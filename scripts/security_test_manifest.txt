@@ -326,6 +326,8 @@ tests/test_payment_void_bot.py
 # Durable broadcast queue: platform audience only, no double send, cancel, admin-only.
 tests/test_broadcast_queue.py
 tests/test_shop_broadcast.py
+# Buttons under staff messages: link permission per shop, presets per shop, renewal of own services only.
+tests/test_message_buttons.py
 # First-use nudge: once per service, per-shop switch, shop bot only.
 tests/test_first_use_nudge.py
 # The app must compile and import (guards a broken merge).
@@ -395,6 +397,7 @@ tests/test_pg_read_breaker_threshold.py
 tests/test_pg_http_rebuild.py
 # Shop staff action log: written with the change, read only by the shop it belongs to.
 tests/test_staff_audit.py
+tests/test_staff_audit_payment_decisions.py
 # Manual shop wallet changes by shop staff: own shop purse only, capped, once per request.
 tests/test_shop_wallet_adjust.py
 # Manual loyalty-point changes by shop staff: own shop only, capped, once per request.

@@ -890,6 +890,10 @@ DEFAULT_SETTINGS = {
     "user_alert_low_enabled": "0",
     "user_alert_low_traffic_pct": "20",
     "user_alert_low_time_pct": "20",
+    "user_alert_low_days": "0",
+    # Empty = the built-in alert texts (usage_alert_messages).
+    "user_alert_time_text": "",
+    "user_alert_traffic_text": "",
     "first_use_nudge_enabled": "0",
     # Expired / volume-finished service cleanup (service_cleanup.py keeps the same defaults).
     "expired_cleanup_enabled": "0",
@@ -1021,12 +1025,14 @@ DEFAULT_SETTINGS = {
     "btn_adm_trial_users": "🧪 کاربران تست",
     "btn_adm_broadcast_history": "📜 تاریخچهٔ ارسال‌ها",
     "btn_adm_staff_audit": "🧾 گزارش کارکنان",
+    "btn_adm_quick_links": "🔗 لینک‌های سریع",
     "btn_adm_service_shop_review": "🏷 تعیین فروشگاه سرویس",
     "btn_pg_hosts": "🌐 هاست‌ها",
     "btn_pg_inbounds": "📡 اینباندها",
     "btn_pg_admins": "🛡 ادمین‌های پنل",
     "btn_res_trial_users": "🧪 کاربران تست",
     "btn_res_staff_audit": "🧾 گزارش کارکنان",
+    "btn_res_quick_links": "🔗 لینک‌های سریع",
     "btn_adm_discounts": "🏷 تخفیف‌ها",
     "btn_adm_funnel": "📊 رفتار کاربر",
     "btn_res_gift_codes": "🎁 کد هدیه",
@@ -1202,7 +1208,7 @@ DEFAULT_SETTINGS = {
     "admin_daily_report_enabled": "1",
     "pg_link_watchdog_enabled": "1",
     "pg_link_alerts_enabled": "1",
-    "admin_daily_report_hour": "0",
+    "admin_daily_report_hour": "4",
     "admin_daily_report_last": "",
     "admin_daily_report_template": "",
     "admin_daily_report_metrics": "",
@@ -1593,6 +1599,24 @@ SETTING_GROUPS = {
             "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام برود",
         ),
         (
+            "user_alert_low_days",
+            "یا وقتی چند روز مانده؟",
+            "number",
+            "۰ تا ۶۰ — مثلاً ۳ یعنی سه روز مانده به پایان هم پیام برود، هر کدام زودتر برسد؛ ۰ = فقط درصد",
+        ),
+        (
+            "user_alert_time_text",
+            "متن هشدار کمبود زمان",
+            "textarea",
+            "خالی = متن پیش‌فرض. متغیرها: {service_name} {days_left} {expire_date} {shop_title}",
+        ),
+        (
+            "user_alert_traffic_text",
+            "متن هشدار کمبود حجم",
+            "textarea",
+            "خالی = متن پیش‌فرض. متغیرها: {service_name} {traffic_used} {shop_title}",
+        ),
+        (
             "first_use_nudge_enabled",
             "پیام کمکی برای سرویس بدون مصرف",
             "toggle",
@@ -1614,9 +1638,9 @@ SETTING_GROUPS = {
         ),
         (
             "admin_daily_report_hour",
-            "ساعت ارسال (۰–۲۳، UTC)",
+            "ساعت ارسال (۰–۲۳، به وقت تهران)",
             "number",
-            "گزارش روز کامل قبل تهران را می‌فرستد · تهران = UTC + ۳:۳۰ · پیش‌فرض ۰ = ۰۳:۳۰ تهران · اگر ربات خاموش باشد همان روز بعداً فرستاده می‌شود",
+            "گزارش روز کامل قبل را می‌فرستد · پیش‌فرض ۴ = ساعت ۰۴:۰۰ بامداد · اگر ربات در این ساعت خاموش باشد، همان روز بعداً فرستاده می‌شود",
         ),
         (
             "admin_daily_report_template",
@@ -1648,9 +1672,9 @@ SETTING_GROUPS = {
         ),
         (
             "one_tap_renew_enabled",
-            "دکمه تمدید یک‌ضرب در هشدار انقضا",
+            "دکمهٔ تمدید سرویس در هشدارها",
             "toggle",
-            "در پیام هشدار انقضا دکمه تمدید سریع نمایش داده شود",
+            "در پیام هشدار کمبود زمان و حجم، دکمهٔ «تمدید سرویس» نمایش داده شود",
         ),
         (
             "capacity_warn_pct",
@@ -2279,15 +2303,6 @@ async def get_all_settings(
 
 def on(value: str | None) -> bool:
     return (value or "").strip() in {"1", "true", "yes", "on", "True"}
-
-
-def clamp_alert_percent(raw: str | None, default: int = 20) -> str:
-    """Keep user-alert thresholds in 1..99."""
-    try:
-        n = int(float(str(raw).strip()))
-    except Exception:
-        n = default
-    return str(max(1, min(99, n)))
 
 
 def is_protected_admin(user: BotUser) -> bool:

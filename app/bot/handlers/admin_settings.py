@@ -20,6 +20,7 @@ from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 from app.services.notifications import NOTIFY_PREFS, PLATFORM_NOTIFY_PREFS
+from app.services.usage_alert_messages import DAYS_MAX
 from app.services.pasarguard import get_pg
 from app.services.support_contacts import (
     delete_support_contact,
@@ -417,7 +418,7 @@ SECTIONS: dict[str, dict] = {
             ("daily", "گزارش روزانه", [
                 ("admin_daily_report_enabled", "ارسال گزارش روزانه", "toggle"),
                 ("subordinate_report_enabled", "گزارش نمایندگان زیرمجموعه", "toggle"),
-                ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، UTC)", "number"),
+                ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، به وقت تهران)", "number"),
             ]),
         ],
     },
@@ -490,6 +491,7 @@ NUMBER_INT_RANGES: dict[str, tuple[int, int]] = {
     "auto_approve_after_minutes": (0, APPROVAL_MAX_MINUTES),
     "auto_approve_after_max_amount": (0, MAX_PRICE),
     "admin_daily_report_hour": (0, 23),
+    "user_alert_low_days": (0, DAYS_MAX),
     IMPORT_KEY_MAX_PER_USER: (IMPORT_MIN_PER_USER, IMPORT_MAX_PER_USER_LIMIT),
     **ENTRY_APPROVAL_NUMBER_BOUNDS,
 }

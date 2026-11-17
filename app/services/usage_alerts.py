@@ -1,9 +1,9 @@
 """Buttons and notes for the low-time and low-volume alerts a customer receives.
 
 The alert job sends one message per service, so everything here is computed per batch from a few
-queries and the job only formats the result. A customer is offered what fits: a one-tap renewal, a
-volume pack when the shop sells one, and a wallet top-up when automatic renewal is on but the wallet
-of that shop cannot pay it.
+queries and the job only formats the result. A customer is offered what fits: renewal, a volume pack
+when the shop sells one, a wallet top-up when automatic renewal is on but the wallet of that shop
+cannot pay it, and always the way to their services and to support.
 """
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Plan, ServiceAddonPack, ServiceAutomation, UserService
-from app.services.button_styles import style_kwargs
 from app.services.catalog_pricing import annotate_prices, sale_price
+from app.services.customer_notice_buttons import help_row, renew_button, volume_pack_button
 from app.services.formatting import format_toman
 from app.services.replaceable_notices import replace_notices
 from app.services.service_automation import TOPUP_CALLBACK
@@ -61,7 +61,8 @@ class AlertExtras:
         return shortfall_note(price) if price is not None else ""
 
 
-async def _sells_volume_packs(session: AsyncSession, shop_id: int | None) -> bool:
+async def sells_volume_packs(session: AsyncSession, shop_id: int | None) -> bool:
+    """True when the shop (None = platform) sells at least one active volume pack."""
     owner = ServiceAddonPack.owner_reseller_id.is_(None) if shop_id is None else ServiceAddonPack.owner_reseller_id == int(shop_id)
     found = await session.scalar(
         select(ServiceAddonPack.id)
@@ -104,7 +105,7 @@ async def alert_extras(session: AsyncSession, services: list[UserService], *, sh
     if not services:
         return AlertExtras()
     return AlertExtras(
-        sells_volume_packs=await _sells_volume_packs(session, shop_id),
+        sells_volume_packs=await sells_volume_packs(session, shop_id),
         renew_shortfalls=await _renew_shortfalls(session, services, shop_id),
     )
 
@@ -116,34 +117,25 @@ def shortfall_note(price: int) -> str:
     )
 
 
-def _renew_button(ui: dict, service_id: int) -> InlineKeyboardButton:
-    return InlineKeyboardButton(
-        text="🔄 تمدید یک‌ضربی", callback_data=f"svc:renew:{service_id}", **style_kwargs(ui, "one_tap_renew", fallback="primary")
-    )
-
-
 def _topup_row(extras: AlertExtras, service_id: int) -> list[list[InlineKeyboardButton]]:
     if service_id not in extras.renew_shortfalls:
         return []
     return [[InlineKeyboardButton(text="➕ شارژ کیف پول", callback_data=TOPUP_CALLBACK)]]
 
 
-def _markup(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup | None:
-    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+def _renew_rows(ui: dict, service_id: int) -> list[list[InlineKeyboardButton]]:
+    return [[renew_button(service_id, ui)]] if on(ui.get("one_tap_renew_enabled", "1")) else []
 
 
-def time_alert_markup(ui: dict, service_id: int, extras: AlertExtras) -> InlineKeyboardMarkup | None:
-    rows = [[_renew_button(ui, service_id)]] if on(ui.get("one_tap_renew_enabled", "1")) else []
-    return _markup(rows + _topup_row(extras, service_id))
+def time_alert_markup(ui: dict, service_id: int, extras: AlertExtras) -> InlineKeyboardMarkup:
+    rows = _renew_rows(ui, service_id) + _topup_row(extras, service_id)
+    return InlineKeyboardMarkup(inline_keyboard=[*rows, help_row()])
 
 
-def traffic_alert_markup(ui: dict, service_id: int, extras: AlertExtras) -> InlineKeyboardMarkup | None:
-    rows: list[list[InlineKeyboardButton]] = []
-    if extras.sells_volume_packs:
-        rows.append([InlineKeyboardButton(text="📦 خرید بستهٔ حجم", callback_data=f"svc:addon:{service_id}:volume")])
-    if on(ui.get("one_tap_renew_enabled", "1")):
-        rows.append([_renew_button(ui, service_id)])
-    return _markup(rows + _topup_row(extras, service_id))
+def traffic_alert_markup(ui: dict, service_id: int, extras: AlertExtras) -> InlineKeyboardMarkup:
+    rows = [[volume_pack_button(service_id)]] if extras.sells_volume_packs else []
+    rows += _renew_rows(ui, service_id) + _topup_row(extras, service_id)
+    return InlineKeyboardMarkup(inline_keyboard=[*rows, help_row()])
 
 
 def period_seconds(*, plan_days: int | None, created_at: datetime | None, expire: datetime) -> float | None:

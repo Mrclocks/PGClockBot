@@ -306,6 +306,7 @@ class NoticeTextTests(NoticeCase):
                 self.assertIn("2026-11-17", text, action)
 
     async def test_a_cleanup_warning_carries_a_renew_button_and_other_notices_do_not(self) -> None:
+        """A renewal notice has nothing to renew: it points to the customer's services and support instead."""
         sent = []
 
         class Bot:
@@ -320,8 +321,10 @@ class NoticeTextTests(NoticeCase):
                 row = CustomerNotice(id=1, shop_id=SHOP, bot_user_id=20, telegram_id=120, action=action, service_name="s",
                                      reason="2026-11-17", service_id=7)
                 await deliver_notice(session, bot_for, row)
-        self.assertEqual(sent[0].inline_keyboard[0][0].callback_data, "svc:renew:7")
-        self.assertIsNone(sent[1])
+        self.assertEqual(sent[0].inline_keyboard[0][0].callback_data, "nto:svc:renew:7")
+        renewed = [b.callback_data for row in sent[1].inline_keyboard for b in row]
+        self.assertNotIn("nto:svc:renew:7", renewed)
+        self.assertIn("nto:svc:list", renewed)
 
 
 class ScopesTests(NoticeCase):

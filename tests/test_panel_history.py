@@ -152,6 +152,8 @@ class PlatformHistoryTests(unittest.IsolatedAsyncioTestCase):
         user_id = card.rsplit(":", 1)[-1]
         await self.tap_data(f"adm:users:msg:{user_id}")
         await self.sim.type("سلام")
+        # The panel now asks whether to add buttons under the message; send it without.
+        await self.tap_data("mbp:n")
         # The typed reply showed the card again; what the panel showed before it is no longer known.
         await self.tap_data(f"adm:users:tag:{user_id}")
         await self.tap_data(card)

@@ -99,6 +99,7 @@ async def queue_shop_broadcast(
     text: object,
     created_by: str | None,
     request_key: object = None,
+    buttons: str | None = None,
 ) -> BroadcastLog:
     """Enqueue one shop broadcast; daily broad cap and request_key make repeats safe."""
     if not isinstance(shop_id, int) or isinstance(shop_id, bool) or shop_id <= 0:
@@ -130,6 +131,7 @@ async def queue_shop_broadcast(
                 status=STATUS_QUEUED,
                 shop_id=int(shop_id),
                 request_key=key,
+                buttons=buttons,
             )
             session.add(log)
             await session.flush()

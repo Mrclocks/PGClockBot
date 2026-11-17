@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -19,6 +19,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy import event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -265,6 +266,8 @@ class Order(Base):
             postgresql_where=text(OPEN_NAMED_ORDER_SQL),
         ),
         Index("ix_orders_shop_amount_created", "reseller_id", "amount", "created_at"),
+        # Daily reports count deliveries of one shop in one day.
+        Index("ix_orders_shop_delivered_at", "reseller_id", "delivered_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -307,10 +310,30 @@ class Order(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    # When the order first became delivered. ``updated_at`` moves on every later edit, so reports
+    # that count a day's deliveries and revenue read this instead.
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped["BotUser"] = relationship(back_populates="orders", foreign_keys=[user_id])
     plan: Mapped[Optional["Plan"]] = relationship()
     payments: Mapped[list["Payment"]] = relationship(back_populates="order")
+
+
+def delivered_stamp(status: str, *, now: datetime | None = None) -> dict[str, object]:
+    """Extra ``update(Order).values(...)`` for a bulk status change: stamps the first delivery time.
+
+    A bulk ``UPDATE`` skips the attribute event below, so callers that may set ``delivered``
+    through one add these values.
+    """
+    if status != OrderStatus.DELIVERED.value:
+        return {}
+    return {"delivered_at": func.coalesce(Order.delivered_at, now or datetime.now(timezone.utc))}
+
+
+@event.listens_for(Order.status, "set")
+def _stamp_first_delivery(target: Order, value: str, _old: object, _initiator: object) -> None:
+    if value == OrderStatus.DELIVERED.value and target.delivered_at is None:
+        target.delivered_at = datetime.now(timezone.utc)
 
 
 class Payment(Base):
@@ -879,6 +902,19 @@ class DiscountCode(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class MessageButtonPreset(Base):
+    """A saved set of buttons staff put under broadcasts and direct messages; one shop's own (0 = platform)."""
+
+    __tablename__ = "message_button_presets"
+    __table_args__ = (UniqueConstraint("shop_key", "name", name="uq_message_button_presets_shop_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_key: Mapped[int] = mapped_column(Integer, default=0, server_default="0", index=True)
+    name: Mapped[str] = mapped_column(String(40))
+    buttons: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class BroadcastLog(Base):
     __tablename__ = "broadcast_logs"
     __table_args__ = (
@@ -897,6 +933,8 @@ class BroadcastLog(Base):
     shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
     audience: Mapped[str] = mapped_column(String(32), default="all")
     text: Mapped[str] = mapped_column(Text)
+    # Buttons under the message, as message_buttons.dump_buttons wrote them; validated again before sending.
+    buttons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     total: Mapped[int] = mapped_column(Integer, default=0)
     ok_count: Mapped[int] = mapped_column(Integer, default=0)
     fail_count: Mapped[int] = mapped_column(Integer, default=0)
