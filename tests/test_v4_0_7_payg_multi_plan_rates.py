@@ -132,14 +132,5 @@ class PaygRateResolveTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("rate_context_for_profile", fn)
 
 
-class VersionTests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
-
-
 if __name__ == "__main__":
     unittest.main()

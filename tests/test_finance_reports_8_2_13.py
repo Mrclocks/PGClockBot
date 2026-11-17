@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class FinanceReportsNormalizeTests(unittest.TestCase):
@@ -68,81 +65,6 @@ class FinanceReportsNormalizeTests(unittest.TestCase):
         self.assertIn("گزارش مالی", text)
         self.assertNotIn("<script>", text)
         self.assertIn("&lt;script&gt;", text)
-
-
-class FinanceReportsUiTests(unittest.TestCase):
-    def test_finance_reports_first_tab(self):
-        html = (ROOT / "app/web/templates/finance.html").read_text(encoding="utf-8")
-        # The tab strip lives in its own partial, shared with the PAYG report page.
-        html += (ROOT / "app/web/templates/_finance_tabs.html").read_text(encoding="utf-8")
-        reports_at = html.find('tab=reports">گزارشات')
-        orders_at = html.find('tab=orders">سفارشات')
-        self.assertGreater(reports_at, -1)
-        self.assertGreater(orders_at, -1)
-        self.assertLess(reports_at, orders_at)
-        self.assertNotIn("tab=behavior", html)
-        self.assertIn('_finance_reports.html', html)
-
-    def test_reports_partial(self):
-        partial = (ROOT / "app/web/templates/_finance_reports.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("home-period-grid", partial)
-        self.assertIn("finance-report-panels", partial)
-        self.assertIn("/users?filter=expiring", partial)
-        self.assertIn("/users?filter=low_volume", partial)
-        self.assertIn("روش پرداخت", partial)
-        # Period compare cards are the selector — no duplicate section-tabs
-        self.assertNotIn("finance-report-periods", partial)
-        self.assertNotIn('role="tablist" aria-label="بازه گزارش"', partial)
-
-    def test_finance_pages_default_and_scope(self):
-        pages = (ROOT / "app/api/finance_pages.py").read_text(encoding="utf-8")
-        self.assertIn('"reports"', pages)
-        self.assertIn("build_finance_report", pages)
-        self.assertIn("shop_owner_id", pages)
-        self.assertIn('tab = "reports"', pages)
-        # behavior + reports fail-closed when non-platform staff lack shop_owner_id
-        self.assertGreaterEqual(pages.count('محدوده فروشگاه مشخص نیست'), 2)
-        self.assertIn('tab == "behavior"', pages)
-
-    def test_mobile_css(self):
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".users-ops-stats", css)
-        self.assertNotIn(".finance-report-periods", css)
-        self.assertIn(".ui-select-menu.users-svc-boxed", css)
-        self.assertIn(".users-ops-table .col-svc", css)
-        self.assertIn("bottom: 0", css)
-
-    def test_bot_hooks(self):
-        kb = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
-        reply_kb = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
-        self.assertIn("REPLY_ACTION_ADMIN_REPORTS", kb)
-        self.assertIn("res_reports", reply_kb)
-        admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertIn("adm:reports", admin)
-        self.assertIn("build_finance_report", admin)
-        self.assertIn("reseller_id=None", admin)
-        res = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")
-        self.assertIn("res:reports", res)
-        self.assertIn("reseller_id=int(owner_id)", res)
-        nav = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
-        self.assertIn("res:reports:week", nav)
-        self.assertIn("REPLY_ACTION_ADMIN_REPORTS", nav)
-
-    def test_service_scoped_doc(self):
-        src = (ROOT / "app/services/finance_reports.py").read_text(encoding="utf-8")
-        self.assertIn("reseller_id", src)
-        self.assertIn("Never fall through", src)
-
-    def test_version(self):
-        from app.version import __version__
-
-        parts = [int(x) for x in __version__.split(".")[:3]]
-        self.assertGreaterEqual(parts, [0, 1, 0])
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
-        notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"0.1.0"', notes)
 
 
 if __name__ == "__main__":

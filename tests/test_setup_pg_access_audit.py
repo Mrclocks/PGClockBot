@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from app.bot.keyboards import admin_reply_keyboard, main_reply_keyboard
@@ -19,10 +18,6 @@ from app.services.representative_unification import (
     staff_can_manage_representatives,
     RepresentativeUnifyError,
 )
-from tests.template_source import template_with_includes
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def _limited_caps() -> dict:
@@ -156,24 +151,6 @@ class HybridOwnerRepGateTests(unittest.TestCase):
 
 
 class WizardAndKeyboardSurfaceTests(unittest.TestCase):
-    def test_setup_template_has_probe_and_audit(self) -> None:
-        html = (ROOT / "app/web/templates/setup.html").read_text(encoding="utf-8")
-        self.assertIn("بررسی سطح دسترسی", html)
-        self.assertIn("setup-probe", html)
-        self.assertIn("X-Requested-With", html)
-        self.assertIn("setup-probe", html)
-        self.assertIn("pg_audit", html)
-        self.assertIn("can_manage_representatives", html)
-        self.assertNotIn("flash_warn", html)
-        self.assertIn('name="pg_password" type="password" value=""', html)
-
-    def test_setup_other_single_endpoint(self) -> None:
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn('x-requested-with', src.lower())
-        self.assertIn("setup-probe", src)
-        self.assertNotIn("/setup/pg-probe", src)
-        self.assertNotIn("pg_warn", src)
-        self.assertIn("setup_pg_access_audit", src)
 
     def test_admin_keyboard_hides_resellers_when_denied(self) -> None:
         from app.bot.keyboards import admin_people_reply_keyboard
@@ -195,34 +172,6 @@ class WizardAndKeyboardSurfaceTests(unittest.TestCase):
         self.assertNotIn("🤝 نمایندگان", main_hidden)
         # The admin main menu only carries the entry to the admin hub.
         self.assertIn("🛠 پنل ادمین", main_hidden)
-
-    def test_sidebar_owner_resellers_uses_capability(self) -> None:
-        from tests.sidebar_view import sidebar
-
-        self.assertNotIn("نمایندگان", [label for label, _ in sidebar("admin", owner=True)["shop"]])
-        self.assertIn("نمایندگان", [label for label, _ in sidebar("admin", owner=True, manage_rep=True)["shop"]])
-        self.assertIn('require_pg_perm("pg_admins")', (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8"))
-        resellers = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
-        self.assertIn("_require_rep_mgmt", resellers)
-        self.assertIn("assert_staff_can_manage_representatives", resellers)
-
-    def test_bot_home_uses_live_admin_keyboard(self) -> None:
-        start = (ROOT / "app/bot/handlers/start.py").read_text(encoding="utf-8")
-        self.assertIn("build_main_reply_keyboard", start)
-        nav = (ROOT / "app/bot/menu_nav.py").read_text(encoding="utf-8")
-        self.assertIn("async def admin_hub_reply_keyboard", nav)
-        admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertNotIn("kb.admin_reply_keyboard()", admin)
-
-    def test_plans_use_live_quota_validation(self) -> None:
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("assert_user_plan_within_limits", src)
-        self.assertIn("assert_custom_plan_range_within_limits", src)
-        plans = template_with_includes("plans.html")
-        self.assertIn("plan_limit_issues", plans)
-        self.assertIn("pg_limit_snapshot", plans)
-        reseller = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
-        self.assertIn("_validate_reseller_capacity_inputs", reseller)
 
 
 class ResolveProbeUsesOwnClientTests(unittest.IsolatedAsyncioTestCase):

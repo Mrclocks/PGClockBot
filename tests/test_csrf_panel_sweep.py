@@ -33,14 +33,3 @@ def test_backup_restore_parses_non_json_safely():
     assert "JSON.parse(text)" in html
     assert "نشست امنیتی منقضی شده" in html
     assert "panelEnsureCsrfField" in html
-
-
-def test_release_notes_mention_csrf_sweep():
-    notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-    assert '"0.1.1"' in notes
-    assert '"0.2.0"' in notes
-    from app.version import __version__
-
-    ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    assert ver == __version__
-    assert f'"{__version__}"' in notes

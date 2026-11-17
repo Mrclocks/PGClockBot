@@ -369,6 +369,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   min-height: var(--ctl-h); align-items: center !important; gap: var(--g3);
 }
 .ds .ui-switch-copy { display: flex; flex-direction: column; gap: var(--g1); min-width: 0; }
+/* Risk switch: the switch, then its danger note, 12 apart inside one settings cell. */
+.ds .setting-item--risk:not([hidden]) { display: flex; flex-direction: column; gap: var(--g3); }
 .ds .ui-switch-copy strong { font-size: var(--fs-3); font-weight: 500; }
 .ds .ui-switch-copy small { font-size: var(--fs-2); line-height: 1.6; }
 /* Consecutive switches: one divided list, 12 above and below every divider; none at the ends. */

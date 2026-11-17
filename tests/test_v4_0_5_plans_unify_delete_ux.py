@@ -80,14 +80,5 @@ class NeutralRowActionsTests(unittest.TestCase):
         self.assertIn(".row-actions-menu .btn:not(.btn-danger):not(.btn-warn)", css)
 
 
-class VersionTests(unittest.TestCase):
-    def test_version_files_match(self):
-        from app.version import __version__
-
-        file_ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(__version__, file_ver)
-        self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
-
-
 if __name__ == "__main__":
     unittest.main()

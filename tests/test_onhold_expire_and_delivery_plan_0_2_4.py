@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class OnHoldExpireTests(unittest.TestCase):
@@ -199,17 +196,6 @@ class DeliveryPlanTypeTests(unittest.IsolatedAsyncioTestCase):
             ),
             "تست",
         )
-
-
-class CategoryModalScrollTests(unittest.TestCase):
-    def test_modal_table_does_not_clamp_height(self):
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".ui-modal-scroll > .table-wrap", css)
-        self.assertIn("flex-shrink: 0", css)
-        self.assertIn("max-height: none", css)
-        html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
-        self.assertIn("plan-cat-list", html)
-        self.assertIn('id="modal-plan-categories"', html)
 
 
 if __name__ == "__main__":

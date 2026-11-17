@@ -42,5 +42,13 @@ fi
 # compatible "is_same_or_newer" checks (2026-08), so no deselect list is
 # needed here anymore — any failure below is a real regression.
 
+# Spread the files over every CPU when pytest-xdist is installed (it is in
+# requirements-dev.txt); PYTEST_WORKERS=0 runs them serially, for example to
+# debug a failure without interleaved output.
+WORKER_ARGS=()
+if python3 -c "import xdist" >/dev/null 2>&1; then
+  WORKER_ARGS=(-n "${PYTEST_WORKERS:-auto}")
+fi
+
 echo "Running ${#FILES[@]} security regression test files..."
-python3 -m pytest "${FILES[@]}" -q "$@"
+python3 -m pytest "${FILES[@]}" -q "${WORKER_ARGS[@]}" "$@"

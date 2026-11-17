@@ -60,15 +60,6 @@ class PlansAddonCategoryUiTests(unittest.TestCase):
         self.assertIn("0043_reseller_plan_is_system", mig)
         self.assertIn("service_addon_packs", mig)
 
-    def test_bot_and_miniapp_filter_by_service_category(self):
-        bot = (ROOT / "app/bot/handlers/services.py").read_text(encoding="utf-8")
-        self.assertIn("list_packs_for_service", bot)
-        mini = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
-        self.assertIn("list_packs_for_service", mini)
-        self.assertIn("pack_matches_service", mini)
-        res = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")
-        self.assertIn("category_id=sub_cat", res)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,6 +24,15 @@
 
   {% from "_home_widgets.html" import kpi_strip, status_tiles, update_notice, connection_banner %}
   {{ update_notice(update if update is defined else none) }}
+  {% if alerts_off_page is defined and alerts_off_page %}
+  <div class="flash warn home-update-banner">
+    <div class="home-update-copy">
+      <strong>هشدار کمبود سرویس برای مشتریان خاموش است</strong>
+      <span class="muted">مشتری پیش از تمام شدن زمان یا حجم سرویسش پیامی نمی‌گیرد و فرصت تمدید را از دست می‌دهد.</span>
+    </div>
+    <a class="btn btn-sm btn-ghost" href="{{ alerts_off_page }}">روشن کردن هشدار</a>
+  </div>
+  {% endif %}
 
   {% set tiles = [] %}
   {% set bot_state = 'neutral' if bot.unchecked else ('ok' if bot.ok else 'err') %}

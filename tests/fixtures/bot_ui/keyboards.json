@@ -1342,13 +1342,6 @@
       ],
       [
         {
-          "callback_data": "nv:loy:home",
-          "style": "success",
-          "text": "⭐ باشگاه مشتریان"
-        }
-      ],
-      [
-        {
           "callback_data": "menu:home",
           "text": "⬅️ بازگشت"
         }

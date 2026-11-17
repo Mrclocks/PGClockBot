@@ -92,6 +92,7 @@ from app.services.psp_gateways import psp_gateways_form_json
 from app.services.panel_assets import asset_version, get_panel_asset_cache_key
 from app.services.redact import operator_error
 from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.usage_alert_messages import ALERT_NUMBER_KEYS, clamp_alert_setting
 from app.services.mobile_bar import load_bar_form, load_bar_order
 from app.services.panel_brand import (
     BRAND_PRESET_CSS,
@@ -114,6 +115,7 @@ from app.services.settings_hub import (
     system_settings_groups,
 )
 from app.services.users import (
+    SETTING_RISK_NOTES,
     SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
     SETTING_GROUPS,
@@ -192,6 +194,7 @@ templates.env.globals["app_version"] = local_version()
 templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
 templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
+templates.env.globals["setting_risk_notes"] = SETTING_RISK_NOTES
 templates.env.globals["brand_presets"] = BRAND_PRESETS
 templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
 # Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).
@@ -5211,10 +5214,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                     from app.services.button_styles import normalize_style
 
                     val = normalize_style(val)
-                if key in ("user_alert_low_traffic_pct", "user_alert_low_time_pct"):
-                    from app.services.users import clamp_alert_percent
-
-                    val = clamp_alert_percent(val)
+                if key in ALERT_NUMBER_KEYS:
+                    val = clamp_alert_setting(key, val)
                 if key == "force_join_channel":
                     from app.services.users import normalize_force_join_channel_value
 

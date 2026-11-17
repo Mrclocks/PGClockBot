@@ -89,17 +89,21 @@ def merge_restored_env(backup_text: str, current_text: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_private_file(path: Path, text: str) -> None:
-    """Never leave a half-written file: write a private temp file, then rename it."""
+def write_private_bytes(path: Path, content: bytes) -> None:
+    """Never leave a half-written file: write a private (0600) temp file, then rename it."""
     fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
     tmp = Path(tmp_name)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(content)
         tmp.chmod(0o600)
         os.replace(tmp, path)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def write_private_file(path: Path, text: str) -> None:
+    write_private_bytes(path, text.encode("utf-8"))
 
 
 def stored_secrets_readable(database_url: str, web_secret: str) -> bool | None:
