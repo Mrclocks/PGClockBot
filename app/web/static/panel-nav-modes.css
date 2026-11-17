@@ -151,7 +151,7 @@
   }
   /* The release channel stays in the desktop sidebar; the header keeps the dot and the version. */
   .topbar .channel-badge { display: none; }
-  /* Action center: the search circle's twin, 8 to its left. The count sits on its outer top corner. */
+  /* Action center: the search circle's twin, 8 to its left. The count sits on its top corner. */
   .topbar .topbar-inbox {
     position: absolute;
     inset-block-start: var(--dock-pad-in);
@@ -179,7 +179,9 @@
   .topbar .topbar-inbox:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
   .topbar .topbar-inbox-count {
     position: absolute;
-    inset-block-start: calc(-1 * var(--space-0));
+    /* Level with the button's top, 8 clear of the capsule edge like the buttons themselves; it leans 4 out
+       sideways, where the capsule has room, so a wide «۹۹+» does not cover the bell. */
+    inset-block-start: 0;
     left: calc(-1 * var(--space-0));
     box-sizing: border-box;
     min-width: 18px;
