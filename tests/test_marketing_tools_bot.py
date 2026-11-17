@@ -209,14 +209,15 @@ class OwnerGateHandlerTests(MarketingDbCase):
     async def test_every_panel_has_a_back_button_to_the_hub(self):
         async with self.Session() as session:
             with await self._owner(True), patch.object(marketing_tools, "panel_page_url", return_value=None):
-                for handler, data in (
-                    (marketing_tools.open_gift_panel, marketing_tools.GIFT_PANEL_CALLBACK),
-                    (marketing_tools.open_campaign_panel, marketing_tools.CAMPAIGN_PANEL_CALLBACK),
+                # Campaigns were merged into group messages, so their panel returns to that hub.
+                for handler, data, back in (
+                    (marketing_tools.open_gift_panel, marketing_tools.GIFT_PANEL_CALLBACK, panels.MARKETING_HUB_CALLBACK),
+                    (marketing_tools.open_campaign_panel, marketing_tools.CAMPAIGN_PANEL_CALLBACK, "nv:adm:broadcast"),
                 ):
                     callback = _callback(data)
                     await handler(callback, session=session, db_user=BotUser(telegram_id=1), state=_state())
                     markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
-                    self.assertEqual(_callbacks(markup)[-1], panels.MARKETING_HUB_CALLBACK)
+                    self.assertEqual(_callbacks(markup)[-1], back)
 
     async def test_non_owner_changes_nothing(self):
         async with self.Session() as session:
@@ -278,9 +279,7 @@ class HubEntryTests(unittest.TestCase):
             data,
             [
                 "nv:adm:loy",
-                "nv:adm:broadcast",
                 "nv:adm:gc",
-                "nv:adm:cmp",
                 "nv:adm:cb",
                 "dsc:l",
                 "fnl:v",

@@ -136,7 +136,7 @@
   <form method="post" action="/plans/trial" class="form-stack ds-body" id="trial-plan-form" data-ds-form>
     {% call ds_sec('پلن تست', sid='utp-sec-basic') %}
       <p class="ds-desc">حجم، مدت و اتصال پاسارگارد برای تست — از فروشگاه فقط یک‌بار به هر کاربر نشان داده می‌شود.</p>
-      <div class="ds-rows">{{ ds_switch('trial_enabled', 'نمایش پلن تست در فروشگاه', checked=trial_on) }}</div>
+      <div class="ds-rows">{{ ds_switch('trial_enabled', 'نمایش پلن تست در فروشگاه', checked=trial_on, id='trial-enabled') }}</div>
       <label class="form-field"><span class="ds-label-text">نام <span class="ds-req" aria-hidden="true">*</span></span>
         <input name="name" value="{{ trial.name if trial else 'تست رایگان' }}" required data-ds-label="نام" />
       </label>
@@ -175,6 +175,19 @@
       {% include "_plan_naming_fields.html" %}
     {% endcall %}
     {% call ds_sec('نمایش در ربات', sid='utp-sec-bot') %}
+      {% set trial_placement = values.get('trial_button_placement') %}
+      {% if trial_placement not in trial_placement_labels %}{% set trial_placement = 'offer' %}{% endif %}
+      <div class="form-field" data-ds-show-when="#trial-enabled:1"{% if not trial_on %} hidden{% endif %}>
+        <span class="ds-label-text" id="trial-placement-label">محل دکمهٔ «دریافت تست»</span>
+        <select name="trial_button_placement" id="trial-placement" data-ui-select="1" hidden aria-hidden="true" tabindex="-1">
+          {% for value, label in trial_placement_labels.items() %}<option value="{{ value }}"{% if value == trial_placement %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <div class="sales-seg ds-seg" role="radiogroup" aria-labelledby="trial-placement-label" data-ds-choice data-ds-target="#trial-placement">
+          {% for value, label in trial_placement_labels.items() %}<button type="button" role="radio" data-value="{{ value }}">{{ label }}</button>{% endfor %}
+        </div>
+        <small class="muted">پیام ورودی: زیر پیام خوش‌آمد. کیبورد اصلی: در منوی پایین ربات؛ جایش را در تنظیمات منو، بخش «منوی فعال» عوض کنید. کاربری که تستش را گرفته، دکمه را دیگر نمی‌بیند.</small>
+      </div>
+      <div class="ds-rows">{{ ds_switch('trial_for_service_owners', 'نمایش به کاربرانی که سرویس دارند', help='خاموش: فقط کاربری که در این فروشگاه سرویسی ندارد تست می‌گیرد. روشن: مشتری‌ای که سرویس دارد هم اگر تست نگرفته باشد، دکمه و پلن تست را می‌بیند.', checked=values.get('trial_for_service_owners') in ['1','true','yes','on'], show_when='#trial-enabled:1', hidden=not trial_on) }}</div>
       {% if trial and trial.button_style is not none %}{% set plan_button_style = trial.button_style if trial.button_style else '' %}{% else %}{% set plan_button_style = 'inherit' %}{% endif %}
       {% set plan_color_compact = true %}
       <div class="form-field">رنگ دکمه{% include "_plan_button_style_field.html" %}</div>

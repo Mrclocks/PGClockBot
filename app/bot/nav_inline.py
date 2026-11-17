@@ -35,11 +35,13 @@ from app.bot.payg_review_entries import PAYG_REVIEW
 from app.bot.service_cleanup_entries import ADMIN_SERVICE_CLEANUP, SHOP_SERVICE_CLEANUP
 from app.bot.shop_marketing_entries import ADMIN_DISCOUNTS, ADMIN_FUNNEL, DISCOUNTS_CALLBACK, FUNNEL_CALLBACK
 from app.services.resellers import has_bot_perm
+from app.bot.broadcast_segments import PLATFORM_LIST, TARGETED_LABEL
 from app.bot.reseller_hub_groups import (
     RESELLER_GROUPS,
     RESELLER_HOME_CALLBACK,
     back_callback_for,
     group_entries,
+    home_entries,
     reseller_group,
 )
 from app.services.wallet_topup import DEFAULT_TOPUP_PRESETS, parse_topup_presets  # noqa: F401  (re-exported)
@@ -610,6 +612,7 @@ def admin_groups_hub_keyboard(
     open_work = pending_payments + pending_tickets + pending_cancellations + pending_deliveries
 
     cb_map = {
+        "adm_broadcast": "nv:adm:broadcast",
         "adm_hub_ops": "nv:adm:ops",
         "adm_hub_people": "nv:adm:people",
         "adm_hub_product": "nv:adm:product",
@@ -638,8 +641,13 @@ def admin_groups_hub_keyboard(
     )
     if shortcuts:
         rows.append(shortcuts)
-    for i in range(0, len(buttons), 2):
-        rows.append(buttons[i : i + 2])
+    # Group messages get a full-width row under the groups, so the most used tool is one tap away.
+    broadcast = [b for b in buttons if b.callback_data == "nv:adm:broadcast"]
+    groups = [b for b in buttons if b.callback_data != "nv:adm:broadcast"]
+    for i in range(0, len(groups), 2):
+        rows.append(groups[i : i + 2])
+    if broadcast:
+        rows.append(broadcast)
     rows.append([_hub_entry_button(ui, ADMIN_QUICK_LINKS)])
     rows.append(
         [
@@ -769,22 +777,19 @@ def admin_product_hub_keyboard(
 
 @editable_screen("a.marketing")
 def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Club and broadcast leaves reuse ``nv:adm:*``; gift codes and campaigns are inline-only."""
+    """The club leaf reuses ``nv:adm:*``; gift codes and cashback are inline-only."""
     from app.bot.marketing_panels import (
-        CAMPAIGN_PANEL_CALLBACK,
         CASHBACK_PANEL_CALLBACK,
         GIFT_PANEL_CALLBACK,
     )
 
     from app.bot.reply_keyboards import (
-        REPLY_ACTION_ADMIN_BROADCAST,
         REPLY_ACTION_ADMIN_LOYALTY,
         _reply_admin_marketing_entries,
     )
 
     cb_map = {
         REPLY_ACTION_ADMIN_LOYALTY: "nv:adm:loy",
-        REPLY_ACTION_ADMIN_BROADCAST: "nv:adm:broadcast",
     }
     buttons = [
         _ikb(
@@ -805,13 +810,6 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
                 ui=ui,
                 label_key="btn_adm_gift_codes",
                 style_id="adm_gift_codes",
-            ),
-            _ikb(
-                _t(ui, "btn_adm_campaigns"),
-                callback_data=CAMPAIGN_PANEL_CALLBACK,
-                ui=ui,
-                label_key="btn_adm_campaigns",
-                style_id="adm_campaigns",
             ),
             _ikb(
                 _t(ui, "btn_adm_cashback"),
@@ -1045,6 +1043,7 @@ def reseller_manage_hub_keyboard(
         rows.append(shortcuts)
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i : i + 2])
+    rows.extend([button] for button in _reseller_entry_buttons(home_entries(entries), ui, {}))
     rows.append([_hub_entry_button(ui, SHOP_QUICK_LINKS)])
     rows.append(_hub_back_row(ui, callback_data="menu:home"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -1285,6 +1284,7 @@ def admin_backup_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 @editable_screen("a.broadcast")
 def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.marketing_panels import CAMPAIGN_PANEL_CALLBACK
     from app.bot.reply_keyboards import _admin_broadcast_submenu_entries
 
     buttons = [
@@ -1298,8 +1298,19 @@ def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
         for key, text in _admin_broadcast_submenu_entries(ui)
         if key.startswith("bc_aud_")
     ]
+    buttons.append(_ikb(TARGETED_LABEL, callback_data=PLATFORM_LIST, ui=ui, style_id="bc_targeted", style_fallback="primary"))
+    # Campaigns were merged into group messages; their list opens from here.
+    buttons.append(
+        _ikb(
+            _t(ui, "btn_adm_campaigns"),
+            callback_data=CAMPAIGN_PANEL_CALLBACK,
+            ui=ui,
+            label_key="btn_adm_campaigns",
+            style_id="adm_campaigns",
+        )
+    )
     buttons.append(_hub_entry_button(ui, BROADCAST_HISTORY))
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:marketing")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
 @editable_screen("a.plans")

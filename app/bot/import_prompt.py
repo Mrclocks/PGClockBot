@@ -37,9 +37,11 @@ HOME_TRIAL_NOTE = "برای شروع می‌توانید یک تست رایگا�
 def should_offer_import(
     ui: dict | None, *, has_services: bool, dismissed: bool, trial_available: bool = False
 ) -> bool:
-    """A customer of this shop with no service who did not ask to stop, while adding old services
-    or a free trial can be offered."""
-    return (import_enabled(ui) or trial_available) and not has_services and not dismissed
+    """A customer of this shop who did not ask to stop, while adding old services (only without a
+    service here) or a free trial (``trial_available`` already applies the shop's rules) can be offered."""
+    if dismissed:
+        return False
+    return (import_enabled(ui) and not has_services) or trial_available
 
 
 def _offer_note(*, with_import: bool, with_trial: bool) -> str:
@@ -48,8 +50,11 @@ def _offer_note(*, with_import: bool, with_trial: bool) -> str:
     return HOME_ADD_NOTE if with_import else HOME_TRIAL_NOTE
 
 
-def build_import_prompt(ui: dict | None, *, trial_available: bool = False) -> InputRichMessage:
-    with_import = import_enabled(ui)
+def build_import_prompt(
+    ui: dict | None, *, trial_available: bool = False, has_services: bool = False
+) -> InputRichMessage:
+    # A customer who owns a service here only reaches this offer for the trial.
+    with_import = import_enabled(ui) and not has_services
     buttons: list[RichMessageButton] = []
     if with_import:
         # The colour is the admin's «افزودن سرویس قبلی» button colour, like the same button elsewhere.
@@ -67,12 +72,14 @@ def build_import_prompt(ui: dict | None, *, trial_available: bool = False) -> In
     )
 
 
-async def send_import_prompt(message: Message, ui: dict | None, *, trial_available: bool = False) -> Message | None:
+async def send_import_prompt(
+    message: Message, ui: dict | None, *, trial_available: bool = False, has_services: bool = False
+) -> Message | None:
     """Send the offer; a Telegram refusal only means the offer is skipped."""
     try:
         return await message.bot.send_rich_message(
             chat_id=message.chat.id,
-            rich_message=build_import_prompt(ui, trial_available=trial_available),
+            rich_message=build_import_prompt(ui, trial_available=trial_available, has_services=has_services),
         )
     except TelegramAPIError:
         logger.warning("could not send the add-existing-service offer", exc_info=True)

@@ -46,6 +46,9 @@ VIEW_SCREENS: frozenset[str] = frozenset({
     "res:dash", "res:orders", "res:tickets", "res:cancellations",
     "qlk:v",
     "shop:list",
+    # Customer screens a group-message button opens (message_buttons.SCREENS): lists and texts only;
+    # the trial and custom pickers and the top-up amounts only offer choices until the customer confirms.
+    "shop:kind:trial", "shop:kind:custom", "nv:w:topup", "nv:loy:ref", "nv:loy:wheel", "help:guide", "help:faq",
 })
 # Read-only screen families: the part before the id or page.
 VIEW_FAMILIES: tuple[str, ...] = (

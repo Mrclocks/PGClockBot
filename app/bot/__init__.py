@@ -173,6 +173,7 @@ def bot_routers() -> list[Router]:
         staff_audit_view,
         stuck_orders,
         subscription_lookup,
+        trial_menu,
         trial_users_view,
         stale_menu,
         start,
@@ -185,7 +186,7 @@ def bot_routers() -> list[Router]:
     from app.bot import nav_input as nav_input_mod
     from app.bot import staff_cancel as _staff_cancel  # noqa: F401 — cancel registry
     from app.bot.handlers import guides
-    from app.bot import message_button_picker
+    from app.bot import broadcast_segments, message_button_picker
 
     return [
         # The menu editor's text input comes first: a typed button name such as «👍 کاربران» or
@@ -202,6 +203,8 @@ def bot_routers() -> list[Router]:
         entry_approval.router,
         connection_status.router,
         connection_status_admin.router,
+        # «دریافت تست» is a menu label too; before the FSM parsers that would read it as input.
+        trial_menu.router,
         # Reply-keyboard nav early so menu labels win over FSM amount parsers
         reply_nav.router,
         notice_panels.router,
@@ -241,6 +244,7 @@ def bot_routers() -> list[Router]:
         trial_users_view.router,
         staff_audit_view.router,
         admin_broadcast_confirm.router,
+        broadcast_segments.router,
         message_button_picker.router,
         quick_links_view.router,
         service_shop_review_view.router,

@@ -10,16 +10,13 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, BroadcastLog, Role
+from app.services.broadcast_audience import SEGMENT_LABELS
 from app.services.shop_membership import shop_member_clause
 
 logger = logging.getLogger("pgclock.broadcast")
 
-AUDIENCE_LABELS = {
-    "all": "همه",
-    "users": "کاربران عادی",
-    "resellers": "نمایندگان",
-    "admins": "ادمین‌ها",
-}
+# Labels of the stored ``audience`` key; the summary with filters lives in ``audience_spec``.
+AUDIENCE_LABELS = SEGMENT_LABELS
 
 
 def shop_scope_filter(*, shop_id: int | None):

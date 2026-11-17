@@ -201,6 +201,8 @@
   --accent-fg: var(--brand-fg);
   --accent-soft: color-mix(in srgb, var(--brand-base) 12%, transparent);
   --danger: var(--destructive);
+  /* Unread count on a round header button: white figures on the destructive red, in both themes. */
+  --count-badge-fg: #ffffff;
   --r: var(--radius);
   --r-sm: 10px;
   --r-control: var(--control-radius);

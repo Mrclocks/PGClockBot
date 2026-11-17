@@ -19,6 +19,7 @@ from app.bot.secret_fields import SECRET, is_secret, secret_prompt
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
+from app.services.trial_offer import TRIAL_MENU_KEY
 from app.services.notifications import NOTIFY_PREFS, PLATFORM_NOTIFY_PREFS
 from app.services.usage_alert_messages import DAYS_MAX
 from app.services.pasarguard import get_pg
@@ -439,6 +440,7 @@ CUSTOM_PRICE: list[Field] = [
 
 MENU_ORDER_LABELS = {
     "shop": "خرید",
+    TRIAL_MENU_KEY: "دریافت تست",
     "services": "سرویس‌ها",
     CONNECTION_STATUS_MENU_KEY: "وضعیت اتصال",
     "wallet": "کیف پول",

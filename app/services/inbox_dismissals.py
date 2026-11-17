@@ -24,6 +24,7 @@ ALLOWED_ALERT_KEYS = frozenset(
         "ticket_alert",
         "shop_maintenance",
         "capacity_warn",
+        "customer_alerts_off",
         "payg_suspended",
         "payg_low",
         "ac:pending",
@@ -33,6 +34,9 @@ ALLOWED_ALERT_KEYS = frozenset(
         "ac:low_volume",
     }
 )
+
+# Alerts that are a single on/off notice in the inbox context; hiding one sets it to False.
+_FLAG_ALERT_KEYS = ("shop_maintenance", "capacity_warn", "customer_alerts_off")
 
 
 def staff_dismiss_key(staff: dict) -> str:
@@ -235,6 +239,7 @@ def _alert_active_map(ctx: dict[str, Any]) -> dict[str, bool]:
         "update": bool((ctx.get("update") or {}).get("update_available")),
         "shop_maintenance": bool(ctx.get("shop_maintenance")),
         "capacity_warn": bool(ctx.get("capacity_warn")),
+        "customer_alerts_off": bool(ctx.get("customer_alerts_off")),
         "payg_suspended": bool(pr.get("suspended")),
         "payg_low": bool(pr.get("low")),
     }
@@ -263,6 +268,7 @@ def alert_counts(ctx: dict[str, Any]) -> dict[str, int]:
         "ticket_alert": 1 if ctx.get("ticket_alert") else 0,
         "shop_maintenance": 1 if ctx.get("shop_maintenance") else 0,
         "capacity_warn": 1 if ctx.get("capacity_warn") else 0,
+        "customer_alerts_off": 1 if ctx.get("customer_alerts_off") else 0,
         "payg_suspended": len(pr.get("suspended") or []),
         "payg_low": len(pr.get("low") or []),
     }
@@ -405,11 +411,9 @@ def filter_inbox_context(
         if hidden("ticket_alert", True, eid):
             out["ticket_alert"] = None
 
-    if out.get("shop_maintenance") and hidden("shop_maintenance", True):
-        out["shop_maintenance"] = False
-
-    if out.get("capacity_warn") and hidden("capacity_warn", True):
-        out["capacity_warn"] = False
+    for flag_key in _FLAG_ALERT_KEYS:
+        if out.get(flag_key) and hidden(flag_key, True):
+            out[flag_key] = False
 
     pr = dict(out.get("payg_risk") or {})
     if pr.get("suspended") and hidden("payg_suspended", True):

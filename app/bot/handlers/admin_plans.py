@@ -38,6 +38,13 @@ from app.bot.nav_inline import present_inline_only
 from app.bot.nav_input import PROMPT_MSG_ID, form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.services.trial_offer import (
+    PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS,
+    TRIAL_SERVICE_OWNERS_KEY,
+    next_trial_placement,
+    save_trial_placement,
+    trial_placement,
+)
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 import logging
@@ -413,6 +420,14 @@ async def _build_trial_screen(session: AsyncSession) -> tuple[str, InlineKeyboar
                 st,
             )
         ],
+        [_ib(f"📍 محل دکمه: {TRIAL_PLACEMENT_LABELS[trial_placement(ui)]}", TRIAL_PLACE_CALLBACK, st)],
+        [
+            _ib(
+                f"{'✅' if on(ui.get(TRIAL_SERVICE_OWNERS_KEY)) else '⬜️'} نمایش به کاربران دارای سرویس",
+                f"adm:plans:tog:{TRIAL_SERVICE_OWNERS_KEY}",
+                st,
+            )
+        ],
         [_ib("نام", "adm:plans:trial:name", st)],
         [_ib("مدت (روز)", "adm:plans:trial:days", st)],
         [_ib("حجم (گیگ)", "adm:plans:trial:gb", st)],
@@ -745,7 +760,7 @@ async def plans_toggle(
     data = await state.get_data()
     aud = data.get("_adm_plans_aud") or "users"
     kind = data.get("_adm_plans_kind") or (
-        "custom" if key.startswith("custom_plan") else "trial" if key == "trial_enabled" else "wholesale"
+        "custom" if key.startswith("custom_plan") else "trial" if key.startswith("trial_") else "wholesale"
     )
     if key.startswith("custom_plan"):
         kind = "custom"
@@ -935,6 +950,25 @@ async def wholesale_del_tier(
     await _rerender_plans_screen(callback, session, "users", "wholesale")
 
 # —— Trial (plans context) ——
+
+TRIAL_PLACE_CALLBACK = "adm:plans:trial:place"
+
+
+@router.callback_query(F.data == TRIAL_PLACE_CALLBACK)
+@require_bot_owner_handler
+async def trial_cycle_placement(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+) -> None:
+    """Each tap moves «دریافت تست» to the next place: home offer → main keyboard → both."""
+    if not _is_admin(db_user):
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
+        return
+    ui = await get_all_settings(session)
+    await save_trial_placement(session, next_trial_placement(trial_placement(ui)), reseller_id=None)
+    await callback.answer(feedback.SAVED)
+    await state.update_data(_adm_plans_aud="users", _adm_plans_kind="trial")
+    await _rerender_plans_screen(callback, session, "users", "trial")
+
 
 @router.callback_query(F.data == "adm:plans:trial:name")
 @require_bot_owner_handler

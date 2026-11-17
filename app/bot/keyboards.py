@@ -21,6 +21,7 @@ from app.services.support_contacts import (
 )
 from app.services.users import DEFAULT_SETTINGS, on
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
+from app.services.trial_offer import TRIAL_MENU_KEY
 from app.services import bot_feedback_texts as feedback
 from app.services.staff_cards import SERVICE_BUTTON_LIMIT
 
@@ -29,6 +30,7 @@ from app.services.staff_cards import SERVICE_BUTTON_LIMIT
 # Connection «آموزش‌ها» lives on the service card (not the main ReplyKeyboard).
 DEFAULT_MENU_ORDER = [
     "shop",
+    TRIAL_MENU_KEY,
     "services",
     CONNECTION_STATUS_MENU_KEY,
     "wallet",
@@ -36,9 +38,12 @@ DEFAULT_MENU_ORDER = [
     "loyalty",
     "reseller_apply",
 ]
-# Items active on a fresh install. The connection status button stays in the catalog (the web menu
-# editor offers it from «مخزن») but is off until an admin adds it.
-DEFAULT_ACTIVE_MENU_ORDER = [key for key in DEFAULT_MENU_ORDER if key != CONNECTION_STATUS_MENU_KEY]
+# Items active on a fresh install. The connection status and trial buttons stay in the catalog (the
+# web menu editor offers them from «مخزن») but are off until added; choosing the keyboard in the
+# trial plan settings adds the trial button.
+DEFAULT_ACTIVE_MENU_ORDER = [
+    key for key in DEFAULT_MENU_ORDER if key not in {CONNECTION_STATUS_MENU_KEY, TRIAL_MENU_KEY}
+]
 
 # Legacy keys stripped from saved menu_order so old installs drop them from the keyboard.
 # miniapp: MenuButton «Open» only — never ReplyKeyboard / menu DnD / welcome inline.
