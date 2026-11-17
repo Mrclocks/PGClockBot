@@ -790,6 +790,9 @@ DEFAULT_SETTINGS = {
     "terms_buy_reseller_btn": "موافقم",
     "terms_buy_reseller_reaccept": "1",
     "trial_enabled": "0",
+    # Where «دریافت تست» shows: offer (home message), keyboard (main menu) or both.
+    "trial_button_placement": "offer",
+    "trial_for_service_owners": "0",
     "trial_require_contact": "0",
     "purchase_require_contact": "0",
     "trial_require_iran_phone": "0",
@@ -914,6 +917,7 @@ DEFAULT_SETTINGS = {
     "bot_tg_photo": "",
 
     "btn_shop": "🟢🛒 خرید سرویس",
+    "btn_trial": "🎁 دریافت تست",
     "btn_services": "🔵📦 سرویس‌های من",
     "btn_wallet": "🟡👛 کیف پول",
     "btn_wallet_topup": "🟢➕ شارژ کیف پول",
@@ -1487,6 +1491,7 @@ SETTING_GROUPS = {
         ("btn_admin", "دکمه ادمین", "text", ""),
         ("btn_connection_status_admin", "دکمه وضعیت اتصال", "text", "صفحهٔ اول پنل ادمین"),
         ("btn_connection_status", "دکمه وضعیت اتصال مشتری", "text", "منوی اصلی"),
+        ("btn_trial", "دکمه دریافت تست", "text", "منوی اصلی؛ محل نمایش از تنظیم پلن تست"),
         ("btn_menu_home", "دکمه منوی اصلی (کیبورد)", "text", "خروج از پیش‌نمایش / خانه"),
         ("btn_adm_hub_ops", "گروه عملیات روزانه (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_people", "گروه افراد (ادمین)", "text", "هاب پنل ادمین"),

@@ -173,6 +173,7 @@ def bot_routers() -> list[Router]:
         staff_audit_view,
         stuck_orders,
         subscription_lookup,
+        trial_menu,
         trial_users_view,
         stale_menu,
         start,
@@ -202,6 +203,8 @@ def bot_routers() -> list[Router]:
         entry_approval.router,
         connection_status.router,
         connection_status_admin.router,
+        # «دریافت تست» is a menu label too; before the FSM parsers that would read it as input.
+        trial_menu.router,
         # Reply-keyboard nav early so menu labels win over FSM amount parsers
         reply_nav.router,
         notice_panels.router,

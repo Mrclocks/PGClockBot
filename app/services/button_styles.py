@@ -34,6 +34,8 @@ STYLE_ALIASES: dict[str, str] = {
     "adm_plan_add": "adm_plans_add",
     "adm_plan_custom": "shop_kind_custom",
     "adm_plan_trial": "shop_kind_trial",
+    # «دریافت تست» on the main keyboard takes the trial plan colour, like the home offer button.
+    "trial": "shop_kind_trial",
     # Legacy settings hub key (pre-8.2.1 «سرویس و دسترسی») → دسترسی
     "adm_st_service": "adm_st_access",
 }
