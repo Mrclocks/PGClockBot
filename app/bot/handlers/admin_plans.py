@@ -40,6 +40,7 @@ from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.trial_offer import (
     PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS,
+    TRIAL_SERVICE_OWNERS_KEY,
     next_trial_placement,
     save_trial_placement,
     trial_placement,
@@ -420,6 +421,13 @@ async def _build_trial_screen(session: AsyncSession) -> tuple[str, InlineKeyboar
             )
         ],
         [_ib(f"📍 محل دکمه: {TRIAL_PLACEMENT_LABELS[trial_placement(ui)]}", TRIAL_PLACE_CALLBACK, st)],
+        [
+            _ib(
+                f"{'✅' if on(ui.get(TRIAL_SERVICE_OWNERS_KEY)) else '⬜️'} نمایش به کاربران دارای سرویس",
+                f"adm:plans:tog:{TRIAL_SERVICE_OWNERS_KEY}",
+                st,
+            )
+        ],
         [_ib("نام", "adm:plans:trial:name", st)],
         [_ib("مدت (روز)", "adm:plans:trial:days", st)],
         [_ib("حجم (گیگ)", "adm:plans:trial:gb", st)],
@@ -752,7 +760,7 @@ async def plans_toggle(
     data = await state.get_data()
     aud = data.get("_adm_plans_aud") or "users"
     kind = data.get("_adm_plans_kind") or (
-        "custom" if key.startswith("custom_plan") else "trial" if key == "trial_enabled" else "wholesale"
+        "custom" if key.startswith("custom_plan") else "trial" if key.startswith("trial_") else "wholesale"
     )
     if key.startswith("custom_plan"):
         kind = "custom"

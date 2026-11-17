@@ -17,6 +17,8 @@ from app.services.users import DEFAULT_SETTINGS, current_shop_reseller_id, get_s
 TRIAL_MENU_KEY = "trial"
 TRIAL_LABEL_KEY = "btn_trial"
 TRIAL_PLACEMENT_KEY = "trial_button_placement"
+# On: a customer who already owns a service in the shop may still take its one trial.
+TRIAL_SERVICE_OWNERS_KEY = "trial_for_service_owners"
 
 PLACEMENT_OFFER = "offer"
 PLACEMENT_KEYBOARD = "keyboard"
@@ -66,6 +68,15 @@ def shows_trial_in_offer(ui: Mapping[str, str] | None) -> bool:
 
 def shows_trial_on_keyboard(ui: Mapping[str, str] | None) -> bool:
     return trial_placement(ui) in {PLACEMENT_KEYBOARD, PLACEMENT_BOTH}
+
+
+def trial_open_to_service_owners(ui: Mapping[str, str] | None) -> bool:
+    return on((ui or {}).get(TRIAL_SERVICE_OWNERS_KEY))
+
+
+def may_offer_trial(ui: Mapping[str, str] | None, *, has_services: bool) -> bool:
+    """Owning a service here rules the trial out unless the shop opened it to its customers too."""
+    return not has_services or trial_open_to_service_owners(ui)
 
 
 def menu_order_with_trial(raw_order: str, *, for_shop: bool) -> str | None:
@@ -123,9 +134,14 @@ async def offerable_trial_plans(session: AsyncSession, ui: Mapping[str, str] | N
 
 
 async def customer_trial_plans(session: AsyncSession, ui: Mapping[str, str] | None, user_id: int) -> list[Plan]:
-    """Trial plans a customer of the current shop may start now: none once they own a service here."""
+    """Trial plans a customer of the current shop may start now.
+
+    A customer who owns a service here gets none, unless the shop opened the trial to them.
+    """
     if not on((ui or {}).get("trial_enabled")):
         return []
-    if await list_customer_services(session, int(user_id), current_shop_reseller_id(), limit=1):
+    if not trial_open_to_service_owners(ui) and await list_customer_services(
+        session, int(user_id), current_shop_reseller_id(), limit=1
+    ):
         return []
     return await offerable_trial_plans(session, ui, user_id)

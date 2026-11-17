@@ -15,7 +15,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot import menu_nav, screen_replay
+from app.bot import import_prompt, menu_nav, screen_replay
 from app.bot import reply_keyboards as rk
 from app.bot.handlers import admin_plans, home_trial, start, trial_menu
 from app.db.models import BotUser, Plan, TrialClaim, UserService
@@ -186,6 +186,71 @@ class CustomerTrialPlansTests(TrialCase):
             session.add(UserService(id=801, bot_user_id=2, pg_user_id=801, pg_username="mine", remark="order:1"))
             await session.commit()
             self.assertEqual(await offer.customer_trial_plans(session, self.KEYBOARD_UI, 2), [])
+
+
+class ServiceOwnerTests(TrialCase):
+    """Off by default: owning a service in the shop rules the trial out unless the shop opens it."""
+
+    OPEN = {**TrialCase.KEYBOARD_UI, offer.TRIAL_SERVICE_OWNERS_KEY: "1"}
+
+    async def asyncSetUp(self) -> None:
+        await super().asyncSetUp()
+        async with self.Session() as session:
+            session.add(UserService(id=801, bot_user_id=1, pg_user_id=801, pg_username="mine", remark="order:1"))
+            await session.commit()
+
+    def test_the_rule_is_off_by_default(self) -> None:
+        self.assertEqual(DEFAULT_SETTINGS[offer.TRIAL_SERVICE_OWNERS_KEY], "0")
+        self.assertTrue(offer.may_offer_trial({}, has_services=False))
+        self.assertFalse(offer.may_offer_trial({}, has_services=True))
+        self.assertTrue(offer.may_offer_trial(self.OPEN, has_services=True))
+
+    async def test_a_service_owner_gets_the_trial_only_when_the_shop_opens_it(self) -> None:
+        async with self.Session() as session:
+            self.assertEqual(await offer.customer_trial_plans(session, self.KEYBOARD_UI, 1), [])
+            self.assertEqual([p.id for p in await offer.customer_trial_plans(session, self.OPEN, 1)], [900])
+            self.assertTrue(await menu_nav.keyboard_shows_trial(session, self.OPEN, 1))
+        await self._claim()
+        async with self.Session() as session:
+            self.assertEqual(await offer.customer_trial_plans(session, self.OPEN, 1), [])
+
+    async def test_a_service_owner_sees_the_trial_in_the_shop_only_when_opened(self) -> None:
+        from app.bot.handlers import shop
+
+        async with self.Session() as session:
+            user = await session.get(BotUser, 1)
+            for ui, expected in ((self.KEYBOARD_UI, []), (self.OPEN, [900])):
+                with patch.object(shop, "get_all_settings", AsyncMock(return_value=ui)):
+                    _, _, trial_on, *_, trial_plans = await shop._shop_kind_flags(session, user)
+                with self.subTest(open=ui is self.OPEN):
+                    self.assertEqual([p.id for p in trial_plans], expected)
+                    self.assertEqual(trial_on, bool(expected))
+
+    async def test_the_home_offer_reaches_a_service_owner_with_the_trial_alone(self) -> None:
+        message = AsyncMock()
+        message.chat = SimpleNamespace(id=1, type="private")
+        message.answer = AsyncMock(return_value=SimpleNamespace(message_id=1, chat=message.chat, bot=message.bot))
+        for extra, expected in (({}, False), ({offer.TRIAL_SERVICE_OWNERS_KEY: "1"}, True)):
+            async with self.Session() as session:
+                user = await session.get(BotUser, 1)
+                ui = {**(await get_all_settings(session)), **self.KEYBOARD_UI, "service_import_enabled": "1",
+                      "trial_button_placement": "offer", **extra}
+                with (
+                    patch.object(start, "replace_home", AsyncMock()),
+                    patch.object(start, "send_import_prompt", AsyncMock()) as sent,
+                ):
+                    await start.render_home(message, session, user, ui=ui)
+            with self.subTest(open=expected):
+                self.assertEqual(sent.await_count, int(expected))
+                if expected:
+                    self.assertTrue(sent.await_args.kwargs["trial_available"])
+                    self.assertTrue(sent.await_args.kwargs["has_services"])
+
+    def test_a_service_owner_offer_carries_no_add_old_service_button(self) -> None:
+        ui = {"service_import_enabled": "1"}
+        blocks = import_prompt.build_import_prompt(ui, trial_available=True, has_services=True).blocks
+        self.assertEqual([b.callback_data for b in blocks[1].buttons], [import_prompt.HOME_TRIAL_CALLBACK])
+        self.assertEqual(blocks[0].text, import_prompt.HOME_TRIAL_NOTE)
 
 
 class KeyboardVisibilityTests(TrialCase):
@@ -427,6 +492,16 @@ class TrialSettingsRouteTests(ImportCase):
         async with self.Session() as session:
             self.assertEqual(await get_setting(session, "trial_enabled", reseller_id=SHOP), "0")
             self.assertEqual(await get_setting(session, offer.TRIAL_PLACEMENT_KEY, reseller_id=SHOP), "offer")
+
+    async def test_the_service_owner_switch_is_saved_for_that_shop_only(self) -> None:
+        shop_staff = {"role": "reseller", "permissions": ["plans"], "bot_user_id": SHOP}
+        await self._post(shop_staff, {offer.TRIAL_SERVICE_OWNERS_KEY: "1"})
+        async with self.Session() as session:
+            self.assertEqual(await get_setting(session, offer.TRIAL_SERVICE_OWNERS_KEY, reseller_id=SHOP), "1")
+            self.assertEqual(await get_setting(session, offer.TRIAL_SERVICE_OWNERS_KEY), "")
+        await self._post(shop_staff, {})
+        async with self.Session() as session:
+            self.assertEqual(await get_setting(session, offer.TRIAL_SERVICE_OWNERS_KEY, reseller_id=SHOP), "0")
 
     async def test_an_older_form_without_the_field_keeps_the_saved_choice(self) -> None:
         async with self.Session() as session:

@@ -185,8 +185,9 @@
         <div class="sales-seg ds-seg" role="radiogroup" aria-labelledby="trial-placement-label" data-ds-choice data-ds-target="#trial-placement">
           {% for value, label in trial_placement_labels.items() %}<button type="button" role="radio" data-value="{{ value }}">{{ label }}</button>{% endfor %}
         </div>
-        <small class="muted">فقط برای کاربری که سرویسی ندارد و تست نگرفته است. جای دکمه در کیبورد اصلی را در تنظیمات منو، بخش «منوی فعال» جابه‌جا کنید.</small>
+        <small class="muted">پیام ورودی: زیر پیام خوش‌آمد. کیبورد اصلی: در منوی پایین ربات؛ جایش را در تنظیمات منو، بخش «منوی فعال» عوض کنید. کاربری که تستش را گرفته، دکمه را دیگر نمی‌بیند.</small>
       </div>
+      <div class="ds-rows">{{ ds_switch('trial_for_service_owners', 'نمایش به کاربرانی که سرویس دارند', help='خاموش: فقط کاربری که در این فروشگاه سرویسی ندارد تست می‌گیرد. روشن: مشتری‌ای که سرویس دارد هم اگر تست نگرفته باشد، دکمه و پلن تست را می‌بیند.', checked=values.get('trial_for_service_owners') in ['1','true','yes','on'], show_when='#trial-enabled:1', hidden=not trial_on) }}</div>
       {% if trial and trial.button_style is not none %}{% set plan_button_style = trial.button_style if trial.button_style else '' %}{% else %}{% set plan_button_style = 'inherit' %}{% endif %}
       {% set plan_color_compact = true %}
       <div class="form-field">رنگ دکمه{% include "_plan_button_style_field.html" %}</div>
