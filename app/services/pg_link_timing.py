@@ -167,4 +167,3 @@ def snapshot(window_sec: float = WINDOW_SEC) -> dict[str, Any]:
         "first_byte": _phase([sample.first_byte_ms for sample in samples]),
         "endpoints": _slowest_endpoints(samples),
     }
-
