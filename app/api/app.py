@@ -108,9 +108,12 @@ from app.services.support_button import support_markup
 from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
 from app.services.settings_hub import (
     SYSTEM_LIST_TAB,
+    first_settings_href,
     hub_sections,
+    settings_nav,
     settings_place,
     system_hub_sections,
+    system_settings_nav,
     system_settings_groups,
 )
 from app.services.users import (
@@ -199,6 +202,9 @@ templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
 # Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).
 templates.env.globals["hub_sections"] = hub_sections
 templates.env.globals["settings_place"] = settings_place
+templates.env.globals["settings_nav"] = settings_nav
+templates.env.globals["system_settings_nav"] = system_settings_nav
+templates.env.globals["first_settings_href"] = first_settings_href
 templates.env.globals["system_settings_groups"] = system_settings_groups
 templates.env.globals["system_hub_sections"] = system_hub_sections
 # Request context overrides these; they keep templates that render without a signed-in person working.

@@ -1,8 +1,9 @@
-"""The list page of a settings area (DESIGN_SYSTEM.md §6-2).
+"""The list page of a settings area and its desktop menu (DESIGN_SYSTEM.md §6-2).
 
 A settings area opens on a list: one titled card per group and one row per settings page, each with an icon
-and a one-line description. The rows come from the same grouped tabs the role already holds
-(``settings_tab_groups.group_settings_tabs``), so the list never shows a page the role may not open.
+and a one-line description. On a wide screen the same rows are a menu beside every page of the area. The rows
+come from the same grouped tabs the role already holds (``settings_tab_groups.group_settings_tabs``), so neither
+shows a page the role may not open.
 """
 
 from __future__ import annotations
@@ -102,6 +103,14 @@ class HubSection:
 
 
 @dataclass(frozen=True, slots=True)
+class SettingsNav:
+    """The menu beside a settings page: the area's rows and the one that is open (``""`` on the list itself)."""
+
+    sections: tuple[HubSection, ...]
+    active_href: str
+
+
+@dataclass(frozen=True, slots=True)
 class SettingsPlace:
     """Where a settings page sits: its group and its own entry in the list."""
 
@@ -160,3 +169,35 @@ def system_hub_sections() -> tuple[HubSection, ...]:
     return hub_sections(
         system_settings_groups(), "/settings", area_icon="gear", descriptions=SYSTEM_DESCRIPTIONS, icons=SYSTEM_ICONS
     )
+
+
+def settings_nav(
+    groups: tuple[SettingsTabGroup, ...],
+    base: str,
+    active: str,
+    *,
+    area_icon: str,
+    descriptions: dict[str, str] | None = None,
+    icons: dict[str, str] | None = None,
+) -> SettingsNav:
+    """The area's rows for the desktop menu, with the entry of ``active`` (a tab or a section of it) marked."""
+    place = settings_place(groups, active)
+    return SettingsNav(
+        sections=hub_sections(groups, base, area_icon=area_icon, descriptions=descriptions, icons=icons),
+        active_href=tab_href(place.tab, base) if place else "",
+    )
+
+
+def system_settings_nav(active: str) -> SettingsNav:
+    return settings_nav(
+        system_settings_groups(active), "/settings", active,
+        area_icon="gear", descriptions=SYSTEM_DESCRIPTIONS, icons=SYSTEM_ICONS,
+    )
+
+
+def first_settings_href(sections: tuple[HubSection, ...]) -> str:
+    """The page a desktop opens instead of the list: the first row of the first group, if any."""
+    for section in sections:
+        for row in section.rows:
+            return row.href
+    return ""
