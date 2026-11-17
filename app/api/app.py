@@ -377,8 +377,12 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["update"] = upd
     if "tickets_unread" not in ctx:
         ctx["tickets_unread"] = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
+    # The inbox page counts its own items; every other page uses the count read during authentication.
+    if "inbox_badge_count" not in ctx:
+        inbox_count = ctx.get("inbox_count", getattr(request.state, "panel_inbox_count", 0))
+        ctx["inbox_badge_count"] = max(0, int(inbox_count or 0))
     if "inbox_alert" not in ctx:
-        ctx["inbox_alert"] = bool(getattr(request.state, "panel_inbox_alert", False))
+        ctx["inbox_alert"] = ctx["inbox_badge_count"] > 0
     if "cancel_alert" not in ctx:
         ctx["cancel_alert"] = bool(getattr(request.state, "panel_cancel_alert", False))
     # Keep env global fresh too — macros import without ``with context``.
@@ -809,7 +813,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             if should_skip_unread_count(request.url.path, request.method):
                 request.state.panel_tickets_unread = 0
-                request.state.panel_inbox_alert = False
+                request.state.panel_inbox_count = 0
                 request.state.panel_cancel_alert = False
             else:
                 from app.services.panel_sidebar_cache import (
@@ -822,13 +826,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 cached = peek_sidebar_counts(cache_key)
                 if cached is not None:
                     request.state.panel_tickets_unread = cached[0]
-                    request.state.panel_inbox_alert = cached[1]
+                    request.state.panel_inbox_count = cached[1]
                     request.state.panel_cancel_alert = cached[2]
                 else:
                     unread = await sidebar_unread_count(session, user)
-                    from app.services.panel_inbox import sidebar_inbox_has_alerts
+                    from app.services.panel_inbox import sidebar_inbox_count
 
-                    alert = await sidebar_inbox_has_alerts(session, request, user)
+                    inbox_count = await sidebar_inbox_count(session, request, user)
                     cancel_alert = False
                     try:
                         from app.services.authz import authz_from_staff, can_shop
@@ -842,16 +846,16 @@ def create_api_app(lifespan=None) -> FastAPI:
                         cancel_alert = False
                     except Exception:
                         cancel_alert = False
-                    store_sidebar_counts(cache_key, unread, alert, cancel_alert)
+                    store_sidebar_counts(cache_key, unread, inbox_count, cancel_alert)
                     request.state.panel_tickets_unread = unread
-                    request.state.panel_inbox_alert = alert
+                    request.state.panel_inbox_count = inbox_count
                     request.state.panel_cancel_alert = cancel_alert
         except Exception:
             from app.services.db_safe import rollback_quiet
 
             await rollback_quiet(session)
             request.state.panel_tickets_unread = 0
-            request.state.panel_inbox_alert = False
+            request.state.panel_inbox_count = 0
             request.state.panel_cancel_alert = False
         from app.services.db_safe import recover_session
 

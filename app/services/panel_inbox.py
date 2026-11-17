@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 _EMPTY_ACTION = {"entries": [], "has_items": False}
 _EMPTY_PAYG = {"suspended": [], "low": [], "threshold": 0, "review": 0, "has_items": False}
 
-# Soft cache for sidebar dot — avoid rebuilding action center on every navigation.
-_SIDEBAR_CACHE: dict[str, tuple[float, bool]] = {}
+# Soft cache for the header badge — avoid rebuilding the action center on every navigation.
+_SIDEBAR_CACHE: dict[str, tuple[float, int]] = {}
 _SIDEBAR_TTL_SEC = 45.0
 
 
@@ -307,18 +307,18 @@ async def build_inbox_context(
         await rollback_quiet(session)
 
     # Refresh sidebar cache from authoritative page build.
-    _SIDEBAR_CACHE[_cache_key(staff)] = (time.monotonic(), bool(ctx["inbox_has"]))
+    _SIDEBAR_CACHE[_cache_key(staff)] = (time.monotonic(), int(ctx["inbox_count"]))
     return ctx
 
 
-async def sidebar_inbox_has_alerts(
+async def sidebar_inbox_count(
     session: AsyncSession,
     request,
     staff: dict,
     *,
     force: bool = False,
-) -> bool:
-    """Boolean for sidebar nav-dot (cached briefly)."""
+) -> int:
+    """Visible inbox items for the header badge and sidebar dot (cached briefly)."""
     key = _cache_key(staff)
     now = time.monotonic()
     if not force:
@@ -328,10 +328,10 @@ async def sidebar_inbox_has_alerts(
 
     try:
         ctx = await build_inbox_context(session, request, staff)
-        has = bool(ctx.get("inbox_has"))
+        count = int(ctx.get("inbox_count") or 0)
     except Exception:
-        logger.exception("sidebar_inbox_has_alerts failed")
-        has = False
+        logger.exception("sidebar_inbox_count failed")
+        count = 0
 
-    _SIDEBAR_CACHE[key] = (now, has)
-    return has
+    _SIDEBAR_CACHE[key] = (now, count)
+    return count
