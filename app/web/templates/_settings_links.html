@@ -3,12 +3,14 @@
   {% if bot_username %}
   <p class="muted update-card-caption">
     ربات: <span dir="ltr">@{{ bot_username }}</span> — لینک را برای کاربر بفرستید تا مستقیم وارد همان بخش شود.
+    لینک تمدید یک سرویس مشخص در کارت همان مشتری، و لینک هر کد هدیه در صفحهٔ کدهای هدیه است.
   </p>
   {% else %}
   <p class="flash warn">یوزرنیم ربات مشخص نیست — اول اتصال ربات را در تنظیمات سیستم › «اتصال ربات و پاسارگارد» درست کنید.</p>
   {% endif %}
   <div class="form-stack magic-links-stack">
-    {% for key, label in [('renew','تمدید'),('wallet','کیف پول'),('support','پشتیبانی'),('config','دریافت مجدد کانفیگ'),('gift','کد هدیه')] %}
+    {% for link in quick_links or [] %}
+    {% set key, label = link.key, link.label %}
     <div class="magic-link-item">
       <span class="magic-link-label" id="ml-label-{{ key }}">{{ label }}</span>
       <div class="magic-link-field{% if links.get(key) %} has-copy{% endif %}" dir="ltr">

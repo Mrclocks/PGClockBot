@@ -1,5 +1,6 @@
 {# Reseller dash body — single root #home-dash for /home/body swap. #}
 {% from "macros.html" import page_header, card_title %}
+{% from "_icons.html" import icon %}
 <div class="home-dash" id="home-dash">
 {% if request is defined and request.url.path == '/home/body' %}{% include "_pg_connection_notice.html" %}{% endif %}
 {% if dashboard_degraded %}
@@ -12,7 +13,19 @@
 </div>
 {% endif %}
 
-{{ page_header('home', 'داشبورد', 'neutral', help='home', capsule=false) }}
+{% call(slot) page_header('home', 'داشبورد', 'neutral', help='home', capsule=false) %}
+  {%- if slot == 'more' and quick_links_page %}<a class="btn btn-ghost" href="{{ quick_links_page }}">{{ icon('external', 'more-ico') }}لینک‌های سریع</a>{% endif -%}
+  {% endcall %}
+
+{% if alerts_off_page is defined and alerts_off_page %}
+<div class="flash warn home-update-banner">
+  <div class="home-update-copy">
+    <strong>هشدار کمبود سرویس برای مشتریان خاموش است</strong>
+    <span class="muted">مشتری پیش از تمام شدن زمان یا حجم سرویسش پیامی نمی‌گیرد و فرصت تمدید را از دست می‌دهد.</span>
+  </div>
+  <a class="btn btn-sm btn-ghost" href="{{ alerts_off_page }}">روشن کردن هشدار</a>
+</div>
+{% endif %}
 
 {% if bot_setup_needed %}
 <div class="flash err dash-bot-setup">

@@ -29,6 +29,14 @@ from app.services.customer_notice_queue import (
     NoticeOutcome,
     add_notice,
 )
+from app.services.customer_notice_buttons import (
+    buy_new_button,
+    help_row,
+    renew_button,
+    services_button,
+    support_button,
+    volume_pack_button,
+)
 from app.services.shop_scope import resolve_shop_scope_id
 from app.services.staff_audit import StaffActor
 
@@ -95,6 +103,14 @@ CLEANUP_NOTICE_TEXTS = {
 RENEW_BUTTON_ACTIONS = frozenset(
     {"cleanup_expired", "cleanup_warning", "cleanup_volume_finished", "cleanup_volume_warning"}
 )
+# The volume warnings may also offer a pack, when the shop sells one.
+VOLUME_PACK_ACTIONS = frozenset({"cleanup_volume_finished", "cleanup_volume_warning"})
+# The service is gone: offer a new one instead of the customer's service list.
+SERVICE_GONE_ACTIONS = frozenset(
+    {"cleanup_deleted", "cleanup_volume_deleted", "service_delete", "pg_user_delete", "service_detach"}
+)
+# The customer needs their service list (a new link, a service now in the list) more than support.
+SERVICES_ONLY_ACTIONS = frozenset({"pg_user_revoke_sub", "service_import_assign"})
 
 
 def notice_text(action: str, *, service_name: str, reason: str) -> str:
@@ -181,19 +197,42 @@ async def notify_customers(session: AsyncSession, targets: list[NoticeTarget], *
 
 
 BotFor = Callable[[int | None], Awaitable[Bot | None]]
+PacksFor = Callable[[int | None], Awaitable[bool]]
 
 
-def _renew_markup(notice: CustomerNotice) -> InlineKeyboardMarkup | None:
-    """A renew button on the warnings that tell the customer a service will be deleted."""
-    if notice.action not in RENEW_BUTTON_ACTIONS or not notice.service_id:
-        return None
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="🔄 تمدید سرویس", callback_data=f"svc:renew:{int(notice.service_id)}")]]
-    )
+def _way_out_rows(notice: CustomerNotice, *, sells_volume_packs: bool) -> list[list[InlineKeyboardButton]]:
+    """What the customer can do about the service: a pack, a renewal, or a new service."""
+    if notice.action in SERVICE_GONE_ACTIONS:
+        return [[buy_new_button()]]
+    if not notice.service_id:
+        return []
+    rows = []
+    if notice.action in VOLUME_PACK_ACTIONS and sells_volume_packs:
+        rows.append([volume_pack_button(int(notice.service_id))])
+    if notice.action in RENEW_BUTTON_ACTIONS:
+        rows.append([renew_button(int(notice.service_id))])
+    return rows
 
 
-async def deliver_notice(session: AsyncSession, bot_for: BotFor, notice: CustomerNotice) -> NoticeOutcome:
-    """Send one queued notice through its shop's bot and say what happened to it."""
+def notice_markup_for(notice: CustomerNotice, *, sells_volume_packs: bool = False) -> InlineKeyboardMarkup:
+    """The buttons under one customer notice; every notice ends with its help row."""
+    rows = _way_out_rows(notice, sells_volume_packs=sells_volume_packs)
+    if notice.action in SERVICES_ONLY_ACTIONS:
+        rows.append([services_button()])
+    elif notice.action in SERVICE_GONE_ACTIONS:
+        rows.append([support_button()])
+    else:
+        rows.append(help_row())
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def deliver_notice(
+    session: AsyncSession, bot_for: BotFor, notice: CustomerNotice, *, packs_for: PacksFor | None = None
+) -> NoticeOutcome:
+    """Send one queued notice through its shop's bot and say what happened to it.
+
+    ``packs_for`` says whether a shop sells volume packs; the job memoises it per batch.
+    """
     user = await session.get(BotUser, int(notice.bot_user_id))
     if user is None or user.is_blocked:
         return NoticeOutcome(OUTCOME_SKIPPED)
@@ -202,8 +241,10 @@ async def deliver_notice(session: AsyncSession, bot_for: BotFor, notice: Custome
         logger.warning("customer notice skipped: no bot for shop=%s", notice.shop_id)
         return NoticeOutcome(OUTCOME_SKIPPED)
     text = notice_text(notice.action, service_name=notice.service_name, reason=notice.reason)
+    sells_packs = bool(packs_for and notice.action in VOLUME_PACK_ACTIONS and await packs_for(notice.shop_id))
+    markup = notice_markup_for(notice, sells_volume_packs=sells_packs)
     try:
-        await bot.send_message(int(notice.telegram_id), text, parse_mode="HTML", reply_markup=_renew_markup(notice))
+        await bot.send_message(int(notice.telegram_id), text, parse_mode="HTML", reply_markup=markup)
     except TelegramRetryAfter as exc:
         return NoticeOutcome(OUTCOME_RETRY, timedelta(seconds=int(exc.retry_after) + 1))
     except TelegramForbiddenError:

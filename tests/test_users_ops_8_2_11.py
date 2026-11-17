@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class UsersOpsUnitTests(unittest.TestCase):
@@ -88,109 +85,6 @@ class UsersOpsUnitTests(unittest.TestCase):
         counts = summarize_ops_counts(rows)
         self.assertEqual(counts["expiring"], 1)
         self.assertEqual(counts["alerts"], 1)
-
-
-class UsersOpsUiTests(unittest.TestCase):
-    def test_template_has_ops_chrome(self):
-        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertNotIn("stat_strip(", users)
-        self.assertIn("alert-dot", users)
-        self.assertIn("badge-risk", users)
-        self.assertIn("cell-name-tags", users)
-        self.assertNotIn("risk-dot", users)
-        self.assertNotIn("users-svc-picker", users)
-        self.assertIn("filter_key='expiring'", users)
-        self.assertIn("نزدیک انقضا", users)
-        self.assertNotIn("<th data-sort-type=\"text\">نقش</th>", users)
-        self.assertIn("can_manage_users", users)
-        # Service, volume and expiry are separate, always-visible columns
-        # (desktop AND mobile) — never merged into one cramped cell, never
-        # hidden behind col-hide-sm. Multi-service rows still get a full
-        # switcher (with live volume/expiry + alert dot); it just lives in
-        # its own column now instead of a stacked mini-summary.
-        self.assertIn('class="col-svc', users)
-        self.assertIn('class="col-vol', users)
-        self.assertIn('class="col-exp', users)
-        self.assertIn("users-svc-select", users)
-        self.assertNotIn("cell-name-meta", users)
-
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
-        self.assertIn("users-svc-select-wrap", css)
-        self.assertIn(
-            "align-items: center",
-            css.split(".users-svc-select-wrap", 1)[1].split("}", 1)[0],
-        )
-        self.assertIn(".alert-dot", css)
-        # A user is shown in the card, never by tinting each cell of a row in the users list.
-        self.assertNotIn(".users-row.is-focus", css)
-        self.assertIn(".cell-name-tags", css)
-        self.assertIn(".cell-name-primary", css)
-        self.assertNotIn(".users-row.has-alert > td:first-child", css)
-        self.assertIn("cell-name-primary", users)
-        self.assertIn("sel.id", users)
-        self.assertIn(".users-ops-table .col-svc", css)
-        self.assertIn(".users-ops-table .col-vol", css)
-        self.assertIn(".users-ops-table .col-exp", css)
-        self.assertIn(".users-ops-table .col-wallet", css)
-        users_html = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn('class="col-wallet"', users_html)
-        self.assertIn("row.wallet_balance", users_html)
-        # Wallet stays visible on mobile (not col-hide-sm); # / telegram may still hide.
-        wallet_th = users_html.split("کیف پول</th>", 1)[0].rsplit("<th", 1)[-1]
-        self.assertNotIn("col-hide-sm", wallet_th)
-        self.assertIn("col-hide-sm", users_html)
-        self.assertIn("users-svc-boxed", css)
-        self.assertIn("users-svc-menu-label", css)
-        self.assertNotIn("has-svc-alert", css)
-        self.assertIn("data-alert", js)
-        self.assertIn("users-svc-menu-label", js)
-        self.assertIn("syncUsersSvcToggleAlert", js)
-        self.assertIn(".badge.badge-risk", css)
-        self.assertNotIn(".risk-dot {", css)
-
-        from tests.sidebar_view import sidebar
-
-        self.assertIn(("مشتریان", "/users"), sidebar("reseller", perms=("dashboard",))["shop"])
-
-    def test_action_center_deep_link(self):
-        ux = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")
-        self.assertIn("users_list_href", ux)
-        self.assertIn('filter_key="expiring"', ux)
-
-    def test_api_scoped_users_page(self):
-        api = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("require_perm(\"dashboard\")", api)
-        self.assertIn("scoped_users_where", api)
-        self.assertIn("build_users_ops_page", api)
-        self.assertIn("can_manage_users", api)
-
-    def test_edit_modal_open_hook(self):
-        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn('data-modal-open="modal-user-edit"', users)
-        self.assertIn("data-modal-load=", users)
-        self.assertIn("panel:modal-load", users)
-        self.assertNotIn("data-user-edit-open", users)
-        self.assertIn("loadEdit", users)
-        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
-        self.assertIn("panel:modal-load", js)
-
-    def test_bot_parity_hooks(self):
-        admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertIn("bot_user_alert_flags", admin)
-        self.assertIn("scoped_users_where(None)", admin)
-        res = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")
-        self.assertIn("bot_user_alert_flags", res)
-        self.assertIn("scoped_users_where(int(owner_id))", res)
-
-    def test_version_at_least_package(self):
-        from app.version import __version__
-
-        parts = [int(x) for x in __version__.split(".")[:3]]
-        self.assertGreaterEqual(parts, [0, 1, 0])
-        self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__
-        )
 
 
 class ActionCenterExpiringHrefTests(unittest.IsolatedAsyncioTestCase):

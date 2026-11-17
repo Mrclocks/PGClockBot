@@ -44,6 +44,8 @@ VIEW_SCREENS: frozenset[str] = frozenset({
     "adm:dash", "adm:orders", "adm:cancellations", "adm:resapp:list", "adm:tickets",
     "autorv:list", "payvoid:list",
     "res:dash", "res:orders", "res:tickets", "res:cancellations",
+    "qlk:v",
+    "shop:list",
 })
 # Read-only screen families: the part before the id or page.
 VIEW_FAMILIES: tuple[str, ...] = (
@@ -54,6 +56,8 @@ VIEW_FAMILIES: tuple[str, ...] = (
     "res:users:", "res:user:", "res:cancel:view:",
     "cnrv:v:", "payvoid:v:", "autorv:v:", "stk:l:", "stk:v:", "tru:l:", "saud:l:",
     "svc:auto:",
+    # Renewal and pack pickers only list choices until the customer confirms.
+    "svc:renew:", "svc:addon:",
 )
 
 PanelKey = tuple[int, int, int]

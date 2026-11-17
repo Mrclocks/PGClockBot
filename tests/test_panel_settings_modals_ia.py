@@ -222,7 +222,12 @@ class PaymentSettingsModalUxTests(unittest.TestCase):
 
 class DomainSettingGroupsTests(unittest.TestCase):
     def test_support_and_referral_groups_split(self):
-        from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, keys_for_tab
+        from app.services.users import (
+            ENTRY_APPROVAL_GROUP,
+            SETTING_GROUPS,
+            TAB_SETTING_GROUPS,
+            keys_for_tab,
+        )
 
         self.assertIn("متن پشتیبانی ربات", SETTING_GROUPS)
         self.assertIn("متن دعوت دوستان", SETTING_GROUPS)
@@ -242,7 +247,8 @@ class DomainSettingGroupsTests(unittest.TestCase):
             keys_for_tab("limits") & {"referral_required", "referral_required_text"},
             {"referral_required", "referral_required_text"},
         )
-        self.assertEqual(TAB_SETTING_GROUPS["limits"][0], "معرف اجباری")
+        # Entry approval comes first, right under the requests list it controls.
+        self.assertEqual(TAB_SETTING_GROUPS["limits"][:2], [ENTRY_APPROVAL_GROUP, "معرف اجباری"])
         self.assertEqual(TAB_SETTING_GROUPS["payment"][:2], ["کیف پول", "کارت به کارت"])
         self.assertIn("معرف اجباری", SETTING_GROUPS)
         self.assertEqual(

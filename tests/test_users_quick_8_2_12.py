@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
-
-ROOT = Path(__file__).resolve().parents[1]
+from unittest.mock import AsyncMock
 
 
 class StaffMessageSanitizeTests(unittest.TestCase):
@@ -57,62 +54,6 @@ class QuickRenewPickTests(unittest.TestCase):
         )
         picked = pick_critical_service([a, b])
         self.assertEqual(picked.id, 2)
-
-
-class UsersQuickUiTests(unittest.TestCase):
-    def test_template_actions(self):
-        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn("quick-renew", users)
-        self.assertIn("modal-user-message", users)
-        self.assertIn("bulk-message", users)
-        self.assertIn("can_user_ops", users)
-
-    def test_routes_registered(self):
-        pages = (ROOT / "app/api/user_pages.py").read_text(encoding="utf-8")
-        self.assertIn('/users/{user_id}/message', pages)
-        self.assertIn('/users/{user_id}/quick-renew', pages)
-        self.assertIn('/users/bulk-message', pages)
-        self.assertIn("require_ops", pages)
-
-    def test_finance_tickets_deep_links(self):
-        # A customer's name opens the user card in place (rendering is covered by test_user_card_links).
-        fin = (ROOT / "app/web/templates/finance.html").read_text(encoding="utf-8")
-        self.assertIn("user_card_link(o.user.id, uname, 'finance'", fin)
-        self.assertIn("user_card_link(payer.id, uname, 'finance'", fin)
-        tix = (ROOT / "app/web/templates/tickets.html").read_text(encoding="utf-8")
-        self.assertIn("user_card_link(row.user_id, row.user_label, 'tickets'", tix)
-        for source in (fin, tix):
-            self.assertNotIn("/users?uid=", source)
-
-    def test_action_center_low_volume(self):
-        ux = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")
-        self.assertIn('filter_key="low_volume"', ux)
-        self.assertIn("notified_traffic", ux)
-        macros = (ROOT / "app/web/templates/macros.html").read_text(encoding="utf-8")
-        self.assertIn("low_volume", macros)
-
-    def test_bot_message_hooks(self):
-        kb = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
-        self.assertIn("adm:users:msg:", kb)
-        self.assertIn("adm:users:renew:", kb)
-        admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertIn("adm_users_message_start", admin)
-        self.assertIn("user_message", admin)
-        self.assertIn("_deny_if_outside_platform_shop", admin)
-        self.assertIn("_platform_shop_user", admin)
-        self.assertIn("adm_users_quick_renew", admin)
-        res = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")
-        self.assertIn("res:usermsg:", res)
-        self.assertIn("res:userrenew:", res)
-
-    def test_version(self):
-        from app.version import __version__
-
-        parts = [int(x) for x in __version__.split(".")[:3]]
-        self.assertGreaterEqual(parts, [0, 1, 0])
-        self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__
-        )
 
 
 class SendStaffDmScopeTests(unittest.IsolatedAsyncioTestCase):

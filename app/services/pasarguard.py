@@ -23,6 +23,7 @@ from app.services.pg_http_rebuild import (
     note_http_transport_failure,
 )
 from app.services.pg_link_health import failure_kind
+from app.services.pg_link_timing import attach_trace
 from app.services.pg_read_resilience import (
     DNS_CACHE_TTL_SEC,
     note_successful_panel_contact,
@@ -79,6 +80,7 @@ def new_panel_http_client(base_url: str, *, timeout: httpx.Timeout = PG_HTTP_TIM
         # Never follow redirects with Bearer tokens (SSRF / credential forwarding)
         follow_redirects=False,
         transport=httpx.AsyncHTTPTransport(retries=PG_CONNECT_RETRIES, limits=PG_HTTP_LIMITS),
+        event_hooks={"request": [attach_trace]},
     )
 
 

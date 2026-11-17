@@ -27,6 +27,7 @@ from app.services.shop_points_adjust import shop_points_form_context
 from app.services.shop_wallet_adjust import shop_wallet_form_context
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
 from app.services.pg_access import staff_user_actions
+from app.services.quick_links import service_renew_links
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.service_import_assign import may_assign_existing_services
 from app.services.resellers import list_active_reseller_plans
@@ -326,6 +327,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "display_wallet": display_wallet,
             "display_points": display_points,
             "services": snaps,
+            "renew_links": await service_renew_links(session, [snap.service for snap in snaps]),
             "can_view_services": can_view_services,
             "wallet_txs": wallet_txs,
             "wallet_nonce": secrets.token_hex(8),

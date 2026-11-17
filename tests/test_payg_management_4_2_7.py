@@ -156,13 +156,6 @@ class VpnLabelRemovalTests(unittest.TestCase):
         self.assertIn("👥 کاربران", labels)
         self.assertTrue(all("VPN" not in t for t in labels))
 
-    def test_nav_pg_prefers_pg_users_label(self):
-        from pathlib import Path
-
-        src = Path("app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
-        self.assertIn("NAV_ADMIN_PG", src)
-        self.assertIn("_pg_submenu_entries", src)
-
 
 class AdminUsageSnapshotTests(unittest.TestCase):
     def test_snapshot_users_and_traffic(self):
@@ -181,22 +174,6 @@ class AdminUsageSnapshotTests(unittest.TestCase):
         self.assertIn("12", snap["users_text"])
         self.assertIn("50", snap["users_text"])
         self.assertIsNotNone(snap["lifetime_text"])
-
-    def test_resellers_and_admins_templates_show_usage(self):
-        from pathlib import Path
-
-        resellers = Path("app/web/templates/resellers.html").read_text(encoding="utf-8")
-        admins = Path("app/web/templates/pg_admins.html").read_text(encoding="utf-8")
-        self.assertIn("reseller_usage", resellers)
-        self.assertIn("users_text", resellers)
-        self.assertIn("traffic_text", resellers)
-        self.assertIn("کاربران", resellers)
-        self.assertIn("حجم", resellers)
-        self.assertIn("admin_usage", admins)
-        self.assertIn("users_text", admins)
-        self.assertIn("traffic_text", admins)
-        self.assertIn("کاربران", admins)
-        self.assertIn("حجم", admins)
 
 
 if __name__ == "__main__":

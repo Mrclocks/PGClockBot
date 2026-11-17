@@ -99,6 +99,30 @@ class WatchdogTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.failure_kind, "connect")
 
+    async def test_transient_drop_is_retried_once_in_the_same_tick(self) -> None:
+        responses: list[object] = [httpx.RemoteProtocolError("server disconnected"), 200]
+        self.calls = 0
+
+        def flaky(request: httpx.Request) -> httpx.Response:
+            self.calls += 1
+            item = responses.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return httpx.Response(int(item), json={"ok": True})
+
+        await self.http.aclose()
+        self.http = httpx.AsyncClient(
+            base_url="https://panel.example",
+            transport=httpx.MockTransport(flaky),
+        )
+        self.panel._http = MagicMock(return_value=self.http)
+        self.panel._client = self.http
+        with patch("asyncio.sleep", new=AsyncMock()):
+            result = await self._tick()
+        self.assertTrue(result.ok)
+        self.assertEqual(self.calls, 2)
+        self.assertEqual(watchdog.consecutive_failures(), 0)
+
     async def test_probe_uses_client_request_not_private_http(self) -> None:
         request_mock = AsyncMock(return_value={"ok": True})
         self.panel.request = request_mock
