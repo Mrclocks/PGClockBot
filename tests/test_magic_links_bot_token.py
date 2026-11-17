@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.db import Base
 from app.db.models import BotUser, ResellerProfile
 from app.services.secret_box import seal_bot_token
-from app.services.ux20 import build_magic_links_context
+from app.services.quick_links import build_magic_links_context
 
 SHOP_ID = 10
 PLAIN_TOKEN = "123456:SHOP-TOKEN"

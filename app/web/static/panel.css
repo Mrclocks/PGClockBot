@@ -12247,6 +12247,64 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
   display: inline-flex;
   margin: 0;
 }
+/* Summary row: four figures across on wide cards, two by two on phones. */
+.link-health-summary { margin-bottom: var(--space-2); }
+.link-health-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container home-periods (min-width: 640px) {
+  .link-health-figures { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+}
+/* Detail boxes share one row on wide cards and stretch to the same height. */
+.link-health-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+@container home-periods (min-width: 640px) {
+  .link-health-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+}
+/* Label-and-value rows; the three-column form is a small table (label, median, p95). */
+.link-health-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+.link-health-rows > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-block: var(--space-0);
+  border-bottom: 1px solid var(--border);
+}
+.link-health-rows > div:last-child { border-bottom: 0; }
+.link-health-rows-3 > div { grid-template-columns: minmax(0, 1fr) 4.75rem 4.75rem; }
+.link-health-rows dt {
+  margin: 0;
+  font-size: var(--fs-2);
+  color: var(--muted-fg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.link-health-rows dd {
+  margin: 0;
+  font-size: var(--fs-3);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: nowrap;
+}
+.link-health-rows > .link-health-rows-head dt,
+.link-health-rows > .link-health-rows-head dd {
+  font-size: var(--fs-1);
+  font-weight: 500;
+  color: var(--muted-fg);
+}
+.link-health-foot {
+  margin: auto 0 0;
+  padding-top: var(--space-1);
+  font-size: var(--fs-2);
+}
 
 /* Nested reseller subscription extras — same vertical rhythm as .form-stack
    so the packs “افزودن” row is not flush against نقش پاسارگارد below. */

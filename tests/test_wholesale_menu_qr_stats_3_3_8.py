@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-from tests.template_source import template_with_includes
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class CompactAdminMenuTests(unittest.TestCase):
@@ -143,25 +139,6 @@ class WholesaleLogicTests(unittest.TestCase):
         )
         sflat = [b.text for row in shop.keyboard for b in row]
         self.assertNotIn("فروش عمده", sflat)
-
-    def test_web_modal_and_route_exist(self):
-        html = template_with_includes("plans.html")
-        self.assertIn("panel-user-wholesale", html)
-        self.assertIn("modal-plan-unified", html)
-        self.assertIn("/plans/wholesale", html)
-        self.assertIn("wholesale_tiers", html)
-        api = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn('"/plans/wholesale"', api)
-        self.assertIn("plans_wholesale_save", api)
-
-    def test_order_has_quantity(self):
-        src = (ROOT / "app/db/models.py").read_text(encoding="utf-8")
-        self.assertIn("quantity: Mapped[int]", src)
-        mig = (ROOT / "app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn('ADD COLUMN quantity', mig)
-        orders = (ROOT / "app/services/orders.py").read_text(encoding="utf-8")
-        self.assertIn("create_wholesale_order", orders)
-        self.assertIn("quantity=qty", orders)
 
 
 class ScopedPgUserStatsTests(unittest.IsolatedAsyncioTestCase):

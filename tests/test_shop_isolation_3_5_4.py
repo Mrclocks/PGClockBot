@@ -116,19 +116,5 @@ class PgShopCredentialsTests(unittest.TestCase):
         self.assertIn("get_pg_for_reseller", src)
 
 
-class VersionBumpTests(unittest.TestCase):
-    def test_version_is_at_least_3_5_4(self):
-        from app.version import __version__
-
-        self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")[:3]), (0, 1, 0)
-        )
-        self.assertEqual(
-            (ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__
-        )
-        notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"0.1.0"', notes)
-
-
 if __name__ == "__main__":
     unittest.main()

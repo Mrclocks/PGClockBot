@@ -108,6 +108,12 @@
       ],
       [
         {
+          "callback_data": "qlk:v",
+          "text": "🔗 لینک‌های سریع"
+        }
+      ],
+      [
+        {
           "callback_data": "ed:a:h",
           "text": "✏️ حالت ویرایش منوها"
         }
@@ -173,6 +179,12 @@
           "callback_data": "cma:home:0",
           "style": "primary",
           "text": "📡 وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "qlk:v",
+          "text": "🔗 لینک‌های سریع"
         }
       ],
       [
@@ -984,6 +996,12 @@
       ],
       [
         {
+          "callback_data": "qlk:v",
+          "text": "🔗 لینک‌های سریع"
+        }
+      ],
+      [
+        {
           "callback_data": "menu:home",
           "text": "⬅️ بازگشت"
         }
@@ -1015,6 +1033,12 @@
           "callback_data": "nv:res:grp:account",
           "style": "primary",
           "text": "💼 حساب من"
+        }
+      ],
+      [
+        {
+          "callback_data": "qlk:v",
+          "text": "🔗 لینک‌های سریع"
         }
       ],
       [
@@ -1338,13 +1362,6 @@
         {
           "callback_data": "nv:w:tx",
           "text": "🟡📜 تراکنش‌ها"
-        }
-      ],
-      [
-        {
-          "callback_data": "nv:loy:home",
-          "style": "success",
-          "text": "⭐ باشگاه مشتریان"
         }
       ],
       [

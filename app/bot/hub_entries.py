@@ -11,6 +11,7 @@ from dataclasses import dataclass
 TRIAL_USERS_CALLBACK = "tru:l:all:0"
 STAFF_AUDIT_CALLBACK = "saud:l:0"
 SERVICE_SHOP_REVIEW_CALLBACK = "ssr:l:0"
+QUICK_LINKS_CALLBACK = "qlk:v"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,4 +30,6 @@ ADMIN_TRIAL_USERS = HubEntry("btn_adm_trial_users", TRIAL_USERS_CALLBACK, "🧪 
 SHOP_TRIAL_USERS = HubEntry("btn_res_trial_users", TRIAL_USERS_CALLBACK, "🧪 کاربران تست")
 ADMIN_STAFF_AUDIT = HubEntry("btn_adm_staff_audit", STAFF_AUDIT_CALLBACK, "🧾 گزارش کارکنان")
 SHOP_STAFF_AUDIT = HubEntry("btn_res_staff_audit", STAFF_AUDIT_CALLBACK, "🧾 گزارش کارکنان")
+ADMIN_QUICK_LINKS = HubEntry("btn_adm_quick_links", QUICK_LINKS_CALLBACK, "🔗 لینک‌های سریع")
+SHOP_QUICK_LINKS = HubEntry("btn_res_quick_links", QUICK_LINKS_CALLBACK, "🔗 لینک‌های سریع")
 SERVICE_SHOP_REVIEW = HubEntry("btn_adm_service_shop_review", SERVICE_SHOP_REVIEW_CALLBACK, "🏷 تعیین فروشگاه سرویس")

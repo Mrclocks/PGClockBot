@@ -21,7 +21,11 @@ from app.db.models import (
 )
 from app.jobs import scheduler as jobs
 from app.services.service_automation import notify_once
+from app.services.support_button import SUPPORT_NOTICE_CALLBACK
 from app.services.usage_alerts import TOPUP_CALLBACK, AlertExtras, alert_extras, time_alert_markup, traffic_alert_markup
+
+# Every alert ends with the customer's services and support (customer_notice_buttons.help_row).
+HELP = ["nto:svc:list", SUPPORT_NOTICE_CALLBACK]
 from app.services.users import _SETTINGS_CACHE, clear_settings_cache, set_setting
 
 
@@ -140,17 +144,22 @@ class AlertMarkupTests(unittest.TestCase):
     UI = {"one_tap_renew_enabled": "1"}
 
     def test_time_alert_offers_renewal_and_topup_only_when_short(self):
-        self.assertEqual(buttons(time_alert_markup(self.UI, 7, AlertExtras())), ["svc:renew:7"])
+        self.assertEqual(buttons(time_alert_markup(self.UI, 7, AlertExtras())), ["nto:svc:renew:7", *HELP])
         short = AlertExtras(renew_shortfalls={7: 100})
-        self.assertEqual(buttons(time_alert_markup(self.UI, 7, short)), ["svc:renew:7", TOPUP_CALLBACK])
-        self.assertIsNone(time_alert_markup({"one_tap_renew_enabled": "0"}, 7, AlertExtras()))
+        self.assertEqual(buttons(time_alert_markup(self.UI, 7, short)), ["nto:svc:renew:7", TOPUP_CALLBACK, *HELP])
+        self.assertEqual(buttons(time_alert_markup({"one_tap_renew_enabled": "0"}, 7, AlertExtras())), HELP)
 
     def test_traffic_alert_offers_the_pack_renewal_and_topup(self):
         extras = AlertExtras(sells_volume_packs=True, renew_shortfalls={7: 100})
-        self.assertEqual(buttons(traffic_alert_markup(self.UI, 7, extras)), ["svc:addon:7:volume", "svc:renew:7", TOPUP_CALLBACK])
-        self.assertEqual(buttons(traffic_alert_markup(self.UI, 7, AlertExtras())), ["svc:renew:7"])
-        self.assertEqual(buttons(traffic_alert_markup({"one_tap_renew_enabled": "0"}, 7, AlertExtras(sells_volume_packs=True))), ["svc:addon:7:volume"])
-        self.assertIsNone(traffic_alert_markup({"one_tap_renew_enabled": "0"}, 7, AlertExtras()))
+        self.assertEqual(
+            buttons(traffic_alert_markup(self.UI, 7, extras)), ["nto:svc:addon:7:volume", "nto:svc:renew:7", TOPUP_CALLBACK, *HELP]
+        )
+        self.assertEqual(buttons(traffic_alert_markup(self.UI, 7, AlertExtras())), ["nto:svc:renew:7", *HELP])
+        self.assertEqual(
+            buttons(traffic_alert_markup({"one_tap_renew_enabled": "0"}, 7, AlertExtras(sells_volume_packs=True))),
+            ["nto:svc:addon:7:volume", *HELP],
+        )
+        self.assertEqual(buttons(traffic_alert_markup({"one_tap_renew_enabled": "0"}, 7, AlertExtras())), HELP)
 
     def test_only_the_short_service_gets_the_wallet_note(self):
         extras = AlertExtras(renew_shortfalls={7: 100})
@@ -204,11 +213,13 @@ class AlertJobTests(AlertCase):
         bot = await self.run_job()
         calls = [c for c in bot.send_message.await_args_list if c.args[0] == 1001]
         self.assertEqual(len(calls), 2)
-        time_call = next(c for c in calls if "زمان سرویس" in c.args[1])
-        traffic_call = next(c for c in calls if "حجم باقی‌مانده" in c.args[1])
-        self.assertEqual(buttons(time_call.kwargs["reply_markup"]), ["svc:renew:10", TOPUP_CALLBACK])
+        time_call = next(c for c in calls if "⏰" in c.args[1])
+        traffic_call = next(c for c in calls if "📉" in c.args[1])
+        self.assertEqual(buttons(time_call.kwargs["reply_markup"]), ["nto:svc:renew:10", TOPUP_CALLBACK, *HELP])
         self.assertIn("کیف پول برای تمدید", time_call.args[1])
-        self.assertEqual(buttons(traffic_call.kwargs["reply_markup"]), ["svc:addon:10:volume", "svc:renew:10", TOPUP_CALLBACK])
+        self.assertEqual(
+            buttons(traffic_call.kwargs["reply_markup"]), ["nto:svc:addon:10:volume", "nto:svc:renew:10", TOPUP_CALLBACK, *HELP]
+        )
         self.assertIn("کیف پول برای تمدید", traffic_call.args[1])
 
     async def test_a_customer_with_enough_wallet_gets_no_topup_offer(self):
@@ -238,8 +249,10 @@ class AlertJobTests(AlertCase):
             await jobs.check_expiring_services(AsyncMock())
         calls = {c.args[0]: c for c in shop_bot.send_message.await_args_list}
         self.assertEqual(set(calls), {1004})
-        traffic = next(c for c in shop_bot.send_message.await_args_list if "حجم باقی‌مانده" in c.args[1])
-        self.assertEqual(buttons(traffic.kwargs["reply_markup"]), ["svc:addon:11:volume", "svc:renew:11", TOPUP_CALLBACK])
+        traffic = next(c for c in shop_bot.send_message.await_args_list if "📉" in c.args[1])
+        self.assertEqual(
+            buttons(traffic.kwargs["reply_markup"]), ["nto:svc:addon:11:volume", "nto:svc:renew:11", TOPUP_CALLBACK, *HELP]
+        )
 
     def numbered_bot(self) -> AsyncMock:
         bot = AsyncMock()
@@ -301,7 +314,7 @@ class AlertThresholdCorrectnessTests(AlertJobTests):
         bot = AsyncMock()
         with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg):
             await jobs.check_expiring_services(bot)
-        return [c for c in bot.send_message.await_args_list if c.args[0] == 1001 and "زمان سرویس" in c.args[1]]
+        return [c for c in bot.send_message.await_args_list if c.args[0] == 1001 and "⏰" in c.args[1]]
 
     async def test_a_renewed_service_is_not_alerted_early_because_of_its_old_creation_date(self):
         await self.set_created(100)  # 25 of the 30 plan days left, but 20% of the time since creation

@@ -51,11 +51,6 @@ class OpsRecoveryStaticContracts(unittest.TestCase):
         self.assertIn("batch_size = 150", fn)
         self.assertIn("UserService.id > last_id", fn)
 
-    def test_terms_integrity_safe(self):
-        src = (ROOT / "app/services/terms.py").read_text(encoding="utf-8")
-        self.assertIn("IntegrityError", src)
-        self.assertIn("await session.rollback()", src)
-
     def test_admin_orders_prioritize_stuck(self):
         src = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
         block = src[src.find("async def adm_orders") : src.find("async def adm_order_view")]

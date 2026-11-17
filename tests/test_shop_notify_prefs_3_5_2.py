@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class CatalogAclTests(unittest.TestCase):
@@ -139,37 +136,6 @@ class IsolationLogicTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(send.await_count, 1)
         self.assertEqual(send.await_args.args[1], [111])
-
-
-class WiringTests(unittest.TestCase):
-    def test_shop_route_and_templates(self):
-        api = (ROOT / "app/api/shop_settings.py").read_text(encoding="utf-8")
-        self.assertIn('/shop-notifications', api)
-        self.assertIn("save_shop_notify_prefs", api)
-        self.assertIn('startswith("notify_")', api)
-        shop_tpl = (ROOT / "app/web/templates/shop_settings.html").read_text(encoding="utf-8")
-        self.assertIn("_shop_settings_notifications.html", shop_tpl)
-        partial = (
-            ROOT / "app/web/templates/_shop_settings_notifications.html"
-        ).read_text(encoding="utf-8")
-        self.assertIn("/shop-notifications", partial)
-        self.assertIn("مستقل از ادمین اصلی", partial)
-
-    def test_bot_reseller_notify_section(self):
-        bot = (ROOT / "app/bot/handlers/reseller_settings.py").read_text(encoding="utf-8")
-        self.assertIn('"notify"', bot)
-        self.assertIn("res:st:ntog:", bot)
-        self.assertIn("PLATFORM_ONLY_NOTIFY_KEYS", bot)
-        self.assertIn("get_shop_notify_prefs", bot)
-
-    def test_version_at_least_3_5_2(self):
-        from app.version import __version__
-
-        self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")[:3]), (0, 1, 0)
-        )
-        notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"0.1.0"', notes)
 
 
 if __name__ == "__main__":

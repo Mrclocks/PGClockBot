@@ -1,10 +1,15 @@
-"""Send finished backups to Telegram: through the panel bot by default, or a separate backup bot."""
+"""Send finished backups to Telegram: through the panel bot by default, or a separate backup bot.
+
+A backup that contains ``.env`` carries every token and secret of the server, so it
+is only sent after the admin turns on the risk-acknowledgement switch.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from aiogram import Bot
@@ -31,6 +36,13 @@ TOO_LARGE_MESSAGE = (
     "آن را از وب‌پنل ← تنظیمات ← بکاپ دانلود کنید و جای امن نگه دارید."
 )
 STATUS_AT_KEY = "backup_telegram_last_at"
+ENABLED_KEY = "backup_telegram_enabled"
+ALLOW_ENV_KEY = "backup_telegram_allow_env"
+CUSTOM_BOT_KEY = "backup_telegram_custom_bot"
+ENV_NOT_ALLOWED_STATUS = (
+    "skipped: بکاپ شامل .env است؛ برای ارسال آن، «تأیید ریسک: ارسال بکاپ همراه .env» را روشن کنید"
+)
+ENV_CAPTION_WARNING = "\n🔐 شامل .env (توکن‌ها و اسرار سرور) — این فایل را با هیچ‌کس به اشتراک نگذارید."
 BACKUP_SCREEN_CALLBACK = "nv:adm:backup"
 
 
@@ -47,7 +59,7 @@ class Destination:
 
 async def resolve_destination(session: AsyncSession) -> Destination:
     """Panel bot + main admins by default; the separate backup bot when that switch is on."""
-    if on(await get_setting(session, "backup_telegram_custom_bot", "0")):
+    if on(await get_setting(session, CUSTOM_BOT_KEY, "0")):
         token = reveal_bot_token(await get_setting(session, TOKEN_KEY, "")) or ""
         chat_ids = parse_chat_ids(await get_setting(session, CHAT_IDS_KEY, ""))
         if not token:
@@ -70,8 +82,6 @@ def _open_bot(token: str) -> Bot:
 
 
 async def _record(session: AsyncSession, status: str) -> None:
-    from datetime import datetime, timezone
-
     await set_setting(session, STATUS_KEY, status[:200])
     await set_setting(session, STATUS_AT_KEY, datetime.now(timezone.utc).isoformat())
     await session.commit()
@@ -80,13 +90,15 @@ async def _record(session: AsyncSession, status: str) -> None:
 async def send_backup(session: AsyncSession, path: Path, *, include_env: bool, caption: str) -> str:
     """Deliver one backup if the switch is on; returns a short status and stores it for the settings page.
 
-    A backup that contains ``.env`` is never sent: it holds every token and secret.
+    A backup that contains ``.env`` is sent only while the risk-acknowledgement switch is on.
     """
-    if not on(await get_setting(session, "backup_telegram_enabled", "0")):
+    if not on(await get_setting(session, ENABLED_KEY, "0")):
         return "disabled"
     if include_env:
-        await _record(session, "skipped: بکاپ شامل .env است و برای تلگرام ارسال نمی‌شود")
-        return "skipped"
+        if not on(await get_setting(session, ALLOW_ENV_KEY, "0")):
+            await _record(session, ENV_NOT_ALLOWED_STATUS)
+            return "skipped"
+        caption = caption[: 900 - len(ENV_CAPTION_WARNING)] + ENV_CAPTION_WARNING
     try:
         size = (await asyncio.to_thread(path.stat)).st_size
     except OSError:
@@ -116,7 +128,8 @@ async def send_backup(session: AsyncSession, path: Path, *, include_env: bool, c
     finally:
         await bot.session.close()
     if delivered:
-        await _record(session, f"ok: برای {delivered} گیرنده ارسال شد")
+        env_note = " (شامل .env)" if include_env else ""
+        await _record(session, f"ok: برای {delivered} گیرنده ارسال شد{env_note}")
         return "ok"
     await _record(session, "error: ارسال به هیچ گیرنده‌ای ممکن نشد؛ ربات را در چت گیرنده شروع کنید و شناسه را بررسی کنید")
     return "error"
