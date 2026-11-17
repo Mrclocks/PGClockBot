@@ -148,8 +148,12 @@
     {{ setting_help(help) }}
   </label>
   {% elif kind == 'number_unlimited' %}
-  {# «نامحدود» button as in the plan and gift-code forms: it empties the field, and an empty field saves as no limit. #}
-  {% set capped = val is string and val.isdigit() %}
+  {# «نامحدود» button as in the plan and gift-code forms: it empties the field, and an empty field saves as no limit.
+     options = (stored unlimited value, default number). Pressed only for the stored unlimited value; anything
+     else shows the number the service reads (the default when nothing valid is stored), so a re-save keeps it. #}
+  {% set unlimited_value, default_number = options %}
+  {% set capped = (val | string | trim) != unlimited_value %}
+  {% set val = val if (val is string and val.isdigit()) else default_number %}
   <div class="form-field">
     <span class="ds-label-row"><span class="ds-label-text">{{ label }}</span>
       <button type="button" class="ds-mini" aria-pressed="{{ 'false' if capped else 'true' }}" data-ds-unlimited="#s-{{ key }}" data-ds-empty-is-unlimited aria-label="{{ label }} نامحدود">نامحدود</button></span>

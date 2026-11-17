@@ -19,6 +19,10 @@ from app.services.screen_titles import SCREEN_TEXT_TAB, screen_text_defaults, sc
 from app.services.settings_button_labels import appearance_button_subs, shop_button_subs
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
+from app.services.service_import_config import (
+    DEFAULT_MAX_PER_USER as IMPORT_DEFAULT_MAX_PER_USER,
+    UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
+)
 from app.services.entry_approval_config import (
     ENTRY_APPROVAL_DEFAULTS,
     GROUP_TITLE as ENTRY_APPROVAL_GROUP,
@@ -1233,7 +1237,7 @@ DEFAULT_SETTINGS = {
     "miniapp_accent_color": "",
     "miniapp_notice": "",
     "service_import_mode": "instant",
-    "service_import_max_per_user": "5",
+    "service_import_max_per_user": str(IMPORT_DEFAULT_MAX_PER_USER),
     "service_import_paths": "",
     "service_import_admins": "",
 }
@@ -1965,6 +1969,8 @@ SETTING_GROUPS = {
             "سقف سرویس افزوده‌شده برای هر مشتری",
             "number_unlimited",
             "با دکمهٔ «نامحدود» سقفی نمی‌ماند — پیش‌فرض ۵",
+            # (value stored by the «نامحدود» button, number shown when nothing valid is stored)
+            (IMPORT_UNLIMITED_VALUE, str(IMPORT_DEFAULT_MAX_PER_USER)),
         ),
     ],
     "مسیرها و ادمین‌های مجاز": [
