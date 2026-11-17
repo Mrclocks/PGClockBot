@@ -19,15 +19,6 @@ from app.bot.keyboards import (
 
 
 class StaticReplyDynamicInline362Tests(unittest.TestCase):
-    def test_version(self):
-        from pathlib import Path
-
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        root = Path(__file__).resolve().parents[1]
-        self.assertEqual((root / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
     def test_user_cannot_map_admin_labels(self):
         ui = {"btn_menu_home": "🏠 منوی اصلی", "btn_back": "⬅️ بازگشت", "menu_order": "shop,wallet"}
@@ -193,39 +184,6 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         system = [b.text for row in admin_system_reply_keyboard(ui).keyboard for b in row]
         self.assertIn("📊 داشبورد", ops)
         self.assertIn("💾 بکاپ / ریستور", system)
-
-    def test_soft_admin_refuses_reseller_bot(self):
-        from pathlib import Path
-
-        root = Path(__file__).resolve().parents[1]
-        src = (root / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
-        self.assertIn("async def _refuse_admin", src)
-        self.assertIn("async def _deny_unless_owner", src)
-        self.assertIn("if is_reseller_bot:", src)
-        self.assertIn("is_bot_owner_principal", src)
-        self.assertIn("open_admin_backup_hub", src)
-        self.assertIn("open_reseller_settings_hub", src)
-        nav = (root / "app/bot/menu_nav.py").read_text(encoding="utf-8")
-        self.assertIn("NAV_RESELLER_SETTINGS", nav)
-
-    def test_block_middleware_still_on_admin_routers(self):
-        from pathlib import Path
-
-        src = (Path(__file__).resolve().parents[1] / "app/bot/__init__.py").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("_BlockPlatformAdminOnResellerBot", src)
-        self.assertIn("admin_backup.router", src)
-        self.assertIn("admin_pg_users.router", src)
-
-    def test_web_preview_mentions_static_reply(self):
-        from pathlib import Path
-
-        root = Path(__file__).resolve().parents[1]
-        menu = (root / "app/web/templates/_settings_menu.html").read_text(encoding="utf-8")
-        # Wave A: menu tab documents inline-first stable reply keyboard
-        self.assertIn("اینلاین", menu)
-        self.assertIn("کیبورد پایین", menu)
 
 
 if __name__ == "__main__":

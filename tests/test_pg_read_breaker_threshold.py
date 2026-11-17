@@ -65,6 +65,13 @@ class BreakerThresholdTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await self._page_read("/fine"))
         self.assertEqual(self.calls, ["/down", "/fine"])
 
+    async def test_four_failures_do_not_yet_pause_every_page(self) -> None:
+        self._offline()
+        for _ in range(resilience.FAILURES_TO_PAUSE - 1):
+            await self._page_read("/down")
+        self.assertIsNone(await self._page_read("/fine"))
+        self.assertIn("/fine", self.calls)
+
     async def test_confirmed_outage_pauses_reads_for_every_page(self) -> None:
         self._offline()
         for _ in range(resilience.FAILURES_TO_PAUSE):

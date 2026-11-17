@@ -3,7 +3,8 @@
 Telegram rejects a whole message when it holds one ``<`` that is not a tag, an unknown tag or an
 unbalanced one, so a broadcast with «قیمت < ۱۰۰» failed for every recipient. ``normalize_telegram_html``
 keeps the tags Telegram supports, escapes every other ``<``, ``>`` and ``&`` as text, and refuses
-tags that are opened and closed out of order, which cannot be repaired without guessing.
+tags that are opened and closed out of order or lack the attribute Telegram requires, which
+cannot be repaired without guessing.
 """
 
 from __future__ import annotations
@@ -22,6 +23,13 @@ ALLOWED_TAGS = frozenset(
 NAMED_ENTITIES = frozenset({"lt", "gt", "amp", "quot"})
 _TAG_RE = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9-]*)((?:\s[^<>]*)?)>")
 _ENTITY_RE = re.compile(r"&(#\d{1,7}|#[xX][0-9A-Fa-f]{1,6}|[A-Za-z]{2,8});")
+# Attributes Telegram requires on these tags; without them it rejects the whole message.
+_REQUIRED_ATTRIBUTE = {
+    "a": re.compile(r"""\shref\s*=\s*(?:"[^"]+"|'[^']+')""", re.IGNORECASE),
+    "span": re.compile(r"""\sclass\s*=\s*["']tg-spoiler["']""", re.IGNORECASE),
+    "tg-emoji": re.compile(r"""\semoji-id\s*=\s*["']\d+["']""", re.IGNORECASE),
+}
+INVALID_TAG_MESSAGE = "برچسب <{tag}> ویژگی لازم را ندارد (مثلاً href برای لینک). متن را درست کنید."
 UNBALANCED_MESSAGE = "برچسب‌های HTML متن کامل نیستند (مثلاً <b> باز شده ولی بسته نشده). متن را درست کنید."
 
 
@@ -54,6 +62,9 @@ def normalize_telegram_html(text: str) -> str:
                 raise ValueError(UNBALANCED_MESSAGE)
             open_tags.pop()
         else:
+            required = _REQUIRED_ATTRIBUTE.get(name)
+            if required is not None and not required.search(match.group(3)):
+                raise ValueError(INVALID_TAG_MESSAGE.format(tag=name))
             open_tags.append(name)
         out.append(match.group(0))
         pos = match.end()

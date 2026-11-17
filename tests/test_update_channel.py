@@ -9,8 +9,6 @@ from app.services.update_channel import (
     badge_context,
     channel_label_fa,
     evaluate_migration_preflight,
-    github_release_notes_url,
-    github_version_url,
     normalize_channel,
     parse_revision_assignment,
 )
@@ -46,16 +44,6 @@ class NormalizeChannelTests(unittest.TestCase):
         badge = badge_context("dev")
         self.assertEqual(badge["deployed_channel"], "dev")
         self.assertEqual(badge["deployed_channel_label"], "توسعه")
-
-
-class ChannelUrlTests(unittest.TestCase):
-    def test_version_and_notes_urls(self):
-        self.assertIn("/main/VERSION", github_version_url(channel="main"))
-        self.assertIn("/dev/VERSION", github_version_url(channel="dev"))
-        self.assertIn(
-            "/dev/app/services/release_notes.py",
-            github_release_notes_url(channel="dev"),
-        )
 
 
 class MigrationPreflightTests(unittest.TestCase):

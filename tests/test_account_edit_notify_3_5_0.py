@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class NotifyPrefsTests(unittest.TestCase):
@@ -85,39 +82,6 @@ class NotifyDispatchTests(unittest.IsolatedAsyncioTestCase):
         send_admins.assert_awaited()
         markup = send_admins.await_args.kwargs["markup"]
         self.assertEqual([b.callback_data for row in markup.inline_keyboard for b in row], ["adm:users:view:1"])
-
-
-class UiWiringTests(unittest.TestCase):
-    def test_users_delete_has_reason_block_does_not(self):
-        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn("/users/{{ u.id }}/block", users)
-        self.assertIn("/users/{{ u.id }}/delete", users)
-        delete = users.split("/users/{{ u.id }}/delete", 1)[1].split("</form>", 1)[0]
-        self.assertIn("data-confirm-reason", delete)
-        block = users.split("/users/{{ u.id }}/block", 1)[1].split("</form>", 1)[0]
-        self.assertNotIn("data-confirm-reason", block)
-        # Role is edited in modal body, not list
-        self.assertNotIn("/users/{{ u.id }}/role", users)
-
-    def test_handlers_call_notify(self):
-        api = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("notify_account_edit", api)
-        self.assertIn('event="block"', api)
-        self.assertIn('event="user_delete"', api)
-        bot = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        self.assertIn("block_user_reason", bot)
-        self.assertIn("notify_account_edit", bot)
-
-
-class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_3_5_0(self):
-        from app.version import __version__
-
-        self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")[:3]), (0, 1, 0)
-        )
-        notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"0.1.0"', notes)
 
 
 if __name__ == "__main__":

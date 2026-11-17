@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.db.models import ResellerApplicationStatus
@@ -92,7 +93,8 @@ class DeliveryGuideAudienceTests(unittest.IsolatedAsyncioTestCase):
                 return_value=MagicMock(admin_ids=[]),
             ),
         ):
-            session.get = AsyncMock(return_value=MagicMock())
+            buyer = SimpleNamespace(full_name="Buyer", username="buyer", telegram_id=1001)
+            session.get = AsyncMock(return_value=buyer)
             await _deliver_reseller_app_order(bot, 1, session, order, None)
 
         self.assertEqual(captured.get("audience"), "reseller")

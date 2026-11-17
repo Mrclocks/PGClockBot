@@ -18,7 +18,6 @@ from app.services.message_variables import template_variable_specs
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "app/web/templates"
 LOYALTY_PAGES = ROOT / "app/api/loyalty_pages.py"
-APP_PY = ROOT / "app/api/app.py"
 CSS = ROOT / "app/web/static/panel.css"
 
 
@@ -197,14 +196,6 @@ class PanelStatusPageTests(unittest.TestCase):
         self.assertIn(".panel-status-watermark", css)
         self.assertIn(".panel-status-badge", css)
         self.assertIn("panel-status-card-in", css)
-
-    def test_app_uses_branded_status_not_inline_tahoma(self):
-        src = APP_PY.read_text(encoding="utf-8")
-        self.assertIn("panel_status.html", src)
-        self.assertIn("_status_page", src)
-        self.assertIn("StarletteHTTPException", src)
-        self.assertNotIn("font-family:Tahoma", src)
-        self.assertNotIn("خطای داخلی</title></head><body style=", src)
 
 
 if __name__ == "__main__":

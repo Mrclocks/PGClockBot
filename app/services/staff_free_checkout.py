@@ -14,6 +14,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentMethod, PaymentStatus
+from app.services.payment_decision_audit import record_free_checkout
 from app.services.bot_principal_identity import resolve_bot_org_principal
 from app.services.org_principals import is_owner_principal
 from app.services.orders import (
@@ -126,6 +127,7 @@ async def claim_staff_free_order(session: AsyncSession, order: Order, *, actor_i
             review_note=f"staff free checkout by user {int(actor_id)}",
         )
     )
+    await record_free_checkout(session, order, actor_id=int(actor_id))
     await session.commit()
     await session.refresh(order)
     return order

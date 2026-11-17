@@ -16,6 +16,7 @@ from app.services.gift_codes import (
     gift_code_scope,
     list_gift_codes,
 )
+from app.services.quick_links import gift_code_link, shop_bot_username
 
 DONE_MESSAGE = "انجام شد"
 GIFT_CODES_PATH = "/gift-codes"
@@ -45,6 +46,7 @@ def register_gift_code_pages(
         codes = await list_gift_codes(session, shop_id=shop_id)
         plans = await gift_code_plan_options(session, shop_id=shop_id)
         plan_names = {plan_id: name for plan_id, name, _active in plans}
+        bot_username = await shop_bot_username(session, shop_id)
         flash_ok = request.query_params.get("ok")
         return render(
             request,
@@ -53,6 +55,7 @@ def register_gift_code_pages(
                 "staff": staff,
                 "gift_codes": codes,
                 "gift_code_details": {code.id: describe_code(code, plan_names) for code in codes},
+                "gift_code_links": {code.id: gift_code_link(bot_username, code.code) for code in codes},
                 "gift_code_plans": plans,
                 "gift_code_max_days": MAX_EXPIRY_DAYS,
                 "flash_ok": DONE_MESSAGE if flash_ok == "1" else flash_ok,

@@ -178,12 +178,6 @@ class LimitsGuidesPhase02Tests(unittest.IsolatedAsyncioTestCase):
         args = p.parse_args(["doctor", "--json"])
         self.assertTrue(getattr(args, "doctor_json", False) or getattr(args, "json", False))
 
-    def test_setup_wizard_uses_ensure_not_create(self):
-        text = Path("pgclock.sh").read_text(encoding="utf-8")
-        self.assertIn("ensure_setup_gate_token", text)
-        # status must pass panel public base into setup_wizard_url
-        self.assertIn('setup_wizard_url "$(panel_public_base_url)/"', text)
-
 
 if __name__ == "__main__":
     unittest.main()

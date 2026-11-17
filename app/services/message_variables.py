@@ -31,6 +31,7 @@ DOMAIN_FORCE_JOIN = "force_join"
 DOMAIN_NAMING = "naming"
 DOMAIN_QR = "qr"
 DOMAIN_DAILY_REPORT = "daily_report"
+DOMAIN_USAGE_ALERT = "usage_alert"
 
 DOMAIN_LABELS_FA: dict[str, str] = {
     DOMAIN_SHOP: "فروشگاه (سراسری)",
@@ -43,6 +44,7 @@ DOMAIN_LABELS_FA: dict[str, str] = {
     DOMAIN_NAMING: "نام‌گذاری پاسارگارد",
     DOMAIN_QR: "کپشن QR",
     DOMAIN_DAILY_REPORT: "گزارش روزانه",
+    DOMAIN_USAGE_ALERT: "هشدار کمبود سرویس",
 }
 
 # Relative to bot settings base, or absolute panel path for modal-hosted texts.
@@ -57,6 +59,7 @@ DOMAIN_SETTINGS_PATH: dict[str, str] = {
     DOMAIN_NAMING: "?tab=naming",
     DOMAIN_QR: "?tab=qr",
     DOMAIN_DAILY_REPORT: "?tab=daily_report",
+    DOMAIN_USAGE_ALERT: "?tab=notifications",
 }
 
 
@@ -86,11 +89,15 @@ SETTING_DOMAIN: dict[str, str] = {
     "pg_username_pattern": DOMAIN_NAMING,
     "custom_plan_username_pattern": DOMAIN_NAMING,
     "admin_daily_report_template": DOMAIN_DAILY_REPORT,
+    "user_alert_time_text": DOMAIN_USAGE_ALERT,
+    "user_alert_traffic_text": DOMAIN_USAGE_ALERT,
 }
 
 # Values actually supplied by each field's renderer, not the entire domain.
 # Naming uses the catalog directly; daily reports additionally filter by role.
 _SETTING_CONTEXT_KEYS: dict[str, frozenset[str]] = {
+    "user_alert_time_text": frozenset({"service_name", "days_left", "expire_date", "shop_title"}),
+    "user_alert_traffic_text": frozenset({"service_name", "traffic_used", "shop_title"}),
     "welcome_text": frozenset({"user_name", "user_id", "username", "shop_title"}),
     "purchase_success_text": frozenset({"order_id", "plan_name", "plan_type", "shop_title", "url"}),
     "wallet_success_text": frozenset({"amount", "payment_id", "shop_title"}),
@@ -126,7 +133,37 @@ _VARS: tuple[MessageVar, ...] = (
         title_fa="نام فروشگاه",
         description_fa="عنوان فروشگاه از تنظیمات (همان مقداری که در هدر خوش‌آمد می‌آید).",
         example="کلاک بات",
-        domains=frozenset({DOMAIN_SHOP, DOMAIN_USER, DOMAIN_ORDER, DOMAIN_PAYMENT, DOMAIN_WALLET, DOMAIN_REFERRAL}),
+        domains=frozenset(
+            {DOMAIN_SHOP, DOMAIN_USER, DOMAIN_ORDER, DOMAIN_PAYMENT, DOMAIN_WALLET, DOMAIN_REFERRAL, DOMAIN_USAGE_ALERT}
+        ),
+    ),
+    MessageVar(
+        key="service_name",
+        title_fa="نام سرویس",
+        description_fa="نام سرویسی که هشدار دربارهٔ آن است.",
+        example="ali_30d",
+        domains=frozenset({DOMAIN_USAGE_ALERT}),
+    ),
+    MessageVar(
+        key="days_left",
+        title_fa="روزهای باقی‌مانده",
+        description_fa="تعداد روز تا پایان اعتبار سرویس (رو به بالا گرد شده).",
+        example="۳",
+        domains=frozenset({DOMAIN_USAGE_ALERT}),
+    ),
+    MessageVar(
+        key="expire_date",
+        title_fa="تاریخ پایان",
+        description_fa="تاریخ شمسی پایان اعتبار سرویس.",
+        example="۱۴۰۵/۹/۲",
+        domains=frozenset({DOMAIN_USAGE_ALERT}),
+    ),
+    MessageVar(
+        key="traffic_used",
+        title_fa="حجم مصرف‌شده از کل",
+        description_fa="مصرف و سقف حجم سرویس، مثلاً «۴۵ گیگ از ۵۰ گیگ».",
+        example="۴۵ GB از ۵۰ GB",
+        domains=frozenset({DOMAIN_USAGE_ALERT}),
     ),
     MessageVar(
         key="bot_username",

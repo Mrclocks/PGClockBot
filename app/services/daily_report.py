@@ -8,7 +8,9 @@ Security:
 
 from __future__ import annotations
 
+import html
 import json
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
@@ -17,7 +19,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, Order, UserService
+from app.db.models import BotUser, Order, ShopStaffAction, UserService
 from app.services.demo_users import non_demo_customer
 from app.services.home_overview import bot_panel_summary, reseller_shop_summary
 from app.services.safe_format import safe_format
@@ -225,6 +227,14 @@ _METRICS: tuple[DailyMetric, ...] = (
         actors=frozenset({ACTOR_OWNER, ACTOR_SHOP}),
     ),
     DailyMetric(
+        key="staff_summary",
+        title_fa="کارکنان در روز گزارش",
+        group="ops",
+        description_fa="هر نفر چند اقدام ثبت کرده (از گزارش کارکنان)؛ پرکارترین‌ها، هر نفر در یک خط.",
+        example="• علی: ۱۲ اقدام (۱۰ تأیید رسید، ۲ رد رسید)",
+        actors=frozenset({ACTOR_OWNER, ACTOR_SHOP}),
+    ),
+    DailyMetric(
         key="funnel_pay_start",
         title_fa="شروع پرداخت (روز گزارش)",
         group="funnel",
@@ -328,6 +338,9 @@ DEFAULT_REPORT_TEMPLATE = (
     "• رسید معلق: {pending}\n"
     "• تیکت باز: {tickets_open}\n"
     "• تحویل ناموفق: {failures}\n"
+    "\n"
+    "👥 <b>کارکنان:</b>\n"
+    "{staff_summary}\n"
     "\n"
     "📈 <b>آمار کل:</b>\n"
     "• کل کاربران: {users_total}\n"
@@ -563,6 +576,40 @@ async def previous_day_activity(
     }
 
 
+# Staff lines in the report: the busiest few, so a large team does not flood the message.
+STAFF_SUMMARY_LIMIT = 5
+_STAFF_DECISIONS = (("payment_approve", "تأیید رسید"), ("payment_reject", "رد رسید"), ("free_checkout", "تحویل رایگان"))
+
+
+def _staff_line(label: str, counts: Counter[str]) -> str:
+    total = sum(counts.values())
+    parts = [f"{counts[action]} {title}" for action, title in _STAFF_DECISIONS if counts[action]]
+    detail = f" ({'، '.join(parts)})" if parts else ""
+    return f"• {html.escape(label)}: {total} اقدام{detail}"
+
+
+async def staff_summary(
+    session: AsyncSession, *, reseller_id: int | None, start: datetime, end: datetime
+) -> str:
+    """One line per staff member with their actions in ``[start, end)``; "—" when nobody acted.
+
+    Labels are staff display names, so they are escaped for the Telegram HTML report.
+    """
+    shop = ShopStaffAction.shop_id.is_(None) if reseller_id is None else ShopStaffAction.shop_id == int(reseller_id)
+    rows = (
+        await session.execute(
+            select(ShopStaffAction.actor_label, ShopStaffAction.action, func.count())
+            .where(shop, ShopStaffAction.created_at >= start, ShopStaffAction.created_at < end)
+            .group_by(ShopStaffAction.actor_label, ShopStaffAction.action)
+        )
+    ).all()
+    per_actor: dict[str, Counter[str]] = defaultdict(Counter)
+    for label, action, count in rows:
+        per_actor[str(label)][str(action)] += int(count or 0)
+    busiest = sorted(per_actor.items(), key=lambda item: (-sum(item[1].values()), item[0]))[:STAFF_SUMMARY_LIMIT]
+    return "\n".join(_staff_line(label, counts) for label, counts in busiest) or "—"
+
+
 async def collect_report_values(
     session: AsyncSession,
     *,
@@ -615,6 +662,12 @@ async def collect_report_values(
         if "tickets_open" not in totals:
             totals["tickets_open"] = int(ac.get("tickets") or 0)
 
+    staff = (
+        await staff_summary(session, reseller_id=reseller_id, start=day_start, end=day_end)
+        if "staff_summary" in keys
+        else ""
+    )
+
     funnel: dict[str, Any] = {}
     if need_funnel:
         funnel = await funnel_summary(session, reseller_id=reseller_id, window=(day_start, day_end))
@@ -637,6 +690,7 @@ async def collect_report_values(
         "pending": totals.get("pending", 0),
         "tickets_open": totals.get("tickets_open", 0),
         "failures": failures,
+        "staff_summary": staff,
         "funnel_pay_start": int(funnel.get("pay_start") or 0),
         "funnel_receipt": int(funnel.get("receipt") or 0),
         "funnel_delivered": int(funnel.get("delivered") or 0),

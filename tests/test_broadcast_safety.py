@@ -41,6 +41,18 @@ class NormalizeTests(unittest.TestCase):
                 normalize_telegram_html(text)
 
 
+class RequiredAttributeTests(unittest.TestCase):
+    def test_tags_missing_the_attribute_telegram_requires_are_refused(self) -> None:
+        for text in ("<a>x</a>", "<span>x</span>", '<a href="">x</a>', "<tg-emoji>x</tg-emoji>"):
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, "ویژگی"):
+                normalize_telegram_html(text)
+
+    def test_tags_with_the_attribute_are_kept(self) -> None:
+        for text in ('<span class="tg-spoiler">x</span>', "<a href='https://t.me/x'>x</a>"):
+            with self.subTest(text=text):
+                self.assertEqual(normalize_telegram_html(text), text)
+
+
 class DbCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -147,6 +159,31 @@ class PreviewTests(DbCase):
         async with self.Session() as session:
             await confirm.preview_broadcast(owner_message("<b>x"), self.state, session, audience="all")
         self.assertIn("HTML", self.finish_mock.await_args.kwargs["text"])
+
+
+class StaleConfirmationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_second_tap_after_sending_keeps_the_success_message(self) -> None:
+        state = FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=101, user_id=101))
+        callback = MagicMock()
+        callback.answer = AsyncMock()
+        callback.message = MagicMock()
+        with patch.object(confirm, "safe_edit_text", AsyncMock()) as edit:
+            await confirm.drop_broadcast(callback, MagicMock(), state)
+        edit.assert_not_awaited()
+        self.assertEqual(callback.answer.await_args.args[0], confirm.STALE_CONFIRM)
+
+    async def test_cancel_while_pending_clears_the_state_and_edits_the_card(self) -> None:
+        state = FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=101, user_id=101))
+        await state.set_state(confirm.BroadcastConfirmStates.confirm)
+        callback = MagicMock()
+        callback.answer = AsyncMock()
+        callback.message = MagicMock()
+        with patch.object(confirm, "safe_edit_text", AsyncMock()) as edit, patch.object(
+            confirm, "_back", AsyncMock(return_value=None)
+        ):
+            await confirm.drop_broadcast(callback, MagicMock(), state)
+        self.assertIsNone(await state.get_state())
+        self.assertEqual(edit.await_args.args[1], confirm.DROPPED)
 
 
 if __name__ == "__main__":

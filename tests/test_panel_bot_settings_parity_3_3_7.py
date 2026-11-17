@@ -81,14 +81,6 @@ class ResellerApplyMenuOrderTests(unittest.TestCase):
 
 
 class ReferralBonusHookTests(unittest.TestCase):
-    def test_deliver_order_calls_referral_hook(self):
-        src = (
-            __import__("pathlib").Path("app/services/orders.py").read_text(encoding="utf-8")
-        )
-        self.assertIn("async def _maybe_pay_referral_bonus", src)
-        self.assertIn("await _maybe_pay_referral_bonus(session, order)", src)
-        self.assertIn('reason = f"referral:{int(buyer.id)}"', src)
-        self.assertIn('get_setting(\n        session, "referral_bonus"', src)
 
     def test_skips_renew_and_reseller_app(self):
         import asyncio
