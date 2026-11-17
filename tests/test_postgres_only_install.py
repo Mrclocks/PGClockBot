@@ -87,8 +87,8 @@ def test_install_global_cli_avoids_dev_stdin():
     src = (ROOT / "scripts" / "install_global_cli.sh").read_text(encoding="utf-8")
     # Must not feed /dev/stdin to `install` (fails under some sudo/pipe setups).
     assert "install -m 755 /dev/stdin" not in src
-    assert "mktemp" in src
-    assert 'install -m 755 "${tmp_bin}"' in src
+    # The wrapper is installed from the repo file; GlobalCommandTests runs the real install.
+    assert 'install -m 755 "${WRAPPER_SRC}" "${BIN}"' in src
 
 
 def test_readme_documents_auto_postgres_install():
