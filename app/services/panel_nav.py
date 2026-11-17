@@ -33,11 +33,12 @@ MARKETING_KEY = "marketing"
 # The marketing entry opens the list of the marketing area (app/api/marketing_pages.py).
 MARKETING_LIST_HREF = "/marketing"
 
-# Phone bottom bar: dashboard and action center, then the most used pages the viewer may open.
+# Phone bottom bar: dashboard and plans, then the most used pages the viewer may open. The action center
+# is not here: it has its own button with a count in the phone header.
 # The owner can put other pages first (app/services/mobile_bar.py); these fill whatever is left.
 DOCK_SLOTS = 4
 DOCK_PRIORITY: tuple[str, ...] = (
-    "home", "inbox", "finance", "users", "customers", "tickets", "pg_tickets", "pg_users", "plans",
+    "home", "plans", "finance", "users", "customers", "tickets", "pg_tickets", "pg_users", "pg_overview",
 )
 # Entries that open the same page for different roles are one choice in the bar settings: choosing the
 # first key also brings the others, so the setting works for the owner, shops and PasarGuard staff alike.
