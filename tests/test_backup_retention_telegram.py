@@ -85,12 +85,26 @@ class SettingsTests(unittest.TestCase):
             normalize_backup_setting(CHAT_IDS_KEY, "abc")
 
     def test_new_switches_default_off_and_retention_is_a_dropdown_of_three_choices(self) -> None:
-        for key in ("backup_telegram_enabled", "backup_telegram_custom_bot"):
+        for key in ("backup_telegram_enabled", "backup_telegram_custom_bot", "backup_telegram_allow_env"):
             self.assertIn(key, TOGGLE_KEYS)
             self.assertEqual(DEFAULT_SETTINGS[key], "0")
         field = next(f for f in SETTING_GROUPS["بکاپ زمان‌بندی"] if f[0] == "backup_keep_count")
         self.assertEqual(field[2], "select")
         self.assertEqual([value for value, _ in field[4]], ["5", "10", "15"])
+
+    def test_the_risk_switch_shows_only_with_delivery_on_and_carries_a_warning(self) -> None:
+        from app.services.users import SETTING_RISK_NOTES, SETTING_VISIBILITY
+
+        field = next(f for f in SETTING_GROUPS["ارسال بکاپ به تلگرام"] if f[0] == tg.ALLOW_ENV_KEY)
+        self.assertEqual(field[2], "toggle")
+        self.assertTrue(field[1].startswith("تأیید ریسک"))
+        self.assertEqual(SETTING_VISIBILITY[tg.ALLOW_ENV_KEY], (tg.ENABLED_KEY, ("1",)))
+        self.assertIn("WEB_SECRET", SETTING_RISK_NOTES[tg.ALLOW_ENV_KEY])
+
+    def test_a_shop_settings_import_cannot_turn_on_the_risk_switch(self) -> None:
+        from app.services.ux20 import shop_bundle_allowed_setting_keys
+
+        self.assertNotIn(tg.ALLOW_ENV_KEY, shop_bundle_allowed_setting_keys())
 
 
 class DeliveryTests(unittest.IsolatedAsyncioTestCase):
@@ -159,10 +173,36 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.opened, [TOKEN])
         self.assertEqual([call.args[0] for call in self.bot.send_document.await_args_list], [555, 666])
 
-    async def test_a_backup_with_env_is_never_sent(self) -> None:
+    async def test_a_backup_with_env_is_not_sent_until_the_risk_is_acknowledged(self) -> None:
         await self.enable()
         self.assertEqual(await self.send(include_env=True), "skipped")
         self.bot.send_document.assert_not_awaited()
+        self.assertIn("تأیید ریسک", await self.status())
+
+    async def test_a_backup_with_env_is_sent_with_a_warning_after_the_risk_is_acknowledged(self) -> None:
+        await self.enable(**{tg.ALLOW_ENV_KEY: "1"})
+        self.assertEqual(await self.send(include_env=True), "ok")
+        self.assertEqual([call.args[0] for call in self.bot.send_document.await_args_list], [11, 22])
+        caption = self.bot.send_document.await_args.kwargs["caption"]
+        self.assertTrue(caption.startswith("c"))
+        self.assertIn(".env", caption)
+        self.assertLessEqual(len(caption), 900)
+        self.assertIn("شامل .env", await self.status())
+
+    async def test_the_acknowledgement_alone_does_not_send_while_delivery_is_off(self) -> None:
+        async with self.Session() as session:
+            await set_setting(session, tg.ALLOW_ENV_KEY, "1")
+            await session.commit()
+        self.assertEqual(await self.send(include_env=True), "disabled")
+        self.bot.send_document.assert_not_awaited()
+
+    async def test_a_long_caption_keeps_the_env_warning_within_the_telegram_limit(self) -> None:
+        await self.enable(**{tg.ALLOW_ENV_KEY: "1"})
+        async with self.Session() as session:
+            await tg.send_backup(session, self.archive, include_env=True, caption="x" * 2000)
+        caption = self.bot.send_document.await_args.kwargs["caption"]
+        self.assertLessEqual(len(caption), 900)
+        self.assertTrue(caption.endswith(tg.ENV_CAPTION_WARNING))
 
     async def test_a_backup_over_the_telegram_limit_is_skipped_with_a_visible_reason(self) -> None:
         await self.enable()
@@ -224,3 +264,33 @@ class PayloadTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await apply_backup_retention({"backup_keep_count": "5"}), 2)
             self.assertEqual(len(list(Path(tmp).glob("*.zip"))), 5)
             self.assertEqual(await apply_backup_retention({"other": "1"}), 0)
+
+class RiskSwitchRenderTests(unittest.TestCase):
+    def render(self, values: dict[str, str]) -> str:
+        from app.api.app import templates
+
+        group = SETTING_GROUPS["ارسال بکاپ به تلگرام"]
+        field = next(f for f in group if f[0] == tg.ALLOW_ENV_KEY)
+        return templates.get_template("_settings_field.html").render(field=field, values=values)
+
+    def test_the_risk_switch_renders_its_danger_note_linked_to_the_switch(self) -> None:
+        html = self.render({tg.ENABLED_KEY: "1", tg.ALLOW_ENV_KEY: "0"})
+        self.assertIn('data-tone="danger"', html)
+        self.assertIn('aria-describedby="risk-note-backup_telegram_allow_env"', html)
+        self.assertIn('id="risk-note-backup_telegram_allow_env"', html)
+        self.assertIn("setting-item--risk", html)
+        self.assertNotIn("checked", html)
+        self.assertNotIn(" hidden", html.split(">", 1)[0])
+
+    def test_the_risk_switch_starts_hidden_while_delivery_is_off(self) -> None:
+        html = self.render({tg.ENABLED_KEY: "0", tg.ALLOW_ENV_KEY: "1"})
+        self.assertIn(" hidden", html.split(">", 1)[0])
+        self.assertIn("checked", html)
+
+    def test_an_ordinary_switch_has_no_risk_note(self) -> None:
+        from app.api.app import templates
+
+        field = next(f for f in SETTING_GROUPS["ارسال بکاپ به تلگرام"] if f[0] == tg.ENABLED_KEY)
+        html = templates.get_template("_settings_field.html").render(field=field, values={})
+        self.assertNotIn("ds-note", html)
+        self.assertNotIn("aria-describedby", html)
