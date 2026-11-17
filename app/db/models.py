@@ -2501,6 +2501,18 @@ class ShopBroadCampaignDay(Base):
     used: Mapped[int] = mapped_column(BigInteger, server_default="0")
 
 
+class ShopTargetedMessageDay(Base):
+    """How many group messages and campaigns to a narrower segment a shop sent on one UTC day (daily cap)."""
+
+    __tablename__ = "shop_targeted_message_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_targeted_message_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")
+
+
 class RandomDiscount(Base):
     """One active shop offer draws an unpredictable checkout reduction."""
 

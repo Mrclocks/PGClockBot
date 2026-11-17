@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BroadcastLog, ResellerProfile, ShopBroadCampaignDay
+from app.db.models import BroadcastLog, ResellerProfile
 from app.services.broadcast_audience import (
     AudienceSpec,
     audience_clause,
@@ -20,8 +20,7 @@ from app.services.broadcast_audience import (
     make_spec,
 )
 from app.services.broadcast_queue import STATUS_QUEUED
-from app.services.campaigns import BROAD_PER_DAY, RECIPIENT_LIMIT
-from app.services.daily_cap import claim_daily_cap
+from app.services.campaigns import RECIPIENT_LIMIT, claim_shop_message_slot
 from app.services.rich_text import utf16_len
 
 SHOP_BROAD_LIMIT_MESSAGE = (
@@ -92,8 +91,8 @@ async def queue_shop_broadcast(
 ) -> BroadcastLog:
     """Enqueue one shop broadcast; the daily broad cap and request_key make repeats safe.
 
-    A message to (nearly) all customers (``is_broad``) uses the shop's one broad slot of the day; a narrower
-    segment does not, but is still capped at ``RECIPIENT_LIMIT`` recipients.
+    A message to (nearly) all customers (``is_broad``) uses the shop's one broad slot of the day; a narrower segment
+    uses one of the shop's daily targeted slots (``TARGETED_PER_DAY``). Both are capped at ``RECIPIENT_LIMIT``.
     """
     if not isinstance(shop_id, int) or isinstance(shop_id, bool) or shop_id <= 0:
         raise ValueError("فروشگاه نامعتبر است")
@@ -110,13 +109,12 @@ async def queue_shop_broadcast(
         raise ValueError("مخاطبی برای این گروه وجود ندارد")
     total = min(total, RECIPIENT_LIMIT)
     # Cap claim and insert share one nested transaction so a colliding request_key
-    # rolls the claim back instead of burning the shop's daily broad slot.
+    # rolls the claim back instead of burning one of the shop's daily slots.
     try:
         async with session.begin_nested():
-            if is_broad(spec) and not await claim_daily_cap(
-                session, ShopBroadCampaignDay, shop_id=int(shop_id), amount=1, cap=BROAD_PER_DAY
-            ):
-                raise ValueError(SHOP_BROAD_LIMIT_MESSAGE)
+            await claim_shop_message_slot(
+                session, shop_id=int(shop_id), broad=is_broad(spec), broad_message=SHOP_BROAD_LIMIT_MESSAGE
+            )
             log = BroadcastLog(
                 audience=spec.segment,
                 audience_spec=spec.to_json(),

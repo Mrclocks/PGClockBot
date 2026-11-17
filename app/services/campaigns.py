@@ -10,8 +10,19 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import BotUser, CampaignRecipient, MarketingPreference, Order, Plan, ShopBroadCampaignDay, TargetedCampaign, UserService
+from app.db.models import (
+    BotUser,
+    CampaignRecipient,
+    MarketingPreference,
+    Order,
+    Plan,
+    ShopBroadCampaignDay,
+    ShopTargetedMessageDay,
+    TargetedCampaign,
+    UserService,
+)
 from app.services.daily_cap import claim_daily_cap
+from app.services.numbers import to_fa_digits
 from app.services.service_scope import shop_services_clause
 from app.services.shop_customer_block import not_blocked_in_shop_clause
 from app.services.shop_membership import shop_member_clause
@@ -28,6 +39,13 @@ AUDIENCES = {
 BROAD_AUDIENCES = frozenset({"active", "all"})
 BROAD_PER_DAY = 1
 BROAD_LIMIT_MESSAGE = "مخاطبان گسترده (همهٔ مشتریان یا دارندگان سرویس فعال) برای هر فروشگاه روزی یک کمپین است"
+# Narrower segments get their own daily cap: several of them together can still reach most of a shop's customers.
+# Group messages and campaigns share it, as they share the broad slot.
+TARGETED_PER_DAY = 3
+TARGETED_LIMIT_MESSAGE = (
+    f"پیام به گروه‌های محدودتر برای هر فروشگاه روزی حداکثر {to_fa_digits(TARGETED_PER_DAY)} بار است"
+    " (پیام گروهی و کمپین با هم شمرده می‌شوند)"
+)
 RECIPIENT_LIMIT = 5000
 CAMPAIGN_LIST_LIMIT = 5
 
@@ -96,14 +114,29 @@ def clean_campaign_text(raw) -> str:
     return text
 
 
+async def claim_shop_message_slot(
+    session, *, shop_id: int, broad: bool, broad_message: str = BROAD_LIMIT_MESSAGE
+) -> None:
+    """Use one of today's message slots of the shop, or raise ``ValueError`` when today's cap is reached.
+
+    Runs inside the caller's transaction, so a send that fails afterwards gives the slot back.
+    """
+    counter, cap, message = (
+        (ShopBroadCampaignDay, BROAD_PER_DAY, broad_message)
+        if broad
+        else (ShopTargetedMessageDay, TARGETED_PER_DAY, TARGETED_LIMIT_MESSAGE)
+    )
+    if not await claim_daily_cap(session, counter, shop_id=int(shop_id), amount=1, cap=cap):
+        raise ValueError(message)
+
+
 async def create_campaign(session, *, shop_id, audience, days, text, actor):
     text = clean_campaign_text(text)
     ids = list((await session.scalars(audience_query(shop_id=shop_id, audience=audience, days=days).limit(RECIPIENT_LIMIT))).all())
     if not ids:
         raise ValueError("مخاطبی در این گروه موجود نیست")
-    if audience in BROAD_AUDIENCES and shop_id:
-        if not await claim_daily_cap(session, ShopBroadCampaignDay, shop_id=int(shop_id), amount=1, cap=BROAD_PER_DAY):
-            raise ValueError(BROAD_LIMIT_MESSAGE)
+    if shop_id:
+        await claim_shop_message_slot(session, shop_id=int(shop_id), broad=audience in BROAD_AUDIENCES)
     row = TargetedCampaign(reseller_id=shop_id, audience=audience, days=days, text=text, created_by=actor)
     session.add(row)
     await session.flush()

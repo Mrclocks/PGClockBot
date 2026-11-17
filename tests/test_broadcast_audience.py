@@ -23,6 +23,7 @@ from app.db.models import (
     Plan,
     ResellerProfile,
     ShopBroadCampaignDay,
+    ShopTargetedMessageDay,
     ShopWallet,
     UserService,
 )
@@ -40,6 +41,7 @@ from app.services.broadcast_audience import (
     stored_label,
 )
 from app.services.broadcast_queue import process_broadcast_batch, queue_broadcast
+from app.services.campaigns import TARGETED_PER_DAY, claim_shop_message_slot, create_campaign
 from app.services.shop_broadcast import new_shop_request_key, queue_shop_broadcast
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -302,6 +304,36 @@ class QueueAndWorkerTests(AudienceCase):
         days = await self.session.scalars(select(ShopBroadCampaignDay.used))
         self.assertEqual(list(days), [1])
 
+    async def test_narrow_shop_messages_have_their_own_daily_cap(self) -> None:
+        for _ in range(TARGETED_PER_DAY):
+            await queue_shop_broadcast(self.session, shop_id=SHOP, text="x", created_by="s",
+                                       request_key=new_shop_request_key(), audience=make_spec("never_bought", shop_id=SHOP))
+        with self.assertRaisesRegex(ValueError, "گروه‌های محدودتر"):
+            await queue_shop_broadcast(self.session, shop_id=SHOP, text="x", created_by="s",
+                                       request_key=new_shop_request_key(), audience=make_spec("never_bought", shop_id=SHOP))
+        await self.session.rollback()
+        # The narrow cap leaves the broad slot of the day alone, and another shop has its own counters.
+        broad = await queue_shop_broadcast(self.session, shop_id=SHOP, text="y", created_by="s",
+                                           request_key=new_shop_request_key(), audience=make_spec("all", shop_id=SHOP))
+        self.assertEqual(broad.total, 2)
+        used = await self.session.scalar(select(ShopTargetedMessageDay.used).where(ShopTargetedMessageDay.shop_id == SHOP))
+        self.assertEqual(used, TARGETED_PER_DAY)
+
+    async def test_a_repeated_narrow_submit_uses_one_slot(self) -> None:
+        key = new_shop_request_key()
+        for _ in range(2):
+            await queue_shop_broadcast(self.session, shop_id=SHOP, text="x", created_by="s",
+                                       request_key=key, audience=make_spec("never_bought", shop_id=SHOP))
+        used = await self.session.scalar(select(ShopTargetedMessageDay.used).where(ShopTargetedMessageDay.shop_id == SHOP))
+        self.assertEqual(used, 1)
+
+    async def test_narrow_campaigns_share_the_targeted_cap(self) -> None:
+        for _ in range(TARGETED_PER_DAY):
+            await claim_shop_message_slot(self.session, shop_id=SHOP, broad=False)
+        await self.session.commit()
+        with self.assertRaisesRegex(ValueError, "گروه‌های محدودتر"):
+            await create_campaign(self.session, shop_id=SHOP, audience="inactive", days=1, text="سلام", actor="s")
+
     async def test_a_shop_message_never_reaches_another_shop_or_the_platform(self) -> None:
         log = await queue_shop_broadcast(self.session, shop_id=SHOP, text="x", created_by="s",
                                          request_key=new_shop_request_key(), audience=make_spec("all", shop_id=SHOP))
@@ -324,6 +356,25 @@ class QueueAndWorkerTests(AudienceCase):
         self.session.add(BroadcastLog(id=99, audience="admins", text="hi", total=1, status="queued"))
         await self.session.commit()
         self.assertEqual((await self.send_all(99)).sent, [1009])
+
+
+class TargetedCapMigrationTests(unittest.TestCase):
+    def test_upgrade_twice_and_downgrade(self) -> None:
+        from alembic.migration import MigrationContext
+        from alembic.operations import Operations
+
+        spec = importlib.util.spec_from_file_location("m0118", ROOT / "alembic/versions/0118_shop_targeted_message_days.py")
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        engine = sa.create_engine("sqlite:///:memory:")
+        with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
+            migration.upgrade()
+            migration.upgrade()
+            self.assertTrue(sa.inspect(conn).has_table("shop_targeted_message_days"))
+            migration.downgrade()
+            migration.downgrade()
+            self.assertFalse(sa.inspect(conn).has_table("shop_targeted_message_days"))
+        engine.dispose()
 
 
 class MigrationTests(unittest.TestCase):
