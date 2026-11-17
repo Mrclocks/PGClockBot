@@ -9,13 +9,22 @@ which escapes every value for Telegram HTML and leaves unknown placeholders as t
 
 from __future__ import annotations
 
+import logging
 import math
+from collections.abc import Callable
 from datetime import datetime
+from typing import Any
+
+from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import InlineKeyboardMarkup, Message
 
 from app.services.daily_report import format_jalali_parts
 from app.services.formatting import format_bytes_ratio
 from app.services.message_variables import DOMAIN_USAGE_ALERT, render_message_template
 from app.services.numbers import to_fa_digits
+
+logger = logging.getLogger(__name__)
 
 SECONDS_PER_DAY = 86400
 # A time alert sent because of the days threshold is armed again only when this many more days are left.
@@ -103,3 +112,28 @@ def traffic_alert_text(ui: dict, *, service_name: str, used: float, limit: float
         traffic_used=format_bytes_ratio(used, limit, joiner=" از "),
         shop_title=ui.get("shop_title") or "",
     )
+
+
+async def send_alert_with_default_fallback(
+    bot: Bot,
+    chat_id: int,
+    ui: dict,
+    build_text: Callable[[dict], str],
+    *,
+    note: str,
+    markup: InlineKeyboardMarkup | None,
+) -> Message:
+    """Send an alert; when Telegram refuses a shop's custom text (stray ``<``, open tag), send the default.
+
+    Without this a shop whose edited text is not valid HTML would never alert its customers: the send
+    fails on every run and the alert is never marked as sent.
+    """
+    kwargs: dict[str, Any] = {"parse_mode": "HTML", "reply_markup": markup}
+    try:
+        return await bot.send_message(chat_id, build_text(ui) + note, **kwargs)
+    except TelegramBadRequest:
+        if not any((ui.get(key) or "").strip() for key in (TIME_TEXT_KEY, TRAFFIC_TEXT_KEY)):
+            raise
+        logger.warning("custom alert text refused by Telegram; sending the default text", exc_info=True)
+        defaults = {**ui, TIME_TEXT_KEY: "", TRAFFIC_TEXT_KEY: ""}
+        return await bot.send_message(chat_id, build_text(defaults) + note, **kwargs)

@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+
+from aiogram.exceptions import TelegramBadRequest
 
 from app.services.alert_rearm import _rearm_one
 from app.services.usage_alert_messages import (
     alerts_off_settings_page,
     clamp_alert_setting,
+    send_alert_with_default_fallback,
     should_rearm_time,
     time_alert_due,
     time_alert_text,
@@ -76,6 +80,31 @@ class ReminderTests(unittest.TestCase):
         self.assertIsNone(alerts_off_settings_page(off, is_owner=False, can_edit_shop=False))
         self.assertIsNone(alerts_off_settings_page({"user_alert_low_enabled": "1"}, is_owner=True, can_edit_shop=True))
         self.assertIsNone(alerts_off_settings_page({}, is_owner=True, can_edit_shop=True))
+
+
+class CustomTextFallbackTests(unittest.IsolatedAsyncioTestCase):
+    def _build(self, ui: dict) -> str:
+        return traffic_alert_text(ui, service_name="ali", used=45 * GB, limit=50 * GB)
+
+    def _refused(self) -> TelegramBadRequest:
+        return TelegramBadRequest(method=MagicMock(), message="can't parse entities")
+
+    async def test_a_custom_text_telegram_refuses_falls_back_to_the_default_text(self) -> None:
+        bot = MagicMock()
+        bot.send_message = AsyncMock(side_effect=[self._refused(), "sent"])
+        ui = {"user_alert_traffic_text": "<b>{service_name}"}
+        result = await send_alert_with_default_fallback(bot, 1, ui, self._build, note="", markup=None)
+        self.assertEqual(result, "sent")
+        first, second = (call.args[1] for call in bot.send_message.await_args_list)
+        self.assertIn("<b>ali", first)
+        self.assertEqual(second, self._build({}))
+
+    async def test_a_refusal_without_a_custom_text_is_raised(self) -> None:
+        bot = MagicMock()
+        bot.send_message = AsyncMock(side_effect=self._refused())
+        with self.assertRaises(TelegramBadRequest):
+            await send_alert_with_default_fallback(bot, 1, {}, self._build, note="", markup=None)
+        self.assertEqual(bot.send_message.await_count, 1)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,7 @@ from app.services.staff_notice_buttons import platform_report_markup, shop_panel
 from app.services.usage_alert_messages import (
     alert_days,
     days_left,
+    send_alert_with_default_fallback,
     time_alert_due,
     time_alert_text,
     traffic_alert_text,
@@ -242,12 +243,15 @@ async def check_expiring_services(bot: Bot) -> None:
                             try:
                                 one_tap = on(_ui.get("one_tap_renew_enabled", "1"))
                                 markup = time_alert_markup(_ui, svc.id, extras)
-                                alert = await send_bot.send_message(
+                                alert = await send_alert_with_default_fallback(
+                                    send_bot,
                                     user.telegram_id,
-                                    time_alert_text(_ui, service_name=svc.pg_username or "", expire=expire, now=now, renew_button=one_tap)
-                                    + extras.note_for(svc.id),
-                                    parse_mode="HTML",
-                                    reply_markup=markup,
+                                    _ui,
+                                    lambda ui, name=svc.pg_username or "", end=expire, button=one_tap: time_alert_text(
+                                        ui, service_name=name, expire=end, now=now, renew_button=button
+                                    ),
+                                    note=extras.note_for(svc.id),
+                                    markup=markup,
                                 )
                                 svc.notified_expire = True
                                 sent_alerts.append((send_bot, usage_alert_key(ALERT_TIME, svc.id), alert))
@@ -269,12 +273,15 @@ async def check_expiring_services(bot: Bot) -> None:
                         if rem_pct is not None:
                             if rem_pct <= traffic_pct:
                                 try:
-                                    alert = await send_bot.send_message(
+                                    alert = await send_alert_with_default_fallback(
+                                        send_bot,
                                         user.telegram_id,
-                                        traffic_alert_text(_ui, service_name=svc.pg_username or "", used=used, limit=limit_f)
-                                        + extras.note_for(svc.id),
-                                        parse_mode="HTML",
-                                        reply_markup=traffic_alert_markup(_ui, svc.id, extras),
+                                        _ui,
+                                        lambda ui, name=svc.pg_username or "", used=used, limit=limit_f: traffic_alert_text(
+                                            ui, service_name=name, used=used, limit=limit
+                                        ),
+                                        note=extras.note_for(svc.id),
+                                        markup=traffic_alert_markup(_ui, svc.id, extras),
                                     )
                                     svc.notified_traffic = True
                                     sent_alerts.append((send_bot, usage_alert_key(ALERT_TRAFFIC, svc.id), alert))
