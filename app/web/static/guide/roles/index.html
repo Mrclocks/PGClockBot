@@ -93,7 +93,7 @@
             </a>
             
             <a class="guide-nav-link" href="../settings-panel/index.html">
-              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/></svg></span>
+              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v16H7.5A2.5 2.5 0 0 0 5 21.5z"/><path d="M5 5.5V21.5"/></svg></span>
               <span class="guide-nav-text">تنظیمات سیستم</span>
             </a>
             
@@ -116,7 +116,7 @@
             </a>
             
             <a class="guide-nav-link" href="../users/index.html">
-              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg></span>
+              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="8" r="3.5"/><path d="M3.5 20a6.5 6.5 0 0 1 13 0"/><path d="M15.6 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.2 14.3A6.5 6.5 0 0 1 20.5 20"/></svg></span>
               <span class="guide-nav-text">کاربران ربات</span>
             </a>
             
@@ -319,6 +319,10 @@
 <p>تمرکز روی بخش <strong>پاسارگارد</strong> منو، به‌اضافه داشبورد، مرکز اقدام، حساب و امنیت، و <strong>پشتیبانی/تیکت</strong> (برای این نقش در منو هست).</p>
 <div class="guide-table-wrap" role="region" aria-label="جدول" tabindex="0"><table><thead><tr><th>بخش PG</th><th>معمولاً برای چه؟</th></tr></thead><tbody><tr><td>نمای کلی پاسارگارد</td><td>سلامت ارتباط و میانبرها</td></tr><tr><td>کاربران</td><td>یوزر VPN، حجم، انقضا</td></tr><tr><td>نود / گروه / اینباند / هاست / تمپلیت</td><td>زیرساخت — فقط اگر نقش PG اجازه بدهد</td></tr></tbody></table></div>
 <p>صفحهٔ «ادمین‌های پاسارگارد» (<code>/pg/admins</code>) معمولاً مال مالک است، نه خود <code>pg_staff</code>.</p>
+<h3 id="کدام-دسترسی-پاسارگارد-چه-چیزی-را-باز-میکند؟">کدام دسترسی پاسارگارد چه چیزی را باز می‌کند؟</h3>
+<p>منوها و دکمه‌های بخش پاسارگارد، در وب‌پنل و ربات، دقیقاً از نقش همان ادمین در پاسارگارد پیروی می‌کنند؛ نه بیشتر و نه کمتر.</p>
+<div class="guide-table-wrap" role="region" aria-label="جدول" tabindex="0"><table><thead><tr><th>دسترسی در پاسارگارد</th><th>در پنل</th></tr></thead><tbody><tr><td><code>users.read</code></td><td>فهرست، جستجو و جزئیات کاربران</td></tr><tr><td><code>users.create</code></td><td>ساخت کاربر (صفحهٔ کاربران باز می‌شود، حتی بدون فهرست)</td></tr><tr><td><code>users.update</code> / <code>delete</code> / <code>reset_usage</code> / <code>revoke_sub</code></td><td>ویرایش و فعال/غیرفعال، حذف، ریست مصرف، تغییر لینک اشتراک</td></tr><tr><td><code>templates.read</code> / <code>groups.read</code> / <code>hosts.read</code> / <code>nodes.read</code></td><td>صفحهٔ تمپلیت‌ها / گروه‌ها / هاست‌ها / نودها</td></tr><tr><td><code>system.read</code></td><td>نمای کلی کامل و صفحهٔ اینباندها</td></tr><tr><td><code>hosts.update</code></td><td>ویرایش، روشن/خاموش و <strong>حذف</strong> هاست (پاسارگارد برای حذف هاست هم همین را می‌خواهد)</td></tr><tr><td><code>nodes.reconnect</code></td><td>اتصال دوباره نود</td></tr><tr><td><code>admins.read</code></td><td>صفحهٔ «ادمین‌ها» — فقط برای حساب اصلی پنل</td></tr></tbody></table></div>
+<ul><li>دسترسی «فقط فهرست ساده» (<code>read_simple</code>) هیچ صفحه‌ای باز نمی‌کند؛ فقط فهرست کشویی تمپلیت و گروه را در فرم کاربر پر می‌کند، مثل خود پاسارگارد.</li><li>ادمینی که در پاسارگارد به وضعیت <strong>محدود</strong> (limited) رسیده، فقط می‌بیند و هیچ تغییری نمی‌تواند بدهد؛ اگر نقشش «غیرفعال هنگام محدودیت» باشد، هیچ بخشی را نمی‌بیند.</li><li>ادمینی که دست‌کم یک بخش برایش باز است، نمای کلی حساب خودش را هم می‌بیند، حتی بدون <code>system.read</code>؛ پاسارگارد اطلاعات حساب هر ادمین را بدون دسترسی خاصی به خودش نشان می‌دهد.</li></ul>
 <h3 id="چه-میتواند-بکند؟">چه می‌تواند بکند؟</h3>
 <ul><li>مدیریت یوزرهای VPN در محدودهٔ دسترسی ادمین فرعی</li><li>کار روی نود/گروه/تمپلیت اگر در نقش PG باشد</li><li>گفتگو با مالک از مسیر پشتیبانی</li></ul>
 <h3 id="چه-نمیتواند-بکند؟">چه نمی‌تواند بکند؟</h3>

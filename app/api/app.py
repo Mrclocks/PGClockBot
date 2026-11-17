@@ -43,13 +43,13 @@ from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
 from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
 from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.panel_nav import DOT_LABELS as NAV_DOT_LABELS
-from app.services.panel_nav import sidebar_for_template
+from app.services.panel_nav import build_dock, sidebar_for_template
 from app.services.resellers import feature_perm_groups
-from app.services.marketing_nav import marketing_groups
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.miniapp_branding import ACCENT_PRESETS
+from app.services.miniapp_main_app import platform_main_app_guide
 from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 from app.services.payer_notify import notify_payer
 from app.services.pg_panel_access import apply_pg_panel_access, is_pg_panel_blocked, pg_panel_allowed
@@ -91,6 +91,7 @@ from app.services.psp_gateways import psp_gateways_form_json
 from app.services.panel_assets import asset_version, get_panel_asset_cache_key
 from app.services.redact import operator_error
 from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.mobile_bar import load_bar_form, load_bar_order
 from app.services.panel_brand import (
     BRAND_PRESET_CSS,
     DEFAULT_BRAND,
@@ -104,6 +105,13 @@ from app.services.notifications import SYSTEM_NOTIFY_KEYS
 from app.services.receipt_review import DEFAULT_REJECT_TEXT
 from app.services.support_button import support_markup
 from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
+from app.services.settings_hub import (
+    SYSTEM_LIST_TAB,
+    hub_sections,
+    settings_place,
+    system_hub_sections,
+    system_settings_groups,
+)
 from app.services.users import (
     SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
@@ -129,6 +137,7 @@ from app.api.catalog_discounts import register_catalog_discounts
 from app.api.random_discounts import register_random_discounts
 from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
+from app.api.marketing_pages import register_marketing_pages
 from app.api.panel_search_pages import register_panel_search_pages
 from app.api.order_purge_pages import register_order_purge_pages
 from app.api.cleanup_settings_pages import register_cleanup_settings_pages
@@ -144,6 +153,7 @@ from app.api.billing_report_pages import register_billing_report_pages
 from app.api.child_pricing_pages import register_child_pricing_pages
 from app.api.shop_points_pages import register_shop_points_pages
 from app.api.shop_customer_block_pages import register_shop_customer_block_pages
+from app.api.mobile_bar_settings import register_mobile_bar_settings
 from app.api.panel_brand_pages import register_panel_brand_pages
 from app.api.trial_users_pages import register_trial_users_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
@@ -153,7 +163,9 @@ from app.services.backup_settings import apply_backup_retention, normalize_backu
 from app.services.bbc_settlement import bbc_enable_error
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
+from app.api.service_import_assign_pages import register_service_import_assign_pages
 from app.api.service_import_pages import register_service_import_pages
+from app.api.entry_approval_pages import register_entry_approval_pages
 from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
 from app.api.login_guard import (
     client_ip as _client_ip,
@@ -167,22 +179,25 @@ logger = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
-from app.services.formatting import format_bytes, format_bytes_ratio, format_gb, format_money, format_number, format_expire_short, order_status_fa, ticket_status_fa
+from app.services.formatting import node_status_fa, order_status_fa, pg_user_status_fa, ticket_status_fa
+from app.services.web_numbers import WEB_NUMBER_FILTERS
 
-templates.env.filters["bytes"] = format_bytes
-templates.env.filters["bytes_ratio"] = format_bytes_ratio
-templates.env.filters["gb"] = format_gb
-templates.env.filters["num"] = format_number
-templates.env.filters["money"] = format_money
-templates.env.filters["expire"] = format_expire_short
+templates.env.filters.update(WEB_NUMBER_FILTERS)
 templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
+templates.env.filters["node_status"] = node_status_fa
+templates.env.filters["pg_user_status"] = pg_user_status_fa
 templates.env.globals["app_version"] = local_version()
 templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
 templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
 templates.env.globals["brand_presets"] = BRAND_PRESETS
 templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
+# Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).
+templates.env.globals["hub_sections"] = hub_sections
+templates.env.globals["settings_place"] = settings_place
+templates.env.globals["system_settings_groups"] = system_settings_groups
+templates.env.globals["system_hub_sections"] = system_hub_sections
 # Request context overrides these; they keep templates that render without a signed-in person working.
 templates.env.globals["panel_brand"] = DEFAULT_BRAND
 templates.env.globals["panel_brand_css"] = BRAND_PRESET_CSS
@@ -206,12 +221,10 @@ except Exception:
     templates.env.globals["deployed_channel_label"] = "پایدار"
 templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["panel_sidebar"] = sidebar_for_template
+templates.env.globals["panel_dock"] = build_dock
 templates.env.globals["nav_dot_labels"] = NAV_DOT_LABELS
 templates.env.globals["feature_perm_groups"] = feature_perm_groups
-templates.env.globals["marketing_groups"] = marketing_groups
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
-templates.env.globals["format_bytes"] = format_bytes
-templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
 templates.env.globals["template_variable_specs"] = template_variable_specs
 
 
@@ -328,6 +341,7 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     ctx.setdefault("csp_nonce", nonce)
     ctx.setdefault("panel_brand", getattr(request.state, "panel_brand", None) or DEFAULT_BRAND)
     ctx.setdefault("panel_brand_css", BRAND_PRESET_CSS)
+    ctx.setdefault("mobile_bar_order", getattr(request.state, "mobile_bar_order", ()))
     if "pwa_name" not in ctx:
         try:
             from app.services.pwa import panel_display_name
@@ -833,6 +847,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         await recover_session(session)
         # Header brand of the shop this person works for (default on any failure).
         request.state.panel_brand = await brand_for_staff(session, user)
+        # The owner's page order for the phone bar (cached; the default order on any failure).
+        request.state.mobile_bar_order = await load_bar_order(session)
         finish_panel_authentication(request)
         return user
 
@@ -1582,6 +1598,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     from app.api.miniapp_feeds import register_miniapp_feeds
     from app.api.miniapp_guides import register_miniapp_guides
     from app.api.miniapp_loyalty import register_miniapp_loyalty
+    from app.api.miniapp_onboarding import register_miniapp_onboarding
     from app.api.miniapp_pages import register_miniapp_pages
     from app.api.miniapp_renewal import register_miniapp_renewal
     from app.api.miniapp_reseller import register_miniapp_reseller
@@ -1599,6 +1616,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_miniapp_loyalty(app, get_db=get_db)
     register_miniapp_reseller(app, get_db=get_db)
     register_miniapp_review(app, get_db=get_db)
+    register_miniapp_onboarding(app, get_db=get_db)
     from app.api.customer_features import register_customer_features
 
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)
@@ -1617,6 +1635,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_random_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_panel_search_pages(app, require_staff=require_staff)
+    register_marketing_pages(app, render=render, require_staff=require_staff)
     register_order_purge_pages(app, require_staff=require_staff, get_db=get_db)
     register_cleanup_settings_pages(app, require_staff=require_staff, get_db=get_db)
     register_staff_audit_pages(app, render=render, require_staff=require_staff, get_db=get_db)
@@ -1633,7 +1652,10 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_shop_customer_block_pages(app, require_staff=require_staff, get_db=get_db)
     register_trial_users_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_panel_brand_pages(app, require_staff=require_staff, get_db=get_db)
+    register_mobile_bar_settings(app, require_admin=require_admin, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
+    register_service_import_assign_pages(app, require_staff=require_staff, get_db=get_db)
+    register_entry_approval_pages(app, require_staff=require_staff, get_db=get_db)
     register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
 
     @app.get("/settings/ssl/progress")
@@ -2547,9 +2569,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.plans_catalog import (
             catalog_owner_id,
             custom_range_limit_issue,
+            group_plans_blocked_by_role,
             list_catalog_plans,
             load_pg_plan_options,
             plan_limit_issue,
+            role_requires_template,
             staff_can_create_pg_template,
         )
         from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
@@ -2643,6 +2667,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 pg_roles = []
 
         plan_categories: list = []
+        plan_board = None
+        plan_category_tones: dict = {}
         plan_category_map: dict = {}
         reseller_plan_category_map: dict = {}
         category_linked_plans: dict = {}
@@ -2653,10 +2679,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 category_plans_map,
                 list_categories,
             )
+            from app.services.plan_category_board import build_plan_board, category_tones
             from app.services.service_addons import list_packs
 
             if is_platform_admin(staff) or rid:
                 plan_categories = await list_categories(session, staff)
+                plan_board = build_plan_board(sale_plans, plan_categories, ui=values)
+                plan_category_tones = category_tones(plan_categories, values)
                 plan_category_map = await category_map_for_plans(
                     session, staff, sale_plans
                 )
@@ -2695,6 +2724,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "pg_live_template_ids": pg_live_template_ids,
                 "groups": groups,
                 "pg_error": pg_error,
+                "pg_template_only": role_requires_template(staff),
+                "role_blocked_plans": group_plans_blocked_by_role(
+                    staff,
+                    plans,
+                    custom_plan_enabled=str(values.get("custom_plan_enabled") or "").lower()
+                    in {"1", "true", "yes", "on"},
+                    custom_plan_group_ids=values.get("custom_plan_group_ids") or "",
+                ),
                 "can_create_template": staff_can_create_pg_template(staff),
                 "is_platform_admin": is_platform_admin(staff),
                 "reseller_plans": reseller_plans,
@@ -2702,6 +2739,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
                 "plan_categories": plan_categories,
+                "plan_board": plan_board,
+                "plan_category_tones": plan_category_tones,
                 "plan_category_map": plan_category_map,
                 "reseller_plan_category_map": reseller_plan_category_map,
                 "category_linked_plans": category_linked_plans,
@@ -2747,12 +2786,12 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
         from app.services.plans_catalog import (
-            groups_allowed_for_staff,
             parse_group_ids_from_form,
             parse_user_plan_duration_days,
+            plan_groups_denial,
+            plan_template_denial,
             require_catalog_owner_id,
             staff_can_create_pg_template,
-            template_allowed_for_staff,
         )
         from app.services.shop_scope import ShopScopeError
 
@@ -2786,9 +2825,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans?err={quote('تمپلیت پاسارگارد را انتخاب کنید')}",
                     status_code=303,
                 )
-            if not template_allowed_for_staff(staff, tpl):
+            template_denial = plan_template_denial(staff, tpl)
+            if template_denial:
                 return RedirectResponse(
-                    f"/plans?err={quote('به این تمپلیت دسترسی ندارید')}",
+                    f"/plans?err={quote(template_denial)}",
                     status_code=303,
                 )
         else:
@@ -2798,9 +2838,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans?err={quote('حداقل یک گروه پاسارگارد انتخاب کنید')}",
                     status_code=303,
                 )
-            if not groups_allowed_for_staff(staff, ids):
+            groups_denial = plan_groups_denial(staff, ids)
+            if groups_denial:
                 return RedirectResponse(
-                    f"/plans?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
+                    f"/plans?err={quote(groups_denial)}",
                     status_code=303,
                 )
             group_csv = ",".join(str(i) for i in ids)
@@ -2899,10 +2940,10 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
         from app.services.plans_catalog import (
-            groups_allowed_for_staff,
             parse_group_ids_from_form,
+            plan_groups_denial,
+            plan_template_denial,
             require_catalog_owner_id,
-            template_allowed_for_staff,
         )
         from app.services.shop_scope import ShopScopeError
 
@@ -2941,9 +2982,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans?err={quote('برای پلن تست، تمپلیت را انتخاب کنید')}",
                     status_code=303,
                 )
-            if tpl and not template_allowed_for_staff(staff, tpl):
+            template_denial = plan_template_denial(staff, tpl) if tpl else None
+            if template_denial:
                 return RedirectResponse(
-                    f"/plans?err={quote('به این تمپلیت دسترسی ندارید')}",
+                    f"/plans?err={quote(template_denial)}",
                     status_code=303,
                 )
         else:
@@ -2953,9 +2995,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans?err={quote('برای پلن تست حداقل یک گروه انتخاب کنید')}",
                     status_code=303,
                 )
-            if ids and not groups_allowed_for_staff(staff, ids):
+            groups_denial = plan_groups_denial(staff, ids) if ids else None
+            if groups_denial:
                 return RedirectResponse(
-                    f"/plans?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
+                    f"/plans?err={quote(groups_denial)}",
                     status_code=303,
                 )
             group_csv = ",".join(str(i) for i in ids) if ids else None
@@ -3019,10 +3062,10 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from app.services.pg_quota import PgQuotaError, assert_custom_plan_range_within_limits
         from app.services.plans_catalog import (
-            groups_allowed_for_staff,
             parse_group_ids_from_form,
+            plan_groups_denial,
+            plan_template_denial,
             require_catalog_owner_id,
-            template_allowed_for_staff,
         )
         from app.services.shop_scope import ShopScopeError
 
@@ -3063,18 +3106,20 @@ def create_api_app(lifespan=None) -> FastAPI:
         mode = str(form.get("mode") or "custom")
         if mode == "template":
             tpl = str(form.get("custom_plan_template_id") or "").strip()
-            if tpl and tpl.isdigit() and not template_allowed_for_staff(staff, int(tpl)):
+            template_denial = plan_template_denial(staff, int(tpl)) if tpl.isdigit() else None
+            if template_denial:
                 return RedirectResponse(
-                    f"/plans?err={quote('به این تمپلیت دسترسی ندارید')}",
+                    f"/plans?err={quote(template_denial)}",
                     status_code=303,
                 )
             await set_setting(session, "custom_plan_template_id", tpl, reseller_id=owner_id)
             await set_setting(session, "custom_plan_group_ids", "", reseller_id=owner_id)
         else:
             ids = parse_group_ids_from_form(form)
-            if ids and not groups_allowed_for_staff(staff, ids):
+            groups_denial = plan_groups_denial(staff, ids) if ids else None
+            if groups_denial:
                 return RedirectResponse(
-                    f"/plans?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
+                    f"/plans?err={quote(groups_denial)}",
                     status_code=303,
                 )
             await set_setting(
@@ -3161,7 +3206,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
 
     async def _plans_context(session: AsyncSession, request: Request, staff: dict, extra: dict | None = None):
-        from app.services.plans_catalog import list_catalog_plans, load_pg_plan_options
+        from app.services.plans_catalog import (
+            list_catalog_plans,
+            load_pg_plan_options,
+            role_requires_template,
+        )
         from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
 
         plans = await list_catalog_plans(session, staff, include_trial=True)
@@ -3173,6 +3222,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "templates": templates,
             "groups": groups,
             "pg_error": pg_error,
+            "pg_template_only": role_requires_template(staff),
             "pg_limit_snapshot": snap,
             "pg_limit_cards": limit_snapshot_cards(snap),
             "flash_err": request.query_params.get("err"),
@@ -3201,11 +3251,13 @@ def create_api_app(lifespan=None) -> FastAPI:
         else:
             values = await get_all_settings(session, reseller_id=rid)
         from app.services.plan_categories import list_categories
+        from app.services.plan_category_board import category_tones
 
         cats = []
         if is_platform_admin(staff) or rid:
             cats = await list_categories(session, staff, active_only=False)
         from app.services.button_styles import (
+            CATEGORY_BUTTON_STYLE_OPTIONS,
             ITEM_BUTTON_STYLE_OPTIONS,
             PLAN_BUTTON_STYLE_OPTIONS,
         )
@@ -3240,12 +3292,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "plan": plan,
                 "values": values,
                 "plan_categories": cats,
+                "plan_category_tones": category_tones(cats, values),
                 "plan_vol_packs": plan_vol_packs,
                 "plan_dur_packs": plan_dur_packs,
             },
         )
         ctx["plan_style_options"] = PLAN_BUTTON_STYLE_OPTIONS
         ctx["pack_style_options"] = ITEM_BUTTON_STYLE_OPTIONS
+        ctx["category_style_options"] = CATEGORY_BUTTON_STYLE_OPTIONS
         return render(request, "plan_edit.html", ctx)
 
     @app.post("/plans/{plan_id}/edit")
@@ -3266,10 +3320,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
         from app.services.plans_catalog import (
             get_owned_plan,
-            groups_allowed_for_staff,
             parse_group_ids_from_form,
             parse_user_plan_duration_days,
-            template_allowed_for_staff,
+            plan_groups_denial,
+            plan_template_denial,
         )
 
         plan = await get_owned_plan(session, plan_id, staff)
@@ -3308,9 +3362,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans/{plan_id}/edit?err={quote('تمپلیت پاسارگارد را انتخاب کنید')}",
                     status_code=303,
                 )
-            if not template_allowed_for_staff(staff, tpl):
+            template_denial = plan_template_denial(staff, tpl)
+            if template_denial:
                 return RedirectResponse(
-                    f"/plans/{plan_id}/edit?err={quote('به این تمپلیت دسترسی ندارید')}",
+                    f"/plans/{plan_id}/edit?err={quote(template_denial)}",
                     status_code=303,
                 )
         else:
@@ -3320,9 +3375,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     f"/plans/{plan_id}/edit?err={quote('حداقل یک گروه پاسارگارد انتخاب کنید')}",
                     status_code=303,
                 )
-            if not groups_allowed_for_staff(staff, ids):
+            groups_denial = plan_groups_denial(staff, ids)
+            if groups_denial:
                 return RedirectResponse(
-                    f"/plans/{plan_id}/edit?err={quote('به یکی از گروه‌های انتخاب‌شده دسترسی ندارید')}",
+                    f"/plans/{plan_id}/edit?err={quote(groups_denial)}",
                     status_code=303,
                 )
             group_csv = ",".join(str(i) for i in ids)
@@ -3898,14 +3954,19 @@ def create_api_app(lifespan=None) -> FastAPI:
                 format_credentials_message,
                 get_reseller_panel_base_url,
                 provision_reseller,
+                reseller_plan_from_form,
             )
 
             try:
+                # A package brings its own PasarGuard role, limits and permissions.
+                plan = await reseller_plan_from_form(session, staff, form.get("reseller_plan_id"))
+                perms = None if plan is not None else DEFAULT_FEATURE_PERMS
                 creds = await provision_reseller(
                     session,
                     user=user,
-                    web_permissions=DEFAULT_FEATURE_PERMS,
-                    bot_permissions=DEFAULT_FEATURE_PERMS,
+                    plan=plan,
+                    web_permissions=perms,
+                    bot_permissions=perms,
                     create_pg_admin=True,
                     panel_base_url=await get_reseller_panel_base_url(session),
                 )
@@ -3939,7 +4000,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         else:
             # Demoting a reseller must tear down profile / PG admin / shop bot
             if user.role == Role.RESELLER.value and role != Role.RESELLER.value:
-                from app.services.resellers import notify_reseller_revoked, revoke_reseller
+                from app.services.resellers import (
+                    PanelAdminNotRemoved,
+                    notify_reseller_revoked,
+                    revoke_reseller,
+                )
 
                 try:
                     info = await revoke_reseller(
@@ -3948,6 +4013,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                         delete_pg_admin=True,
                         reason=reason,
                     )
+                except PanelAdminNotRemoved as e:
+                    # The shop and its role stay as they are while its admin is still in PasarGuard.
+                    return _redirect_msg("/users", err=str(e))
                 except ValueError:
                     user.role = role
                     await session.commit()
@@ -4259,11 +4327,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             contacts, err = contacts_from_form_json(str(raw))
             if err:
                 return RedirectResponse(
-                    f"/tickets?supports=1&err={quote(err)}",
+                    f"/tickets?supports=1&stab=contacts&err={quote(err)}",
                     status_code=303,
                 )
             await save_support_contacts(session, contacts or [])
-            return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+            return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
         # Legacy single-row upsert (bot / older clients)
         from app.services.button_styles import parse_item_button_style_form
@@ -4291,10 +4359,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
         if err:
             return RedirectResponse(
-                f"/tickets?supports=1&err={quote(err)}",
+                f"/tickets?supports=1&stab=contacts&err={quote(err)}",
                 status_code=303,
             )
-        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
     @app.post("/supports/delete")
     async def supports_delete(
@@ -4308,7 +4376,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         contact_id = str(form.get("id") or "").strip()
         if contact_id:
             await delete_support_contact(session, contact_id)
-        return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
+        return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
     def _menu_tab_context(values: dict) -> dict:
         from app.bot.keyboards import DEFAULT_ACTIVE_MENU_ORDER, DEFAULT_MENU_ORDER
@@ -4394,6 +4462,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.updates import clear_update_cache, local_version
 
         tab = resolve_merged_tab((request.query_params.get("tab") or "welcome").strip())
+        if tab == SYSTEM_LIST_TAB:
+            # The system settings list renders over the first system page's context (settings.html).
+            tab = PANEL_SETTINGS_TABS[0][0]
         valid = {t[0] for t in SETTINGS_TABS} | PANEL_SETTINGS_KEYS
         if tab in SETTINGS_DOMAIN_REDIRECTS:
             dest = SETTINGS_DOMAIN_REDIRECTS[tab]
@@ -4534,6 +4605,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             from app.services.pwa import load_pwa_settings
 
             ctx["pwa"] = await load_pwa_settings(session)
+            ctx["mobile_bar"] = await load_bar_form(session)
             ctx["brand_values"] = await load_own_values(session, None)
             ctx["brand_form_action"] = "/panel-brand"
         elif tab == "backup":
@@ -4597,6 +4669,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["ssl"] = st
         elif tab == "miniapp":
             ctx["miniapp_url"] = get_settings().miniapp_url
+            ctx["main_app"] = await platform_main_app_guide()
         elif tab == "appearance":
             from app.services.bot_appearance import load_appearance_context
             from app.services.setup_wizard import current_setup_values
@@ -4662,7 +4735,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             from fastapi.responses import JSONResponse
 
             from app.services.pasarguard import reset_pg
-            from app.services.pg_access import clear_platform_pg_capability_cache, resolve_platform_pg_capabilities
+            from app.services.pg_access import check_pg_credentials, clear_platform_pg_capability_cache
             from app.services.setup_wizard import current_setup_values
 
             ajax = str(form.get("ajax") or "") == "1"
@@ -4705,24 +4778,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                     "نام کاربری و (رمز یا کلید API) الزامی است؛ فیلد خالی مقدار فعلی را حفظ می‌کند",
                     code=400,
                 )
+            # Save runs the same check as Test: a refused login is never written to .env.
+            connection_error = await check_pg_credentials(
+                username=username, password=password, api_key=api_key, base_url=base
+            )
+            if connection_error:
+                return pg_result(False, connection_error, code=400)
             if action == "test":
-
-                try:
-                    caps = await asyncio.wait_for(resolve_platform_pg_capabilities(
-                        username=username,
-                        password=password or None,
-                        api_key=api_key or None,
-                        base_url=base,
-                        use_cache=False,
-                    ), timeout=8.0)
-                except Exception:
-                    return pg_result(False, "پنل در زمان مقرر پاسخ نداد؛ آدرس و اتصال پنل را بررسی کنید", code=502)
-                if not caps.get("ok"):
-                    return pg_result(
-                        False,
-                        "اتصال پاسارگارد ناموفق بود؛ آدرس، نام کاربری، رمز یا کلید API را بررسی کنید",
-                        code=400,
-                    )
                 return pg_result(True, f"اتصال پاسارگارد موفق است؛ مسیر سابسکریپشن: {sub_path}/")
             update_env_keys({
                 "PG_BASE_URL": base, "PG_SUBSCRIPTION_PATH": sub_path,
@@ -5320,5 +5382,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     from starlette.middleware.gzip import GZipMiddleware
 
     app.add_middleware(PanelConnectionMiddleware)
-    app.add_middleware(GZipMiddleware, minimum_size=400)
+    # Level 6, not the default 9: measured on panel.css (367 KB) 7 ms instead of 14 ms of CPU per
+    # response for 71.0 KB instead of 70.3 KB; panel.js 4 ms instead of 12.5 ms for the same size.
+    app.add_middleware(GZipMiddleware, minimum_size=400, compresslevel=6)
     return app

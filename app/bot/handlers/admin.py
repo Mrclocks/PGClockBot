@@ -45,6 +45,7 @@ from app.services.automation_review import count_review_queue
 from app.services.payment_voids import offers_void
 from app.services.chat_records import keep_sent
 from app.services.db_safe import rollback_quiet
+from app.services.plans_catalog import plan_groups_denial, plan_template_denial, role_requires_template
 from app.services.redact import user_safe_error
 from app.services.subscription_lookup import link_token
 from app.services.reseller_wallet import load_reseller_profile
@@ -70,6 +71,7 @@ from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
 from app.bot.handlers import stuck_orders
 from app.bot.handlers.payment_voids import void_button
+from app.bot.handlers.make_reseller_plan import ask_reseller_plan
 from app.bot.handlers.subscription_lookup import (
     RESELLER_SEARCH_PROMPT,
     SEARCH_PROMPT,
@@ -1308,15 +1310,10 @@ async def plan_gb(
         return
     await state.update_data(gb=None if gb <= 0 else gb)
     await state.set_state(AdminStates.add_plan_link)
+    staff = await _platform_catalog_staff(session, db_user)
     await message.answer(
         "اتصال پاسارگارد را انتخاب کنید:",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="📋 از تمپلیت", callback_data="adm:plan:new:mode:tpl")],
-                [InlineKeyboardButton(text="📁 با گروه (سفارشی)", callback_data="adm:plan:new:mode:grp")],
-                [InlineKeyboardButton(text="❌ انصراف", callback_data="adm:plans")],
-            ]
-        ),
+        reply_markup=_plan_link_markup(staff),
     )
 
 @router.message(AdminStates.add_plan_link)
@@ -1541,6 +1538,10 @@ async def adm_plan_set_tpl(
     parts = callback.data.split(":")
     plan_id = int(parts[-2])
     tpl_id = int(parts[-1])
+    template_denial = plan_template_denial(await _platform_catalog_staff(session, db_user), tpl_id)
+    if template_denial:
+        await callback.answer(template_denial, show_alert=True)
+        return
     data = await state.get_data()
     creating = bool(data.get("new_plan") or plan_id == 0)
     if creating:
@@ -1606,6 +1607,10 @@ async def adm_plan_grp_done(
     if not selected:
         await callback.answer(feedback.PICK_AT_LEAST_ONE_GROUP, show_alert=True)
         return
+    groups_denial = plan_groups_denial(await _platform_catalog_staff(session, db_user), selected)
+    if groups_denial:
+        await callback.answer(groups_denial, show_alert=True)
+        return
     group_csv = ",".join(str(x) for x in selected)
     creating = bool(data.get("new_plan") or plan_id == 0)
     if creating:
@@ -1640,24 +1645,30 @@ async def adm_plan_grp_done(
 
 @router.callback_query(F.data == "adm:plan:new:backlink")
 @require_bot_owner_handler
-async def adm_plan_new_back_link(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
+async def adm_plan_new_back_link(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
+):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await state.set_state(AdminStates.add_plan_link)
     await callback.answer()
     if callback.message:
+        staff = await _platform_catalog_staff(session, db_user)
         await safe_edit_text(
             callback.message,
             "اتصال پاسارگارد را انتخاب کنید:",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text="📋 از تمپلیت", callback_data="adm:plan:new:mode:tpl")],
-                    [InlineKeyboardButton(text="📁 با گروه (سفارشی)", callback_data="adm:plan:new:mode:grp")],
-                    [InlineKeyboardButton(text="❌ انصراف", callback_data="adm:plans")],
-                ]
-            ),
+            reply_markup=_plan_link_markup(staff),
         )
+
+
+def _plan_link_markup(staff: dict | None) -> InlineKeyboardMarkup:
+    """Template / group choice; the group button is left out when the PasarGuard role forbids it."""
+    rows = [[InlineKeyboardButton(text="📋 از تمپلیت", callback_data="adm:plan:new:mode:tpl")]]
+    if not role_requires_template(staff):
+        rows.append([InlineKeyboardButton(text="📁 با گروه (سفارشی)", callback_data="adm:plan:new:mode:grp")])
+    rows.append([InlineKeyboardButton(text="❌ انصراف", callback_data="adm:plans")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 async def _platform_catalog_staff(
     session: AsyncSession, db_user: BotUser
@@ -2810,9 +2821,10 @@ async def adm_users_services(
                 "این کاربر هنوز سرویسی ندارد.",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
+                        [kb.service_import_button(user_id)],
                         [
                             kb.back_button(None, f"adm:users:view:{user_id}")
-                        ]
+                        ],
                     ]
                 ),
             )
@@ -4673,39 +4685,9 @@ async def make_res(
     if not user:
         await message.answer("کاربر باید حداقل یک بار ربات را استارت کرده باشد.")
         return
-    from app.services.resellers import (
-        format_credentials_message,
-        get_reseller_panel_base_url,
-        provision_reseller,
+    await ask_reseller_plan(
+        message, state, session, user_id=int(user.id), can_approve=can_approve
     )
-
-    perms = "dashboard,orders,tickets,stats"
-    if can_approve:
-        perms = "dashboard,orders,payments,tickets,stats"
-    try:
-        creds = await provision_reseller(
-            session,
-            user=user,
-            can_approve_receipts=can_approve,
-            web_permissions=perms,
-            bot_permissions=perms,
-            create_pg_admin=True,
-            panel_base_url=await get_reseller_panel_base_url(session),
-        )
-    except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}")
-        return
-    await state.clear()
-    try:
-        with keep_sent():  # a notice or review item, never a temporary panel
-            await message.bot.send_message(
-                user.telegram_id,
-                format_credentials_message(creds),
-                parse_mode="HTML",
-            )
-    except Exception:
-        logger.debug("make_res: ignored failure", exc_info=True)
-    await message.answer(f"کاربر {tg_id} نماینده شد ✅ — اطلاعات ورود ارسال شد")
 
 @router.callback_query(F.data == "adm:tickets")
 @require_bot_owner_handler

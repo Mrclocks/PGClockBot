@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, oversell_create_switch, row_actions, page_title, modal_title %}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import switch, oversell_create_switch, row_actions, modal_title, page_header, act_label %}
 {% block title %}ادمین‌های پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('admins', 'ادمین‌های پاسارگارد', 'pg', help='pg-admins') }}
-  </div>
-  <button type="button" class="btn" data-modal-open="modal-pg-admin-create">ساخت ادمین</button>
-</div>
+{% call(slot) page_header('admins', 'ادمین‌های پاسارگارد', 'pg', help='pg-admins') %}
+  {%- if slot == 'primary' %}
+  <button type="button" class="btn" data-modal-open="modal-pg-admin-create">{{ act_label('ساخت ادمین', 'ادمین') }}</button>
+  {%- endif %}
+{% endcall %}
 <div class="card card-flush">
   <h2>لیست ادمین‌ها</h2>
   {% if not admins %}
@@ -36,16 +36,16 @@
       {% set src = st.get('source') or 'none' %}
       <tr>
         <td class="mono col-hide-sm">{{ a.get('id') or '—' }}</td>
-        <td class="li-title" dir="ltr">{{ uname or '—' }}</td>
+        <td class="li-title"><bdi dir="ltr">{{ uname or '—' }}</bdi></td>
         <td class="mono muted col-hide-sm li-sub">
           {#- On phones line two: role and status, then users used. -#}
           {% if a.get('role') and a.get('role').get('name') %}{{ a.get('role').get('name') }} · {% endif %}
           {% if a.get('is_sudo') %}دسترسی کامل · {% endif %}
-          {% if a.get('status') %}{{ a.get('status') }}{% endif %}
+          {% if a.get('status') %}<bdi dir="auto">{{ a.get('status') | pg_user_status }}</bdi>{% endif %}
           {% if a.get('note') %}<br class="li-hide"><small class="muted li-hide">{{ a.get('note') }}</small>{% endif %}
           <span class="li-only">· کاربران <bdi dir="ltr">{{ usage.get('users_text') or '—' }}</bdi></span>
         </td>
-        <td class="mono" dir="ltr" title="مصرف / سقف کاربران">{{ usage.get('users_text') or '—' }}</td>
+        <td class="mono" title="مصرف / سقف کاربران"><bdi dir="ltr">{{ usage.get('users_text') or '—' }}</bdi></td>
         <td class="mono reseller-quota-cell li-value" title="مصرف / سقف حجم{% if usage.get('lifetime_text') %} · lifetime {{ usage.get('lifetime_text') }}{% endif %}">
           <div class="reseller-quota byte-stack">
             <span class="reseller-quota-line byte-size">{{ usage.get('traffic_text') or '—' }}</span>
@@ -185,7 +185,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('nodes', ('ویرایش ادمین فرعی' if src == 'pg_staff' else 'اعطای ادمین فرعی (فقط پاسارگارد)'), tone='pg') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/admins/{{ uname }}/web-access/staff" class="form-stack ds-body js-busy-form" data-busy-label="در حال ذخیره…">
@@ -246,7 +246,7 @@
           <option value="">— بدون محدودیت زمان —</option>
           {% for p in sub_plans %}
           {% if (p.plan_kind or 'subscription') == 'subscription' %}
-          <option value="{{ p.id }}">{{ p.name }}{% if p.duration_days %} — {{ p.duration_days }} روز{% endif %}</option>
+          <option value="{{ p.id }}">{{ p.name }}{% if p.duration_days %} — {{ (p.duration_days) | fa }} روز{% endif %}</option>
           {% endif %}
           {% endfor %}
         </select>
@@ -259,7 +259,7 @@
       </div></div>
     </form>
     {% if src == 'pg_staff' %}
-    <form method="post" action="/pg/admins/{{ uname }}/subscription/renew" class="form-stack ds-body" style="margin-top:var(--space-2)">
+    <form method="post" action="/pg/admins/{{ uname }}/subscription/renew" class="form-stack ds-body renew-form">
       <input type="hidden" name="plan_id" value="" />
       <section class="ds-sec ds-sec-first"><div class="ds-card">
       </div></section>
@@ -278,7 +278,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('resellers', 'تبدیل به نماینده', tone='brand') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/admins/{{ uname }}/convert-to-reseller" class="form-stack ds-body js-busy-form" data-busy-label="در حال تبدیل…">
@@ -301,7 +301,7 @@
         <select name="plan_id" required {% if not grant_plans %}disabled{% endif %}>
           <option value="">— انتخاب پلن —</option>
           {% for p in grant_plans %}
-          <option value="{{ p.id }}" {% if default_plan_id and p.id == default_plan_id %}selected{% endif %}>{% if (p.plan_kind or '') == 'current_capacity' %}[ظرفیت فعلی] {% elif (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% elif p.duration_days %} — {{ p.duration_days }} روز{% endif %}</option>
+          <option value="{{ p.id }}" {% if default_plan_id and p.id == default_plan_id %}selected{% endif %}>{% if (p.plan_kind or '') == 'current_capacity' %}[ظرفیت فعلی] {% elif (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% elif p.duration_days %} — {{ (p.duration_days) | fa }} روز{% endif %}</option>
           {% endfor %}
         </select>
         <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن می‌آید</small>
@@ -337,7 +337,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('resellers', 'اعطای دسترسی نماینده (فروشگاه)', tone='brand') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/admins/{{ uname }}/web-access/reseller" class="form-stack ds-body js-busy-form" data-busy-label="در حال ذخیره…">
@@ -360,7 +360,7 @@
         <select name="plan_id" required {% if not grant_plans %}disabled{% endif %}>
           <option value="">— انتخاب پلن —</option>
           {% for p in grant_plans %}
-          <option value="{{ p.id }}" {% if default_plan_id and p.id == default_plan_id %}selected{% endif %}>{% if (p.plan_kind or '') == 'current_capacity' %}[ظرفیت فعلی] {% elif (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% elif p.duration_days %} — {{ p.duration_days }} روز{% endif %}</option>
+          <option value="{{ p.id }}" {% if default_plan_id and p.id == default_plan_id %}selected{% endif %}>{% if (p.plan_kind or '') == 'current_capacity' %}[ظرفیت فعلی] {% elif (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}{% if (p.billing_mode or 'fixed') == 'payg' and p.price_per_gb %} · {{ "\u200e" }}{{ p.price_per_gb | money }} / گیگ{% elif p.duration_days %} — {{ (p.duration_days) | fa }} روز{% endif %}</option>
           {% endfor %}
         </select>
         <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن کپی می‌شود</small>
@@ -398,7 +398,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('admins', 'ساخت ادمین پنل', tone='pg') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/admins" class="form-stack ds-body js-busy-form" data-busy-label="در حال ساخت…">

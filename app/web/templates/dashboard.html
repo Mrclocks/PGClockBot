@@ -1,17 +1,13 @@
 {% extends "base.html" %}
-{% from "macros.html" import pay_status, page_title, card_title %}
+{% from "macros.html" import pay_status, page_header, act_label, card_title %}
 {% from "_home_widgets.html" import delta, status_tiles %}
 {% block title %}نمای کلی فروشگاه{% endblock %}
 {% block content %}
-<div class="page-head ov-page-head">
-  {{ page_title('overview', 'نمای کلی فروشگاه', 'brand', help='bot-dashboard') }}
-  {% if viewer.can_settings %}
-  <a class="btn btn-sm btn-ghost ov-head-btn" href="{{ '/settings?tab=bot' if viewer.shop_id is none else '/shop-settings' }}">
-    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
-    <span>تنظیمات ربات</span>
-  </a>
-  {% endif %}
-</div>
+{% call(slot) page_header('overview', 'نمای کلی فروشگاه', 'brand', help='bot-dashboard') %}
+  {%- if slot == 'primary' and viewer.can_settings %}
+  <a class="btn btn-ghost page-act-icon" href="{{ '/settings?tab=bot' if viewer.shop_id is none else '/shop-settings' }}">{{ act_label('تنظیمات ربات', icon_name='bot-settings') }}</a>
+  {%- endif %}
+{% endcall %}
 
 {% if bot_setup_needed %}
 <div class="flash err dash-bot-setup">
@@ -108,7 +104,7 @@
         {% for p in recent_payments %}
           <tr>
             <td class="mono col-id">{{ p.id }}</td>
-            <td class="mono col-amount" dir="ltr">{{ p.amount | money }}</td>
+            <td class="mono col-amount">{{ p.amount | money }}</td>
             <td class="col-type">{% if p.is_wallet_topup %}شارژ کیف{% else %}خرید{% endif %}</td>
             <td class="col-status"><span class="badge {% if p.status=='pending' %}pending{% elif p.status=='approved' %}approved{% else %}rejected{% endif %}">{{ pay_status(p.status) }}</span></td>
           </tr>
@@ -137,7 +133,7 @@
           {% set waiting = o.status in ['pending', 'awaiting_receipt', 'awaiting_approval'] %}
           <tr>
             <td class="mono col-id">{{ o.id }}</td>
-            <td class="mono col-amount" dir="ltr">{{ o.amount | money }}</td>
+            <td class="mono col-amount">{{ o.amount | money }}</td>
             <td class="col-status">
               <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif waiting %}pending{% elif o.status in ['rejected','cancelled'] %}rejected{% else %}neutral{% endif %}">
                 {%- if waiting %}در انتظار{% elif o.status == 'delivered' %}تحویل شد{% elif o.status == 'paid' %}پرداخت شد{% elif o.status == 'rejected' %}رد شد{% elif o.status == 'cancelled' %}لغو{% else %}{{ o.status }}{% endif -%}

@@ -1,13 +1,9 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, empty_state %}
 {% block title %}درخواست‌های نمایندگی{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('applications', 'درخواست‌های نمایندگی', help='reseller-applications') }}
-  </div>
-</div>
+{{ page_header('applications', 'درخواست‌های نمایندگی', help='reseller-applications') }}
 
 <div class="section-tabs">
   {% for t in tabs %}
@@ -36,7 +32,7 @@
           {% if a.user %}<span class="li-only li-id" dir="ltr">({{ a.user.telegram_id }})</span>{% endif %}
         </td>
         <td class="col-hide-sm li-sub"><span>{{ a.plan.name if a.plan else '—' }}</span> <span class="li-only">· درخواست <bdi dir="ltr">#{{ a.id }}</bdi></span></td>
-        <td class="mono li-value" dir="ltr">{{ (a.plan.price if a.plan else 0) | money }}</td>
+        <td class="mono li-value">{{ (a.plan.price if a.plan else 0) | money }}</td>
         <td class="li-badge">
           {% if a.status == 'awaiting_approval' %}<span class="badge pending">منتظر تأیید</span>
           {% elif a.status == 'pending_payment' %}<span class="badge pending">منتظر پرداخت</span>
@@ -61,7 +57,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">درخواستی نیست</td></tr>
+      {{ empty_state('درخواستی نیست', 'applications', colspan=7) }}
     {% endfor %}
     </tbody>
   </table>

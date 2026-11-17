@@ -41,6 +41,7 @@ from app.services.service_scope import customer_may_use_service, list_customer_s
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 from app.services.service_live_info import fetch_live_service_info, with_stored_quota
+from app.services.catalog_descriptions import with_descriptions
 from app.services.plan_categories import shop_category_map
 from app.services.service_renewals import RenewalChoices, load_renewal_choices
 from app.services.wireguard_delivery import REASON_DISABLED, REASON_UNAVAILABLE, fetch_wireguard, has_wireguard
@@ -228,34 +229,72 @@ async def svc_auto(callback: CallbackQuery, session: AsyncSession, db_user: BotU
 @router.callback_query(F.data.startswith("svc:autopick:"))
 async def svc_auto_pick(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     from app.services.service_automation import ACTIONS, LABELS, automation_choices, owned_automation_service
+    from app.services.plan_categories import (
+        plans_in_category,
+        shop_categories_for_menu,
+        shop_category_map,
+        uncategorized_fixed_plans,
+    )
+    from app.services.service_addons import amount_label
+
     try:
-        _, _, service_id, action = callback.data.split(":")
-        service_id = int(service_id)
+        parts = callback.data.split(":")
+        service_id = int(parts[2])
+        action = parts[3]
+        category_raw = parts[4] if len(parts) > 4 else None
         if action not in ACTIONS:
             raise ValueError("تنظیم نامعتبر است")
         await owned_automation_service(session, db_user, service_id)
         choices = (await automation_choices(session))[action]
         if not choices:
             raise ValueError("پلن یا بسته فعالی موجود نیست")
+        category_id = None
+        if category_raw not in (None, "none"):
+            category_id = int(category_raw)
     except ValueError as exc:
         await callback.answer(domain_error_text(exc), show_alert=True)
         return
-    from app.services.plan_categories import shop_category_map
-    from app.services.service_addons import amount_label
+    except IndexError:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
 
     categories = await shop_category_map(session)
+    back_callback = f"svc:auto:{service_id}"
+    title = f"⚙️ {LABELS[action]}"
+    body = "با انتخاب گزینه، این قابلیت روشن می‌شود و در هر بار پایان زمان یا حجم، هزینه از کیف پول پرداخت خواهد شد."
+    if action == "renew":
+        menu_categories = await shop_categories_for_menu(session, fixed_plans=choices)
+        if menu_categories and category_raw is None:
+            # Categories come first; plans are listed only after one is chosen.
+            buttons = [[InlineKeyboardButton(
+                text=kb._category_button_label(cat),
+                callback_data=f"svc:autopick:{service_id}:{action}:{cat.id}",
+                icon_custom_emoji_id=getattr(cat, "icon_custom_emoji_id", None) or None,
+            )] for cat in menu_categories]
+            if uncategorized_fixed_plans(choices):
+                buttons.append([InlineKeyboardButton(
+                    text="سایر", callback_data=f"svc:autopick:{service_id}:{action}:none"
+                )])
+            buttons.append([kb.back_button(None, back_callback)])
+            await callback.answer()
+            if callback.message:
+                await safe_edit_text(callback.message, format_message(title, "ابتدا دسته‌بندی پلن را انتخاب کنید."), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+            return
+        if menu_categories:
+            choices = plans_in_category(choices, category_id)
+            back_callback = f"svc:autopick:{service_id}:{action}"
+            if not choices:
+                await callback.answer(feedback.NO_PLANS_IN_CATEGORY, show_alert=True)
+                return
     buttons = [[InlineKeyboardButton(
         text=f"{p.name}{' — +' + amount_label(p) if action != 'renew' else ''} — {format_toman(sale_price(p))}",
         callback_data=f"svc:autoset:{service_id}:{action}:{p.id}",
         icon_custom_emoji_id=kb.category_icon_for(p, categories),
     )] for p in choices]
-    buttons.append([kb.back_button(None, f"svc:auto:{service_id}")])
+    buttons.append([kb.back_button(None, back_callback)])
     await callback.answer()
     if callback.message:
-        await safe_edit_text(callback.message, format_message(
-            f"⚙️ {LABELS[action]}",
-            "با انتخاب گزینه، این قابلیت روشن می‌شود و در هر بار پایان زمان یا حجم، هزینه از کیف پول پرداخت خواهد شد.",
-        ), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+        await safe_edit_text(callback.message, format_message(title, body), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
 
 @router.callback_query(F.data.startswith("svc:autotoggle:"))
 async def svc_auto_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -630,9 +669,12 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     await callback.answer()
     ui = await get_all_settings(session)
     hint = RENEWAL_GROUPED_HINT if choices.categories and choices.current else RENEWAL_HINT
+    described = [*choices.categories, choices.current] if choices.categories and choices.current else (choices.categories or choices.options)
     if callback.message:
         await safe_edit_text(
-            callback.message, hint, reply_markup=renewal_keyboard(svc_id, choices, ui, categories)
+            callback.message,
+            with_descriptions(html.escape(hint), described),
+            reply_markup=renewal_keyboard(svc_id, choices, ui, categories)
         )
 
 
@@ -655,7 +697,7 @@ async def svc_renew_category(callback: CallbackQuery, session: AsyncSession, db_
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message(title, RENEWAL_HINT),
+            format_message(title, with_descriptions(RENEWAL_HINT, plans)),
             reply_markup=renewal_category_keyboard(svc.id, plans, choices, ui, categories),
         )
 

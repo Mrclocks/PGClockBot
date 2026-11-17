@@ -1,22 +1,17 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label %}
 {% block title %}نودهای پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('nodes', 'نودها', 'pg', help='pg-nodes') }}
-  </div>
-  <div class="page-head-actions">
-    {% if can_reconnect %}
-    <form method="post" action="/pg/nodes/reconnect-all" class="js-busy-form" data-busy-label="در حال اتصال…">
-      <button class="btn btn-ghost" type="submit">اتصال مجدد همه</button>
-    </form>
-    {% endif %}
-    {% if can_create %}
-    <button type="button" class="btn" data-modal-open="modal-node-create">ساخت نود</button>
-    {% endif %}
-  </div>
-</div>
+{% call(slot) page_header('nodes', 'نودها', 'pg', help='pg-nodes') %}
+  {%- if slot == 'primary' and can_create %}
+  <button type="button" class="btn" data-modal-open="modal-node-create">{{ act_label('ساخت نود', 'نود') }}</button>
+  {%- elif slot == 'more' and can_reconnect %}
+  <form method="post" action="/pg/nodes/reconnect-all" class="js-busy-form" data-busy-label="در حال اتصال…">
+    <button class="btn btn-ghost" type="submit">{{ icon('refresh', 'more-ico') }}اتصال مجدد همه</button>
+  </form>
+  {%- endif %}
+{% endcall %}
 <div class="card card-flush">
   {% if not nodes %}
   <p class="muted">نودی یافت نشد.</p>
@@ -54,13 +49,13 @@
       {% endif %}
       <tr data-bulk-ops="{{ ns.ops.rstrip(',') }}">
         {% if can_reconnect or can_update or can_delete %}{% if n.get('id') %}{{ table_select_cell(n.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
-        <td class="mono" dir="ltr" data-sort-value="{{ n.get('id') or 0 }}">{{ n.get('id') }}</td>
+        <td class="mono" data-sort-value="{{ n.get('id') or 0 }}"><bdi dir="ltr">{{ n.get('id') }}</bdi></td>
         <td class="li-title" data-sort-value="{{ n.get('name') or '' }}"><span dir="auto">{{ n.get('name') or '—' }}</span> <span class="li-only li-id" dir="ltr">(#{{ n.get('id') }})</span></td>
         <td class="mono li-sub" data-sort-value="{{ n.get('address') or n.get('host') or '' }}"><bdi dir="ltr">{{ n.get('address') or n.get('host') or '—' }}{% if n.get('port') %}:{{ n.get('port') }}{% endif %}</bdi></td>
         <td class="li-badge" data-sort-value="{{ (n.get('status') or n.get('connection_status') or '')|string|lower }}">
           {% set st = (n.get('status') or n.get('connection_status') or '')|string|lower %}
           <span class="badge {% if st in ['connected','online','healthy'] %}connected{% elif 'connect' in st %}connecting{% elif st in ['error','offline','unhealthy','disabled','disconnected'] %}danger{% else %}neutral{% endif %}">
-            {{ n.get('status') or n.get('connection_status') or '—' }}
+            <bdi dir="auto">{{ (n.get('status') or n.get('connection_status')) | node_status }}</bdi>
           </span>
         </td>
         <td class="mono reseller-quota-cell" data-sort-value="{{ n.get('_traffic_up') if n.get('_traffic_up') is not none else '' }}">
@@ -116,7 +111,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('nodes', 'ساخت نود', tone='pg') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/nodes" class="form-stack ds-body js-busy-form" data-busy-label="در حال ساخت…">

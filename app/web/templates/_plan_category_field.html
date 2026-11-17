@@ -1,0 +1,48 @@
+{# The category of a user plan, chosen with chips right under its name (DESIGN_SYSTEM.md §5: single choice from a
+   list that grows). The chips drive a hidden select (panel-ds.js data-ds-choice); «+ جدید» opens a field that adds a
+   category in place (plan-categories.js). The category a plan already has stays on offer even when it is switched off. #}
+{% from "_ds.html" import ico %}
+{% macro plan_category_field(categories, tones={}, selected=none, field_id='user-plan-category', style_options=[]) %}
+{% set picked = selected|string if selected is not none else '' %}
+{% set ns = namespace(options=[]) %}
+{% for c in categories or [] %}
+  {% if ((c.audience or 'users') == 'users' and c.is_active) or c.id|string == picked %}
+    {% set ns.options = ns.options + [c] %}
+  {% endif %}
+{% endfor %}
+<div class="form-field plan-cat-field" data-plan-category-field>
+  <span class="ds-label-text" id="{{ field_id }}-label">برچسب دسته</span>
+  <select name="category_id" id="{{ field_id }}" hidden aria-hidden="true" tabindex="-1" data-ui-select="1" data-plan-category-select data-category-audience="users">
+    <option value="" {% if not picked %}selected{% endif %}>بدون دسته</option>
+    {% for c in ns.options %}
+    <option value="{{ c.id }}" {% if c.id|string == picked %}selected{% endif %}>{{ c.name }}</option>
+    {% endfor %}
+  </select>
+  <div class="ds-chips plan-cat-chips" role="radiogroup" aria-labelledby="{{ field_id }}-label"
+       data-ds-choice data-ds-target="#{{ field_id }}" data-ds-other-field="#{{ field_id }}-new">
+    {% for c in ns.options %}
+    <button type="button" role="radio" data-value="{{ c.id }}" data-tone="{{ tones.get(c.id, 'default') }}" title="{{ c.name }}">
+      <span class="plan-cat-dot" aria-hidden="true"></span><span class="plan-cat-chip-name" dir="auto">{{ c.name }}</span>{% if not c.is_active %}<span class="plan-cat-chip-off">خاموش</span>{% endif %}
+    </button>
+    {% endfor %}
+    <button type="button" role="radio" data-value="">بدون دسته</button>
+    <button type="button" role="radio" class="plan-cat-chip-new" data-ds-other>+ جدید</button>
+  </div>
+  <div class="plan-cat-new" id="{{ field_id }}-new" hidden data-plan-category-new>
+    <input type="text" maxlength="128" placeholder="نام دستهٔ جدید، مثلاً ویژه" aria-label="نام دستهٔ جدید" data-plan-category-new-name />
+    {% if style_options %}
+    {# No name: this colour belongs to the new category, not to the plan being saved. #}
+    <span class="plan-cat-new-color">
+      <select class="btn-color-select" data-plan-category-new-style aria-label="رنگ دکمهٔ دسته در ربات">
+        {% for opt_val, opt_label, opt_tone in style_options %}
+        <option value="{{ opt_val }}" data-tone="{{ opt_tone }}" {% if opt_val == 'inherit' %}selected{% endif %}>{{ 'پیش‌فرض' if opt_val == 'inherit' else opt_label }}</option>
+        {% endfor %}
+      </select>
+    </span>
+    {% endif %}
+    <button type="button" class="icon-btn plan-cat-new-add" data-plan-category-create aria-label="افزودن دسته">{{ ico('plus') }}</button>
+    <small class="muted plan-cat-new-error" role="alert" hidden data-plan-category-error></small>
+  </div>
+  <small class="muted">در ربات، مشتری اول دسته را انتخاب می‌کند و بعد پلن را. بسته‌های حجم و زمانِ یک دسته فقط روی سرویس‌های همان دسته دیده می‌شوند.</small>
+</div>
+{% endmacro %}

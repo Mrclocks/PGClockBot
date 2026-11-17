@@ -16,7 +16,9 @@ from app.bot import chat_screen
 from app.bot import import_prompt as prompt
 from app.bot.handlers import service_import as flow
 from app.bot.handlers import start
-from app.db.models import BotUser, UserService
+from app.bot.handlers import home_trial
+from app.db.models import BotUser, Plan, TrialClaim, UserService
+from app.services.trial_offer import offerable_trial_plans
 from app.services.service_import_offer import dismiss_offer, is_offer_dismissed
 from tests.test_chat_screen import _Rules
 from tests.test_service_import import ImportCase
@@ -35,23 +37,35 @@ class OfferRuleTests(unittest.TestCase):
 
     def test_the_add_button_takes_the_colour_set_for_it_and_keeps_its_fixed_label(self):
         for colour in ("success", "primary", "danger"):
-            add, _ = prompt.build_import_prompt({**ON, "btn_style_svc_add_existing": colour}).blocks[1].buttons
+            (add,) = prompt.build_import_prompt({**ON, "btn_style_svc_add_existing": colour}).blocks[1].buttons
             self.assertEqual((add.text, add.style), ("اتصال اشتراک قبلی", colour))
 
-    def test_the_hide_button_stays_red_whatever_the_add_colour(self):
-        _, hide = prompt.build_import_prompt({**ON, "btn_style_svc_add_existing": "success"}).blocks[1].buttons
-        self.assertEqual(hide.style, "danger")
-
-    def test_the_message_has_the_note_above_the_add_and_the_red_hide_button_side_by_side(self):
+    def test_the_message_has_the_note_above_a_single_add_button_and_no_hide_button(self):
         blocks = prompt.build_import_prompt(ON).blocks
         self.assertEqual(blocks[0].text, prompt.HOME_ADD_NOTE)
         self.assertIn("از بخش «سرویس‌های من»", prompt.HOME_ADD_NOTE)
         self.assertEqual(len(blocks), 2)
-        add, hide = blocks[1].buttons
+        (add,) = blocks[1].buttons
         self.assertEqual((add.text, add.callback_data), ("اتصال اشتراک قبلی", prompt.HOME_ADD_CALLBACK))
-        self.assertEqual((hide.text, hide.callback_data, hide.style), ("نمایش نده", prompt.HOME_HIDE_CALLBACK, "danger"))
-        for data in (prompt.HOME_ADD_CALLBACK, prompt.HOME_HIDE_CALLBACK):
+
+    def test_the_trial_button_sits_beside_the_add_button_and_nothing_follows_it(self):
+        blocks = prompt.build_import_prompt(ON, trial_available=True).blocks
+        self.assertEqual(blocks[0].text, prompt.HOME_BOTH_NOTE)
+        add, trial = blocks[1].buttons
+        self.assertEqual(add.callback_data, prompt.HOME_ADD_CALLBACK)
+        self.assertEqual((trial.text, trial.callback_data), ("دریافت تست", prompt.HOME_TRIAL_CALLBACK))
+        for data in (prompt.HOME_ADD_CALLBACK, prompt.HOME_TRIAL_CALLBACK, prompt.HOME_HIDE_CALLBACK):
             self.assertLessEqual(len(data.encode()), 64)
+
+    def test_a_shop_without_adding_old_services_offers_the_trial_alone(self):
+        blocks = prompt.build_import_prompt(OFF, trial_available=True).blocks
+        self.assertEqual(blocks[0].text, prompt.HOME_TRIAL_NOTE)
+        (trial,) = blocks[1].buttons
+        self.assertEqual(trial.callback_data, prompt.HOME_TRIAL_CALLBACK)
+
+    def test_an_available_trial_is_enough_to_offer_even_with_adding_old_services_off(self):
+        self.assertTrue(prompt.should_offer_import(OFF, has_services=False, dismissed=False, trial_available=True))
+        self.assertFalse(prompt.should_offer_import(OFF, has_services=True, dismissed=False, trial_available=True))
 
 
 class SendTests(unittest.IsolatedAsyncioTestCase):
@@ -110,6 +124,22 @@ class HomeTests(ImportCase):
         message.answer.assert_awaited_once()
         message.offer.assert_awaited_once()
 
+    async def test_a_trial_alone_is_offered_when_adding_old_services_is_off_and_a_trial_plan_exists(self):
+        async with self.Session() as session:
+            session.add(Plan(id=900, name="تست", is_trial=True, is_active=True, price=0, duration_days=1))
+            await session.commit()
+        message = await self._home({**OFF, "trial_enabled": "1"})
+        message.offer.assert_awaited_once()
+        self.assertTrue(message.offer.await_args.kwargs["trial_available"])
+
+    async def test_a_customer_who_already_took_the_trial_is_not_offered_it_again(self):
+        async with self.Session() as session:
+            session.add(Plan(id=900, name="تست", is_trial=True, is_active=True, price=0, duration_days=1))
+            session.add(TrialClaim(user_id=1, shop_key="platform"))
+            await session.commit()
+        message = await self._home({**OFF, "trial_enabled": "1"})
+        message.offer.assert_not_awaited()
+
     async def test_a_customer_with_a_service_gets_the_plain_welcome_only(self):
         async with self.Session() as session:
             session.add(UserService(id=801, bot_user_id=1, pg_user_id=801, pg_username="mine", remark="order:1"))
@@ -162,6 +192,59 @@ class ButtonFlowTests(ImportCase):
                 await flow.svc_add_existing_from_home(callback, session, user, AsyncMock())
         ask.assert_not_awaited()
         callback.message.delete.assert_not_awaited()
+
+
+class TrialOfferTests(ImportCase):
+    async def _add_trial_plan(self) -> None:
+        async with self.Session() as session:
+            session.add(Plan(id=900, name="تست", is_trial=True, is_active=True, price=0, duration_days=1))
+            await session.commit()
+
+    async def test_no_trial_plan_is_offered_while_trials_are_switched_off(self):
+        await self._add_trial_plan()
+        async with self.Session() as session:
+            self.assertEqual(await offerable_trial_plans(session, {"trial_enabled": "0"}, 1), [])
+            self.assertEqual([p.id for p in await offerable_trial_plans(session, {"trial_enabled": "1"}, 1)], [900])
+
+    async def test_a_trial_claimed_in_another_shop_does_not_hide_this_shops_trial(self):
+        await self._add_trial_plan()
+        async with self.Session() as session:
+            session.add(TrialClaim(user_id=1, shop_key="7"))
+            await session.commit()
+            self.assertEqual([p.id for p in await offerable_trial_plans(session, {"trial_enabled": "1"}, 1)], [900])
+
+    async def test_tapping_the_trial_button_hands_the_single_plan_to_the_shop_purchase_and_removes_the_offer(self):
+        await self._add_trial_plan()
+        callback = SimpleNamespace(data=prompt.HOME_TRIAL_CALLBACK, message=AsyncMock(), answer=AsyncMock())
+        callback.model_copy = lambda update: SimpleNamespace(**{**vars(callback), **update})
+        async with self.Session() as session:
+            user = await session.get(BotUser, 1)
+            with (
+                patch.object(home_trial, "get_all_settings", AsyncMock(return_value={"trial_enabled": "1"})),
+                patch.object(home_trial, "shop_buy", AsyncMock()) as buy,
+            ):
+                await home_trial.home_get_trial(callback, session, user, AsyncMock())
+        handed_over = buy.await_args.args[0]
+        self.assertEqual(handed_over.data, "shop:buy:900")
+        callback.message.delete.assert_awaited_once()
+        # The purchase result goes to a message of its own, not to the offer that is deleted.
+        self.assertIs(handed_over.message, callback.message.answer.return_value)
+        self.assertIsNot(handed_over.message, callback.message)
+
+    async def test_tapping_it_after_the_trial_was_taken_is_refused(self):
+        await self._add_trial_plan()
+        callback = SimpleNamespace(data=prompt.HOME_TRIAL_CALLBACK, message=AsyncMock(), answer=AsyncMock())
+        async with self.Session() as session:
+            session.add(TrialClaim(user_id=1, shop_key="platform"))
+            await session.commit()
+            user = await session.get(BotUser, 1)
+            with (
+                patch.object(home_trial, "get_all_settings", AsyncMock(return_value={"trial_enabled": "1"})),
+                patch.object(home_trial, "shop_buy", AsyncMock()) as buy,
+            ):
+                await home_trial.home_get_trial(callback, session, user, AsyncMock())
+        buy.assert_not_awaited()
+        callback.answer.assert_awaited_once()
 
 
 class HideOfferTests(ImportCase):

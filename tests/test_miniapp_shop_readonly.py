@@ -151,8 +151,13 @@ class ShopReadOnlyTests(ShopFixture):
         self.assertEqual((await self.shop_get("/api/mini/service/101/qr")).status_code, 200)
 
     async def test_other_shop_sees_its_own_data_with_its_own_bot(self) -> None:
+        # Opening shop 6's Mini App joins shop 6 (as /start in its bot would); it shows shop 6's purse
+        # and services only, never shop 5's or the platform's.
         response = await self.shop_get("/api/mini/me", key=OTHER_KEY, token=OTHER_SHOP_TOKEN)
-        self.assertEqual(response.status_code, 403, "a customer of shop 5 is not shop 6's")
+        self.assertEqual(response.status_code, 200, response.text)
+        me = response.json()
+        self.assertEqual((me["customer"]["wallet"], me["user"]["wallet"]), (999, 999))
+        self.assertEqual([s["id"] for s in me["customer"]["home"]["recent"]], [103])
 
     async def test_activity_lists_the_shop_purse_only(self) -> None:
         items = (await self.shop_get("/api/mini/activity")).json()["items"]

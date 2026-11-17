@@ -20,9 +20,9 @@
   <p class="muted">نتیجهٔ ارسال اعلان قطعی نیست؛ پیام خودکار دوباره ارسال نمی‌شود. درخواست را از همین صفحه بررسی کنید.</p>
   {% endif %}
   <p>{{ cancel_labels[row.status] }}</p>
-  <p style="white-space:pre-wrap">دلیل: {{ row.reason }}</p>
+  <p class="text-pre-wrap">علت: {{ row.reason }}</p>
   {% if row.operator_note %}
-  <p style="white-space:pre-wrap">توضیح اپراتور: {{ row.operator_note }}</p>
+  <p class="text-pre-wrap">توضیح اپراتور: {{ row.operator_note }}</p>
   {% endif %}
   {% if row.status == 'approved' %}
   <p>اعتبار برگشتی: <span dir="ltr">{{ row.refund_amount | money }}</span> تومان</p>
@@ -47,7 +47,7 @@
   {% if row.status == 'pending' %}
   <form method="post" action="/service-cancellations/{{ row.id }}/reject" class="form-stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label class="form-field">دلیل رد
+    <label class="form-field">علت رد
       <textarea name="note" maxlength="1000" required></textarea>
     </label>
     <button class="btn btn-danger" type="submit">رد درخواست</button>

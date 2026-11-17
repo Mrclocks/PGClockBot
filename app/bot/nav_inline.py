@@ -366,8 +366,6 @@ def topup_methods_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 @editable_screen("c.wallet")
 def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    from app.services.users import on
-
     rows = [
         [
             _ikb(
@@ -386,18 +384,6 @@ def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             ),
         ],
     ]
-    if on((ui or {}).get("loyalty_enabled")):
-        rows.append(
-            [
-                _ikb(
-                    _t(ui, "btn_loyalty") or "⭐ باشگاه",
-                    callback_data="nv:loy:home",
-                    ui=ui,
-                    label_key="btn_loyalty",
-                    style_id="loyalty",
-                )
-            ]
-        )
     rows.append(
         [
             _ikb(
@@ -876,6 +862,7 @@ def pg_hub_keyboard(
     *,
     features: frozenset[str] | set[str] | None = None,
     can_create_user: bool = True,
+    can_list_users: bool = True,
     back_callback: str = "nv:adm:product",
 ) -> InlineKeyboardMarkup:
     """PG feature hub — leaf buttons reuse ``adm:pg:*``."""
@@ -908,7 +895,7 @@ def pg_hub_keyboard(
             style_id=key, style_fallback="primary",
         )
         for key, text in _pg_submenu_entries(
-            ui, features=features, can_create_user=can_create_user
+            ui, features=features, can_create_user=can_create_user, can_list_users=can_list_users
         )
         if key in cb_map
     ]

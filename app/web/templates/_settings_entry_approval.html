@@ -1,0 +1,50 @@
+{# «تأیید ورود کاربران جدید»: requests waiting for a decision, and the rejected or blocked ones.
+   The card stays hidden until the list loads, so staff without the permission never see it. #}
+{% from "macros.html" import empty_state, row_actions %}
+<div class="card settings-card card-flush" id="ea-requests" data-url="/entry-approvals" hidden>
+  <div class="card-flush-head">
+    <h2>درخواست‌های ورود</h2>
+    <div class="actions">
+      <div class="sales-seg ds-seg" role="tablist" aria-label="نمای درخواست‌ها">
+        <button type="button" role="tab" class="on" aria-selected="true" data-ea-view="pending">در انتظار</button>
+        <button type="button" role="tab" aria-selected="false" data-ea-view="closed">ردشده و مسدود</button>
+      </div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table-compact table-list-sm">
+      <thead>
+        <tr>
+          <th>کاربر</th>
+          <th class="col-hide-sm">آیدی عددی</th>
+          <th>زمان</th>
+          <th>وضعیت</th>
+          <th class="col-actions"><span class="sr-only">عملیات</span></th>
+          <th class="li-head" scope="col"><span class="li-count" id="ea-count"></span></th>
+        </tr>
+      </thead>
+      <tbody id="ea-body" aria-live="polite">
+        <tr><td colspan="5" class="muted">در حال بارگذاری…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="ea-msg" class="muted" role="status" aria-live="polite"></div>
+  <template id="ea-empty-pending">{{ empty_state('درخواست ورودی در انتظار نیست', 'users', colspan=5) }}</template>
+  <template id="ea-empty-closed">{{ empty_state('درخواست ردشده یا مسدودی نیست', 'users', colspan=5) }}</template>
+  <template id="ea-row">
+    <tr>
+      <td class="li-title"><span dir="auto" data-ea="name"></span> <span class="li-only li-id" dir="ltr" data-ea="username"></span></td>
+      <td class="col-hide-sm mono"><bdi dir="ltr" data-ea="customer"></bdi></td>
+      <td class="li-sub" data-ea="when"></td>
+      <td class="li-badge"><span class="badge" data-ea="status"></span></td>
+      <td class="col-actions">
+        {% call row_actions() %}
+        <button type="button" class="btn btn-sm" data-ea-action="approve">تأیید</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-ea-action="reject">رد</button>
+        <button type="button" class="btn btn-sm btn-danger" data-ea-action="block">مسدود</button>
+        {% endcall %}
+      </td>
+    </tr>
+  </template>
+</div>
+<script src="/static/entry-approval-admin.js?v={{ asset_v('entry-approval-admin.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>

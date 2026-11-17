@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.catalog_descriptions import with_descriptions
 from app.services.chat_records import keep_sent
 from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id
@@ -358,7 +359,7 @@ async def present_shop_kind_picker(
     """
     from app.bot.nav_inline import present_inline_only
 
-    text = format_message("🛒 فروشگاه", body)
+    text = format_message("🛒 فروشگاه", with_descriptions(body, categories or []))
     inline = kb.shop_kind_keyboard(
         ui,
         fixed_on=fixed_on,
@@ -441,7 +442,7 @@ async def shop_kind_fixed(
         if callback.message:
             await safe_edit_text(
                 callback.message,
-                format_message("🛒 فروشگاه", body),
+                format_message("🛒 فروشگاه", with_descriptions(body, cats)),
                 reply_markup=kb.shop_kind_keyboard(
                     ui,
                     fixed_on=True,
@@ -460,7 +461,7 @@ async def shop_kind_fixed(
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("پلن ثابت", "یکی از پلن‌ها را انتخاب کنید:"),
+            format_message("پلن ثابت", with_descriptions("یکی از پلن‌ها را انتخاب کنید:", fixed_plans)),
             reply_markup=kb.plans_keyboard(
                 fixed_plans,
                 ui,
@@ -517,7 +518,7 @@ async def shop_category_pick(
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message(title, "یکی از پلن‌ها را انتخاب کنید:"),
+            format_message(title, with_descriptions("یکی از پلن‌ها را انتخاب کنید:", plans)),
             reply_markup=kb.plans_keyboard(
                 plans,
                 ui,
@@ -546,7 +547,7 @@ async def shop_kind_trial(
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("پلن تست", "پلن تست را انتخاب کنید:"),
+            format_message("پلن تست", with_descriptions("پلن تست را انتخاب کنید:", trial_plans)),
             reply_markup=kb.plans_keyboard(
                 trial_plans,
                 ui,

@@ -69,8 +69,8 @@ class SourceContractTests(unittest.TestCase):
         src = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")
         self.assertIn("def shop_bundle_allowed_setting_keys", src)
         self.assertIn("async def _validate_import_plan", src)
-        self.assertIn("template_allowed_for_staff", src)
-        self.assertIn("groups_allowed_for_staff", src)
+        self.assertIn("plan_template_denial", src)
+        self.assertIn("plan_groups_denial", src)
         self.assertIn("assert_user_plan_within_limits", src)
         fn = src.split("async def import_shop_bundle", 1)[1].split(
             "\ndef capacity_used_pct", 1

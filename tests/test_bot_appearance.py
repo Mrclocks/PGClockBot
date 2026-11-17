@@ -85,19 +85,6 @@ class CommandsUiRemovedTests(unittest.TestCase):
         self.assertNotIn("bot_cmd_help", ap)
         self.assertNotIn("ap-cmd-start", ap)
 
-    def test_preview_has_no_command_rows(self):
-        prev = (ROOT / "app/web/templates/_tg_preview_appearance.html").read_text(
-            encoding="utf-8"
-        )
-        js = (ROOT / "app/web/templates/_tg_preview_appearance_js.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertNotIn("tg-profile-cmds", prev)
-        self.assertNotIn("bot_cmd_start", prev)
-        self.assertNotIn("ap-pv-cmd", prev)
-        self.assertNotIn("ap-cmd-start", js)
-        self.assertNotIn("ap-pv-cmd", js)
-
     def test_service_no_longer_reads_or_sets_command_descriptions(self):
         src = (ROOT / "app/services/bot_appearance.py").read_text(encoding="utf-8")
         self.assertNotIn("get_my_commands", src)

@@ -1,0 +1,41 @@
+{# The read-only user card and the message form it opens, shared by the users and resellers lists.
+   ``return_page`` sends the message form back to that list (the route matches it against a fixed value). #}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import modal_title %}
+{% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
+{% macro user_card_modals(return_page='', return_filter=none, return_q=none, with_message=true) %}
+<div class="ui-modal ds" id="modal-user-card" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-card-title">
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('users', 'اطلاعات کاربر', tone='brand', heading_id='user-card-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
+      </div>
+    </div>
+    <div id="user-card-body" class="edit-modal-body" data-load-fragment>
+      <p class="muted">در حال بارگذاری…</p>
+    </div>
+  </div>
+</div>
+{% if with_message %}
+<div class="ui-modal ds" id="modal-user-message" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-msg-title">
+    {{ ds_modal_head('users', 'پیام به کاربر', 'user-msg-title') }}
+    <form method="post" action="/users/0/message" class="form-stack ds-body" id="user-msg-form">
+      {% if return_page %}<input type="hidden" name="return_page" value="{{ return_page }}" />{% endif %}
+      {% if return_filter %}<input type="hidden" name="return_filter" value="{{ return_filter }}" />{% endif %}
+      {% if return_q %}<input type="hidden" name="return_q" value="{{ return_q }}" />{% endif %}
+      {% call ds_sec('پیام', extra_class='ds-sec-first') %}
+        <p class="ds-desc">گیرنده: <b id="user-msg-target">—</b></p>
+        <label class="form-field"><span>متن پیام <span class="ds-req" aria-hidden="true">*</span></span>
+          <textarea name="body" rows="6" required maxlength="2000" placeholder="پیام کوتاه پشتیبانی…"></textarea>
+        </label>
+      {% endcall %}
+      {{ ds_foot('ارسال') }}
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endmacro %}

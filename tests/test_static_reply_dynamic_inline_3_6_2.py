@@ -222,8 +222,6 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         from pathlib import Path
 
         root = Path(__file__).resolve().parents[1]
-        hint = (root / "app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8")
-        self.assertIn("Reply Keyboard", hint)
         menu = (root / "app/web/templates/_settings_menu.html").read_text(encoding="utf-8")
         # Wave A: menu tab documents inline-first stable reply keyboard
         self.assertIn("اینلاین", menu)

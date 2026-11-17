@@ -95,9 +95,9 @@
   }
 
   /* ---------- Switch groups with counters: [data-ds-perms] ---------- */
-  function faDigits(n) {
-    return String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
-  }
+  // Shared figure formatting (fa-number.js): a page global in the browser, a module in Node tests.
+  var numbers = root.PanelNumbers || (typeof require === "function" ? require("./fa-number.js") : null);
+  const faDigits = numbers.faDigits;
 
   function syncPerms(box) {
     let on = 0;

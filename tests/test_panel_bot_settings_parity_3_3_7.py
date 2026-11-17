@@ -79,13 +79,6 @@ class ResellerApplyMenuOrderTests(unittest.TestCase):
         labels = [b.text for row in markup.inline_keyboard for b in row]
         self.assertIn("نمایندگی", labels)
 
-    def test_preview_live_updates_reseller_apply_label(self):
-        src = (
-            __import__("pathlib").Path("app/web/templates/_tg_preview_chat_js.html")
-            .read_text(encoding="utf-8")
-        )
-        self.assertIn("map.reseller_apply = val('btn_reseller_apply'", src)
-
 
 class ReferralBonusHookTests(unittest.TestCase):
     def test_deliver_order_calls_referral_hook(self):

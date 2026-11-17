@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title %}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import page_header, act_label, empty_state %}
 {% from "_finance_tabs.html" import finance_tabs %}
 {% block title %}نمایندگان PAYG{% endblock %}
 {% set credit_labels = {'frozen': 'منجمد', 'overdue': 'سررسید گذشته', 'blocked': 'مسدود'} %}
@@ -11,19 +12,19 @@
 </div>
 {% endmacro %}
 {% block content %}
-<div class="page-head">
-  <div>{{ page_title('orders', 'مالی', help='finance') }}</div>
-  <div class="page-head-actions">
-    <a class="btn btn-ghost" href="/payg/charges/review">بازبینی هزینه‌ها</a>
-    <a class="btn" href="/finance/payg.csv">خروجی CSV</a>
-  </div>
-</div>
+{% call(slot) page_header('orders', 'مالی', help='finance') %}
+  {%- if slot == 'primary' %}
+  <a class="btn" href="/finance/payg.csv">{{ act_label('خروجی CSV', 'CSV', icon_name='download') }}</a>
+  {%- elif slot == 'more' %}
+  <a class="btn btn-ghost" href="/payg/charges/review">{{ icon('receipt', 'more-ico') }}بازبینی هزینه‌ها</a>
+  {%- endif %}
+{% endcall %}
 
 {{ finance_tabs('payg', can_orders=can_orders, can_payments=can_payments, staff=staff) }}
 
-{% set ico_debt %}<svg viewBox="0 0 24 24"><path d="M12 3v18M7 7.5h7a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h8"/></svg>{% endset %}
-{% set ico_payg %}<svg viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg>{% endset %}
-{% set ico_gift %}<svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8c-2-4-6-4-6-1.5S9 8 12 8zm0 0c2-4 6-4 6-1.5S15 8 12 8z"/></svg>{% endset %}
+{% set ico_debt %}{{ icon('money') }}{% endset %}
+{% set ico_payg %}{{ icon('payg') }}{% endset %}
+{% set ico_gift %}{{ icon('gift') }}{% endset %}
 {% set ns = namespace(debt=0, charges=0, cashback=0) %}
 {% for r in rows %}{% set ns.debt = ns.debt + r.debt %}{% set ns.charges = ns.charges + r.month_charges %}{% set ns.cashback = ns.cashback + r.month_cashback %}{% endfor %}
 <div class="home-panels">
@@ -59,9 +60,9 @@
       <td class="cell-tight li-badge">{% if r.credit_status and r.credit_status != 'active' %}<span class="badge {{ credit_tones.get(r.credit_status, 'neutral') }}">{{ credit_labels.get(r.credit_status, r.credit_status) }}</span>{% else %}<span class="badge ok">عادی</span>{% endif %}</td>
       <td class="col-actions">
         <a class="btn btn-sm btn-ghost li-hide" href="/resellers?edit={{ r.shop_id }}">کارت نماینده</a>
-        <a class="li-only li-open" href="/resellers?edit={{ r.shop_id }}" aria-label="کارت نماینده {{ r.label }}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></a>
+        <a class="li-only li-open" href="/resellers?edit={{ r.shop_id }}" aria-label="کارت نماینده {{ r.label }}">{{ icon('chev', 'ico') }}</a>
       </td>
-    </tr>{% else %}<tr><td colspan="8" class="muted">نمایندهٔ PAYG وجود ندارد</td></tr>{% endfor %}</tbody>
+    </tr>{% else %}{{ empty_state('نمایندهٔ PAYG وجود ندارد', 'payg', colspan=8) }}{% endfor %}</tbody>
   </table></div>
 </div>
 {% endblock %}

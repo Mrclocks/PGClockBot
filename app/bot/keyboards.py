@@ -2366,6 +2366,11 @@ def admin_user_risk_tag_keyboard(user_id: int, *, current: str | None = None) ->
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def service_import_button(user_id: int) -> InlineKeyboardButton:
+    """«افزودن سرویس قبلی» on a customer's services screen (service_import_assign_bot)."""
+    return InlineKeyboardButton(text="➕ افزودن سرویس قبلی", callback_data=f"sia:o:{int(user_id)}")
+
+
 def admin_user_services_keyboard(
     user_id: int, service_ids: list[int]
 ) -> InlineKeyboardMarkup:
@@ -2379,6 +2384,7 @@ def admin_user_services_keyboard(
                 )
             ]
         )
+    rows.append([service_import_button(user_id)])
     rows.append(
         [back_button(None, f"adm:users:view:{user_id}")]
     )

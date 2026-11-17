@@ -93,7 +93,8 @@ class MessageVariablesEntryTests(unittest.TestCase):
             nav = group_settings_tabs(tabs_with_message_variables(tabs, staff), MESSAGE_VARIABLES_TAB_KEY)
             html = _page("message_variables.html", "/message-variables", staff, groups=[], settings_base=base, tab_nav=nav)
             head = html.split("msg-vars-stack", 1)[0].split('<main class="main', 1)[1]
-            self.assertIn(f'href="{base}?tab=identity"', head)
+            # The page is a detail page of the settings area: its back button opens the area's list.
+            self.assertIn(f'href="{base}" aria-label="بازگشت به', head)
             self.assertNotIn(other, head)
 
     def test_settings_sidebar_item_stays_active_on_the_variables_page(self):

@@ -1,8 +1,19 @@
 {% from "macros.html" import switch %}
 {% from "_ds.html" import ds_perm_groups %}
 {% from "_list_input.html" import list_input %}
+{% from "_user_identity.html" import user_identity %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+
+{# The same header as the user edit modal: whose account this is, before any setting. #}
+<section class="edit-section edit-section--identity">
+  {% call(part) user_identity(user) %}
+    {%- if part == 'badges' -%}
+    <span class="badge neutral">نماینده</span>
+    {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
+    {%- endif -%}
+  {% endcall %}
+</section>
 
 <section class="edit-section">
   <header class="edit-section-head">
@@ -52,9 +63,6 @@
             <option value="payg" {% if profile.billing_mode == 'payg' %}selected{% endif %}>PAYG</option>
           </select>
         </label>
-        <div class="ui-switch-list">
-          {{ switch('confirm_billing_mode_change', 'تأیید تغییر نوع پرداخت', checked=false, help='مصرف PAYG از مصرف فعلی ادمین شروع می‌شود و مسدودی PAYG در بازگشت به «ثابت» برداشته می‌شود') }}
-        </div>
       </div>
       <div>
         <label class="form-field">یوزرنیم پاسارگارد
@@ -73,6 +81,10 @@
           </select>
         </label>
       </div>
+    </div>
+    {#- Full width under the three fields, like every other switch row. -#}
+    <div class="ui-switch-list">
+      {{ switch('confirm_billing_mode_change', 'تأیید تغییر نوع پرداخت', checked=false, help='مصرف PAYG از مصرف فعلی ادمین شروع می‌شود و مسدودی PAYG در بازگشت به «ثابت» برداشته می‌شود') }}
     </div>
 
     <div class="ui-switch-section">
@@ -192,7 +204,7 @@
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>تغییر ظرفیت اشتراک</h3>
-    <p class="muted">تنظیم رایگان روز/حجم اشتراک پاسارگارد (مثبت = افزایش، منفی = کاهش)</p>
+    <p class="muted">تنظیم رایگان روز و حجم اشتراک پاسارگارد: مقدار را وارد کنید، سپس کاهش یا افزایش را بزنید.</p>
   </header>
   <ul class="payg-meta">
     <li>
@@ -201,42 +213,42 @@
     </li>
     <li>
       <span class="payg-meta-label">حجم کل</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.total_gb_text }}</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.total_gb_text | fa }}</span>
     </li>
     <li>
       <span class="payg-meta-label">حجم اضافه</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_gb_text }}</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_gb_text | fa }}</span>
     </li>
     {% if pg_subscription.alloc_ratio_text %}
     <li>
       <span class="payg-meta-label">تخصیص / سقف</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_ratio_text }}</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_ratio_text | fa }}</span>
     </li>
     <li>
       <span class="payg-meta-label">ساخته‌شده مستقیم در پاسارگارد</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_external_text }}</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_external_text | fa }}</span>
     </li>
     <li>
       <span class="payg-meta-label">واگذارشده به زیرنماینده‌ها</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_children_text }}</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_children_text | fa }}</span>
     </li>
     <li>
       <span class="payg-meta-label">حجم در اختیار منقضی‌ها</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_expired_held_text }}</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_expired_held_text | fa }}</span>
     </li>
     {% endif %}
     <li>
       <span class="payg-meta-label">کاربران کل</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.total_users_text }}</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.total_users_text | fa }}</span>
     </li>
     <li>
       <span class="payg-meta-label">کاربران اضافه</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_users_text }}</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_users_text | fa }}</span>
     </li>
     {% if pg_subscription.can_sync %}
     <li>
       <span class="payg-meta-label">سقف فعلی در پاسارگارد</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.live_gb_text }} · {{ pg_subscription.live_users_text }}</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.live_gb_text | fa }} · {{ pg_subscription.live_users_text | fa }}</span>
     </li>
     {% endif %}
   </ul>
@@ -275,24 +287,32 @@
         data-confirm-title="همگام‌سازی ظرفیت"
         data-confirm-label="همگام‌سازی">
     <div class="actions">
-      <button class="btn btn-ghost btn-sm" type="submit">همگام‌سازی از پاسارگارد</button>
+      <button class="btn btn-ghost" type="submit">همگام‌سازی از پاسارگارد</button>
     </div>
   </form>
   {% endif %}
   <form method="post" action="/resellers/{{ user.id }}/subscription/adjust" class="form-stack"
-        data-confirm="ظرفیت اشتراک نماینده تغییر کند؟ (مثبت = افزایش، منفی = کاهش)"
+        data-confirm="ظرفیت اشتراک نماینده مطابق روز و گیگ و نوع انتخاب‌شده تغییر کند؟"
         data-confirm-title="تغییر ظرفیت اشتراک"
         data-confirm-label="اعمال">
     <div class="user-edit-fields user-edit-fields--2">
       <label class="form-field">روز
-        {{ num_stepper('extra_days', value=0, step=1, min=-3650, max=3650, inputmode='numeric', aria_label='روز') }}
+        {{ num_stepper('extra_days', value=0, step=1, min=0, max=3650, inputmode='numeric', aria_label='روز') }}
       </label>
       <label class="form-field">گیگ
-        {{ num_stepper('extra_gb', value=0, step=1, min=-10000, max=10000, inputmode='numeric', aria_label='گیگ') }}
+        {{ num_stepper('extra_gb', value=0, step=1, min=0, max=10000, inputmode='numeric', aria_label='گیگ') }}
       </label>
     </div>
-    <div class="actions">
-      <button class="btn btn-sm" type="submit">تغییر ظرفیت</button>
+    {#- Same «کاهش» / «افزایش» pair as the wallet and points forms. -#}
+    <div class="wallet-adjust-modes" role="group" aria-label="نوع تغییر ظرفیت">
+      <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
+        <span class="wallet-mode-swatch" aria-hidden="true"></span>
+        <span class="wallet-mode-label">کاهش</span>
+      </button>
+      <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
+        <span class="wallet-mode-swatch" aria-hidden="true"></span>
+        <span class="wallet-mode-label">افزایش</span>
+      </button>
     </div>
   </form>
 </section>

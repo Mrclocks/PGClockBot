@@ -3,18 +3,18 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const live = require(path.join(__dirname, '..', 'app', 'web', 'static', 'overview-live.js'));
 
-assert.equal(live.fmtPct(41.6), '42٪');
-assert.equal(live.fmtPct(140), '100٪');
+assert.equal(live.fmtPct(41.6), '۴۲٪');
+assert.equal(live.fmtPct(140), '۱۰۰٪');
 assert.equal(live.fmtPct(null), '—');
 assert.equal(live.fmtPct(NaN), '—');
 assert.equal(live.clampPct(-5), 0);
 
-assert.equal(live.memHint({ memory_ratio_text: '2 / 4 GB' }), '2 / 4 GB');
-assert.equal(live.memHint({ memory_used_text: '2', memory_total_text: '4 GB' }), '2 / 4 GB');
+assert.equal(live.memHint({ memory_ratio_text: '2 / 4 GB' }), '۲ / ۴ GB');
+assert.equal(live.memHint({ memory_used_text: '2', memory_total_text: '4 GB' }), '۲ / ۴ GB');
 assert.equal(live.memHint({}), null);
 
-assert.equal(live.partsText({ num: '1.5', unit: 'GB' }), '1.5 GB');
-assert.equal(live.partsText({ num: 0 }), '0');
+assert.equal(live.partsText({ num: '1.5', unit: 'GB' }), '۱٫۵ GB');
+assert.equal(live.partsText({ num: 0 }), '۰');
 assert.equal(live.partsText(null), '—');
 
 let buf = [];
@@ -29,10 +29,10 @@ assert.equal(live.sparkPoints([0, 0], 0, 300, 60).split(' ')[1], '0.0,59.0', 'id
 assert.equal(live.areaPoints('10.0,5.0 300.0,1.0', 60), '10.0,60 10.0,5.0 300.0,1.0 300.0,60');
 assert.equal(live.areaPoints('', 60), '');
 
-assert.equal(live.fmtRate(0), '0 بایت/ثانیه');
-assert.equal(live.fmtRate(1536), '1.5 کیلوبایت/ثانیه');
-assert.equal(live.fmtRate(12.5 * 1024 * 1024), '12.5 مگ/ثانیه');
-assert.equal(live.fmtRate(150 * 1024 * 1024), '150 مگ/ثانیه');
+assert.equal(live.fmtRate(0), '۰ بایت/ثانیه');
+assert.equal(live.fmtRate(1536), '۱٫۵ کیلوبایت/ثانیه');
+assert.equal(live.fmtRate(12.5 * 1024 * 1024), '۱۲٫۵ مگ/ثانیه');
+assert.equal(live.fmtRate(150 * 1024 * 1024), '۱۵۰ مگ/ثانیه');
 assert.equal(live.fmtRate(NaN), '—');
 const pts = live.sparkPoints([0, 10], 10, 300, 60).split(' ');
 assert.equal(pts.length, 2);

@@ -127,10 +127,10 @@ class UserEditUiTests(unittest.TestCase):
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".badge.badge-risk-tag", css)
         risk = css.split(".badge.badge-risk-tag {", 1)[1].split("}", 1)[0]
-        self.assertIn("border-radius: 999px;", risk)
+        self.assertIn("border-radius: var(--control-radius);", risk)
         self.assertIn("color: var(--tag-color", risk)
         opt = css.split(".color-tag-option {", 1)[1].split("}", 1)[0]
-        self.assertIn("border-radius: 999px;", opt)
+        self.assertIn("border-radius: var(--control-radius);", opt)
         self.assertIn('html[data-theme="light"] .badge.badge-risk-tag', css)
         light_risk = css.split('html[data-theme="light"] .badge.badge-risk-tag {', 1)[1].split("}", 1)[0]
         self.assertIn("color-mix(in srgb, var(--tag-color", light_risk)

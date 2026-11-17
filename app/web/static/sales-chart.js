@@ -3,13 +3,15 @@
 (function (root) {
   'use strict';
 
-  // The panel shows figures with Latin digits, so the chart does too; only the words are Persian.
+  // Shared figure formatting (fa-number.js): a page global in the browser, a module in Node tests.
+  var numbers = root.PanelNumbers || (typeof require === "function" ? require("./fa-number.js") : null);
+
   function fa(value) {
-    return String(value);
+    return numbers.faNumber(value);
   }
 
   function fullToman(value) {
-    return Math.round(Number(value) || 0).toLocaleString('en-US');
+    return numbers.formatInt(value);
   }
 
   function trimNumber(value, digits) {
@@ -195,7 +197,7 @@
     }
     this.card.classList.toggle('is-empty', !data.has_data);
     if (this.empty) this.empty.hidden = !!data.has_data;
-    this.plot.setAttribute('aria-label', this.title + ' ' + (this.days === 7 ? '7' : '30') + ' روز اخیر؛ جمع ' + this.amount(data.total));
+    this.plot.setAttribute('aria-label', this.title + ' ' + (this.days === 7 ? '۷' : '۳۰') + ' روز اخیر؛ جمع ' + this.amount(data.total));
     this.active = null;
     this.draw();
   };

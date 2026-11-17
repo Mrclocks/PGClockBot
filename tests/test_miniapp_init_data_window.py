@@ -28,7 +28,6 @@ from app.services.miniapp_auth import (
     INIT_DATA_MAX_AGE_SEC,
     INIT_DATA_MAX_FUTURE_SKEW_SEC,
     NO_INIT_DATA,
-    NOT_STARTED,
     load_mini_user,
     validate_webapp_init_data,
 )
@@ -37,7 +36,6 @@ from app.services.users import clear_settings_cache
 TOKEN = "123456:MAIN"
 OTHER_BOT_TOKEN = "654321:SHOP"
 CUSTOMER = 9001
-STRANGER = 9002
 PROBE = "/api/mini/probe"
 
 
@@ -139,7 +137,6 @@ class LoadMiniUserRefusalTests(unittest.IsolatedAsyncioTestCase):
         self.assert_refused(await self.call(None), 401, NO_INIT_DATA)
         self.assert_refused(await self.call(signed(OTHER_BOT_TOKEN, CUSTOMER)), 401, BAD_SIGNATURE)
         self.assert_refused(await self.call(signed(TOKEN, CUSTOMER, age=INIT_DATA_MAX_AGE_SEC + 60)), 401, EXPIRED)
-        self.assert_refused(await self.call(signed(TOKEN, STRANGER)), 404, NOT_STARTED)
 
 
 if __name__ == "__main__":

@@ -9,11 +9,11 @@
   margin: 0;
   padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
   border: 1px solid transparent;
-  border-radius: 999px; /* capsule hit/select chrome */
+  border-radius: var(--control-radius); /* capsule hit/select chrome */
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1.25;
@@ -56,7 +56,7 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.7;
-  transition: transform var(--motion-fast, 0.15s) var(--ease-standard, ease);
+  transition: transform var(--motion-fast, var(--motion-fast)) var(--ease-standard, ease);
   pointer-events: none;
 }
 
@@ -73,10 +73,709 @@
   display: none;
   margin: 0;
   padding: var(--space-1, 0.25rem);
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1.45;
 }
 
 .nav-section:not(:has(.nav-item)) > .nav-empty {
   display: block;
+}
+
+/* —— Sidebar search hotkey hint: one compact «/» key (Ctrl/⌘+K works too) so the placeholder keeps its room.
+   Desktop only; the phone bar has its own search button. —— */
+.side-search-key { display: none; }
+@media (min-width: 901px) {
+  .side-search-key {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    justify-content: center;
+    min-width: var(--space-2_5);
+    height: var(--space-2_5);
+    padding: 0 var(--space-0);
+    border: 1px solid var(--border);
+    border-radius: var(--menu-item-radius);
+    color: var(--muted-fg);
+    font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    direction: ltr;
+    pointer-events: none;
+  }
+  .side-search input:focus ~ .side-search-key,
+  .side-search input:not(:placeholder-shown) ~ .side-search-key { display: none; }
+}
+
+/* —— Phone header: a floating capsule that mirrors the bottom bar (same height, glass, shadow and side
+   margins). A round logo flush with its inner edge, the brand name and version beside it at field height, and
+   the search as a round button at the other end (panel-ds.css §14). —— */
+@media (max-width: 900px) {
+  .shell { padding-top: calc(var(--hdr-top) + var(--dock-h)); }
+  .topbar {
+    top: var(--hdr-top);
+    left: var(--dock-inline);
+    right: var(--dock-inline);
+    width: auto;
+    height: var(--dock-h);
+    padding: var(--dock-pad-in);
+    border: var(--dock-line) solid var(--dock-glass-line);
+    border-radius: var(--control-radius);
+    background: var(--dock-glass-bg);
+    box-shadow: var(--dock-glass-highlight), var(--dock-shadow);
+    backdrop-filter: var(--dock-glass-blur);
+    -webkit-backdrop-filter: var(--dock-glass-blur);
+    transition: background-color var(--drawer-motion) var(--ease-standard);
+  }
+  .topbar-brand {
+    height: var(--dock-inner);
+    gap: var(--space-1);
+    /* Clear of the search circle at the other end. */
+    max-width: calc(100% - var(--dock-inner) - var(--space-2));
+  }
+  .topbar-brand .brand-logo { width: var(--dock-inner); height: var(--dock-inner); border-radius: 50%; }
+  .topbar-brand-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    height: var(--dock-inner);
+    min-width: 0;
+  }
+  .topbar-brand-text strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--title-size);
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  /* The release channel stays in the desktop sidebar; the header keeps the dot and the version. */
+  .topbar .channel-badge { display: none; }
+}
+/* —— The page header inside the capsule (DESIGN_SYSTEM.md §7). page_header() renders once; on phones it lies on the
+   capsule (fixed, same box as .topbar, above it) instead of in the page: icon and title beside the search, «⋯» and
+   the primary action at the far end. The brand gives way while a page header is there. Without :has() (old browsers)
+   and on phones turned sideways the title row simply stays in the page and the brand stays in the capsule. —— */
+@supports selector(:has(*)) {
+  @media (max-width: 900px) and (min-height: 501px) {
+    .shell:has(.page-head[data-page-head="capsule"]) .topbar-brand { display: none; }
+    .page-head[data-page-head="flow"] { display: none; }
+    .page-head[data-page-head="capsule"] {
+      position: fixed;
+      z-index: 56;
+      top: var(--hdr-top);
+      left: var(--dock-inline);
+      right: var(--dock-inline);
+      box-sizing: border-box;
+      height: var(--dock-h);
+      margin: 0;
+      padding: var(--dock-pad);
+      padding-right: calc(var(--dock-pad) + var(--dock-inner) + var(--space-1));
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: var(--space-1);
+      pointer-events: none;
+      transition: opacity var(--motion-fast) var(--ease-out), visibility 0s linear 0s;
+    }
+    .page-head[data-page-head="capsule"] > * { pointer-events: auto; }
+    body.nav-open .page-head[data-page-head="capsule"] { z-index: 5301; }
+    /* The search field opens across the whole capsule: the title and actions step aside meanwhile. */
+    .shell:has(.topbar-search:focus-within) .page-head[data-page-head="capsule"],
+    .shell:has(.topbar-search input:not(:placeholder-shown)) .page-head[data-page-head="capsule"] {
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity var(--motion-fast) var(--ease-in), visibility 0s linear var(--motion-fast);
+    }
+
+    .page-head[data-page-head="capsule"] .page-head-main {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      column-gap: var(--space-1);
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .page-head[data-page-head="capsule"] .page-back { width: var(--dock-inner); height: var(--dock-inner); }
+    .page-head[data-page-head="capsule"] .page-title { min-width: 0; gap: var(--space-1); }
+    .page-head[data-page-head="capsule"] .page-title-ico {
+      width: auto;
+      height: auto;
+      background: none;
+      animation: none;
+    }
+    .page-head[data-page-head="capsule"] .page-title-ico svg { width: var(--ico-md); height: var(--ico-md); stroke-width: 1.8; }
+    .page-head--detail[data-page-head="capsule"] .page-title-ico { display: none; }
+    .page-head[data-page-head="capsule"] h1 {
+      overflow: hidden;
+      font-size: var(--fs-4);
+      font-weight: 700;
+      letter-spacing: 0;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      animation: none;
+    }
+    /* Help is a small «؟» right after the title; its touch area reaches the capsule height. */
+    .page-head[data-page-head="capsule"] .page-help-btn {
+      position: relative;
+      width: 24px;
+      height: 24px;
+      margin-inline-start: var(--space-0);
+      border: 0;
+      background: var(--dock-tint);
+      font-size: var(--fs-2);
+    }
+    .page-head[data-page-head="capsule"] .page-help-btn::before { content: ""; position: absolute; inset: -10px; }
+
+    .page-head[data-page-head="capsule"] > .page-head-actions {
+      flex: 0 0 auto;
+      max-width: none;
+      gap: var(--space-1);
+      overflow: visible;
+    }
+    .page-head[data-page-head="capsule"] > .page-head-actions > .btn,
+    .page-head[data-page-head="capsule"] > .page-head-actions > a.btn,
+    .page-head[data-page-head="capsule"] > .page-head-actions > form > .btn {
+      height: var(--dock-inner);
+      min-height: var(--dock-inner);
+      padding-inline: var(--space-2);
+    }
+    .page-head[data-page-head="capsule"] .btn > .act-ico { display: inline-block; flex: 0 0 auto; width: var(--ico-sm); height: var(--ico-sm); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .page-head[data-page-head="capsule"] .btn > .act-short { display: inline; }
+    .page-head[data-page-head="capsule"] .btn:has(> .act-short) > .act-long,
+    .page-head[data-page-head="capsule"] .page-act-icon > .act-long {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .page-head[data-page-head="capsule"] > .page-head-actions > .btn:has(> .act-short) { gap: var(--space-0); padding-inline: var(--space-1_5) var(--space-2); }
+    /* A frequent non-create action: a round neutral button like search and «⋯». */
+    .page-head[data-page-head="capsule"] > .page-head-actions > .page-act-icon {
+      width: var(--dock-inner);
+      padding: 0;
+      border: 0;
+      background: var(--dock-tint);
+      color: var(--foreground);
+      justify-content: center;
+    }
+    .page-more-btn {
+      display: grid;
+      place-items: center;
+      order: 2;
+      width: var(--dock-inner);
+      height: var(--dock-inner);
+      padding: 0;
+      border: 0;
+      border-radius: var(--control-radius);
+      background: var(--dock-tint);
+      color: var(--foreground);
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform var(--motion-fast) var(--ease-standard);
+    }
+    .page-more-btn svg { width: var(--ico-sm); height: var(--ico-sm); fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
+    .page-more-btn:active { transform: scale(0.96); }
+    .page-more-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .page-more-btn[aria-expanded="true"] { background: color-mix(in srgb, var(--foreground) 12%, transparent); }
+
+    /* «⋯» menu: a small sheet from the corner of its button, in the capsule's glass. */
+    .page-more {
+      position: fixed;
+      z-index: 5400;
+      top: calc(var(--hdr-top) + var(--dock-h) + var(--space-1));
+      left: var(--dock-inline);
+      display: flex;
+      flex-direction: column;
+      /* As wide as its longest row (icon and label); the floor keeps a one-word row from looking like a chip. */
+      width: max-content;
+      min-width: 128px;
+      max-width: calc(100vw - 2 * var(--dock-inline));
+      box-sizing: border-box;
+      padding: var(--space-0);
+      border: 1px solid var(--dock-glass-line);
+      border-radius: var(--inner-radius);
+      background: var(--modal-frost-bg-fallback);
+      box-shadow: var(--dock-glass-highlight), var(--dock-shadow);
+      direction: rtl;
+      transform-origin: top left;
+      opacity: 0;
+      visibility: hidden;
+      transform: scale(0.96) translateY(-4px);
+      transition:
+        opacity var(--motion-fast) var(--ease-in),
+        transform var(--motion-fast) var(--ease-in),
+        visibility 0s linear var(--motion-fast);
+    }
+    .page-more.is-open {
+      opacity: 1;
+      visibility: visible;
+      transform: none;
+      transition:
+        opacity var(--motion-fast) var(--ease-out),
+        transform var(--motion-fast) var(--ease-out),
+        visibility 0s linear 0s;
+    }
+    .page-head[data-page-head="capsule"] .page-more > .btn,
+    .page-head[data-page-head="capsule"] .page-more > a.btn,
+    .page-head[data-page-head="capsule"] .page-more > form > .btn {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: var(--space-1_5);
+      width: 100%;
+      height: var(--btn-h);
+      min-height: var(--btn-h);
+      padding: 0 var(--space-1_5);
+      border: 0;
+      border-radius: var(--r-sm);
+      background: transparent;
+      box-shadow: none;
+      color: var(--foreground);
+      font-size: var(--fs-3);
+      font-weight: var(--btn-fw);
+      text-align: start;
+      text-decoration: none;
+    }
+    .page-more > form { display: block; }
+    .page-head[data-page-head="capsule"] .page-more .more-ico {
+      display: block;
+      flex: 0 0 auto;
+      width: var(--dock-ico);
+      height: var(--dock-ico);
+      color: var(--muted-fg);
+    }
+    .page-head[data-page-head="capsule"] .page-more > .btn:active,
+    .page-head[data-page-head="capsule"] .page-more > a.btn:active,
+    .page-head[data-page-head="capsule"] .page-more > form > .btn:active { background: color-mix(in srgb, var(--foreground) 7%, transparent); }
+  }
+  @media (max-width: 359px) and (min-height: 501px) {
+    .page-head[data-page-head="capsule"] .page-title-ico { display: none; }
+    /* The narrowest phones keep the whole title: one type step down and 4px gaps before it is ever cut. */
+    .page-head[data-page-head="capsule"] .page-head-main { column-gap: var(--space-0); }
+    .page-head[data-page-head="capsule"] .page-title { gap: var(--space-0); }
+    .page-head[data-page-head="capsule"] h1 { font-size: var(--fs-3); }
+    .page-head[data-page-head="capsule"] .page-help-btn { margin-inline-start: 0; }
+    .page-head[data-page-head="capsule"] .btn > .act-short { display: none; }
+    .page-head[data-page-head="capsule"] > .page-head-actions > .btn:has(> .act-short) { width: var(--dock-inner); padding: 0; justify-content: center; }
+  }
+  @media (max-width: 900px) and (min-height: 501px) and (prefers-reduced-motion: reduce) {
+    .page-head[data-page-head="capsule"],
+    .page-more,
+    .page-more.is-open { transition: none; }
+  }
+}
+
+/* Phones turned sideways: a fixed header and bar would leave a strip of page between them, so the header
+   scrolls away with the page there; the bar stays. */
+@media (max-width: 900px) and (max-height: 500px) {
+  .topbar { position: absolute; }
+}
+
+/* —— Phone bottom bar: a frosted capsule with the most used items and «منو».
+   Shown exactly where the sidebar becomes a drawer. Same matte glass as the drawer and modal chrome.
+   While the drawer is open the capsule folds into a round red × at its inline end (bottom left), above the
+   dim, and unfolds again when the drawer closes. —— */
+/* .shell is laid out LTR and sets RTL back on .side and .main; the bar is its child too. */
+.bottom-dock { display: none; direction: rtl; }
+@media (max-width: 900px) {
+  /* Invariant E (panel.css, mobile geometry): Safari 26 tints its bottom toolbar with a fixed box near the
+     screen edge, which turned the area under the bar solid. The fixed box stays transparent and every painted
+     layer (the shadow, the capsule, the ×) is an absolute child, so the toolbar keeps showing the page as glass. */
+  .bottom-dock {
+    position: fixed;
+    /* Above the closed menu (.side, 50) so the sheet slides away behind the bar while the bar unfolds;
+       below the header (55), modals and ported menus. */
+    z-index: 52;
+    inset-inline: var(--dock-inline);
+    bottom: var(--dock-bottom);
+    display: block;
+    height: var(--dock-h);
+    background: transparent;
+    transform: translate3d(0, 0, 0);
+    /* Transform only, never opacity: while an ancestor is part-transparent the browser drops the capsule's
+       backdrop blur, so a fading bar would come back clear and turn matte only when the fade ended. */
+    will-change: transform;
+    transition:
+      transform var(--dock-show) var(--ease-out),
+      visibility 0s linear 0s;
+  }
+  /* The bar's shadow lives on this layer: the bar's own box-shadow would be cut off by the clip-path that folds
+     it into the ×. An outer shadow is painted only outside its box, so it never darkens the glass above it.
+     It folds and unfolds with the bar (the same edge, time and curve as the bar's clip), so the shadow is
+     always the shape you see: the capsule, then the ×'s circle. */
+  .bottom-dock::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--dock-h);
+    border-radius: var(--control-radius);
+    box-shadow: var(--dock-shadow);
+    pointer-events: none;
+    transition: right var(--dock-morph) var(--ease-out) var(--dock-morph-lead);
+  }
+  body.nav-open .bottom-dock::before {
+    right: calc(100% - var(--dock-h));
+    transition: right var(--dock-morph) var(--ease-standard);
+  }
+  .bottom-dock-bar {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    box-sizing: border-box;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    height: var(--dock-h);
+    padding: var(--dock-pad-in);
+    border: var(--dock-line) solid var(--dock-glass-line);
+    border-radius: var(--control-radius);
+    background: var(--dock-glass-bg);
+    box-shadow: var(--dock-glass-highlight);
+    backdrop-filter: var(--dock-glass-blur);
+    -webkit-backdrop-filter: var(--dock-glass-blur);
+    clip-path: inset(0 0 0 0 round var(--dock-h));
+    /* Unfolding: starts just after the × has faded, then eases out to full width. */
+    transition: clip-path var(--dock-morph) var(--ease-out) var(--dock-morph-lead);
+  }
+  .bottom-dock-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+    height: var(--dock-inner);
+    padding: 0 2px;
+    border: 0;
+    border-radius: var(--control-radius);
+    background: transparent;
+    color: var(--muted-fg);
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background-color var(--motion-fast) var(--ease-standard),
+      color var(--motion-fast) var(--ease-standard),
+      transform var(--motion-fast) var(--ease-standard),
+      opacity var(--motion-med) var(--ease-out) var(--dock-morph-items),
+      visibility 0s linear 0s;
+  }
+  .bottom-dock-item .nav-ico { width: var(--dock-ico); height: var(--dock-ico); }
+  .bottom-dock-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--dock-label-fs);
+    line-height: 1.2;
+  }
+  .bottom-dock-item.is-active {
+    color: var(--accent);
+    background: var(--accent-soft);
+    font-weight: 600;
+  }
+  .bottom-dock-item .nav-dot {
+    position: absolute;
+    top: var(--space-0);
+    inset-inline-start: calc(50% + var(--space-1));
+  }
+  .bottom-dock-item:active { transform: scale(0.96); }
+  .bottom-dock-item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+  /* The close button sits where the folded capsule ends up; hidden until the drawer opens. */
+  .bottom-dock-close {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: var(--dock-h);
+    height: var(--dock-h);
+    padding: 0;
+    /* Red glass: the folded bar's frosted circle shows through a red tint lighter than the red edge,
+       like the brand-tinted action buttons in the page header. */
+    border: var(--dock-line) solid color-mix(in srgb, var(--destructive) 55%, transparent);
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--destructive) 14%, transparent);
+    color: var(--destructive);
+    box-shadow: none;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: rotate(-90deg) scale(0.6);
+    transition:
+      opacity var(--motion-fast) var(--ease-in),
+      transform var(--motion-fast) var(--ease-in),
+      visibility 0s linear var(--motion-fast);
+  }
+  .bottom-dock-close .nav-ico { width: var(--dock-ico); height: var(--dock-ico); stroke-width: 2.4; }
+  .bottom-dock-close:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+  /* Drawer open: above the dim (the drawer itself is on the other side), folded into the red ×. */
+  body.nav-open .bottom-dock { z-index: 5250; }
+  body.nav-open .bottom-dock-bar {
+    clip-path: inset(0 calc(100% - var(--dock-h)) 0 0 round var(--dock-h));
+    transition: clip-path var(--dock-morph) var(--ease-standard);
+  }
+  /* Hidden, not only transparent, once faded, so Tab and screen readers skip the folded items. */
+  body.nav-open .bottom-dock-item {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity var(--motion-fast) var(--ease-in),
+      visibility 0s linear var(--motion-fast);
+  }
+  body.nav-open .bottom-dock-close {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+    transition:
+      opacity var(--motion-med) var(--ease-out) var(--dock-morph-items),
+      transform var(--dock-morph) var(--ease-out) var(--dock-morph-items),
+      visibility 0s linear 0s;
+  }
+  body.nav-open .bottom-dock-close:active { transform: scale(0.94); }
+
+  /* Out of the way while a modal is open or the on-screen keyboard is up; it slides fully below the
+     screen edge, and only turns invisible once the slide has finished.
+     body.modal-open is the panel's modal lock (some pages set it themselves); .ui-modal.open covers the rest;
+     body.kbd-up comes from panel-keyboard.js. */
+  body.modal-open .bottom-dock,
+  body:has(.ui-modal.open) .bottom-dock,
+  body.kbd-up .bottom-dock {
+    transform: translate3d(0, calc(100% + var(--dock-bottom) + var(--space-1)), 0);
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      transform var(--dock-hide) var(--ease-in),
+      visibility 0s linear var(--dock-hide);
+  }
+
+  /* Fixed notices at the bottom (upload progress) sit above the bar instead of covering it. */
+  html:has(.bottom-dock) .upload-toast { bottom: calc(var(--dock-bottom) + var(--dock-h) + var(--space-1_5)); }
+
+  /* The footer is the one bottom-inset owner (panel.css mobile geometry, rule C). Under the bar it keeps the
+     same air between its content and the bar as between the separator line and its content (--page-title-gap),
+     plus the bar itself and the bar's distance from the screen edge (safe area included in --dock-bottom). */
+  html:has(.bottom-dock) .site-footer {
+    --footer-under-bar: calc(var(--page-title-gap) + var(--dock-h) + var(--dock-bottom));
+    padding-bottom: var(--footer-under-bar);
+    min-height: calc(var(--footer-bar-h) + var(--footer-under-bar));
+    max-height: calc(var(--footer-bar-h) + var(--footer-under-bar));
+  }
+}
+/* —— Phone menu: a launcher sheet that rises above the bottom bar while the bar folds into its ×.
+   The sidebar's own items become tiles, four per row, grouped by section with the section's colour:
+   web panel neutral, shop orange, PasarGuard blue. Every section is open (no accordion on phones).
+   Theme and help share the top row; the signed-in user and «خروج» close the sheet.
+   The sheet has the same matte glass as the header and the bar. Only transform and opacity move and the dim
+   is a plain colour (no blur), so weak phones keep their frame rate. —— */
+@media (max-width: 900px) {
+  /* The sheet grows up from the bar to at most 12px under the header (the same gap it keeps from the ×);
+     the empty part of .side above a short sheet lets taps through to the dim, which closes the menu. */
+  .side {
+    top: calc(var(--hdr-top) + var(--dock-h) + var(--dock-edge));
+    left: var(--dock-inline);
+    right: var(--dock-inline);
+    bottom: calc(var(--dock-bottom) + var(--dock-h) + var(--dock-edge));
+    width: auto;
+    height: auto;
+    justify-content: flex-end;
+    overflow: visible;
+    pointer-events: none;
+  }
+  .side.open .side-panel { pointer-events: auto; }
+  .side-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "theme help" "nav nav" "foot foot";
+    align-content: start;
+    column-gap: var(--space-1);
+    flex: 0 1 auto;
+    height: auto;
+    max-height: 100%;
+    padding: var(--space-2) var(--space-2) 0;
+    /* The same matte glass as the bottom bar and the header. */
+    border: 1px solid var(--modal-frost-line);
+    border-radius: var(--radius);
+    background: var(--modal-frost-bg);
+    backdrop-filter: var(--modal-frost-blur) var(--sheet-dim-lift);
+    -webkit-backdrop-filter: var(--modal-frost-blur) var(--sheet-dim-lift);
+    box-shadow: var(--sheet-shadow);
+    overscroll-behavior: contain;
+    transform: translate3d(0, calc(100% + var(--dock-h) + var(--dock-bottom) + var(--space-3)), 0);
+    /* Closed, the sheet waits just below the screen edge. Android Chrome moves fixed boxes a moment late while
+       its address bar shows or hides during a scroll, which let the sheet's top peek out under the bar; once
+       the slide has finished it is hidden, so it is never painted while closed. */
+    visibility: hidden;
+    transition:
+      transform var(--sheet-out) var(--ease-in),
+      visibility 0s linear var(--sheet-out);
+  }
+  .side.open .side-panel {
+    transform: translate3d(0, 0, 0);
+    visibility: visible;
+    transition:
+      transform var(--sheet-in) var(--ease-out),
+      visibility 0s linear 0s;
+  }
+  .side-backdrop::before,
+  .side-backdrop.show::before { top: 0; left: 0; right: 0; transform: none; transition: none; }
+  /* The header stays above the dim but blurs it: the same lift keeps its glass from greying while the menu is open. */
+  body.nav-open .topbar {
+    backdrop-filter: var(--modal-frost-blur) var(--sheet-dim-lift);
+    -webkit-backdrop-filter: var(--modal-frost-blur) var(--sheet-dim-lift);
+  }
+
+  .side-panel > .side-theme { grid-area: theme; margin: 0; padding: 0; border: 0; }
+  .side-panel > .side-help-btn {
+    grid-area: help;
+    width: auto;
+    min-height: var(--btn-h);
+    margin: 0;
+    padding: 0 var(--space-2);
+  }
+  .side-panel > .side-nav { grid-area: nav; margin: var(--space-2) 0 0; border-top: 1px solid var(--border); }
+  /* Never squeezed: when the menu is taller than its space the grid gives each row only its minimum size, so
+     a zero minimum (or the drawer's overflow:hidden) cut «خروج» in half. The whole sheet scrolls instead. */
+  .side-panel > .side-foot {
+    grid-area: foot;
+    min-height: auto;
+    max-height: none;
+    overflow: visible;
+    margin: 0 calc(-1 * var(--space-2));
+    padding: var(--space-1_5) var(--space-2);
+    border-top: 1px solid var(--border);
+    background: transparent;
+  }
+
+  /* Sections: a coloured title over a four-column grid of tiles, a hairline between sections. */
+  .side .side-nav > .nav-section {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-1_5) var(--space-0);
+    margin: 0;
+    padding: var(--space-2) 0;
+    border: 0 !important;
+    border-radius: 0;
+    background: transparent !important;
+  }
+  .side .side-nav > .nav-section + .nav-section { border-top: 1px solid var(--border) !important; }
+  .side .side-nav > .nav-section:not(:has(> .nav-item)) { display: none !important; }
+  .side .nav-section > .nav-label-toggle {
+    grid-column: 1 / -1;
+    min-height: 0;
+    padding: 0 var(--space-0);
+    border: 0;
+    background: transparent !important;
+    font-size: var(--fs-2);
+    font-weight: 600;
+    pointer-events: none;
+  }
+  .side .nav-label-caret,
+  .side .nav-section > .nav-empty { display: none !important; }
+
+  /* Tile: the icon centred in a 48px rounded square tinted with the section colour, the name under it
+     (two lines at most, the same height in every tile so rows line up). */
+  .side .nav-section > .nav-item {
+    --tile-tone: var(--foreground);
+    position: relative;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-1);
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+    margin: 0;
+    padding: var(--space-0) 2px;
+    border: 0 !important;
+    border-radius: var(--menu-radius);
+    background: transparent !important;
+    color: var(--foreground) !important;
+    font-size: var(--fs-2);
+    font-weight: 500;
+    line-height: 1.35;
+    text-align: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .side .nav-section-bot > .nav-item { --tile-tone: var(--bot-line); }
+  .side .nav-section-pg > .nav-item { --tile-tone: var(--pg-line); }
+  .side .nav-section > .nav-item > .nav-ico {
+    flex: none;
+    box-sizing: border-box;
+    width: var(--tile-ico);
+    height: var(--tile-ico);
+    padding: calc((var(--tile-ico) - 22px) / 2);
+    margin: 0;
+    border-radius: var(--menu-radius);
+    color: var(--tile-tone);
+    background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+    transition: transform var(--motion-fast) var(--ease-standard);
+  }
+  .side .nav-section > .nav-item > span,
+  .side .nav-section > .nav-item > .nav-item-label > span:first-child {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    max-width: 100%;
+    min-height: calc(2em * 1.35);
+    white-space: normal;
+  }
+  .side .nav-section > .nav-item > .nav-item-label { display: block; max-width: 100%; }
+  .side .nav-section > .nav-item .nav-dot {
+    position: absolute;
+    top: 0;
+    inset-inline-start: calc(50% + var(--tile-ico) / 2 - var(--space-1));
+    margin: 0;
+  }
+  .side .nav-section > .nav-item.active { font-weight: 600; }
+  .side .nav-section-bot > .nav-item.active,
+  .side .nav-section-pg > .nav-item.active { color: var(--tile-tone) !important; }
+  .side .nav-section > .nav-item.active > .nav-ico {
+    background: color-mix(in srgb, var(--tile-tone) 18%, transparent);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tile-tone) 55%, transparent);
+  }
+  .side .nav-section > .nav-item:active > .nav-ico { transform: scale(0.92); }
+  .side .nav-section > .nav-item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+@media (max-width: 900px) and (prefers-reduced-motion: reduce) {
+  .side .nav-section > .nav-item > .nav-ico { transition: none; }
+  .side .nav-section > .nav-item:active > .nav-ico { transform: none; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .bottom-dock-bar { background: var(--modal-frost-bg-fallback); }
+  @media (max-width: 900px) {
+    .side-panel { background: var(--modal-frost-bg-fallback); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bottom-dock,
+  .bottom-dock::before,
+  body.nav-open .bottom-dock::before,
+  .bottom-dock-bar,
+  .bottom-dock-item,
+  .bottom-dock-close,
+  body.nav-open .bottom-dock-bar,
+  body.nav-open .bottom-dock-item,
+  body.nav-open .bottom-dock-close { transition: none; }
+  .bottom-dock-item:active,
+  body.nav-open .bottom-dock-close:active { transform: none; }
 }

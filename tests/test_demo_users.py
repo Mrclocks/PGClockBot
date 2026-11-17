@@ -32,6 +32,7 @@ from app.services.loyalty import overview_metrics
 from app.services.subordinate_report import SubordinateShop, collect_subordinate_stats
 from app.services.ux20 import funnel_summary
 from app.services.shop_scope import ShopScopeError
+from app.services.numbers import to_fa_digits
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
@@ -98,6 +99,7 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
         self.env = Environment(loader=FileSystemLoader(ROOT / "app/web/templates"), autoescape=select_autoescape())
         self.env.filters["num"] = format_number
         self.env.filters["money"] = format_money
+        self.env.filters["fa"] = to_fa_digits
 
         def render(request: Request, name: str, context: dict[str, Any]) -> HTMLResponse:
             return HTMLResponse(self.env.get_template(name).render(**context, csrf_token="fake-csrf"))

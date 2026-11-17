@@ -1,18 +1,25 @@
-{# Finance settings modal — tabs: پرداخت | PAYG | پاکسازی #}
+{% from "_icons.html" import icon %}
+{# Finance settings modal: a list of پرداخت | PAYG | پاکسازی, each opening its section (DESIGN_SYSTEM.md §3). #}
 {% from "macros.html" import modal_title %}
+{% from "_settings_hub.html" import modal_settings_list, modal_shown_section, modal_list_heading, modal_list_back %}
 
 {% set open_settings = (open_finance_settings or '')|string %}
+{% set rows = [{'key': 'payment', 'label': 'پرداخت', 'desc': 'درگاه‌ها، کارت به کارت و تأیید پرداخت', 'icon': 'card', 'url': 'settings=payment'}] %}
+{% if can_billing_settings %}{% set rows = rows + [{'key': 'billing', 'label': 'مدیریت PAYG', 'desc': 'صورتحساب و حداقل موجودی نمایندگان', 'icon': 'payg', 'url': 'settings=billing'}] %}{% endif %}
+{% if can_pending_orders %}{% set rows = rows + [{'key': 'cleanup', 'label': 'پاکسازی', 'desc': 'سفارش‌های رهاشده و قوانین حذف', 'icon': 'trash', 'url': 'settings=cleanup'}] %}{% endif %}
+{% set shown = modal_shown_section(rows, open_settings) %}
 {% set strip_keys = 'settings,supports,stab,saved,ok,err,msg,_' %}
 <div class="ui-modal ds ds-settings{% if open_settings %} open{% endif %}" id="modal-finance-settings"
      {% if not open_settings %}hidden{% endif %}
-     data-modal-strip-keys="{{ strip_keys }}">
+     data-modal-strip-keys="{{ strip_keys }}" data-modal-list data-modal-list-title="تنظیمات مالی" data-modal-list-url="">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl settings-modal-panel" role="dialog" aria-modal="true" aria-labelledby="finance-settings-title">
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
-      {{ modal_title('payments', 'تنظیمات مالی', tone='brand', heading_id='finance-settings-title') }}
+      {{ modal_list_back(rows, shown) }}
+      {{ modal_title('payments', modal_list_heading(rows, shown, 'تنظیمات مالی'), tone='brand', heading_id='finance-settings-title') }}
       <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        {{ icon('close', 'ico') }}
       </button>
       </div>
     </div>
@@ -37,24 +44,16 @@
       {% endif %}
     </div>
     {% endif %}
-    <nav class="section-tabs settings-tabs modal-section-tabs" role="tablist" aria-label="تب‌های تنظیمات مالی" data-modal-tabs>
-      <button type="button" class="tab-btn {% if open_settings not in ['billing', 'cleanup'] %}active{% endif %}" data-modal-tab="payment" role="tab">پرداخت</button>
-      {% if can_billing_settings %}
-      <button type="button" class="tab-btn {% if open_settings == 'billing' %}active{% endif %}" data-modal-tab="billing" role="tab">مدیریت PAYG</button>
-      {% endif %}
-      {% if can_pending_orders %}
-      <button type="button" class="tab-btn {% if open_settings == 'cleanup' %}active{% endif %}" data-modal-tab="cleanup" role="tab">پاکسازی</button>
-      {% endif %}
-    </nav>
+    {{ modal_settings_list(rows, shown) }}
     <div class="settings-modal-body">
-      <div class="modal-tab-panel" data-modal-tab-panel="payment" {% if open_settings in ['billing', 'cleanup'] %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="payment" {% if shown != 'payment' %}hidden{% endif %}>
         {% set settings_form_action = payment_settings_action %}
         {% set tab_groups = payment_tab_groups %}
         {% set groups = payment_groups %}
         {% include "_domain_settings_form.html" %}
       </div>
       {% if can_billing_settings %}
-      <div class="modal-tab-panel" data-modal-tab-panel="billing" {% if open_settings != 'billing' %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="billing" {% if shown != 'billing' %}hidden{% endif %}>
         {% set settings_form_action = billing_settings_action %}
         {% set tab_groups = billing_tab_groups %}
         {% set groups = billing_groups %}
@@ -62,7 +61,7 @@
       </div>
       {% endif %}
       {% if can_pending_orders %}
-      <div class="modal-tab-panel" data-modal-tab-panel="cleanup" {% if open_settings != 'cleanup' %}hidden{% endif %}>
+      <div class="modal-tab-panel" data-modal-tab-panel="cleanup" {% if shown != 'cleanup' %}hidden{% endif %}>
         {% include "_settings_cleanup_tab.html" %}
       </div>
       {% endif %}
