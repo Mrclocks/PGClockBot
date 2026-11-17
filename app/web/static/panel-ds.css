@@ -881,7 +881,8 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .msg-btn-group { display: flex; flex-direction: column; gap: var(--g2); }
 .ds .msg-btn-group-title { font-size: var(--fs-2); color: var(--muted-fg); }
 .ds .msg-btn-chips { --ds-chip-cols: 3; }
-.ds .msg-btn-chips button span { overflow: hidden; text-overflow: ellipsis; }
+/* A target name is never cut: on a narrow phone it wraps to a second line inside its chip. */
+.ds .msg-btn-chips button { height: auto; min-height: var(--ctl-h); padding-block: var(--g1); white-space: normal; line-height: 1.35; }
 .ds .msg-btn-actions { display: flex; align-items: center; gap: var(--g2); }
 .ds .msg-btn-actions .btn-danger { margin-inline-start: auto; }
 .ds .msg-btn-actions svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
