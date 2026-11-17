@@ -1,6 +1,6 @@
 # Gozargah engineering rules
 
-These rules apply to every change, whether written by a person or by an AI agent. Read this file before editing code. When a rule conflicts with a quick fix, follow the rule and explain the trade-off in the pull request.
+These rules apply to every change. Read this file before editing code. When a rule conflicts with a quick fix, follow the rule and explain the trade-off in the pull request.
 Rules marked **MUST** are required. Rules marked **SHOULD** are the default and need a reason to skip. The cleanup of code that does not meet these rules yet is tracked in [docs/ENGINEERING_REMEDIATION_PLAN.md](docs/ENGINEERING_REMEDIATION_PLAN.md); do not fold that cleanup into a feature change.
 
 ## 1. Core rules
