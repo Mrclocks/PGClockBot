@@ -169,9 +169,10 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         block = re.search(r"(?ms)^\.btn-ok\s*\{([^}]+)\}", css)
         self.assertIsNotNone(block)
         body = block.group(1)
-        # Approve actions follow the panel brand colour like the other main actions.
-        self.assertIn("background: color-mix(in srgb, var(--brand) 8%, transparent)", body)
-        self.assertIn("color: var(--brand-fg)", body)
+        # Approve actions follow the panel brand colour like the other main actions, unless a coloured notice
+        # hands them its own (behaviour covered by test_notice_button_tone_browser_e2e).
+        self.assertIn("background: color-mix(in srgb, var(--btn-tone, var(--brand)) 8%, transparent)", body)
+        self.assertIn("color: var(--btn-fg, var(--brand-fg))", body)
 
     def test_btn_warn_matches_soft_tint_style(self):
         css = CSS.read_text(encoding="utf-8")

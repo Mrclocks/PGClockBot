@@ -2479,10 +2479,11 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
   max-width: 100%;
   min-width: 0;
   text-decoration: none !important;
-  /* Main actions (save, confirm, add, select) follow the panel brand colour: strong edge, light fill. */
-  color: var(--brand-fg) !important;
-  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
-  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  /* Main actions (save, confirm, add, select) follow the panel brand colour: strong edge, light fill.
+     A coloured notice sets --btn-tone / --btn-fg, so its buttons take the notice's colour, text included. */
+  color: var(--btn-fg, var(--brand-fg)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--btn-tone, var(--brand)) 72%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 8%, transparent);
   box-sizing: border-box;
   transition:
     background var(--motion-fast) var(--ease-standard),
@@ -2493,7 +2494,7 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
     box-shadow var(--motion-fast) var(--ease-standard);
 }
 .btn:hover, a.btn:hover {
-  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
@@ -2531,13 +2532,13 @@ a.btn.btn-ghost:hover {
   transform: translateY(-1px);
 }
 .btn-ok {
-  color: var(--brand-fg) !important;
-  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
-  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  color: var(--btn-fg, var(--brand-fg)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--btn-tone, var(--brand)) 72%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 8%, transparent);
   font-weight: var(--btn-fw);
 }
 .btn-ok:hover {
-  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
@@ -3435,6 +3436,11 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .flash.ok { background: rgba(34, 197, 94, 0.1); color: var(--ok-text); border-color: rgba(34, 197, 94, 0.28); }
 .flash.err { background: rgba(239, 68, 68, 0.1); color: var(--danger-text); border-color: rgba(239, 68, 68, 0.28); }
 .flash.warn { background: rgba(234, 179, 8, 0.1); color: var(--warn-text); border-color: rgba(234, 179, 8, 0.28); }
+/* A main-action button inside a coloured notice is that notice's colour, text and edge alike (never brand-orange
+   text on a yellow notice). Red and ghost buttons keep their own colour: they say something else. */
+.flash.ok { --btn-tone: var(--ok); --btn-fg: var(--ok-text); }
+.flash.err { --btn-tone: var(--destructive); --btn-fg: var(--danger-text); }
+.flash.warn { --btn-tone: var(--warn); --btn-fg: var(--warn-text); }
 
 /* Icon box — same footprint as .stat-ico; shape encodes severity */
 .flash.ok::before,

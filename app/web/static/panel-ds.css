@@ -46,12 +46,12 @@
 .ds .icon-btn .ico { width: 18px; height: 18px; }
 /* Warnings act like main actions: the brand colour, so a colour change in the panel settings reaches them. */
 .btn-warn, a.btn.btn-warn {
-  color: var(--brand-fg) !important;
-  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent) !important;
-  background: color-mix(in srgb, var(--brand) 8%, transparent) !important;
+  color: var(--btn-fg, var(--brand-fg)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--btn-tone, var(--brand)) 72%, transparent) !important;
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 8%, transparent) !important;
 }
-.btn-warn:hover, a.btn.btn-warn:hover { background: color-mix(in srgb, var(--brand) 15%, transparent) !important; }
-html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
+.btn-warn:hover, a.btn.btn-warn:hover { background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent) !important; }
+html[data-theme="light"] .btn-warn { color: var(--btn-fg, var(--brand-fg)) !important; }
 
 /* ===================================================================== 3. Modal shell */
 .ui-modal.ds .ui-modal-panel {
