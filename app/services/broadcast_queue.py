@@ -19,14 +19,21 @@ from datetime import datetime, timedelta, timezone
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.types import InlineKeyboardMarkup
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, BroadcastLog, Role
-from app.services.broadcast import AUDIENCE_LABELS, shop_scope_filter
+from app.db.models import BotUser, BroadcastLog
+from app.services.broadcast import shop_scope_filter
+from app.services.broadcast_audience import (
+    AudienceSpec,
+    audience_clause,
+    checked_spec,
+    count_audience,
+    load_spec,
+    make_spec,
+)
 from app.services.message_buttons import stored_keyboard
-from app.services.shop_membership import shop_member_clause
 from app.services.telegram_html import normalize_telegram_html
 
 logger = logging.getLogger("pgclock.broadcast")
@@ -74,35 +81,21 @@ def platform_request_key(token: object) -> str | None:
     return f"{PLATFORM_REQUEST_KEY_PREFIX}{raw}" if _REQUEST_TOKEN_RE.fullmatch(raw) else None
 
 
-def _audience_clause(audience: str, *, shop_id: int | None = None):
-    """Recipients for one broadcast: platform bot audience, or one shop's customers."""
-    if shop_id is not None:
-        # Lazy import: shop_broadcast imports STATUS_QUEUED from this module at load time.
-        from app.services.shop_broadcast import shop_audience_clause
-
-        return shop_audience_clause(int(shop_id))
-    clause = [BotUser.is_blocked.is_(False), shop_member_clause(None)]
-    if audience == "users":
-        clause.append(BotUser.role.in_([Role.USER.value, Role.RESELLER.value]))
-    elif audience == "resellers":
-        clause.append(BotUser.role == Role.RESELLER.value)
-    elif audience == "admins":
-        clause.append(BotUser.role == Role.ADMIN.value)
-    return clause
+def _spec(audience: AudienceSpec | str) -> AudienceSpec:
+    """A platform audience; a bare key (the bot's audience buttons) is that segment with its defaults."""
+    return audience if isinstance(audience, AudienceSpec) else make_spec(str(audience or ""), shop_id=None)
 
 
-async def count_platform_targets(session: AsyncSession, audience: str) -> int:
+async def count_platform_targets(session: AsyncSession, audience: AudienceSpec | str) -> int:
     """How many people a platform broadcast to ``audience`` reaches now."""
-    if audience not in AUDIENCE_LABELS:
-        raise ValueError("گروه مخاطبان نامعتبر است")
-    return int(await session.scalar(select(func.count()).select_from(BotUser).where(*_audience_clause(audience))) or 0)
+    return await count_audience(session, _spec(audience), shop_id=None)
 
 
 async def queue_broadcast(
     session: AsyncSession,
     *,
     text: str,
-    audience: str,
+    audience: AudienceSpec | str,
     created_by: str | None,
     request: BroadcastRequest | None = None,
 ) -> BroadcastLog:
@@ -118,18 +111,19 @@ async def queue_broadcast(
         raise ValueError("متن پیام خالی است")
     if len(body) > MAX_TEXT_LENGTH:
         raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
-    if audience not in AUDIENCE_LABELS:
-        raise ValueError("گروه مخاطبان نامعتبر است")
+    spec = _spec(audience)
     key = platform_request_key(request.token)
     if key is not None:
         existing = await session.scalar(select(BroadcastLog).where(BroadcastLog.request_key == key))
         if existing is not None:
             return existing
-    total = await count_platform_targets(session, audience)
+    spec = await checked_spec(session, spec, shop_id=None)
+    total = await count_audience(session, spec, shop_id=None)
     if not total:
         raise ValueError("مخاطبی برای این گروه وجود ندارد")
     log = BroadcastLog(
-        audience=audience,
+        audience=spec.segment,
+        audience_spec=spec.to_json(),
         text=body,
         total=total,
         created_by=(created_by or "")[:128] or None,
@@ -335,6 +329,7 @@ async def process_broadcast_batch(
             await session.execute(
                 select(
                     BroadcastLog.audience,
+                    BroadcastLog.audience_spec,
                     BroadcastLog.text,
                     BroadcastLog.cursor_id,
                     BroadcastLog.shop_id,
@@ -346,7 +341,9 @@ async def process_broadcast_batch(
                 ).where(BroadcastLog.id == log_id)
             )
         ).one()
-        audience, text, cursor, shop_id, total, ok_count, fail_count, review_count, buttons = row
+        audience, stored_spec, text, cursor, shop_id, total, ok_count, fail_count, review_count, buttons = row
+        tenant = int(shop_id) if shop_id is not None else None
+        spec = load_spec(stored_spec, audience, shop_id=tenant)
         progress = int(ok_count) + int(fail_count) + int(review_count)
         if progress >= int(total):
             await _finish(session, log_id, token)
@@ -356,7 +353,7 @@ async def process_broadcast_batch(
             await session.execute(
                 select(BotUser.id, BotUser.telegram_id)
                 .where(
-                    *_audience_clause(audience, shop_id=int(shop_id) if shop_id is not None else None),
+                    *audience_clause(spec, shop_id=tenant),
                     BotUser.id > int(cursor),
                 )
                 .order_by(BotUser.id)

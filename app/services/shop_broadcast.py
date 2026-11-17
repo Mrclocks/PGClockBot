@@ -6,18 +6,24 @@ import html
 import secrets
 import string
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, BroadcastLog, MarketingPreference, ResellerProfile, ShopBroadCampaignDay
+from app.db.models import BroadcastLog, ResellerProfile, ShopBroadCampaignDay
+from app.services.broadcast_audience import (
+    AudienceSpec,
+    audience_clause,
+    checked_spec,
+    count_audience,
+    is_broad,
+    make_spec,
+)
 from app.services.broadcast_queue import STATUS_QUEUED
-from app.services.campaigns import BROAD_PER_DAY, RECIPIENT_LIMIT, _member_clause
+from app.services.campaigns import BROAD_PER_DAY, RECIPIENT_LIMIT
 from app.services.daily_cap import claim_daily_cap
 from app.services.rich_text import utf16_len
-from app.services.shop_customer_block import not_blocked_in_shop_clause
 
-SHOP_AUDIENCE_LABELS = {"all": "همهٔ مشتریان"}
 SHOP_BROAD_LIMIT_MESSAGE = (
     "پیام گروهی گسترده برای هر فروشگاه روزی یک‌بار است (با کمپین گسترده مشترک است)"
 )
@@ -26,22 +32,9 @@ MAX_SHOP_TEXT_UTF16 = 4000
 REQUEST_KEY_LEN = 32
 
 
-def shop_audience_clause(shop_id: int):
-    """Customers of this shop who may receive a group message (campaigns membership rules)."""
-    opted_out = exists(
-        select(MarketingPreference.user_id).where(
-            MarketingPreference.user_id == BotUser.id,
-            MarketingPreference.shop_key == int(shop_id),
-            MarketingPreference.enabled.is_(False),
-        )
-    )
-    return [
-        _member_clause(int(shop_id)),
-        BotUser.is_blocked.is_(False),
-        not_blocked_in_shop_clause(int(shop_id)),
-        BotUser.role.in_(["user", "reseller"]),
-        ~opted_out,
-    ]
+def shop_audience_clause(shop_id: int, spec: AudienceSpec | None = None):
+    """Customers of this shop who may receive a group message: ``spec`` (all customers when None)."""
+    return audience_clause(spec or make_spec("all", shop_id=int(shop_id)), shop_id=int(shop_id))
 
 
 def clean_shop_broadcast_text(raw: object) -> str:
@@ -83,13 +76,8 @@ async def shop_can_send_broadcast(session: AsyncSession, *, shop_id: int) -> boo
     return bool(profile and profile.is_active and profile.bot_token)
 
 
-async def count_shop_broadcast_targets(session: AsyncSession, *, shop_id: int) -> int:
-    return int(
-        await session.scalar(
-            select(func.count()).select_from(BotUser).where(*shop_audience_clause(shop_id))
-        )
-        or 0
-    )
+async def count_shop_broadcast_targets(session: AsyncSession, *, shop_id: int, spec: AudienceSpec | None = None) -> int:
+    return await count_audience(session, spec or make_spec("all", shop_id=int(shop_id)), shop_id=int(shop_id))
 
 
 async def queue_shop_broadcast(
@@ -100,8 +88,13 @@ async def queue_shop_broadcast(
     created_by: str | None,
     request_key: object = None,
     buttons: str | None = None,
+    audience: AudienceSpec | None = None,
 ) -> BroadcastLog:
-    """Enqueue one shop broadcast; daily broad cap and request_key make repeats safe."""
+    """Enqueue one shop broadcast; the daily broad cap and request_key make repeats safe.
+
+    A message to (nearly) all customers (``is_broad``) uses the shop's one broad slot of the day; a narrower
+    segment does not, but is still capped at ``RECIPIENT_LIMIT`` recipients.
+    """
     if not isinstance(shop_id, int) or isinstance(shop_id, bool) or shop_id <= 0:
         raise ValueError("فروشگاه نامعتبر است")
     body = clean_shop_broadcast_text(text)
@@ -111,7 +104,8 @@ async def queue_shop_broadcast(
         return existing
     if not await shop_can_send_broadcast(session, shop_id=shop_id):
         raise ValueError(SHOP_NO_BOT_MESSAGE)
-    total = await count_shop_broadcast_targets(session, shop_id=shop_id)
+    spec = await checked_spec(session, audience or make_spec("all", shop_id=shop_id), shop_id=shop_id)
+    total = await count_shop_broadcast_targets(session, shop_id=shop_id, spec=spec)
     if not total:
         raise ValueError("مخاطبی برای این گروه وجود ندارد")
     total = min(total, RECIPIENT_LIMIT)
@@ -119,12 +113,13 @@ async def queue_shop_broadcast(
     # rolls the claim back instead of burning the shop's daily broad slot.
     try:
         async with session.begin_nested():
-            if not await claim_daily_cap(
+            if is_broad(spec) and not await claim_daily_cap(
                 session, ShopBroadCampaignDay, shop_id=int(shop_id), amount=1, cap=BROAD_PER_DAY
             ):
                 raise ValueError(SHOP_BROAD_LIMIT_MESSAGE)
             log = BroadcastLog(
-                audience="all",
+                audience=spec.segment,
+                audience_spec=spec.to_json(),
                 text=body,
                 total=total,
                 created_by=(created_by or "")[:128] or None,

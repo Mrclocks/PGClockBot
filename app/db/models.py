@@ -932,6 +932,9 @@ class BroadcastLog(Base):
     # None = platform/owner broadcast; a shop id never shares history or audience with another shop.
     shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
     audience: Mapped[str] = mapped_column(String(32), default="all")
+    # Segment, filters and reference time as broadcast_audience.AudienceSpec JSON; NULL on rows queued before
+    # filters existed, which keep their ``audience`` key.
+    audience_spec: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     text: Mapped[str] = mapped_column(Text)
     # Buttons under the message, as message_buttons.dump_buttons wrote them; validated again before sending.
     buttons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
