@@ -127,6 +127,8 @@ class TimingCardTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("مراحل هر درخواست", html)
         self.assertIn("اتصال TCP و DNS", html)
         self.assertIn("GET /api/user/…", html)
+        self.assertIn('<div class="link-health-rows-head"><dt>مرحله</dt><dd>میانه</dd><dd>۹۵٪</dd></div>', html)
+        self.assertIn("از 3 درخواست با اتصال تازه", html)
         self.assertNotIn("alice", html)
 
     def test_the_timing_section_is_hidden_without_samples(self) -> None:

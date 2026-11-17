@@ -1,8 +1,9 @@
 {# Owner only: how the link to PasarGuard behaved in the last hour (this process).
-   Same layout as the period sales card so the dashboard reads as one system. #}
+   A summary row with the four figures an owner checks first, then the detail boxes side by side. #}
 {% from "macros.html" import card_title %}
 {% set health = pg_link_health %}
 {% set circuit = health.circuit or {} %}
+{% set timing = health.timing or {} %}
 {% if circuit.paused %}
   {% set link_tone, link_label = 'err', 'متوقف' %}
 {% elif health.recent_failure_count %}
@@ -12,6 +13,9 @@
 {% else %}
   {% set link_tone, link_label = 'neutral', 'بدون داده' %}
 {% endif %}
+{% macro ms(value) -%}
+{% if value is not none %}<span dir="ltr">{{ value | num }} ms</span>{% else %}—{% endif %}
+{%- endmacro %}
 <section class="card home-periods-card home-link-health" aria-label="سلامت ارتباط با پاسارگارد">
   <header class="home-periods-head link-health-head">
     {{ card_title('connection', 'سلامت ارتباط با پاسارگارد') }}
@@ -30,64 +34,63 @@
       {% endif %}
     </div>
   </header>
-  <div class="home-period-grid">
-    <article class="home-period">
-      <h3 class="home-period-label">زمان پاسخ</h3>
-      <dl class="home-period-metrics">
-        <div><dt>معمول (میانه)</dt><dd>{% if health.latency_p50_ms is not none %}<span dir="ltr">{{ health.latency_p50_ms | num }} ms</span>{% else %}—{% endif %}</dd></div>
-        <div><dt>کندترین (۹۵٪)</dt><dd>{% if health.latency_p95_ms is not none %}<span dir="ltr">{{ health.latency_p95_ms | num }} ms</span>{% else %}—{% endif %}</dd></div>
-      </dl>
-    </article>
-    <article class="home-period">
-      <h3 class="home-period-label">آخرین وضعیت</h3>
-      <dl class="home-period-metrics">
-        <div><dt>پاسخ موفق</dt><dd>{% if health.last_ok_time %}<span dir="ltr">{{ health.last_ok_time }}</span> (تهران){% else %}—{% endif %}</dd></div>
-        <div><dt>آخرین خطا</dt><dd>{% if health.last_failure_time %}<span dir="ltr">{{ health.last_failure_time }}</span> (تهران){% else %}—{% endif %}</dd></div>
-        {% if circuit.paused %}
-        <div><dt>تلاش دوباره</dt><dd><span dir="ltr">{{ circuit.retry_in_sec | num }}</span> ثانیه دیگر</dd></div>
-        {% endif %}
-      </dl>
-    </article>
+
+  <div class="home-period link-health-summary">
+    <dl class="home-period-metrics link-health-figures">
+      <div><dt>زمان پاسخ معمول</dt><dd>{{ ms(health.latency_p50_ms) }}</dd></div>
+      <div><dt>کندترین پاسخ (۹۵٪)</dt><dd>{{ ms(health.latency_p95_ms) }}</dd></div>
+      <div><dt>آخرین پاسخ موفق (تهران)</dt><dd>{% if health.last_ok_time %}<span dir="ltr">{{ health.last_ok_time }}</span>{% else %}—{% endif %}</dd></div>
+      <div><dt>آخرین خطا (تهران)</dt><dd>{% if health.last_failure_time %}<span dir="ltr">{{ health.last_failure_time }}</span>{% else %}—{% endif %}</dd></div>
+      {% if circuit.paused %}
+      <div><dt>تلاش دوباره</dt><dd><span dir="ltr">{{ circuit.retry_in_sec | num }}</span> ثانیه دیگر</dd></div>
+      {% endif %}
+    </dl>
+  </div>
+
+  <div class="link-health-grid">
     <article class="home-period">
       <h3 class="home-period-label">خطاهای یک ساعت اخیر</h3>
-      <dl class="home-period-metrics">
+      <dl class="link-health-rows">
         {% for row in health.recent_failures if row.count %}
         <div><dt>{{ row.label }}</dt><dd>{{ row.count | num }}</dd></div>
         {% else %}
-        <div><dt>خطا</dt><dd>ندارد</dd></div>
+        <div><dt>خطایی ثبت نشده</dt><dd>—</dd></div>
         {% endfor %}
         {% if health.budget_exhaustion_count %}
         <div><dt>{{ health.budget_exhaustion_label }}</dt><dd>{{ health.budget_exhaustion_count | num }}</dd></div>
         {% endif %}
       </dl>
     </article>
-    {% set timing = health.timing or {} %}
+
     {% if timing.requests %}
     <article class="home-period">
       <h3 class="home-period-label">مراحل هر درخواست</h3>
-      <dl class="home-period-metrics">
-        <div><dt>درخواست‌ها</dt><dd>{{ timing.requests | num }}</dd></div>
-        <div><dt>با اتصال تازه</dt><dd>{{ timing.new_connection_pct | num }}٪</dd></div>
+      <dl class="link-health-rows link-health-rows-3">
+        <div class="link-health-rows-head"><dt>مرحله</dt><dd>میانه</dd><dd>۹۵٪</dd></div>
         {% for key, label in [('pool', 'انتظار در صف'), ('connect', 'اتصال TCP و DNS'), ('tls', 'دست‌دادن TLS'), ('first_byte', 'تا اولین پاسخ')] %}
         {% set phase = timing[key] or {} %}
         {% if phase.count %}
-        <div><dt>{{ label }}</dt><dd><span dir="ltr">{{ phase.p50_ms | num }} / {{ phase.p95_ms | num }} ms</span></dd></div>
+        <div><dt>{{ label }}</dt><dd>{{ ms(phase.p50_ms) }}</dd><dd>{{ ms(phase.p95_ms) }}</dd></div>
         {% endif %}
         {% endfor %}
       </dl>
+      <p class="muted link-health-foot">{{ timing.new_connection_pct | num }}٪ از {{ timing.requests | num }} درخواست با اتصال تازه</p>
     </article>
+
     {% if timing.endpoints %}
     <article class="home-period">
-      <h3 class="home-period-label">کندترین درخواست‌ها (میانه / ۹۵٪)</h3>
-      <dl class="home-period-metrics">
+      <h3 class="home-period-label">کندترین درخواست‌ها</h3>
+      <dl class="link-health-rows link-health-rows-3">
+        <div class="link-health-rows-head"><dt>درخواست</dt><dd>میانه</dd><dd>۹۵٪</dd></div>
         {% for row in timing.endpoints %}
-        <div><dt><span dir="ltr">{{ row.endpoint }}</span></dt><dd><span dir="ltr">{{ row.p50_ms | num }} / {{ row.p95_ms | num }} ms</span></dd></div>
+        <div><dt><span dir="ltr">{{ row.endpoint }}</span></dt><dd>{{ ms(row.p50_ms) }}</dd><dd>{{ ms(row.p95_ms) }}</dd></div>
         {% endfor %}
       </dl>
     </article>
     {% endif %}
     {% endif %}
   </div>
+
   {% if health.from_prior_boot %}
   <p class="muted link-health-note">{{ health.prior_boot_note }}</p>
   {% else %}
