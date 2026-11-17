@@ -17,6 +17,7 @@ from app.bot.entry_gate import run_entry_gate
 from app.bot.import_prompt import send_import_prompt, should_offer_import
 from app.bot.nav_input import delete_user_message
 from app.bot.tg_utils import safe_edit_text
+from app.bot.verbatim_input import NotVerbatimTextInput
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
 from app.services.referral_scope import is_referral_of_shop
@@ -178,7 +179,7 @@ async def seed_main_reply_kb(message: Message, reply_kb, *, tip: str = "·") -> 
         body = "منوی اصلی"
     await replace_home(await attach_reply_keyboard(message, reply_kb, text=body))
 
-@router.message(F.text.func(kb.is_restart_text))
+@router.message(F.text.func(kb.is_restart_text), NotVerbatimTextInput())
 async def cmd_restart(
     message: Message,
     state: FSMContext,
