@@ -45,7 +45,9 @@ STATUS_PENDING = "pending"
 STATUS_APPROVED = "approved"
 STATUS_REJECTED = "rejected"
 STATUS_BLOCKED = "blocked"
-DECIDED_BY_EXEMPT = "exempt"
+# Why a customer was let in without a request; kept in decided_by so it can be traced later.
+EXEMPT_INVITED = "exempt:invited"
+EXEMPT_MEMBER = "exempt:member"
 DECIDED_BY_EXPIRY = "expired"
 LIST_LIMIT = 50
 VIEW_PENDING = "pending"
@@ -142,15 +144,16 @@ async def _load(session: AsyncSession, user_id: int, shop_key: int) -> EntryAppr
     )
 
 
-async def _insert(session: AsyncSession, user_id: int, shop_key: int, status: str) -> EntryApproval:
+async def _insert(
+    session: AsyncSession, user_id: int, shop_key: int, status: str, *, decided_by: str | None = None
+) -> EntryApproval:
     """Create the customer's row once; a simultaneous insert of the same pair wins quietly."""
-    decided = status != STATUS_PENDING
     now = datetime.now(timezone.utc)
     try:
         async with session.begin_nested():
             session.add(EntryApproval(
                 bot_user_id=int(user_id), shop_key=int(shop_key), status=status, requested_at=now,
-                decided_at=now if decided else None, decided_by=DECIDED_BY_EXEMPT if decided else None,
+                decided_at=now if decided_by else None, decided_by=decided_by,
             ))
             await session.flush()
     except IntegrityError:
@@ -177,7 +180,18 @@ async def _joined_before(session: AsyncSession, user: BotUser, shop_key: int, si
     candidates = [as_utc(seen) for seen in (first_seen, first_order) if seen]
     if shop_key_of(user.reseller_id) == shop_key and user.created_at:
         candidates.append(as_utc(user.created_at))
-    return bool(candidates) and min(candidates) < since
+    # SQLite keeps whole seconds, so someone who joined in the second the gate was switched on
+    # would read as earlier than the switch; compare whole seconds and count that second as after.
+    return bool(candidates) and min(candidates) < since.replace(microsecond=0)
+
+
+async def _exemption(session: AsyncSession, user: BotUser, shop_key: int, config: EntryApprovalConfig) -> str | None:
+    """Why ``user`` may enter without a request (an ``EXEMPT_*`` reason), or None."""
+    if config.skip_referred and is_referral_of_shop(user, shop_key or None):
+        return EXEMPT_INVITED
+    if config.since is not None and await _joined_before(session, user, shop_key, config.since):
+        return EXEMPT_MEMBER
+    return None
 
 
 async def _expire_if_stale(session: AsyncSession, row: EntryApproval, config: EntryApprovalConfig) -> None:
@@ -222,11 +236,10 @@ async def resolve_gate(
         return OPEN
     row = await _load(session, int(user.id), shop_key)
     if row is None:
-        exempt = (config.skip_referred and is_referral_of_shop(user, shop_key or None)) or (
-            config.since is not None and await _joined_before(session, user, shop_key, config.since)
-        )
-        if exempt:
-            await _insert(session, int(user.id), shop_key, STATUS_APPROVED)
+        reason = await _exemption(session, user, shop_key, config)
+        if reason is not None:
+            logger.info("entry approval: user=%s shop=%s let in without a request (%s)", user.id, shop_key, reason)
+            await _insert(session, int(user.id), shop_key, STATUS_APPROVED, decided_by=reason)
             return OPEN
         if not create:
             return GateState(GateStep.PENDING)
