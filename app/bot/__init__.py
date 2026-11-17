@@ -184,6 +184,7 @@ def bot_routers() -> list[Router]:
     from app.bot import nav_input as nav_input_mod
     from app.bot import staff_cancel as _staff_cancel  # noqa: F401 — cancel registry
     from app.bot.handlers import guides
+    from app.bot import message_button_picker
 
     return [
         # The menu editor's text input comes first: a typed button name such as «👍 کاربران» or
@@ -239,6 +240,7 @@ def bot_routers() -> list[Router]:
         trial_users_view.router,
         staff_audit_view.router,
         admin_broadcast_confirm.router,
+        message_button_picker.router,
         service_shop_review_view.router,
         payg_charge_review.router,
         service_cleanup_bot.router,

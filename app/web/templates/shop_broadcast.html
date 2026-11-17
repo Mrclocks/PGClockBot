@@ -22,14 +22,14 @@
       <textarea name="text" rows="8" required maxlength="4000" placeholder="متن پیام…"></textarea>
       <small class="muted">متن به‌صورت امن ارسال می‌شود. ارسال از صف محدود انجام می‌شود؛ از اسپم خودداری کنید. سقف گسترده: روزی یک‌بار.</small>
     </label>
-    {{ buttons_field(buttons_help, button_presets) }}
+    {{ buttons_field(button_targets, button_styles, button_presets, button_max) }}
     <div class="actions">
       <button class="btn" type="submit">ارسال پیام</button>
     </div>
   </form>
 </div>
 
-{{ presets_card(button_presets, buttons_help, button_preset_limit) }}
+{{ presets_card(button_presets, button_targets, button_styles, button_preset_limit, button_max) }}
 
 <div class="card card-flush">
   <div class="card-flush-head">
@@ -92,4 +92,7 @@
   </div>
 </div>
 </div>
+{% endblock %}
+{% block page_scripts %}
+<script src="/static/message-buttons.js?v={{ asset_v('message-buttons.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 {% endblock %}

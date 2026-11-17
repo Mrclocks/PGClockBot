@@ -1,4 +1,5 @@
-"""Buttons under staff messages: parsing, permissions, presets per shop, the broadcast worker and DMs."""
+"""Buttons under staff messages: one to four, permissions, colours, presets per shop, the bot checklist,
+the broadcast worker and direct messages."""
 
 from __future__ import annotations
 
@@ -9,24 +10,30 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import sqlalchemy as sa
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import StorageKey
+from aiogram.fsm.storage.memory import MemoryStorage
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from starlette.datastructures import FormData
 
+from app.bot import message_button_picker as picker
 from app.db import Base
 from app.db.models import BotUser, ResellerProfile, Ticket, UserService
 from app.services.broadcast_queue import BroadcastRequest, process_broadcast_batch, queue_broadcast
 from app.services.message_buttons import (
+    ButtonInput,
     ButtonRules,
     broadcast_buttons,
     build_keyboard,
     delete_preset,
-    dump_rows,
+    dump_buttons,
+    form_inputs,
     list_presets,
-    load_rows,
-    parse_buttons,
-    resolve_buttons,
+    load_buttons,
+    make_buttons,
+    preset_inputs,
     save_preset,
-    split_message,
 )
 from app.services.shop_broadcast import queue_shop_broadcast
 from app.services.users_quick import send_staff_dm
@@ -37,63 +44,87 @@ NO_LINKS = ButtonRules()
 SHOP_A, SHOP_B = 20, 30
 
 
-def specs(rows):
-    return [[(b.kind, b.label, b.target) for b in row] for row in rows]
+def kinds(buttons):
+    return [(b.kind, b.label, b.target, b.style) for b in buttons]
 
 
-class ParseTests(unittest.TestCase):
-    def test_rows_and_screen_buttons(self) -> None:
-        rows = parse_buttons("🛒 خرید - @shop | پشتیبانی - @support\nکیف پول - @wallet", NO_LINKS)
-        self.assertEqual(specs(rows), [
-            [("screen", "🛒 خرید", "shop"), ("screen", "پشتیبانی", "support")],
-            [("screen", "کیف پول", "wallet")],
+class MakeButtonsTests(unittest.TestCase):
+    def test_screen_buttons_get_a_default_label_and_keep_their_colour(self) -> None:
+        buttons = make_buttons([ButtonInput("shop"), ButtonInput("support", "سؤال دارید؟", style="success")], NO_LINKS)
+        self.assertEqual(kinds(buttons), [
+            ("screen", "🛒 خرید سرویس", "shop", ""),
+            ("screen", "سؤال دارید؟", "support", "success"),
         ])
 
-    def test_a_label_may_contain_a_dash(self) -> None:
-        self.assertEqual(specs(parse_buttons("پلن - ۳۰ روزه - @shop", NO_LINKS)), [[("screen", "پلن - ۳۰ روزه", "shop")]])
+    def test_one_to_four_buttons(self) -> None:
+        self.assertEqual(make_buttons([ButtonInput("")], NO_LINKS), [])
+        with self.assertRaises(ValueError):
+            make_buttons([ButtonInput("shop")] * 5, NO_LINKS)
 
-    def test_links_need_permission(self) -> None:
+    def test_links_need_permission_https_and_a_label(self) -> None:
         with self.assertRaisesRegex(ValueError, "اجازه"):
-            parse_buttons("کانال - https://t.me/x", NO_LINKS)
-        self.assertEqual(specs(parse_buttons("کانال - https://t.me/x", LINKS)), [[("url", "کانال", "https://t.me/x")]])
+            make_buttons([ButtonInput("link", "کانال", "https://t.me/x")], NO_LINKS)
+        for url in ("http://t.me/a", "javascript:alert(1)", "https://a b.com", "https://u:p@a.com", "https://localhost"):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                make_buttons([ButtonInput("link", "x", url)], LINKS)
+        with self.assertRaisesRegex(ValueError, "متن"):
+            make_buttons([ButtonInput("link", "", "https://t.me/x")], LINKS)
 
-    def test_unsafe_or_malformed_targets_are_refused(self) -> None:
-        for line in ("x - http://t.me/a", "x - javascript:alert(1)", "x - https://a b.com", "x - https://user:pw@a.com",
-                     "x - @admin", "بدون مقصد", "x - https://localhost"):
-            with self.subTest(line=line), self.assertRaises(ValueError):
-                parse_buttons(line, LINKS)
-
-    def test_limits(self) -> None:
-        with self.assertRaisesRegex(ValueError, "ردیف"):
-            parse_buttons("a - @shop | b - @shop | c - @shop | d - @shop", NO_LINKS)
+    def test_unknown_targets_and_bad_colours(self) -> None:
         with self.assertRaises(ValueError):
-            parse_buttons("\n".join(["a - @shop"] * 9), NO_LINKS)
-        with self.assertRaisesRegex(ValueError, "نویسه"):
-            parse_buttons(("x" * 41) + " - @shop", NO_LINKS)
+            make_buttons([ButtonInput("adm:wallet")], LINKS)
+        self.assertEqual(make_buttons([ButtonInput("shop", style="purple")], NO_LINKS)[0].style, "")
 
-    def test_renewal_only_for_the_allowed_services(self) -> None:
-        rules = ButtonRules(renew_service_ids=frozenset({7}))
-        self.assertEqual(specs(parse_buttons("تمدید - @renew:7", rules)), [[("renew", "تمدید", "7")]])
+    def test_renewal_only_with_a_service(self) -> None:
         with self.assertRaisesRegex(ValueError, "تمدید"):
-            parse_buttons("تمدید - @renew:8", rules)
+            make_buttons([ButtonInput("renew")], NO_LINKS)
+        self.assertEqual(kinds(make_buttons([ButtonInput("renew")], ButtonRules(renew_service_id=7))),
+                         [("renew", "🔄 تمدید سرویس", "7", "")])
+
+    def test_keyboard_two_per_row_opening_under_the_message(self) -> None:
+        buttons = make_buttons(
+            [ButtonInput("shop", style="primary"), ButtonInput("renew"), ButtonInput("link", "کانال", "https://t.me/x")],
+            ButtonRules(True, 7),
+        )
+        keyboard = build_keyboard(buttons)
+        self.assertEqual([len(row) for row in keyboard], [2, 1])
+        self.assertEqual([b.callback_data for b in keyboard[0]], ["nto:shop:list", "nto:svc:renew:7"])
+        self.assertEqual(keyboard[0][0].style, "primary")
+        self.assertEqual(keyboard[1][0].url, "https://t.me/x")
+
+    def test_stored_buttons_are_checked_again(self) -> None:
+        stored = dump_buttons(make_buttons([ButtonInput("shop"), ButtonInput("link", "c", "https://t.me/x")], LINKS))
+        self.assertEqual([b.target for b in load_buttons(stored, NO_LINKS)], ["shop"])
+        self.assertEqual(load_buttons("not json", LINKS), [])
+        self.assertEqual(load_buttons('[{"k": "screen", "l": "x", "t": "adm:wallet"}]', LINKS), [])
+
+    def test_form_rows(self) -> None:
+        form = FormData([
+            ("btn_target", "shop"), ("btn_label", ""), ("btn_url", ""), ("btn_style", "success"),
+            ("btn_target", "link"), ("btn_label", "کانال"), ("btn_url", "https://t.me/x"), ("btn_style", ""),
+        ])
+        self.assertEqual(form_inputs(form), [
+            ButtonInput("shop", "", "", "success"), ButtonInput("link", "کانال", "https://t.me/x", ""),
+        ])
+
+
+class ChecklistTests(unittest.TestCase):
+    def test_toggle_keeps_order_and_stops_at_four(self) -> None:
+        selected: list[str] = []
+        for key in ("shop", "wallet", "support", "club"):
+            selected = picker.toggle(selected, key)
+        self.assertEqual(selected, ["shop", "wallet", "support", "club"])
         with self.assertRaises(ValueError):
-            parse_buttons("تمدید - @renew:7", NO_LINKS)
+            picker.toggle(selected, "services")
+        self.assertEqual(picker.toggle(selected, "wallet"), ["shop", "support", "club"])
 
-    def test_keyboard_opens_screens_under_the_message(self) -> None:
-        rows = parse_buttons("a - @shop | b - @renew:7 | c - https://t.me/x", ButtonRules(True, frozenset({7})))
-        keyboard = build_keyboard(rows)
-        self.assertEqual([b.callback_data for b in keyboard[0][:2]], ["nto:shop:list", "nto:svc:renew:7"])
-        self.assertEqual(keyboard[0][2].url, "https://t.me/x")
-
-    def test_stored_rows_are_checked_again(self) -> None:
-        stored = dump_rows(parse_buttons("a - @shop | c - https://t.me/x", LINKS))
-        self.assertEqual(specs(load_rows(stored, NO_LINKS)), [[("screen", "a", "shop")]])
-        self.assertEqual(load_rows("not json", LINKS), [])
-        self.assertEqual(load_rows('[[{"k": "screen", "l": "x", "t": "adm:wallet"}]]', LINKS), [])
-
-    def test_split_message(self) -> None:
-        self.assertEqual(split_message("سلام\nخوبی\n---\na - @shop"), ("سلام\nخوبی", "a - @shop"))
-        self.assertEqual(split_message("بدون دکمه"), ("بدون دکمه", ""))
+    def test_checklist_marks_choices_and_lists_presets(self) -> None:
+        markup = picker.checklist_markup(["shop"], renew=True, presets=[(3, "فروش")])
+        texts = [b.text for row in markup.inline_keyboard for b in row]
+        self.assertIn("✅ 🛒 خرید سرویس", texts)
+        self.assertIn("⬜ 🔄 تمدید سرویس", texts)
+        self.assertIn("📚 قالب: فروش", texts)
+        self.assertNotIn("⬜ 🔗 لینک", texts)
 
 
 class DbCase(unittest.IsolatedAsyncioTestCase):
@@ -117,10 +148,7 @@ class DbCase(unittest.IsolatedAsyncioTestCase):
                 BotUser(id=3, telegram_id=3003, referral_code="u3", role="user", reseller_id=SHOP_A),
             ])
             await session.flush()
-            session.add_all([
-                UserService(id=7, bot_user_id=2, shop_id=SHOP_A, pg_username="mine"),
-                UserService(id=8, bot_user_id=3, shop_id=SHOP_A, pg_username="other"),
-            ])
+            session.add(UserService(id=7, bot_user_id=2, shop_id=SHOP_A, pg_username="mine"))
             await session.commit()
 
     async def asyncTearDown(self) -> None:
@@ -129,30 +157,48 @@ class DbCase(unittest.IsolatedAsyncioTestCase):
 
 
 class PresetTests(DbCase):
-    async def test_presets_are_per_shop_and_expand_by_name(self) -> None:
+    async def test_presets_are_per_shop(self) -> None:
         async with self.Session() as session:
-            await save_preset(session, SHOP_A, name="فروش", buttons="خرید - @shop", rules=NO_LINKS)
-            await save_preset(session, SHOP_A, name="فروش", buttons="کیف پول - @wallet", rules=NO_LINKS)
+            await save_preset(session, SHOP_A, name="فروش", items=[ButtonInput("shop")], rules=NO_LINKS)
+            preset = await save_preset(session, SHOP_A, name="فروش", items=[ButtonInput("wallet", style="danger")], rules=NO_LINKS)
             self.assertEqual([p.name for p in await list_presets(session, SHOP_A)], ["فروش"])
             self.assertEqual(await list_presets(session, SHOP_B), [])
-            rows = await resolve_buttons(session, "@preset:فروش\nپشتیبانی - @support", shop_id=SHOP_A, rules=NO_LINKS)
-            self.assertEqual(specs(rows), [[("screen", "کیف پول", "wallet")], [("screen", "پشتیبانی", "support")]])
-            with self.assertRaisesRegex(ValueError, "پیدا نشد"):
-                await resolve_buttons(session, "@preset:فروش", shop_id=SHOP_B, rules=NO_LINKS)
-
-    async def test_another_shop_cannot_delete_a_preset(self) -> None:
-        async with self.Session() as session:
-            preset = await save_preset(session, SHOP_A, name="x", buttons="خرید - @shop", rules=NO_LINKS)
+            self.assertEqual(await preset_inputs(session, SHOP_A, preset.id), [ButtonInput("wallet", "👛 کیف پول", "", "danger")])
+            self.assertEqual(await preset_inputs(session, SHOP_B, preset.id), [])
             self.assertFalse(await delete_preset(session, SHOP_B, preset.id))
             self.assertFalse(await delete_preset(session, None, preset.id))
             self.assertTrue(await delete_preset(session, SHOP_A, preset.id))
 
+    async def test_a_preset_cannot_hold_a_renewal(self) -> None:
+        async with self.Session() as session:
+            with self.assertRaisesRegex(ValueError, "تمدید"):
+                await save_preset(session, SHOP_A, name="x", items=[ButtonInput("renew")], rules=LINKS)
+
     async def test_a_shop_without_permission_cannot_add_links(self) -> None:
+        link = [ButtonInput("link", "کانال", "https://t.me/x")]
         async with self.Session() as session:
             with self.assertRaisesRegex(ValueError, "اجازه"):
-                await broadcast_buttons(session, "کانال - https://t.me/x", shop_id=SHOP_A)
-            self.assertIsNotNone(await broadcast_buttons(session, "کانال - https://t.me/x", shop_id=SHOP_B))
-            self.assertIsNotNone(await broadcast_buttons(session, "کانال - https://t.me/x", shop_id=None))
+                await broadcast_buttons(session, link, shop_id=SHOP_A)
+            self.assertIsNotNone(await broadcast_buttons(session, link, shop_id=SHOP_B))
+            self.assertIsNotNone(await broadcast_buttons(session, link, shop_id=None))
+
+
+class PickerFlowTests(DbCase):
+    async def test_a_preset_tap_uses_the_shop_the_flow_started_in(self) -> None:
+        async with self.Session() as session:
+            other = await save_preset(session, SHOP_B, name="b", items=[ButtonInput("shop")], rules=NO_LINKS)
+        state = FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=1, user_id=1))
+        message = MagicMock()
+        message.answer = AsyncMock()
+        await picker.ask_for_buttons(message, state, flow="t", shop_id=SHOP_A)
+        finished = AsyncMock()
+        picker.register_flow("t", finished)
+        callback = MagicMock(data=f"mbp:p:{other.id}")
+        callback.answer = AsyncMock()
+        async with self.Session() as session:
+            await picker.on_preset(callback, state, session, MagicMock())
+        finished.assert_not_awaited()
+        callback.answer.assert_awaited_with(picker.EXPIRED, show_alert=True)
 
 
 class WorkerTests(DbCase):
@@ -166,16 +212,16 @@ class WorkerTests(DbCase):
         bot = MagicMock()
         bot.send_message = AsyncMock()
         async with self.Session() as session:
-            buttons = await broadcast_buttons(session, "خرید - @shop", shop_id=None)
-            log = await queue_broadcast(session, text="سلام", audience="users", created_by="o", request=BroadcastRequest(buttons=buttons))
+            stored = await broadcast_buttons(session, [ButtonInput("shop", style="success")], shop_id=None)
+            log = await queue_broadcast(session, text="سلام", audience="users", created_by="o", request=BroadcastRequest(buttons=stored))
         await self.run_batches(log.id, bot)
-        markup = bot.send_message.await_args.kwargs["reply_markup"]
-        self.assertEqual(markup.inline_keyboard[0][0].callback_data, "nto:shop:list")
+        button = bot.send_message.await_args.kwargs["reply_markup"].inline_keyboard[0][0]
+        self.assertEqual((button.callback_data, button.style), ("nto:shop:list", "success"))
 
     async def test_a_revoked_link_is_not_sent(self) -> None:
         bot = MagicMock()
         bot.send_message = AsyncMock()
-        stored = dump_rows(parse_buttons("کانال - https://t.me/x | خرید - @shop", LINKS))
+        stored = dump_buttons(make_buttons([ButtonInput("link", "کانال", "https://t.me/x"), ButtonInput("shop", "خرید")], LINKS))
         async with self.Session() as session:
             log = await queue_shop_broadcast(session, shop_id=SHOP_A, text="سلام", created_by="s", buttons=stored)
         await self.run_batches(log.id, bot)
@@ -184,7 +230,7 @@ class WorkerTests(DbCase):
 
 
 class DirectMessageTests(DbCase):
-    async def send(self, buttons: str, user_id: int = 2):
+    async def send(self, buttons, user_id: int = 2):
         bot = MagicMock()
         bot.send_message = AsyncMock()
         async with self.Session() as session:
@@ -198,20 +244,21 @@ class DirectMessageTests(DbCase):
         async with self.Session() as session:
             return int(await session.scalar(select(func.count()).select_from(Ticket)))
 
-    async def test_renewal_of_the_customers_own_service_sits_above_reply_and_close(self) -> None:
-        bot = await self.send("تمدید - @renew:7")
+    async def test_renewal_targets_the_customers_service_above_reply_and_close(self) -> None:
+        bot = await self.send([ButtonInput("renew")])
         rows = bot.send_message.await_args.kwargs["reply_markup"].inline_keyboard
         self.assertEqual(rows[0][0].callback_data, "nto:svc:renew:7")
         self.assertGreater(len(rows), 1)
 
-    async def test_another_customers_service_is_refused_and_nothing_is_stored(self) -> None:
+    async def test_a_customer_without_a_service_gets_no_renewal_and_nothing_is_stored(self) -> None:
         with self.assertRaisesRegex(ValueError, "تمدید"):
-            await self.send("تمدید - @renew:8")
+            await self.send([ButtonInput("renew")], user_id=3)
         self.assertEqual(await self.tickets(), 0)
 
-    async def test_plain_message_is_unchanged(self) -> None:
-        bot = await self.send("")
-        self.assertNotIn("nto:", str(bot.send_message.await_args.kwargs["reply_markup"].inline_keyboard[0][0].callback_data))
+    async def test_a_shop_without_permission_cannot_link_in_a_dm(self) -> None:
+        with self.assertRaisesRegex(ValueError, "اجازه"):
+            await self.send([ButtonInput("link", "x", "https://t.me/x")])
+        self.assertEqual(await self.tickets(), 0)
 
 
 class MigrationTests(unittest.TestCase):

@@ -15,7 +15,8 @@ from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
 from app.services.broadcast import clear_broadcast_history, delete_broadcast_log, list_broadcast_history
 from app.services.broadcast_queue import STATUS_LABELS, cancel_broadcast
-from app.services.message_buttons import BUTTONS_HINT, broadcast_buttons, split_message, stored_markup_rows
+from app.bot.message_button_picker import ask_for_buttons, register_flow
+from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard
 from app.services.redact import user_safe_error
 from app.services.shop_broadcast import (
     SHOP_AUDIENCE_LABELS,
@@ -36,6 +37,7 @@ CB_CONFIRM = "shp:bc:go"
 CB_CANCEL_PREFIX = "shp:bc:x:"
 CB_DELETE_PREFIX = "shp:bc:d:"
 CB_CLEAR = "shp:bc:clr"
+FLOW = "shop_broadcast"
 HISTORY_LIMIT = 8
 
 
@@ -238,7 +240,7 @@ async def cb_audience(
     label = SHOP_AUDIENCE_LABELS["all"]
     if callback.message:
         await callback.message.edit_text(
-            f"📢 مخاطب: <b>{label}</b>\nمتن پیام را بفرستید.\n{BUTTONS_HINT}\nبرای لغو: انصراف"
+            f"📢 مخاطب: <b>{label}</b>\nمتن پیام را بفرستید.\nبرای لغو: انصراف"
         )
     await ask_text(
         callback,
@@ -282,20 +284,44 @@ async def on_text(
             reseller_owner_id=reseller_owner_id,
         )
         return
-    text, buttons_raw = split_message(message.text or "")
     try:
-        body = clean_shop_broadcast_text(text)
-        buttons = await broadcast_buttons(session, buttons_raw, shop_id=shop_id)
+        body = clean_shop_broadcast_text(message.text)
     except ValueError as exc:
         await message.answer(f"⚠️ {user_safe_error(exc)}")
         return
-    await state.update_data(shop_broadcast_text=body, shop_broadcast_buttons=buttons)
+    await state.update_data(shop_broadcast_text=body)
+    await ask_for_buttons(message, state, flow=FLOW, shop_id=shop_id)
+
+
+async def _confirm_with_buttons(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    buttons: list[ButtonInput],
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    **_: object,
+) -> None:
+    """After the buttons step: the message with its buttons as customers will get it, then «تأیید»."""
+    message = callback.message
+    shop_id = await _shop_id(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    data = await state.get_data()
+    if not isinstance(message, Message) or shop_id is None or data.get("shop_broadcast_shop_id") != shop_id:
+        await state.clear()
+        return
+    try:
+        stored = await broadcast_buttons(session, buttons, shop_id=shop_id)
+    except ValueError as exc:
+        await state.clear()
+        await message.answer(f"⚠️ {user_safe_error(exc)}")
+        return
+    body = str(data.get("shop_broadcast_text") or "")
+    await state.update_data(shop_broadcast_buttons=stored)
     await state.set_state(ShopBroadcastStates.confirm)
     ui = await get_all_settings(session)
-    preview = shop_broadcast_html_snippet(body, limit=500)
-    if len(body) > 500:
-        preview += "…"
-    rows = stored_markup_rows(buttons)
+    preview = shop_broadcast_html_snippet(body, limit=500) + ("…" if len(body) > 500 else "")
+    rows = preview_keyboard(stored)
     if rows:
         # The buttons exactly as customers will get them, under the message preview.
         await message.answer(preview, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
@@ -303,6 +329,9 @@ async def on_text(
         f"تأیید ارسال به <b>{SHOP_AUDIENCE_LABELS['all']}</b>؟\n\n{preview}",
         reply_markup=_confirm_keyboard(ui),
     )
+
+
+register_flow(FLOW, _confirm_with_buttons)
 
 
 @router.callback_query(F.data == CB_CONFIRM, ShopBroadcastStates.confirm)

@@ -92,6 +92,8 @@ from app.services.psp_gateways import psp_gateways_form_json
 from app.services.panel_assets import asset_version, get_panel_asset_cache_key
 from app.services.redact import operator_error
 from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.button_styles import STYLE_OPTIONS
+from app.services.message_buttons import target_options as message_button_target_options
 from app.services.mobile_bar import load_bar_form, load_bar_order
 from app.services.panel_brand import (
     BRAND_PRESET_CSS,
@@ -193,6 +195,9 @@ templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
 templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
 templates.env.globals["brand_presets"] = BRAND_PRESETS
+# The direct-message modal sits on many pages: its button targets and colours come from one place.
+templates.env.globals["message_button_dm_targets"] = message_button_target_options(renew=True, links=True)
+templates.env.globals["message_button_styles"] = STYLE_OPTIONS
 templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
 # Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).
 templates.env.globals["hub_sections"] = hub_sections
@@ -5346,10 +5351,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         text: str = Form(...),
         audience: str = Form("all"),
         request_token: str = Form(""),
-        buttons: str = Form(""),
     ):
         from app.services.broadcast_queue import BroadcastRequest, queue_broadcast
-        from app.services.message_buttons import broadcast_buttons
+        from app.services.message_buttons import broadcast_buttons, form_inputs
 
         audience = (audience or "all").strip()
         if audience not in {"all", "users", "resellers", "admins"}:
@@ -5360,7 +5364,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 text=text,
                 audience=audience,
                 created_by=str(staff.get("username") or "admin"),
-                request=BroadcastRequest(request_token, await broadcast_buttons(session, buttons, shop_id=None)),
+                request=BroadcastRequest(
+                    request_token, await broadcast_buttons(session, form_inputs(await request.form()), shop_id=None)
+                ),
             )
         except ValueError as e:
             return _redirect_msg("/broadcast", err=str(e))

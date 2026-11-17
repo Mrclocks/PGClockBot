@@ -12,6 +12,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import Message
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -19,6 +20,7 @@ from app.bot.handlers import admin_broadcast_confirm as confirm
 from app.db import Base
 from app.db.models import BotUser, BroadcastLog
 from app.services.broadcast_queue import BroadcastRequest, new_request_token, queue_broadcast
+from app.services.message_buttons import ButtonInput
 from app.services.telegram_html import normalize_telegram_html
 
 
@@ -86,7 +88,7 @@ class QueueTests(DbCase):
 
 
 def owner_message(text: str, *, entities=None) -> MagicMock:
-    message = MagicMock()
+    message = MagicMock(spec=Message)
     message.text = text
     message.entities = entities
     message.html_text = f"<b>{text}</b>" if entities else text
@@ -102,14 +104,31 @@ class PreviewTests(DbCase):
         self.finish_mock = self.finish.start()
         self.addCleanup(self.finish.stop)
 
+    async def ask_then_preview(self, message, buttons=()) -> MagicMock:
+        """The text step (asks for buttons), then the buttons step (preview and confirm card)."""
+        with patch("app.bot.message_button_picker.finish_text_step", AsyncMock()):
+            async with self.Session() as session:
+                await confirm.preview_broadcast(message, self.state, session, audience="all")
+        callback = MagicMock()
+        callback.message = message
+        async with self.Session() as session:
+            await confirm._preview(callback, self.state, session, MagicMock(), list(buttons))
+        return callback
+
     async def test_preview_sends_the_real_message_and_queues_nothing(self) -> None:
         message = owner_message("قیمت < ۱۰۰")
+        await self.ask_then_preview(message)
         async with self.Session() as session:
-            await confirm.preview_broadcast(message, self.state, session, audience="all")
             self.assertEqual(await self.broadcasts(session), 0)
-        message.answer.assert_awaited_once_with("قیمت &lt; ۱۰۰", parse_mode="HTML")
+        self.assertEqual(message.answer.await_args_list[0].args, ("قیمت &lt; ۱۰۰",))
         self.assertEqual(await self.state.get_state(), confirm.BroadcastConfirmStates.confirm.state)
-        self.assertIn("1 نفر", self.finish_mock.await_args.kwargs["text"])
+        self.assertIn("1 نفر", message.answer.await_args_list[-1].args[0])
+
+    async def test_preview_shows_the_chosen_buttons(self) -> None:
+        message = owner_message("سلام")
+        await self.ask_then_preview(message, [ButtonInput("shop")])
+        markup = message.answer.await_args_list[0].kwargs["reply_markup"]
+        self.assertEqual(markup.inline_keyboard[0][0].callback_data, "nto:shop:list")
 
     async def test_telegram_formatting_is_kept(self) -> None:
         message = owner_message("سلام", entities=[SimpleNamespace(type="bold")])
@@ -119,11 +138,10 @@ class PreviewTests(DbCase):
 
     async def test_text_telegram_rejects_is_not_offered_for_sending(self) -> None:
         message = owner_message('<a href="bad">x</a>')
-        message.answer = AsyncMock(side_effect=TelegramBadRequest(method=MagicMock(), message="can't parse entities"))
-        async with self.Session() as session:
-            await confirm.preview_broadcast(message, self.state, session, audience="all")
+        message.answer = AsyncMock(side_effect=[TelegramBadRequest(method=MagicMock(), message="can't parse entities"), None])
+        await self.ask_then_preview(message)
         self.assertIsNone(await self.state.get_state())
-        self.assertEqual(self.finish_mock.await_args.kwargs["text"], confirm.REJECTED_BY_TELEGRAM)
+        self.assertEqual(message.answer.await_args_list[-1].args[0], confirm.REJECTED_BY_TELEGRAM)
 
     async def test_unbalanced_tags_are_explained(self) -> None:
         async with self.Session() as session:

@@ -110,7 +110,7 @@ async def queue_broadcast(
 
     The text is normalized to HTML Telegram accepts, so one stray ``<`` cannot fail the broadcast
     for every recipient. A repeated request token returns the broadcast it already queued; the
-    request's buttons are rows already validated by ``message_buttons`` (``dump_rows``).
+    request's buttons are rows already validated by ``message_buttons`` (``dump_buttons``).
     """
     request = request or BroadcastRequest()
     body = normalize_telegram_html((text or "").strip())

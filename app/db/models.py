@@ -933,7 +933,7 @@ class BroadcastLog(Base):
     shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
     audience: Mapped[str] = mapped_column(String(32), default="all")
     text: Mapped[str] = mapped_column(Text)
-    # Buttons under the message, as message_buttons.dump_rows wrote them; validated again before sending.
+    # Buttons under the message, as message_buttons.dump_buttons wrote them; validated again before sending.
     buttons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     total: Mapped[int] = mapped_column(Integer, default=0)
     ok_count: Mapped[int] = mapped_column(Integer, default=0)

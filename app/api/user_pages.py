@@ -601,6 +601,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.notifications import actor_label_from_staff
+        from app.services.message_buttons import form_inputs
         from app.services.users_quick import send_staff_dm
 
         loaded = await _require_scoped_user(session, staff, user_id)
@@ -617,7 +618,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 shop_id=resolve_shop_scope_id(staff),
                 actor=actor_label_from_staff(staff),
                 sender_tg=int(staff.get("telegram_id") or 0),
-                buttons=str(form.get("buttons") or ""),
+                buttons=form_inputs(form),
             )
             await session.commit()
         except ValueError as e:
