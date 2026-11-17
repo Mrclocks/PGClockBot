@@ -38,6 +38,7 @@ HUB_CALLBACK = "nv:adm:broadcast"
 REJECTED_BY_TELEGRAM = "⚠️ تلگرام این متن را نپذیرفت (احتمالاً لینک یا برچسب نادرست). متن را اصلاح و دوباره بفرستید."
 ONLY_TEXT = "⚠️ فقط پیام متنی قابل ارسال گروهی است."
 DROPPED = "ارسال لغو شد؛ پیامی فرستاده نشد."
+STALE_CONFIRM = "این تأیید دیگر معتبر نیست (قبلاً ارسال یا لغو شده)."
 
 
 class BroadcastConfirmStates(StatesGroup):
@@ -120,9 +121,14 @@ async def send_confirmed(callback: CallbackQuery, session: AsyncSession, db_user
 
 @router.callback_query(F.data.in_({CB_SEND, CB_DROP}))
 async def drop_broadcast(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
-    """«لغو», or «ارسال» on a card whose confirmation is no longer pending: nothing is sent."""
-    if await state.get_state() == BroadcastConfirmStates.confirm.state:
-        await state.clear()
-    await callback.answer(feedback.CANCELLED if callback.data == CB_DROP else DROPPED)
+    """«لغو» while the confirmation is pending; on a stale card (already sent or cancelled) only an alert.
+
+    A stale card must keep its text: after a double tap on «ارسال» it shows the queued broadcast.
+    """
+    if await state.get_state() != BroadcastConfirmStates.confirm.state:
+        await callback.answer(STALE_CONFIRM, show_alert=True)
+        return
+    await state.clear()
+    await callback.answer(feedback.CANCELLED)
     if callback.message:
         await safe_edit_text(callback.message, DROPPED, reply_markup=await _back(session))
