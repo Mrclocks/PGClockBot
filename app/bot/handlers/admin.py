@@ -14,8 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.handlers.admin_broadcast_confirm import preview_broadcast
+from app.bot.message_button_picker import ask_for_buttons, register_flow
 from app.bot.auth import (
     platform_can_manage_representatives,
+    require_bot_owner,
     require_bot_owner_handler,
     require_platform_rep_mgmt,
 )
@@ -2307,6 +2309,7 @@ STAFF_DM_UNDELIVERED = "⚠️ پیام به کاربر نرسید؛ احتما�
 
 # Which card the staff DM prompt returns to (also the callback-data namespace).
 MSG_CARD_USER = "users"
+ADMIN_DM_FLOW = "admin_dm"
 MSG_CARD_RESELLER = "resellers"
 
 def _deny_if_outside_platform_shop(user: BotUser | None) -> str | None:
@@ -2655,7 +2658,26 @@ async def adm_users_message_send(
     uid = int(data.get("msg_user_id") or 0)
     card = str(data.get("msg_card") or MSG_CARD_USER)
     user, deny = await _staff_message_target(session, uid, card) if uid else (None, feedback.NOT_FOUND)
-    await state.set_state(None)
+    if deny or user is None:
+        await state.set_state(None)
+        await _outcome_back_to_users(message, state, session, deny or feedback.NOT_FOUND)
+        return
+    await state.update_data(msg_text=message.text or "")
+    await ask_for_buttons(message, state, flow=ADMIN_DM_FLOW, shop_id=None, renew=True)
+
+
+async def _send_admin_dm(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser, buttons: list, **_: object
+) -> None:
+    """After the buttons step: send the owner's message, then show the person's card with the outcome."""
+    message = callback.message
+    if not isinstance(message, Message) or not await require_bot_owner(session, db_user, notify=False):
+        await state.clear()
+        return
+    data = await state.get_data()
+    card = str(data.get("msg_card") or MSG_CARD_USER)
+    uid = int(data.get("msg_user_id") or 0)
+    user, deny = await _staff_message_target(session, uid, card) if uid else (None, feedback.NOT_FOUND)
     if deny or user is None:
         await _outcome_back_to_users(message, state, session, deny or feedback.NOT_FOUND)
         return
@@ -2665,10 +2687,11 @@ async def adm_users_message_send(
         await send_staff_dm(
             session,
             user,
-            message.text or "",
+            str(data.get("msg_text") or ""),
             shop_id=None,
             actor=bot_user_panel_label(db_user),
             sender_tg=int(db_user.telegram_id or 0),
+            buttons=buttons,
         )
         await session.commit()
         status = feedback.MESSAGE_SENT
@@ -2677,7 +2700,14 @@ async def adm_users_message_send(
     except TelegramAPIError:
         logger.warning("staff DM not delivered user=%s", user.id, exc_info=True)
         status = STAFF_DM_UNDELIVERED
-    await _outcome_on_card(message, state, session, user, status, card=card)
+    # The question sat in the card's panel: the card comes back there, with the outcome on top.
+    build = _reseller_card if card == MSG_CARD_RESELLER else _user_card
+    text, markup = await build(session, user)
+    await state.clear()
+    await safe_edit_text(message, f"{status}\n\n{text}", reply_markup=markup)
+
+
+register_flow(ADMIN_DM_FLOW, _send_admin_dm)
 
 @router.callback_query(F.data.startswith("adm:users:view:"))
 @require_bot_owner_handler
@@ -4932,7 +4962,7 @@ async def adm_broadcast_audience(callback: CallbackQuery, db_user: BotUser, stat
     if callback.message:
         await callback.message.edit_text(
             f"📢 مخاطب: <b>{audience_fa}</b>\nمتن پیام را بفرستید؛ بولد، لینک و قالب‌بندی تلگرام حفظ می‌شود.\n"
-            "پیش از ارسال، پیش‌نمایش را می‌بینید و تأیید می‌کنید.\nبرای لغو: انصراف"
+            "بعد از متن می‌پرسیم دکمه زیر پیام باشد یا نه، و پیش از ارسال پیش‌نمایش را می‌بینید.\nبرای لغو: انصراف"
         )
         from app.bot.nav_input import ask_text
 

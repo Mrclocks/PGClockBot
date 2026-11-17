@@ -1,0 +1,93 @@
+{# Buttons under a staff message (message_buttons): the row list (target, text, colour, remove, «افزودن دکمه»)
+   and the saved-sets card. Rows are driven by message-buttons.js; the server validates every row again. #}
+{% from "_ds.html" import ico %}
+
+{% macro button_row(targets, styles) -%}
+<div class="ds-list-row" data-msg-btn-row>
+  <span class="ds-list-value">
+    <select name="btn_target" aria-label="کار دکمه" data-msg-btn-target>
+      <option value="">— انتخاب —</option>
+      {% for value, label in targets or [] %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+  </span>
+  <span class="ds-list-value msg-btn-text">
+    <input name="btn_label" maxlength="40" dir="auto" placeholder="متن (خالی: پیش‌فرض)" aria-label="متن دکمه" />
+    <input name="btn_url" type="url" dir="ltr" maxlength="256" placeholder="https://…" aria-label="لینک دکمه" data-msg-btn-url hidden />
+  </span>
+  <span class="ds-dot-select" data-ds-dot data-menu-min-width="168" data-value="" data-tone="default">
+    <select name="btn_style" class="btn-color-select" data-tone="default" aria-label="رنگ دکمه">
+      {% for value, label, tone in styles or [] %}<option value="{{ value }}" data-tone="{{ tone }}">{{ label }}</option>{% endfor %}
+    </select>
+  </span>
+  <button type="button" class="ds-del" data-msg-btn-remove aria-label="حذف دکمه">{{ ico('trash') }}</button>
+</div>
+{%- endmacro %}
+
+{% macro button_list(targets=[], styles=[], presets=[], max=4) -%}
+<div class="ds-list ds-list--buttons" data-msg-btn-list data-max="{{ max or 4 }}" data-presets="{{ (presets or []) | tojson | forceescape }}">
+  <div class="ds-list-head" aria-hidden="true"><span>کار دکمه</span><span>متن</span><span>رنگ</span><span></span></div>
+  <div data-msg-btn-rows></div>
+  <template data-msg-btn-template>{{ button_row(targets, styles) }}</template>
+  <button type="button" class="ds-add" data-msg-btn-add>{{ ico('plus') }}افزودن دکمه</button>
+</div>
+{%- endmacro %}
+
+{% macro buttons_field(targets=[], styles=[], presets=[], max=4) -%}
+<div class="form-field">
+  <span>دکمه‌های زیر پیام (اختیاری، تا {{ max or 4 }} دکمه)</span>
+  {% if presets %}
+  <select data-msg-btn-preset aria-label="پر کردن دکمه‌ها از یک قالب">
+    <option value="">پر کردن از قالب ذخیره‌شده…</option>
+    {% for p in presets %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  {{ button_list(targets, styles, presets, max) }}
+  <small class="muted">هر دکمه صفحه‌ای از ربات را زیر همین پیام باز می‌کند{% for value, label in (targets or []) if value == 'link' %}، یا لینکی که با https:// شروع شود{% endfor %}.</small>
+</div>
+{%- endmacro %}
+
+{% macro presets_card(presets=[], targets=[], styles=[], limit=30, max=4) -%}
+<div class="card">
+  <h2>قالب‌های دکمه</h2>
+  <p class="muted">یک دسته دکمه را یک بار بسازید و زیر هر پیام انتخابش کنید (در ربات و وب)؛ حداکثر {{ limit }} قالب.</p>
+  {% if presets %}
+  <div class="table-wrap">
+  <table class="table-compact table-list-sm">
+    <thead><tr><th>نام</th><th class="col-text">دکمه‌ها</th><th class="col-actions"></th></tr></thead>
+    <tbody>
+    {% for p in presets %}
+      <tr>
+        <td class="li-title"><span dir="auto">{{ p.name }}</span></td>
+        <td class="li-sub"><span dir="auto">{% for b in p.buttons %}{{ b.label or b.target }}{% if not loop.last %} · {% endif %}{% endfor %}</span></td>
+        <td class="col-actions">
+          <form method="post" action="/message-buttons/presets/{{ p.id }}/delete"
+                data-confirm="قالب «{{ p.name }}» حذف شود؟ پیام‌های فرستاده‌شده تغییری نمی‌کنند."
+                data-confirm-title="حذف قالب"
+                data-confirm-danger="1"
+                data-confirm-label="حذف">
+            <button class="btn btn-danger btn-sm" type="submit" aria-label="حذف قالب {{ p.name }}">حذف</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">هنوز قالبی ساخته نشده.</p>
+  {% endif %}
+  <form method="post" action="/message-buttons/presets" class="form-stack">
+    <label class="form-field">نام قالب
+      <input type="text" name="name" required maxlength="40" dir="auto" />
+      <small class="muted">با همین نام، قالب قبلی جایگزین می‌شود.</small>
+    </label>
+    <div class="form-field">
+      <span>دکمه‌ها</span>
+      {{ button_list(targets, styles, [], max) }}
+    </div>
+    <div class="actions">
+      <button class="btn btn-ghost" type="submit">ذخیرهٔ قالب</button>
+    </div>
+  </form>
+</div>
+{%- endmacro %}
