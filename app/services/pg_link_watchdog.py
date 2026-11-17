@@ -8,6 +8,7 @@ starts a pause. Skips while a manual reconnect holds its lock.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass
@@ -27,7 +28,11 @@ logger = logging.getLogger(__name__)
 SETTING_KEY = "pg_link_watchdog_enabled"
 SETTING_DEFAULT = "1"
 FAILURES_BEFORE_REBUILD = 3
+# One dropped keep-alive or gateway blip should not start an outage clock.
+WATCHDOG_FAILURES_FOR_ALERT = 2
 WATCHDOG_TIMEOUT = httpx.Timeout(5.0, connect=3.0)
+WATCHDOG_RETRY_DELAY_SEC = 0.35
+WATCHDOG_RETRY_KINDS = frozenset({"dropped", "timeout", "gateway"})
 BACKOFF_TICKS_AFTER_REBUILD = 3
 
 _consecutive_failures = 0
@@ -52,6 +57,11 @@ def reset_watchdog_state() -> None:
     _rebuild_state = HttpRebuildState()
 
 
+def consecutive_failures() -> int:
+    """How many watchdog probes in a row have failed (process-local)."""
+    return int(_consecutive_failures)
+
+
 def _truthy(raw: str | None) -> bool:
     return str(raw or "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -71,23 +81,31 @@ async def _probe() -> tuple[bool, str | None]:
 
     No web_read_budget, so ``panel_read_request`` takes the budgetless path and
     does not reject while the circuit is paused — then we force-heal on success.
+    One transient drop/gateway answer is retried once inside the same tick.
     """
     client = get_pg()
     started = time.monotonic()
-    try:
-        await client.request(
-            "GET",
-            "/api/system",
-            use_cache=False,
-            timeout=WATCHDOG_TIMEOUT,
-        )
-    except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
-        kind = _failure_kind_from_exc(exc)
-        pg_link_health.record_failure(kind)
-        return False, kind
-    pg_link_health.record_success(time.monotonic() - started)
-    force_mark_circuit_healthy(str(client.base_url))
-    return True, None
+    last_kind: str | None = None
+    for attempt in range(2):
+        try:
+            await client.request(
+                "GET",
+                "/api/system",
+                use_cache=False,
+                timeout=WATCHDOG_TIMEOUT,
+            )
+        except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
+            last_kind = _failure_kind_from_exc(exc)
+            if attempt == 0 and last_kind in WATCHDOG_RETRY_KINDS:
+                await asyncio.sleep(WATCHDOG_RETRY_DELAY_SEC)
+                continue
+            pg_link_health.record_failure(last_kind)
+            return False, last_kind
+        pg_link_health.record_success(time.monotonic() - started)
+        force_mark_circuit_healthy(str(client.base_url))
+        return True, None
+    pg_link_health.record_failure(last_kind or "dropped")
+    return False, last_kind
 
 
 async def run_watchdog_tick(session: AsyncSession) -> WatchdogTickResult:
