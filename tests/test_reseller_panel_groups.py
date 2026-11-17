@@ -30,7 +30,7 @@ class PanelLayoutTests(unittest.TestCase):
     def test_the_home_lists_only_groups_that_have_an_entry(self) -> None:
         with patch("app.bot.reply_keyboards._reseller_submenu_entries", return_value=ENTRIES):
             markup = reseller_manage_hub_keyboard(MagicMock(), {})
-        self.assertEqual(_callbacks(markup), ["nv:res:grp:daily", "nv:res:grp:customers", "nv:res:grp:shop", "menu:home"])
+        self.assertEqual(_callbacks(markup), ["nv:res:grp:daily", "nv:res:grp:customers", "nv:res:grp:shop", "qlk:v", "menu:home"])
 
     def test_a_group_keeps_the_entries_buttons_and_backs_up_to_the_home(self) -> None:
         with patch("app.bot.reply_keyboards._reseller_submenu_entries", return_value=ENTRIES):
