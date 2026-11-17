@@ -1,7 +1,6 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, row_actions %}
+{% from "macros.html" import row_actions, page_header, act_label, empty_state %}
 {% from "_ds.html" import ds_switch, ds_sec, ds_head_switch, ds_modal_head, ds_foot %}
-{% from "_marketing_tabs.html" import marketing_tabs %}
 {% set event_labels = {'new': 'تازه', 'renew': 'تمدید', 'addon': 'اضافه'} %}
 
 {# Rule form body; key makes the ids unique when several rule modals share the page. #}
@@ -76,14 +75,15 @@
 {% endmacro %}
 
 {% block title %}کش‌بک{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>{{ page_title('gift', 'کش‌بک') }}</div>
-  <div class="page-head-actions"><button type="button" class="btn" data-modal-open="modal-cb-rule-new">قانون تازه</button></div>
-</div>
+{% call(slot) page_header('gift', 'کش‌بک', back='/marketing', back_label='بازاریابی') %}
+  {%- if slot == 'primary' %}
+  <button type="button" class="btn" data-modal-open="modal-cb-rule-new">{{ act_label('قانون تازه', 'قانون') }}</button>
+  {%- endif %}
+{% endcall %}
 
-{{ marketing_tabs(marketing_sections|default(()), 'cashback') }}
 
 <form method="post" action="/cashback/settings" class="form-stack ds-page-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -126,7 +126,7 @@
       <tr>
         <td class="li-title"><span dir="auto">{{ r.name }}</span></td>
         <td class="cell-tight li-value"><bdi dir="ltr">{% if r.mode == 'fixed' %}{{ r.fixed_amount | money }}{% else %}{{ (r.percent_bps / 100) | round(2) }}%{% endif %}</bdi></td>
-        <td class="col-hide-sm" dir="ltr">{{ (r.max_per_order | money) if r.max_per_order is not none else '—' }}</td>
+        <td class="col-hide-sm">{{ (r.max_per_order | money) if r.max_per_order is not none else '—' }}</td>
         <td class="col-hide-sm li-sub">{{ purchases }}</td>
         <td class="cell-tight li-badge"><span class="badge {{ 'ok' if r.enabled else 'neutral' }}">{{ 'روشن' if r.enabled else 'خاموش' }}</span></td>
         <td class="col-actions">
@@ -145,7 +145,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">هنوز قانونی ساخته نشده است</td></tr>
+      {{ empty_state('هنوز قانونی ساخته نشده است.', 'gift', colspan=6, action_label='قانون تازه', action_modal='modal-cb-rule-new') }}
     {% endfor %}
     </tbody>
   </table></div>

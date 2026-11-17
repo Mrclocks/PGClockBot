@@ -1,14 +1,11 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, setting_help, row_actions %}
+{% from "macros.html" import setting_help, row_actions, page_header %}
+{% from "_user_card_modals.html" import user_card_link, user_card_button, user_card_hint, user_card_modals with context %}
 {% block title %}پاکسازی سرویس‌ها{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('trash', 'پاکسازی سرویس‌ها') }}
-    <p class="muted">سرویس‌هایی که منقضی یا بی‌حجم شده‌اند و تمدید نشدند، بعد از مهلتی که تعیین می‌کنید حذف می‌شوند. قبل از حذف به مشتری هشدار می‌رسد.</p>
-  </div>
-</div>
+{{ page_header('trash', 'پاکسازی سرویس‌ها') }}
+<p class="muted page-intro">سرویس‌هایی که منقضی یا بی‌حجم شده‌اند و تمدید نشدند، بعد از مهلتی که تعیین می‌کنید حذف می‌شوند. قبل از حذف به مشتری هشدار می‌رسد.</p>
 
 <div class="settings-domain-stack">
 <div class="card settings-card">
@@ -91,13 +88,14 @@
   {% if not preview.rows %}
   <p class="muted empty-state">سرویسی نزدیک به حذف نیست.</p>
   {% else %}
+  {{ user_card_hint() }}
   <div class="table-wrap">
     <table class="table-compact table-list-sm" data-sortable>
       <thead>
         <tr>
           <th class="col-name" data-sort-type="text" data-list-sort-label="مشتری" data-list-sort-dir="ascending" data-list-sort-order="2">مشتری</th>
           <th class="col-svc" data-sort-type="text">سرویس</th>
-          <th class="col-status" data-sort-type="text">دلیل</th>
+          <th class="col-status" data-sort-type="text">علت</th>
           <th class="col-hide-sm" data-sort-type="text">از تاریخ</th>
           <th class="col-exp" data-sort-type="num" data-list-sort-label="نزدیک‌ترین مهلت" data-list-sort-dir="ascending" data-list-sort-order="1">حذف در</th>
           <th class="col-actions"></th>
@@ -113,7 +111,7 @@
           <td class="col-name li-title" data-sort-value="{{ r.customer }}">
             <div class="cell-name">
               <span class="cell-name-primary">
-                <a class="cell-name-text cell-name-link" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}" dir="auto">{{ r.customer }}</a>
+                {{ user_card_link(r.user_id, r.customer, 'cleanup', title=true, context='سرویس ' ~ r.username) }}
               </span>
             </div>
           </td>
@@ -125,14 +123,14 @@
           </td>
           <td class="col-actions">
             {% call row_actions() %}
-              <a class="btn btn-ghost btn-sm" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}">مشاهده کاربر</a>
+              {{ user_card_button(r.user_id, 'مشاهده کاربر', 'cleanup') }}
               {% for extra in (7, 30) %}
               <form method="post" action="/service-cleanup/{{ r.service_id }}/hold"
-                    data-confirm="{{ extra }} روز به مهلت حذف سرویس {{ r.username }} اضافه شود؟" data-confirm-title="تمدید مهلت حذف" data-confirm-label="تمدید"
+                    data-confirm="{{ (extra) | fa }} روز به مهلت حذف سرویس {{ r.username }} اضافه شود؟" data-confirm-title="تمدید مهلت حذف" data-confirm-label="تمدید"
                     data-confirm-reason="1" data-confirm-reason-label="علت تمدید مهلت" data-confirm-reason-name="reason">
                 <input type="hidden" name="reason" value="" />
                 <input type="hidden" name="days" value="{{ extra }}" />
-                <button class="btn btn-ghost btn-sm" type="submit">{{ extra }} روز مهلت</button>
+                <button class="btn btn-ghost btn-sm" type="submit">{{ (extra) | fa }} روز مهلت</button>
               </form>
               {% endfor %}
               <form method="post" action="/service-cleanup/{{ r.service_id }}/exempt"
@@ -156,6 +154,7 @@
 <div class="card card-flush">
   <h2>سرویس‌های معاف از پاکسازی</h2>
   <p class="muted">این سرویس‌ها هیچ‌وقت خودکار حذف نمی‌شوند.</p>
+  {{ user_card_hint() }}
   <div class="table-wrap">
     <table class="table-compact table-list-sm" data-sortable>
       <thead>
@@ -175,14 +174,14 @@
           <td class="col-name li-title" data-sort-value="{{ r.customer }}">
             <div class="cell-name">
               <span class="cell-name-primary">
-                <a class="cell-name-text cell-name-link" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}" dir="auto">{{ r.customer }}</a>
+                {{ user_card_link(r.user_id, r.customer, 'cleanup', title=true, context='سرویس ' ~ r.username) }}
               </span>
             </div>
           </td>
           <td class="col-svc li-sub" data-sort-value="{{ r.username }}"><bdi dir="ltr" class="mono">{{ r.username }}</bdi></td>
           <td class="col-actions">
             {% call row_actions() %}
-              <a class="btn btn-ghost btn-sm" href="/users?uid={{ r.user_id }}&amp;edit={{ r.user_id }}">مشاهده کاربر</a>
+              {{ user_card_button(r.user_id, 'مشاهده کاربر', 'cleanup') }}
               <form method="post" action="/service-cleanup/{{ r.service_id }}/exempt"
                     data-confirm="سرویس {{ r.username }} دوباره در پاکسازی قرار گیرد؟" data-confirm-title="برگرداندن به پاکسازی" data-confirm-label="برگردان"
                     data-confirm-reason="1" data-confirm-reason-label="علت برگرداندن" data-confirm-reason-name="reason">
@@ -202,4 +201,5 @@
 </div>
 <script src="/static/settings-show-when.js?v={{ asset_v('settings-show-when.js') if asset_v is defined else app_version }}" defer></script>
 </div>
+{{ user_card_modals(return_page='cleanup') }}
 {% endblock %}

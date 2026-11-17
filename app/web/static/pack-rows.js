@@ -14,9 +14,9 @@
     return Math.round(r * a);
   }
 
-  function faDigits(n) {
-    return String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
-  }
+  // Shared figure formatting (fa-number.js): a page global in the browser, a module in Node tests.
+  var numbers = root.PanelNumbers || (typeof require === "function" ? require("./fa-number.js") : null);
+  const faDigits = numbers.faDigits;
 
   function escapeAttr(text) {
     return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -90,7 +90,7 @@
         } else {
           const num = document.createElement("bdi");
           num.setAttribute("dir", "ltr");
-          num.textContent = price.toLocaleString("en-US");
+          num.textContent = numbers.formatInt(price);
           out.appendChild(num);
         }
       });

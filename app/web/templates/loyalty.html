@@ -1,27 +1,25 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, modal_title %}
-{% from "_marketing_tabs.html" import marketing_tabs %}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import modal_title, page_header, act_label, empty_state %}
+{% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
 {% block title %}باشگاه مشتریان{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
 {% set tab = tab or 'overview' %}
-<div class="page-head">
-  <div>
-    {{ page_title('loyalty', 'باشگاه مشتریان', help='loyalty') }}
-  </div>
-  <div class="page-head-actions">
-    <button type="button" class="btn btn-ghost" data-modal-open="modal-loyalty-settings">تنظیمات</button>
-  </div>
-</div>
+{% call(slot) page_header('loyalty', 'تراکنش‌های امتیاز' if tab == 'transactions' else 'باشگاه مشتریان', help='loyalty', back='/marketing', back_label='بازاریابی') %}
+  {%- if slot == 'primary' %}
+  <button type="button" class="btn btn-ghost page-act-icon" data-modal-open="modal-loyalty-settings">{{ act_label('تنظیمات', icon_name='settings') }}</button>
+  {%- endif %}
+{% endcall %}
 
-{{ marketing_tabs(marketing_sections|default(()), 'club_transactions' if tab == 'transactions' else 'club') }}
 
 {% if tab == 'overview' %}
 <div class="home-panels loyalty-overview">
   <section class="home-panel home-panel-neutral">
     <div class="home-panel-head">
       <div class="home-panel-title">
-        <svg class="home-panel-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7L12 3z"/></svg>
+        {{ icon('loyalty', 'home-panel-ico') }}
         <h2 class="home-panel-h">خلاصه باشگاه</h2>
       </div>
     </div>
@@ -29,7 +27,7 @@
       <div class="stat">
         <div class="stat-top">
           <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
+            {{ icon('users-pair') }}
           </span>
           <span>کل دعوت‌ها</span>
         </div>
@@ -38,7 +36,7 @@
       <div class="stat">
         <div class="stat-top">
           <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/></svg>
+            {{ icon('shield-check') }}
           </span>
           <span>واجد شرایط</span>
         </div>
@@ -47,7 +45,7 @@
       <div class="stat">
         <div class="stat-top">
           <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7L12 3z"/></svg>
+            {{ icon('loyalty') }}
           </span>
           <span>امتیاز صادرشده</span>
         </div>
@@ -56,7 +54,7 @@
       <div class="stat">
         <div class="stat-top">
           <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7L12 3z"/><path d="M8 12h8"/></svg>
+            {{ icon('loyalty') }}
           </span>
           <span>امتیاز مصرف‌شده</span>
         </div>
@@ -65,7 +63,7 @@
       <div class="stat">
         <div class="stat-top">
           <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h4"/></svg>
+            {{ icon('card') }}
           </span>
           <span>اعتبار کیف جوایز</span>
         </div>
@@ -74,7 +72,7 @@
       <div class="stat">
         <div class="stat-top">
           <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 8v8M8 12h8"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+            {{ icon('plus-square') }}
           </span>
           <span>جوایز فعال</span>
         </div>
@@ -83,7 +81,7 @@
       <div class="stat">
         <div class="stat-top">
           <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 3"/></svg>
+            {{ icon('time') }}
           </span>
           <span>چرخ شانس</span>
         </div>
@@ -96,17 +94,18 @@
 
 <div class="card card-flush">
   <div class="card-flush-head"><h2>برترین معرف‌ها</h2></div>
+  {{ user_card_hint() }}
   <div class="table-wrap loyalty-referrers">
   <table class="table-compact" data-sortable>
     <thead><tr><th data-sort-type="text">کاربر</th><th class="col-count" data-sort-type="num">تعداد دعوت</th></tr></thead>
     <tbody>
     {% for r in metrics.top_referrers %}
       <tr>
-        <td data-sort-value="{{ r.label }}">{{ r.label }}</td>
+        <td data-sort-value="{{ r.label }}">{{ user_card_link(r.user_id, r.label, 'loyalty') }}</td>
         <td class="mono col-count" data-sort-value="{{ r.count }}">{{ r.count | num }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="2" class="muted">هنوز دعوتی ثبت نشده</td></tr>
+      {{ empty_state('هنوز دعوتی ثبت نشده', 'loyalty', colspan=2) }}
     {% endfor %}
     </tbody>
   </table>
@@ -119,14 +118,14 @@
   {% if can_adjust_platform_points|default(false) %}
   <div class="card settings-card">
     <h2>تعدیل دستی امتیاز</h2>
-    <p class="muted update-card-caption">فقط ادمین — دلیل الزامی است و در دفترکل ثبت می‌شود.</p>
+    <p class="muted update-card-caption">فقط ادمین — علت الزامی است و در دفترکل ثبت می‌شود.</p>
     <form method="post" action="/loyalty/adjust" class="form-stack">
       <input type="hidden" name="nonce" value="{{ owner_points_nonce }}" />
       <div class="form-row">
         <label class="form-field">شناسه کاربر<input name="user_id" type="number" min="1" required dir="ltr" /></label>
         <label class="form-field">تغییر امتیاز (+/-)<input name="delta" type="number" required dir="ltr" /></label>
       </div>
-      <label class="form-field">دلیل<textarea name="reason" rows="2" required maxlength="255"></textarea></label>
+      <label class="form-field">علت<textarea name="reason" rows="2" required maxlength="255"></textarea></label>
       <div class="actions"><button class="btn" type="submit">ثبت تعدیل</button></div>
     </form>
   </div>
@@ -153,6 +152,7 @@
   {% endif %}
   <div class="card card-flush">
     <div class="card-flush-head"><h2>آخرین تراکنش‌های امتیاز</h2></div>
+    {{ user_card_hint() }}
     <div class="table-wrap">
     <table class="table-compact table-list-sm" data-sortable>
       <thead><tr><th class="col-id" data-sort-type="num" data-list-sort-label="جدیدترین" data-list-sort-dir="descending" data-list-sort-order="1">#</th><th class="col-user" data-sort-type="num">کاربر</th><th class="col-amount" data-sort-type="num" data-list-sort-label="بیشترین مقدار" data-list-sort-dir="descending" data-list-sort-order="2">مقدار</th><th class="col-amount" data-sort-type="num">مانده</th><th class="col-text" data-sort-type="text">شرح</th><th class="col-time" data-sort-type="text">زمان</th><th class="li-head" scope="col"><span class="li-count">تراکنش‌ها</span><select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select></th></tr></thead>
@@ -160,14 +160,14 @@
       {% for t in txs %}
         <tr>
           <td class="mono" data-sort-value="{{ t.id }}">{{ t.id }}</td>
-          <td class="li-title" data-sort-value="{{ t.user_label }}"><span dir="auto">{{ t.user_label }}</span> <span class="li-only li-id" dir="ltr">(#{{ t.id }})</span></td>
-          <td class="mono li-value li-tone-{{ 'none' if t.amount > 0 else 'danger' }}" data-sort-value="{{ t.amount }}" dir="ltr">{% if t.amount > 0 %}+{% endif %}{{ t.amount | num }}</td>
+          <td class="li-title" data-sort-value="{{ t.user_label }}">{{ user_card_link(t.user_id, t.user_label, 'loyalty') }} <span class="li-only li-id" dir="ltr">(#{{ t.id }})</span></td>
+          <td class="mono li-value li-tone-{{ 'none' if t.amount > 0 else 'danger' }}" data-sort-value="{{ t.amount }}"><bdi dir="ltr">{% if t.amount > 0 %}+{% endif %}{{ t.amount | num }}</bdi></td>
           <td class="mono li-badge" data-sort-value="{{ t.balance_after }}"><span class="li-only">مانده&nbsp;</span>{{ t.balance_after | num }}</td>
           <td class="li-sub" data-sort-value="{{ t.description }}"><span dir="auto">{{ t.description }}</span> <span class="li-only">· <bdi dir="ltr">{{ (t.created_at|string)[:16] }}</bdi></span></td>
           <td class="muted mono" data-sort-value="{{ t.created_at }}">{{ t.created_at }}</td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="muted">تراکنشی نیست</td></tr>
+        {{ empty_state('تراکنشی نیست', 'loyalty', colspan=6) }}
       {% endfor %}
       </tbody>
     </table>
@@ -178,4 +178,5 @@
 
 {% include "_modal_loyalty_settings.html" %}
 </div>
+{{ user_card_modals(return_page='loyalty') }}
 {% endblock %}

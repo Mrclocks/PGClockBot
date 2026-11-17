@@ -24,7 +24,7 @@ class NumStepperUiTests(unittest.TestCase):
         self.assertIn(".num-stepper-input", css)
         # Circular ± buttons inset inside the outer capsule
         btn = css.split(".num-stepper-btn {", 1)[1].split("}", 1)[0]
-        self.assertIn("border-radius: 999px", btn)
+        self.assertIn("border-radius: var(--control-radius)", btn)
         # Value centered — must be excluded from global input text-align:right
         self.assertIn(":not(.num-stepper-input)", css)
         self.assertIn(
@@ -44,12 +44,12 @@ class NumStepperUiTests(unittest.TestCase):
         self.assertIn("num_stepper", body)
         self.assertIn("تغییر مانده", body)
         self.assertNotIn("افزایش مانده", body)
+        # Positive amounts plus «کاهش» / «افزایش», like the wallet form (the sign comes from the button).
         extend = body.split("/extend", 1)[1].split("</form>", 1)[0]
-        self.assertIn("min=-3650", extend)
+        self.assertIn("min=0", extend)
         self.assertIn("max=3650", extend)
-        self.assertNotIn('min="0"', extend)
-        self.assertNotIn("min=0,", extend)
-        self.assertNotIn("min=0)", extend)
+        self.assertIn('name="mode" value="debit"', extend)
+        self.assertIn('name="mode" value="credit"', extend)
 
     def test_reseller_edit_subscription_adjust(self):
         body = (ROOT / "app/web/templates/_reseller_edit_body.html").read_text(

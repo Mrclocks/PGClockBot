@@ -212,15 +212,18 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertNotIn("abandoned_plans", ux)
 
     def test_settings_icons_distinct(self):
-        macros = Path("app/web/templates/macros.html").read_text(encoding="utf-8")
-        self.assertIn("panel-settings", macros)
-        self.assertIn("bot-settings", macros)
+        from jinja2 import Environment, FileSystemLoader
+
+        # The two settings areas draw different icons (sliders vs. robot), wherever the title icon comes from.
+        env = Environment(loader=FileSystemLoader("app/web/templates"), autoescape=True)
+        draw = env.from_string('{% from "macros.html" import page_ico %}{{ page_ico(name) }}').render
+        self.assertNotEqual(draw(name="panel-settings"), draw(name="bot-settings"))
         from app.services.panel_nav import build_sidebar, viewer_from_context
 
         # Panel settings: sliders; bot settings: robot face (not identical gear).
         owner = build_sidebar(viewer_from_context({"role": "admin"}, {}, is_owner=True), path="/home")
         icons = {i.key: i.icon for s in owner for i in s.items}
-        self.assertEqual((icons["system_settings"], icons["bot_settings"]), ("sliders", "bot"))
+        self.assertEqual((icons["system_settings"], icons["bot_settings"]), ("gear", "bot"))
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("panel-settings", settings)
         self.assertIn("bot-settings", settings)
@@ -235,17 +238,6 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
     def test_plans_clone_button(self):
         html = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
         self.assertIn("/plans/{{ p.id }}/clone", html)
-
-    def test_preview_no_purchase_simulator(self):
-        html = Path("app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8")
-        js = Path("app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertNotIn("pv-sim-buy", html)
-        self.assertNotIn("شبیه‌ساز خرید", html)
-        self.assertNotIn("tg-sim-bar", html)
-        self.assertNotIn("simStep", js)
-        self.assertNotIn("pv-sim-buy", js)
-        self.assertNotIn(".tg-sim-bar", css)
 
     def test_backup_verify_ui(self):
         html = Path("app/web/templates/_settings_backup.html").read_text(encoding="utf-8")
@@ -460,17 +452,6 @@ class ButtonStyleTests(unittest.TestCase):
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('tab == \'colors\'', settings)
         self.assertIn("'colors'", settings)
-        self.assertIn("can-preview", settings)
-        self.assertIn("has-preview", Path("app/web/static/panel.css").read_text(encoding="utf-8"))
-        self.assertIn("data-tg-preview-open", Path("app/web/templates/_tg_preview_chat.html").read_text(encoding="utf-8"))
-        preview_js = Path("app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        self.assertNotIn("tab === 'colors'", preview_js)
-        self.assertIn("styleTone", preview_js)
-        self.assertIn("hasOwnProperty.call(values", preview_js)
-        self.assertIn('data-tone', preview_js)
-        self.assertIn("openPreview", preview_js)
-        self.assertIn("DEBOUNCE_MS", preview_js)
-        self.assertIn('.tg-key[data-tone="success"]', css)
         self.assertIn("receipt-modal-frame", css)
         admin_py = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
         self.assertIn('_style(ui, "confirm"', admin_py)

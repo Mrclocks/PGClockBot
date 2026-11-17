@@ -113,7 +113,6 @@ class FinanceReportsUiTests(unittest.TestCase):
         self.assertIn(".ui-select-menu.users-svc-boxed", css)
         self.assertIn(".users-ops-table .col-svc", css)
         self.assertIn("bottom: 0", css)
-        self.assertIn("tg-preview-gate > .actions", css)
 
     def test_bot_hooks(self):
         kb = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")

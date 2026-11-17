@@ -41,6 +41,7 @@ ACTION_NOTICE_TITLES = {
     "service_extend": "⚙️ مانده سرویس شما تغییر کرد",
     "service_delete": "🗑 سرویس شما حذف شد",
     "service_detach": "📤 سرویس از لیست شما جدا شد",
+    "service_import_assign": "➕ سرویس قبلی به «سرویس‌های من» شما اضافه شد",
     "pg_user_disable": "⛔ سرویس شما غیرفعال شد",
     "pg_user_enable": "✅ سرویس شما فعال شد",
     "pg_user_reset_usage": "♻️ مصرف سرویس شما صفر شد",

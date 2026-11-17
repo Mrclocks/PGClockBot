@@ -51,6 +51,28 @@
     ]);
   }
 
+  /**
+   * True when the page was opened in a browser, not by Telegram: no sign-in, no Telegram launch
+   * parameters, and the SDK (if it loaded at all) reports no Telegram platform.
+   */
+  function outsideTelegram() {
+    if (getInitData()) return false;
+    const l = launch();
+    if (l && l.inTelegram) return false;
+    const w = webApp();
+    return !w || !w.platform || w.platform === "unknown";
+  }
+
+  const BOT_USERNAME = /^[A-Za-z][A-Za-z0-9_]{3,31}$/;
+
+  /** This Mini App's bot, from the page (public), or "" when the server did not say. */
+  function botUsername() {
+    const doc = root.document;
+    const meta = doc && typeof doc.querySelector === "function" ? doc.querySelector('meta[name="pg-mini-bot"]') : null;
+    const value = meta && typeof meta.getAttribute === "function" ? String(meta.getAttribute("content") || "") : "";
+    return BOT_USERNAME.test(value) ? value : "";
+  }
+
   /** The SDK's initData, else the one Telegram put in the address. */
   function getInitData() {
     const w = webApp();
@@ -239,6 +261,19 @@
     authLostHandler = typeof handler === "function" ? handler : null;
   }
 
+  // Steps the person finishes in the Mini App itself (referral code, channels, terms);
+  // the server names them in ``X-Mini-Error`` with a 403 (app/services/miniapp_auth.py).
+  const GATE_CODES = new Set(["referral_required", "force_join", "terms"]);
+  let gateHandler = null;
+
+  function onGate(handler) {
+    gateHandler = typeof handler === "function" ? handler : null;
+  }
+
+  function isGateError(err) {
+    return !!err && err.status === 403 && GATE_CODES.has(err.code);
+  }
+
   const FALLBACK_ERROR = "ارتباط با سرور برقرار نشد؛ دوباره تلاش کنید.";
 
   const STATUS_ERRORS = {
@@ -290,6 +325,7 @@
     if (!res.ok) {
       const err = new ApiError(errorText(data, res.status), res.status, errorCode(res));
       if (res.status === 401 && authLostHandler) authLostHandler(err);
+      if (isGateError(err) && gateHandler) gateHandler(err);
       throw err;
     }
     return data;
@@ -403,6 +439,80 @@
     return false;
   }
 
+  const WRITE_ACCESS_ASKED = "pgmini.writeAccessAsked";
+
+  /**
+   * Someone who opened the Mini App without /start cannot get the bot's messages (receipts,
+   * renewals). Telegram can ask them once; this asks at most once per device and bot.
+   */
+  function requestWriteAccessOnce() {
+    const tg = webApp();
+    const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+    if (!user || user.allows_write_to_pm !== false || typeof tg.requestWriteAccess !== "function") return false;
+    if (typeof tg.isVersionAtLeast === "function" && !tg.isVersionAtLeast("6.9")) return false;
+    const key = WRITE_ACCESS_ASKED + ":" + (shopKey() || "platform");
+    try {
+      if (root.localStorage.getItem(key)) return false;
+      root.localStorage.setItem(key, "1");
+    } catch (_) {
+      return false;
+    }
+    try {
+      tg.requestWriteAccess(() => {});
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Telegram's answers about a home-screen shortcut (Bot API 8.0); "unsupported" until it says otherwise.
+  const HOME_SCREEN_STATUSES = new Set(["unsupported", "unknown", "added", "missed"]);
+  let homeScreenStatus = "unsupported";
+  let homeScreenHandler = null;
+
+  function onHomeScreenChange(handler) {
+    homeScreenHandler = typeof handler === "function" ? handler : null;
+  }
+
+  function setHomeScreenStatus(status) {
+    const next = HOME_SCREEN_STATUSES.has(status) ? status : "unsupported";
+    if (next === homeScreenStatus) return;
+    homeScreenStatus = next;
+    if (homeScreenHandler) homeScreenHandler(next);
+  }
+
+  /** Older Telegram apps load the same SDK but ignore these calls, so the version decides. */
+  function homeScreenApi(tg) {
+    return !!tg && typeof tg.checkHomeScreenStatus === "function" && typeof tg.addToHomeScreen === "function"
+      && typeof tg.isVersionAtLeast === "function" && tg.isVersionAtLeast("8.0");
+  }
+
+  /** True when Telegram can add a shortcut and the person does not have one yet. */
+  function canAddToHomeScreen() {
+    return homeScreenStatus === "missed" || homeScreenStatus === "unknown";
+  }
+
+  /** Telegram's own prompt; false when this Telegram cannot add a shortcut. */
+  function addToHomeScreen() {
+    const tg = webApp();
+    if (!homeScreenApi(tg) || !canAddToHomeScreen()) return false;
+    try {
+      tg.addToHomeScreen();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function watchHomeScreen(tg) {
+    if (!homeScreenApi(tg)) return;
+    try {
+      tg.onEvent("homeScreenAdded", () => setHomeScreenStatus("added"));
+      tg.onEvent("homeScreenChecked", (event) => setHomeScreenStatus(event && event.status));
+      tg.checkHomeScreenStatus(setHomeScreenStatus);
+    } catch (_) {}
+  }
+
   let telegramInitialized = false;
 
   /** Once, as soon as the SDK is there (it may arrive after the first screen). */
@@ -425,12 +535,14 @@
       tg.onEvent("themeChanged", applyTheme);
       tg.onEvent("fullscreenChanged", applyFullscreen);
     } catch (_) {}
+    watchHomeScreen(tg);
   }
 
   const core = Object.freeze({
-    webApp, getInitData, whenTelegram, sdkPending, sdkFailed, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, formatRelative, faDigits,
-    haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, onAuthLost, closeApp, copyText, markCopied,
-    applyTheme, applyBrand, inkFor, initTelegram,
+    webApp, getInitData, outsideTelegram, botUsername, whenTelegram, sdkPending, sdkFailed, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, formatRelative, faDigits,
+    haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, onAuthLost, onGate, isGateError, closeApp, copyText, markCopied,
+    applyTheme, applyBrand, inkFor, initTelegram, requestWriteAccessOnce,
+    onHomeScreenChange, canAddToHomeScreen, addToHomeScreen,
   });
   root.PGMini = Object.assign(root.PGMini || {}, { core });
 })(typeof window === "object" ? window : globalThis);

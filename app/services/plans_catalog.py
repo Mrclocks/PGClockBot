@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -24,8 +24,14 @@ from app.db.models import (
     UserService,
 )
 from app.services.custom_plans import exclude_custom_order_plans
-from app.services.pasarguard import as_list, get_pg
+from app.services.pasarguard import as_list, get_pg, is_pg_permission_denied
 from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
+from app.services.pg_read import (
+    PgReadDenied,
+    staff_pg_credentials_ready,
+    staff_pg_read_client,
+    trust_pg_list_scope,
+)
 from app.services.shop_scope import ShopScopeError, is_platform_admin, shop_owner_id
 
 log = logging.getLogger(__name__)
@@ -221,6 +227,30 @@ def resolve_user_write_group_ids(
     return ids or None
 
 
+def _platform_role_was_read(staff: dict) -> bool:
+    """True when the platform admin's PasarGuard role came from a live read.
+
+    The role (and its ``access`` block) is attached only after a successful
+    capability probe; a failed probe leaves no ``pg_role`` on the staff dict.
+    """
+    return isinstance(staff.get("pg_role"), dict)
+
+
+def _missing_allow_list_permits(staff: dict) -> bool:
+    """Decide a write when the role has no template/group allow-list.
+
+    PasarGuard stores ``None`` for "no restriction", which is the default for
+    every new role. For the platform admin that answer is only trusted once
+    the role was actually read: the platform client signs in as that same
+    PasarGuard account, so PasarGuard still enforces the role on the write.
+    An unread role stays denied. Resellers and credentialed staff are scoped
+    by their own client.
+    """
+    if is_platform_admin(staff):
+        return _platform_role_was_read(staff)
+    return bool(staff_pg_credentials_ready(staff))
+
+
 def template_allowed_for_staff(staff: dict | None, template_id: int | None) -> bool:
     """Mutation/object check. Missing allow-list is NOT unrestricted for non-Owner (M1)."""
     if template_id is None:
@@ -230,14 +260,7 @@ def template_allowed_for_staff(staff: dict | None, template_id: int | None) -> b
     access = staff.get("pg_access") or {}
     allowed = _allowed_id_set(access.get("allowed_template_ids"))
     if allowed is None:
-        # Unresolved allow-list ≠ unrestricted. Hybrid limited admin → deny.
-        # Reseller / credentialed pg_staff → own-client scopes the ID space.
-        from app.services.pg_read import staff_pg_credentials_ready
-        from app.services.shop_scope import is_platform_admin
-
-        if is_platform_admin(staff):
-            return False
-        return bool(staff_pg_credentials_ready(staff))
+        return _missing_allow_list_permits(staff)
     if not allowed:
         return False
     return int(template_id) in allowed
@@ -252,15 +275,81 @@ def groups_allowed_for_staff(staff: dict | None, group_ids: list[int]) -> bool:
     access = staff.get("pg_access") or {}
     allowed = _allowed_id_set(access.get("allowed_group_ids"))
     if allowed is None:
-        from app.services.pg_read import staff_pg_credentials_ready
-        from app.services.shop_scope import is_platform_admin
-
-        if is_platform_admin(staff):
-            return False
-        return bool(staff_pg_credentials_ready(staff))
+        return _missing_allow_list_permits(staff)
     if not allowed:
         return False
     return all(int(g) in allowed for g in group_ids)
+
+
+PLAN_GROUPS_DENIED_MESSAGE = "به یکی از گروه‌های انتخاب‌شده دسترسی ندارید"
+PLAN_TEMPLATE_DENIED_MESSAGE = "به این تمپلیت دسترسی ندارید"
+ROLE_REQUIRES_TEMPLATE_MESSAGE = (
+    "نقش پاسارگارد این حساب ساخت سرویس بدون تمپلیت را اجازه نمی‌دهد؛ پلن را با تمپلیت بسازید."
+)
+PG_ROLE_UNREAD_MESSAGE = (
+    "نقش پاسارگارد این حساب خوانده نشد، پس دسترسی تمپلیت و گروه معلوم نیست. "
+    "اتصال پاسارگارد را در تنظیمات آزمایش کنید و دوباره تلاش کنید."
+)
+
+
+def _platform_role_unread(staff: dict | None) -> bool:
+    """The platform admin's limited PasarGuard role could not be read, so its allow-lists are unknown."""
+    return bool(staff) and is_platform_admin(staff) and not _admin_pg_unrestricted(staff) and not _platform_role_was_read(staff)
+
+
+def plan_template_denial(staff: dict | None, template_id: int | None) -> str | None:
+    """Why a plan cannot use this template, or ``None`` when it can."""
+    if template_allowed_for_staff(staff, template_id):
+        return None
+    return PG_ROLE_UNREAD_MESSAGE if _platform_role_unread(staff) else PLAN_TEMPLATE_DENIED_MESSAGE
+
+
+def role_requires_template(staff: dict | None) -> bool:
+    """True when PasarGuard rejects a user created without a template for this role.
+
+    PasarGuard's ``access.require_template`` refuses manual (group-based)
+    user creation for every non-owner admin, so a group plan would fail at
+    delivery, after the customer paid.
+    """
+    if not staff or _admin_pg_unrestricted(staff):
+        return False
+    return bool((staff.get("pg_access") or {}).get("require_template"))
+
+
+def plan_groups_denial(staff: dict | None, group_ids: list[int]) -> str | None:
+    """Why a plan cannot be delivered with these groups, or ``None`` when it can."""
+    if role_requires_template(staff):
+        return ROLE_REQUIRES_TEMPLATE_MESSAGE
+    if not groups_allowed_for_staff(staff, group_ids):
+        return PG_ROLE_UNREAD_MESSAGE if _platform_role_unread(staff) else PLAN_GROUPS_DENIED_MESSAGE
+    return None
+
+
+CUSTOM_PLAN_LABEL = "پلن دلخواه"
+
+
+def group_plans_blocked_by_role(
+    staff: dict | None,
+    plans: Sequence[Plan],
+    *,
+    custom_plan_enabled: bool = False,
+    custom_plan_group_ids: str = "",
+) -> list[str]:
+    """Names of active group plans PasarGuard refuses to deliver for a template-only role.
+
+    Shown on the plans page so operators see which plans need a template
+    before a customer pays for one.
+    """
+    if not role_requires_template(staff):
+        return []
+    names = [
+        str(p.name or p.id)
+        for p in plans
+        if p.is_active and (p.pg_group_ids or "").strip() and not p.pg_template_id
+    ]
+    if custom_plan_enabled and (custom_plan_group_ids or "").strip():
+        names.append(CUSTOM_PLAN_LABEL)
+    return names
 
 
 def staff_can_create_pg_template(staff: dict | None) -> bool:
@@ -271,6 +360,41 @@ def staff_can_create_pg_template(staff: dict | None) -> bool:
 
     # Hybrid: platform admin also needs templates.create on the env PG role.
     return staff_pg_action(staff, "templates", "create")
+
+
+PG_UNREACHABLE_MESSAGE = "اتصال به پاسارگارد برقرار نشد"
+
+
+async def _fetch_plan_catalog(
+    fetch: Callable[[], Awaitable[Any]], key: str
+) -> tuple[list[dict] | None, bool]:
+    """Run one catalog read; return ``(rows or None on failure, panel_unreachable)``.
+
+    A refusal for this role (403/404/405) only hides that list. Any other
+    failure (rejected credentials, outage) is reported as a connection problem
+    instead of looking like an empty catalog.
+    """
+    try:
+        data = await fetch()
+    except Exception as exc:
+        log.warning("load_pg_plan_options %s unavailable: %s", key, exc)
+        return None, not is_pg_permission_denied(exc)
+    return as_list(data, key), False
+
+
+async def _load_plan_templates(pg: Any) -> tuple[list[dict], bool]:
+    """Full template rows when the role may read them, else the simple list.
+
+    A role with only ``templates.read_simple`` gets 403 on the full list;
+    the simple list must still be offered instead of an empty one.
+    """
+    full, full_down = await _fetch_plan_catalog(pg.get_user_templates, "templates")
+    if full:
+        return full, False
+    simple, simple_down = await _fetch_plan_catalog(pg.get_user_templates_simple, "templates")
+    if simple is not None:
+        return simple, False
+    return full or [], full_down or simple_down
 
 
 async def load_pg_plan_options(
@@ -287,8 +411,6 @@ async def load_pg_plan_options(
     groups: list[dict] = []
     pg_error = None
     try:
-        from app.services.pg_read import PgReadDenied, staff_pg_read_client, trust_pg_list_scope
-
         if staff and staff.get("role") != "admin":
             try:
                 pg = await staff_pg_read_client(session, staff)
@@ -300,28 +422,17 @@ async def load_pg_plan_options(
             await pg.ensure_token()
         except Exception as e:
             log.warning("load_pg_plan_options token failed: %s", e)
-            return [], [], "اتصال به پاسارگارد برقرار نشد"
-        try:
-            templates = await pg.get_user_templates_simple()
-            full = await pg.get_user_templates()
-            if isinstance(full, list) and full:
-                templates = full
-            else:
-                templates = as_list(full, "templates") or templates
-        except Exception as e:
-            log.warning("load_pg_plan_options templates unavailable: %s", e)
-            templates = []
-        try:
-            groups = await pg.get_groups_simple()
-        except Exception as e:
-            log.warning("load_pg_plan_options groups unavailable: %s", e)
-            groups = []
+            return [], [], PG_UNREACHABLE_MESSAGE
+        templates, templates_down = await _load_plan_templates(pg)
+        groups, groups_down = await _fetch_plan_catalog(pg.get_groups_simple, "groups")
+        if templates_down or groups_down:
+            pg_error = PG_UNREACHABLE_MESSAGE
     except Exception as e:
         # Never surface raw PG/HTTP exception text to the panel (info leak).
         log.warning("load_pg_plan_options failed: %s", e)
-        pg_error = "اتصال به پاسارگارد برقرار نشد"
-    templates = [t for t in templates if isinstance(t, dict)]
-    groups = [g for g in groups if isinstance(g, dict)]
+        pg_error = PG_UNREACHABLE_MESSAGE
+    templates = templates or []
+    groups = groups or []
     trust = trust_pg_list_scope(staff) if staff else True
     templates = filter_templates_for_staff(templates, staff, trust_client_scope=trust)
     groups = filter_groups_for_staff(groups, staff, trust_client_scope=trust)

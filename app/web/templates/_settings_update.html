@@ -108,11 +108,11 @@
     </div>
     <div class="progress-wrap" aria-label="نوار پیشرفت">
       <div class="progress-bar">
-        <div class="progress-fill" id="upd-fill" style="width: {{ (status.percent or 0) if show_ops else 0 }}%"></div>
+        <div class="progress-fill" id="upd-fill" style="--p: {{ (status.percent or 0) if show_ops else 0 }}"></div>
       </div>
       <div class="progress-meta">
         <span id="upd-step">{% if show_ops %}در حال اعمال…{% else %}آماده{% endif %}</span>
-        <strong id="upd-percent">{{ (status.percent or 0) if show_ops else 0 }}٪</strong>
+        <strong id="upd-percent">{{ ((status.percent or 0) if show_ops else 0) | fa }}٪</strong>
       </div>
     </div>
     <span id="upd-from" hidden dir="ltr">{{ status.from_version or local_version }}</span>

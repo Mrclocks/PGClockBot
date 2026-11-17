@@ -56,6 +56,7 @@ ACTION_LABELS = {
     "service_renew": "تمدید دستی سرویس",
     "service_extend": "تغییر مانده سرویس",
     "service_delete": "حذف سرویس",
+    "service_import_assign": "افزودن سرویس قبلی به مشتری",
     "customer_delete": "حذف مشتری",
     "service_auto_delete": "حذف خودکار سرویس",
     "service_cleanup_exempt": "معاف‌کردن سرویس از پاکسازی",

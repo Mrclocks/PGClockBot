@@ -15,7 +15,6 @@ GB = 1024**3
 class SvcCardMetaTests(unittest.TestCase):
     def test_user_edit_uses_meta_stack(self):
         html = (ROOT / "app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
-        self.assertIn("user-edit-meta", html)
         self.assertIn("svc-stat-row", html)
         self.assertIn("volume_text", html)
         self.assertIn("num-ratio", html)

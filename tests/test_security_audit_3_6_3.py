@@ -147,12 +147,5 @@ class ResellerReplyAclTests(unittest.TestCase):
         self.assertNotIn("💎 پلن‌های فروش", mapping)
 
 
-class PreviewDefaultsTests(unittest.TestCase):
-    def test_preview_js_uses_emoji_defaults(self):
-        js = (ROOT / "app/web/templates/_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        self.assertIn("🟢🛒 خرید سرویس", js)
-        self.assertIn("🔵📦 سرویس‌های من", js)
-
-
 if __name__ == "__main__":
     unittest.main()

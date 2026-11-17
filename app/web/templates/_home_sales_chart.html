@@ -5,15 +5,15 @@
   <div class="home-sales-head">
     {{ card_title('sales', 'فروش') }}
     <div class="sales-seg" role="group" aria-label="بازهٔ نمودار">
-      <button type="button" class="on" data-range="7" aria-pressed="true">7 روز</button>
-      <button type="button" data-range="30" aria-pressed="false">30 روز</button>
+      <button type="button" class="on" data-range="7" aria-pressed="true">۷ روز</button>
+      <button type="button" data-range="30" aria-pressed="false">۳۰ روز</button>
     </div>
   </div>
   <div class="sales-total">
     <strong data-total>{% if tr %}{{ tr.total | money }} تومان{% else %}—{% endif %}</strong>
     <span class="sales-delta flat" data-delta></span>
   </div>
-  <div class="sales-plot-wrap"><div class="sales-plot" data-plot tabindex="0" role="img" aria-label="نمودار فروش 7 روز اخیر"></div></div>
+  <div class="sales-plot-wrap"><div class="sales-plot" data-plot tabindex="0" role="img" aria-label="نمودار فروش ۷ روز اخیر"></div></div>
   <p class="muted sales-empty" data-empty{% if tr and tr.has_data %} hidden{% endif %}>هنوز فروشی در این بازه ثبت نشده است.</p>
   <p class="muted sales-error" data-error>دریافت نمودار ممکن نشد؛ دوباره تلاش کنید.</p>
 </section>

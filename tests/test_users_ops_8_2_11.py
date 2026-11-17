@@ -93,7 +93,7 @@ class UsersOpsUnitTests(unittest.TestCase):
 class UsersOpsUiTests(unittest.TestCase):
     def test_template_has_ops_chrome(self):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn("users-ops-overview", users)
+        self.assertNotIn("stat_strip(", users)
         self.assertIn("alert-dot", users)
         self.assertIn("badge-risk", users)
         self.assertIn("cell-name-tags", users)
@@ -122,7 +122,8 @@ class UsersOpsUiTests(unittest.TestCase):
             css.split(".users-svc-select-wrap", 1)[1].split("}", 1)[0],
         )
         self.assertIn(".alert-dot", css)
-        self.assertIn(".users-row.is-focus", css)
+        # A user is shown in the card, never by tinting each cell of a row in the users list.
+        self.assertNotIn(".users-row.is-focus", css)
         self.assertIn(".cell-name-tags", css)
         self.assertIn(".cell-name-primary", css)
         self.assertNotIn(".users-row.has-alert > td:first-child", css)

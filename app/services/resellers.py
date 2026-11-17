@@ -26,6 +26,15 @@ from app.db.models import (
 )
 from app.services.db_safe import rollback_quiet
 from app.services.chat_records import keeps_sent
+from app.services import pasarguard
+from app.services.pasarguard import PasarGuardError
+from app.services.pg_access import (
+    resolve_platform_pg_capabilities,
+    staff_from_platform_caps,
+    staff_may_delete_pg_admin,
+)
+from app.services.pg_admin_roles import apply_admin_role, resolve_new_admin_role_id
+from app.services.platform_identity import is_explicit_owner_staff
 from app.services.pg_panel_access import (
     close_access_warning,
     may_share_pg_credentials,
@@ -60,10 +69,12 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("wallet_adjust", "تنظیم دستی کیف پول مشتری"),
     ("loyalty_adjust", "تغییر دستی امتیاز مشتری"),
     ("customers_block", "مسدودسازی مشتری در فروشگاه"),
+    ("customers_approve", "تأیید ورود مشتریان جدید"),
     ("loyalty", "باشگاه مشتریان"),
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
     ("connection_status_manage", "مدیریت تست اتصال"),
     ("service_import", "تأیید افزودن سرویس قبلی"),
+    ("service_import_assign", "افزودن سرویس قبلی به مشتری توسط ادمین"),
     ("orders_purge", "حذف کامل سفارش‌ها و پرداخت‌ها"),
     ("service_cleanup", "پاکسازی خودکار سرویس‌های منقضی"),
     ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
@@ -92,8 +103,8 @@ class FeaturePermGroup:
 # Risky money and data actions sit in their own group and are off by default.
 FEATURE_PERM_LAYOUT: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
     ("فروش و سفارش", False, ("dashboard", "plans", "orders", "payments", "stats", "custom_service_name")),
-    ("مشتریان", False, ("tickets", "customer_notes", "customer_services", "demo_users", "trial_users",
-                        "trial_users_manage", "customers_block")),
+    ("مشتریان", False, ("tickets", "customer_notes", "customer_services", "service_import_assign", "demo_users",
+                        "trial_users", "trial_users_manage", "customers_block", "customers_approve")),
     ("بازاریابی و وفاداری", False, ("campaigns", "broadcast", "catalog_discounts", "random_discounts", "gift_codes", "cashback",
                                    "loyalty")),
     ("فروشگاه و فنی", False, ("shop_settings", "miniapp", "service_import", "connection_status",
@@ -540,6 +551,33 @@ async def list_active_reseller_plans(
         q = q.where(ResellerPlan.billing_mode == mode)
     result = await session.execute(q.order_by(ResellerPlan.sort_order, ResellerPlan.id))
     return list(result.scalars().all())
+
+
+async def grantable_reseller_plan(session: AsyncSession, plan_id: int) -> ResellerPlan:
+    """An active subscription package a staff member may grant a new reseller."""
+    plan = await session.get(ResellerPlan, int(plan_id))
+    if plan is None or not plan.is_active or plan.plan_kind != "subscription":
+        raise ValueError("پلن نمایندگی نامعتبر یا غیرفعال است")
+    return plan
+
+
+PLAN_GRANT_OWNER_ONLY = "فقط مالک می‌تواند پلن نمایندگی انتخاب کند"
+
+
+async def reseller_plan_from_form(session: AsyncSession, staff: dict | None, raw: object) -> ResellerPlan | None:
+    """The package chosen on the users page, or ``None`` when none was chosen.
+
+    A package grants its own permissions, limits and panel role, so only the owner may pick one;
+    the form hides the field from everyone else, and this refuses a hand-made request too.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    if not is_explicit_owner_staff(staff):
+        raise ValueError(PLAN_GRANT_OWNER_ONLY)
+    if not text.isascii() or not text.isdigit():
+        raise ValueError("پلن نمایندگی نامعتبر یا غیرفعال است")
+    return await grantable_reseller_plan(session, int(text))
 
 
 def normalize_reseller_billing_mode(raw: str | None) -> str:
@@ -1275,10 +1313,8 @@ async def provision_reseller(
         tid = deliverable_telegram_id(getattr(user, "telegram_id", None))
         if tid is not None:
             payload["telegram_id"] = tid
-        if role_id:
-            payload["role_id"] = int(role_id)
-        else:
-            payload["is_sudo"] = False
+        role_id = await resolve_new_admin_role_id(get_pg(), int(role_id) if role_id else None)
+        apply_admin_role(payload, role_id)
         if plan is not None and is_subscription_plan(plan):
             # Refuse before anything exists, and create the admin with the package's limits:
             # a PasarGuard admin without ``data_limit`` is unlimited until something sets one.
@@ -1287,15 +1323,8 @@ async def provision_reseller(
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
-            if "role_id" in payload:
-                payload.pop("role_id", None)
-                payload["is_sudo"] = False
-                try:
-                    await get_pg().create_admin(payload)
-                except Exception as e2:
-                    raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e2)}") from e2
-            else:
-                raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
+            # No second create: the first one may have succeeded on the panel.
+            raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
 
     web_username = None
     web_password = None
@@ -2401,6 +2430,75 @@ async def reject_application(
     await session.commit()
 
 
+PANEL_ADMIN_DELETE_REFUSED_MSG = (
+    "حساب پاسارگاردی که پنل با آن وصل است اجازهٔ حذف ادمین ندارد؛ نمایندگی حذف نشد."
+)
+PANEL_ADMIN_DELETE_FAILED_MSG = (
+    "حذف ادمین نماینده در پاسارگارد انجام نشد؛ نمایندگی حذف نشد. چند لحظهٔ دیگر دوباره تلاش کنید."
+)
+
+
+PANEL_ADMIN_DELETE_PARTIAL_MSG = (
+    "ادمین پاسارگارد این نمایندگی حذف شد، ولی حذف ادمین یکی از زیرنماینده‌ها انجام نشد؛ "
+    "نمایندگی در پنل باقی ماند. تا دوباره تلاش نکنید ربات این فروشگاه به پاسارگارد وصل نمی‌شود. "
+    "همین حالا دوباره تلاش کنید."
+)
+
+
+class PanelAdminNotRemoved(ValueError):
+    """PasarGuard did not remove a shop's panel admin, so the shop was left as it was."""
+
+
+@dataclass(slots=True)
+class _RevokeRun:
+    """One ``revoke_reseller`` call: shops already visited and PasarGuard admins already removed."""
+
+    delete_pg_admin: bool
+    seen: set[int]
+    removed_pg_admins: list[str]
+    capability_checked: bool = False
+
+
+async def assert_platform_may_delete_pg_admins() -> None:
+    """The connected PasarGuard account must be owner or hold ``admins.delete``."""
+    caps = await resolve_platform_pg_capabilities()
+    if not caps.get("ok"):
+        raise PanelAdminNotRemoved(PANEL_ADMIN_DELETE_FAILED_MSG)
+    if not staff_may_delete_pg_admin(staff_from_platform_caps(caps)):
+        raise PanelAdminNotRemoved(PANEL_ADMIN_DELETE_REFUSED_MSG)
+
+
+async def _remove_shop_pg_admin(run: _RevokeRun, pg_username: str) -> bool:
+    """Delete the shop's PasarGuard admin; ``False`` when PasarGuard no longer has it.
+
+    PasarGuard is only consulted for a shop that has an admin there: the capability check
+    runs once, right before the first delete. A refusal or an unknown outcome raises, so
+    the caller changes nothing here; a retry is safe because an admin that is already gone
+    answers 404.
+    """
+    if not run.capability_checked:
+        await assert_platform_may_delete_pg_admins()
+        run.capability_checked = True
+    try:
+        await pasarguard.get_pg().delete_admin(pg_username)
+    except PasarGuardError as exc:
+        if exc.status_code == 404:
+            return False
+        raise PanelAdminNotRemoved(_not_removed_message(run, refused=exc.status_code == 403)) from exc
+    except Exception as exc:  # transport error or timeout: the outcome is unknown
+        logger.warning("revoke_reseller: PasarGuard admin delete failed", exc_info=True)
+        raise PanelAdminNotRemoved(_not_removed_message(run, refused=False)) from exc
+    run.removed_pg_admins.append(pg_username)
+    return True
+
+
+def _not_removed_message(run: _RevokeRun, *, refused: bool) -> str:
+    """Say so when an admin of this tree is already gone from PasarGuard: the shop needs a retry."""
+    if run.removed_pg_admins:
+        return PANEL_ADMIN_DELETE_PARTIAL_MSG
+    return PANEL_ADMIN_DELETE_REFUSED_MSG if refused else PANEL_ADMIN_DELETE_FAILED_MSG
+
+
 async def revoke_reseller(
     session: AsyncSession,
     user_id: int,
@@ -2408,21 +2506,39 @@ async def revoke_reseller(
     delete_pg_admin: bool = True,
     commit: bool = True,
     reason: str | None = None,
-    _seen_profile_ids: set[int] | None = None,
 ) -> dict:
     """Remove reseller profile, unlink customers, demote role to user.
 
     Does not delete the BotUser row. Optional PasarGuard admin cleanup.
+
+    With ``delete_pg_admin`` the shop's PasarGuard admin (and those of its sub-shops) is
+    removed first. When PasarGuard refuses or cannot answer, ``PanelAdminNotRemoved`` is
+    raised and the session is rolled back, so no shop is removed here while its admin
+    stays in PasarGuard. A shop without a PasarGuard admin never touches PasarGuard.
+    """
+    run = _RevokeRun(delete_pg_admin=delete_pg_admin, seen=set(), removed_pg_admins=[])
+    try:
+        return await _revoke_reseller_tree(session, user_id, run=run, commit=commit, reason=reason)
+    except PanelAdminNotRemoved:
+        await rollback_quiet(session)
+        raise
+
+
+async def _revoke_reseller_tree(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    run: _RevokeRun,
+    commit: bool,
+    reason: str | None,
+) -> dict:
+    """Revoke one shop and, recursively, the shops under it.
 
     Before deleting ``ResellerProfile``, purges the linked OrgPrincipal tree
     (children, web identities, provisions, owner_principal_id refs) so the
     ``org_principals.reseller_profile_id`` FK cannot block the delete.
     Descendant shop profiles are revoked recursively (no remount as L1).
     """
-    from sqlalchemy import update
-
-    from app.services.pasarguard import get_pg
-
     user = await session.get(BotUser, user_id)
     if not user:
         raise ValueError("کاربر یافت نشد")
@@ -2430,9 +2546,8 @@ async def revoke_reseller(
     if not profile:
         raise ValueError("این کاربر نماینده نیست")
 
-    seen = _seen_profile_ids if _seen_profile_ids is not None else set()
     profile_id = int(profile.id)
-    if profile_id in seen:
+    if profile_id in run.seen:
         return {
             "user_id": user_id,
             "telegram_id": user.telegram_id,
@@ -2440,16 +2555,12 @@ async def revoke_reseller(
             "pg_admin_deleted": False,
             "reason": (reason or "").strip() or None,
         }
-    seen.add(profile_id)
+    run.seen.add(profile_id)
 
     pg_username = (profile.pg_admin_username or "").strip() or None
     pg_deleted = False
-    if delete_pg_admin and pg_username:
-        try:
-            await get_pg().delete_admin(pg_username)
-            pg_deleted = True
-        except Exception:
-            pg_deleted = False
+    if run.delete_pg_admin and pg_username:
+        pg_deleted = await _remove_shop_pg_admin(run, pg_username)
 
     # OrgPrincipal.reseller_profile_id FK — purge tree before profile delete.
     from app.services.org_principals import purge_principal_for_reseller_profile
@@ -2458,7 +2569,7 @@ async def revoke_reseller(
 
     # Cascade: child shops under this principal must not remount as L1.
     for child_profile_id in purge_info.detached_reseller_profile_ids:
-        if int(child_profile_id) == profile_id or int(child_profile_id) in seen:
+        if int(child_profile_id) == profile_id or int(child_profile_id) in run.seen:
             continue
         child_profile = await session.get(ResellerProfile, int(child_profile_id))
         if child_profile is None:
@@ -2467,17 +2578,12 @@ async def revoke_reseller(
         if child_uid <= 0 or child_uid == int(user_id):
             continue
         try:
-            await revoke_reseller(
-                session,
-                child_uid,
-                delete_pg_admin=delete_pg_admin,
-                commit=False,
-                reason=reason,
-                _seen_profile_ids=seen,
-            )
+            await _revoke_reseller_tree(session, child_uid, run=run, commit=False, reason=reason)
+        except PanelAdminNotRemoved:
+            raise
         except ValueError:
             # Profile may already be gone / not a reseller — continue.
-            pass
+            logger.debug("revoke_reseller: sub-shop %s already gone", child_uid, exc_info=True)
 
     await session.execute(
         update(BotUser).where(BotUser.reseller_id == user_id).values(reseller_id=None)

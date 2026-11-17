@@ -137,6 +137,7 @@ async def _wheel_panel_context(
         spins = [
             {
                 "id": s.id,
+                "user_id": int(s.user_id),
                 "user_label": bot_user_panel_label(
                     users.get(int(s.user_id)), fallback_id=int(s.user_id)
                 ),
@@ -357,12 +358,12 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 raise ValueError("نرخ نامعتبر")
         except ValueError:
             return RedirectResponse(
-                f"/loyalty?tab={page_tab}&settings=1&err={quote('نرخ تبدیل نامعتبر است')}",
+                f"/loyalty?tab={page_tab}&settings=club&err={quote('نرخ تبدیل نامعتبر است')}",
                 status_code=303,
             )
         await set_setting(session, "loyalty_enabled", enabled, reseller_id=scope)
         await set_setting(session, "points_to_wallet_rate", str(rate), reseller_id=scope)
-        return RedirectResponse(f"/loyalty?tab={page_tab}&settings=1&saved=1", status_code=303)
+        return RedirectResponse(f"/loyalty?tab={page_tab}&settings=club&saved=1", status_code=303)
 
     @app.post("/loyalty/rules/{rule_id}/save")
     async def loyalty_rule_save(

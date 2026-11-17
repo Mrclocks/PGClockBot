@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 <div class="card menu-layout-intro">
   <h2>چیدمان دکمه‌های کیبورد</h2>
   <p class="muted update-card-caption">
@@ -33,12 +34,12 @@
             <strong>{{ item.label }}</strong>
           </div>
           <div class="dnd-actions">
-            <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>
-            <button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
+            <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا">{{ icon('chev-up', 'ico') }}</button>
+            <button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین">{{ icon('chev-down', 'ico') }}</button>
             {% if not item.required %}
-            <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+            <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف">{{ icon('close', 'ico') }}</button>
             {% else %}
-            <span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></span>
+            <span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img">{{ icon('minus', 'ico') }}</span>
             {% endif %}
           </div>
         </li>
@@ -54,7 +55,7 @@
             <strong>{{ item.label }}</strong>
           </div>
           <div class="dnd-actions">
-            <button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+            <button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن">{{ icon('plus', 'ico') }}</button>
           </div>
         </li>
         {% endfor %}
@@ -90,11 +91,11 @@
     const box = document.createElement('div');
     box.className = 'dnd-actions';
     box.innerHTML =
-      '<button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>' +
-      '<button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>' +
+      '<button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا">{{ icon('chev-up', 'ico') }}</button>' +
+      '<button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین">{{ icon('chev-down', 'ico') }}</button>' +
       (required
-        ? '<span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></span>'
-        : '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>');
+        ? '<span class="icon-btn icon-move icon-fixed" title="همیشه در منو است — با ▲▼ جابه‌جا می‌شود" aria-label="قابل جابه‌جایی، غیرقابل حذف" role="img">{{ icon('minus', 'ico') }}</span>'
+        : '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف">{{ icon('close', 'ico') }}</button>');
     li.querySelectorAll('.dnd-actions, button.btn-remove, button.btn-add, span.badge, span.icon-fixed').forEach((n) => n.remove());
     li.appendChild(box);
     li.draggable = true;
@@ -104,7 +105,7 @@
     li.querySelectorAll('.dnd-actions, button.btn-remove, button.btn-add, span.badge, span.icon-fixed').forEach((n) => n.remove());
     const box = document.createElement('div');
     box.className = 'dnd-actions';
-    box.innerHTML = '<button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>';
+    box.innerHTML = '<button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن">{{ icon('plus', 'ico') }}</button>';
     li.appendChild(box);
   }
   function moveToActive(li) {

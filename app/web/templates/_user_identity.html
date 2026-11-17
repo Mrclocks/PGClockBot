@@ -1,0 +1,37 @@
+{# Who the person is, at the top of the user card, the user edit modal and the reseller edit modal: the Telegram photo
+   (its initial until the photo loads, or when there is none), the name with its badges, then the @username and the
+   Telegram id as chips that copy on tap. The caller adds badges with caller('badges') and anything that sits under
+   the identity with caller('after'). #}
+{% from "_icons.html" import icon %}
+{% macro user_identity(user) -%}
+{% set display_name = user.full_name or user.username or "—" %}
+<div class="user-identity">
+  <div class="user-identity-row">
+    <span class="user-card-photo" aria-hidden="true">
+      <span>{{ display_name[:1] }}</span>
+      <img src="/users/{{ user.id }}/photo" alt="" width="56" height="56" decoding="async" data-user-photo>
+    </span>
+    <div class="user-identity-main">
+      <h3 class="user-identity-name"><bdi>{{ display_name }}</bdi></h3>
+      {%- if caller %}{% set badges = caller('badges') %}{% if badges | trim %}
+      <p class="user-identity-badges">{{ badges }}</p>
+      {%- endif %}{% endif %}
+    </div>
+  </div>
+  <div class="user-identity-ids">
+    {% if user.username %}
+    <button type="button" class="user-id-chip" data-copy="@{{ user.username }}" aria-label="کپی یوزرنیم">
+      <span class="user-id-chip-label">یوزرنیم</span>
+      <bdi class="user-id-chip-value" dir="ltr">@{{ user.username }}</bdi>
+      {{ icon('copy', 'user-id-chip-ico') }}
+    </button>
+    {% endif %}
+    <button type="button" class="user-id-chip" data-copy="{{ user.telegram_id }}" aria-label="کپی آیدی عددی">
+      <span class="user-id-chip-label">آیدی</span>
+      <bdi class="user-id-chip-value" dir="ltr">{{ user.telegram_id }}</bdi>
+      {{ icon('copy', 'user-id-chip-ico') }}
+    </button>
+  </div>
+  {%- if caller %}{{ caller('after') }}{% endif %}
+</div>
+{%- endmacro %}

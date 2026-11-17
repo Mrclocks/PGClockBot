@@ -143,7 +143,7 @@ class ScreenTests(RoutesHarness):
         with patch("app.services.pg_overview.build_reseller_pg_overview", AsyncMock(return_value=overview)):
             response = await self.call_form(OWNER_SESSION, "GET", "/resellers/5/edit?fragment=1")
         self.assertEqual(response.status_code, 200)
-        for needle in ("کاربران کل", "نامحدود", "/resellers/5/subscription/sync", "500 گیگ", "یکی نیست"):
+        for needle in ("کاربران کل", "نامحدود", "/resellers/5/subscription/sync", "۵۰۰ گیگ", "یکی نیست"):
             self.assertIn(needle, response.text)
 
     async def test_the_owner_syncs_and_a_shop_cannot(self):

@@ -20,6 +20,11 @@ NODE_LIST_MAX_AGE_SEC = 15.0
 CAPABILITY_PROBE_MAX_AGE_SEC = 180.0
 CAPABILITY_PROBE_PATH = "__pg_capability_probe__"
 ROLE_FEATURES_PATH = "__pg_role_features__"
+# A probe that failed because PasarGuard is unreachable is held briefly, so
+# every web request during an outage does not wait on the panel again. Only
+# outages are held: a refused login is re-checked on the next request.
+CAPABILITY_OUTAGE_PATH = "__pg_capability_outage__"
+CAPABILITY_OUTAGE_HOLD_SEC = 15.0
 # Display-only fallback while PasarGuard is unreachable; never for access checks.
 LAST_GOOD_MAX_AGE_SEC = 900.0
 _MAX = 256
@@ -113,7 +118,7 @@ def invalidate_ident(ident: str) -> None:
 
 def invalidate_capability_cache(*, ident: str | None = None) -> None:
     """Drop capability / role-feature entries (all identities, or one)."""
-    paths = {CAPABILITY_PROBE_PATH, ROLE_FEATURES_PATH}
+    paths = {CAPABILITY_PROBE_PATH, CAPABILITY_OUTAGE_PATH, ROLE_FEATURES_PATH}
     if ident is None:
         for key in [key for key in _STORE if key[1] in paths]:
             _STORE.pop(key, None)

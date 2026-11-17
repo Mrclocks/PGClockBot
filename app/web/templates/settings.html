@@ -1,27 +1,24 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, modal_title %}
 {% from "_settings_tabs.html" import settings_tabs %}
-{% from "_panel_settings_tabs.html" import panel_settings_tabs %}
+{% from "_settings_hub.html" import settings_hub, settings_area_header %}
 {% block title %}{% if is_panel_settings %}تنظیمات سیستم{% else %}تنظیمات ربات{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {% if is_panel_settings %}
-    {{ page_title('panel-settings', 'تنظیمات سیستم', 'neutral', help='settings-panel') }}
-    {% else %}
-    {{ page_title('bot-settings', 'تنظیمات ربات', help='settings-bot') }}
-    {% endif %}
-  </div>
-</div>
-
+{% set is_hub = (is_panel_settings and request.query_params.get('tab') == 'system') or (not is_panel_settings and tabs and not request.query_params.get('tab')) %}
 {% if is_panel_settings %}
-{{ panel_settings_tabs(tab) }}
-{% elif tabs %}
-{{ settings_tabs(tab, tabs, tab_nav|default(none)) }}
+{{ settings_area_header(system_settings_groups(tab), tab, '/settings?tab=system', 'تنظیمات سیستم', 'panel-settings', 'neutral', help='settings-panel', is_hub=is_hub) }}
+{% else %}
+{{ settings_area_header(tab_nav|default(()), tab, '/settings', 'تنظیمات ربات', 'bot-settings', help='settings-bot', is_hub=is_hub) }}
+{% if not is_hub and tabs %}{{ settings_tabs(tab, tabs, tab_nav|default(none)) }}{% endif %}
 {% endif %}
 
-<div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','daily_report'] %}can-preview{% endif %}" id="settings-layout">
+{% if is_hub and is_panel_settings %}
+{{ settings_hub(system_hub_sections(), tone='neutral') }}
+{% elif is_hub %}
+{{ settings_hub(hub_sections(tab_nav, '/settings', area_icon='bot')) }}
+{% else %}
+<div class="settings-layout">
   <div class="settings-main">
 
   {% if tab == 'general' %}
@@ -49,6 +46,7 @@
   {% elif tab == 'links' %}
     {% include "_settings_links.html" %}
   {% elif tab == 'limits' %}
+    {% include "_settings_entry_approval.html" %}
     <form method="post" action="/settings?tab=limits" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
       {% set fields = groups[group_name] %}
@@ -174,20 +172,10 @@
   {% endif %}
 
   </div>
-
-  {% if tab == 'appearance' %}
-  {% include "_tg_preview_appearance.html" %}
-  {% elif tab in ['menu','welcome','messages','buttons','qr','daily_report'] %}
-  {% include "_tg_preview_chat.html" %}
-  {% endif %}
 </div>
+{# Fields tied to a switch or a choice (SETTING_VISIBILITY) appear as soon as it changes, before saving. #}
+<script src="/static/settings-show-when.js?v={{ asset_v('settings-show-when.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 
-{% if tab == 'appearance' %}
-{% include "_tg_preview_appearance_js.html" %}
-{% endif %}
-{% if tab in ['menu','welcome','messages','buttons','qr','daily_report'] %}
-{% include "_tg_preview_chat_js.html" %}
-{% endif %}
 {% if tab == 'naming' %}
 <script>
 (function(){
@@ -196,7 +184,7 @@
   if (!form || !sample) return;
   function rnd(){ return Math.random().toString(36).slice(2,10); }
   function render(){
-    const prefix = (form.querySelector('[name="s_pg_username_prefix"]')||{}).value || 'clk';
+    const prefix = ((form.querySelector('[name="s_pg_username_prefix"]')||{}).value || '').trim();
     const suffix = (form.querySelector('[name="s_pg_username_suffix"]')||{}).value || '';
     const pattern = (form.querySelector('[name="s_pg_username_pattern"]')||{}).value || '{prefix}_{random}{suffix}';
     let out;
@@ -210,15 +198,16 @@
         .replaceAll('{plan_unit}', 'GB')
         .replaceAll('{username}', 'ali_user');
     } catch (e) {
-      out = prefix + '_' + rnd() + suffix;
+      out = (prefix ? prefix + '_' : '') + rnd() + suffix;
     }
-    sample.textContent = out;
+    sample.textContent = out.replace(/^_+|_+$/g, '');
   }
   form.addEventListener('input', render);
   form.addEventListener('change', render);
   render();
 })();
 </script>
+{% endif %}
 {% endif %}
 </div>
 {% endblock %}

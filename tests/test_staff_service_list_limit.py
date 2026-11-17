@@ -98,6 +98,13 @@ class ServiceListKeyboardLimitTests(unittest.TestCase):
         from app.bot.handlers import reseller_customer_services as shop
 
         ids = list(range(1, 101))
-        for markup in (kb.admin_user_services_keyboard(4, ids), shop._services_keyboard(4, ids)):
+        for markup in (
+            kb.admin_user_services_keyboard(4, ids),
+            shop._services_keyboard(4, ids),
+            shop._services_keyboard(4, ids, can_import=True),
+        ):
             buttons = [b for row in markup.inline_keyboard for b in row]
-            self.assertEqual(len(buttons), SERVICE_BUTTON_LIMIT + 1, "service buttons plus back")
+            services = [b for b in buttons if b.text.startswith("سرویس #")]
+            self.assertEqual(len(services), SERVICE_BUTTON_LIMIT)
+            # Besides the service buttons only back and, when allowed, «افزودن سرویس قبلی».
+            self.assertLessEqual(len(buttons) - len(services), 2)

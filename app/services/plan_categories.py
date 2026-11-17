@@ -7,7 +7,7 @@ fixed/trial/custom). Each category targets an ``audience``:
 
 from __future__ import annotations
 
-from sqlalchemy import func, select, update
+from sqlalchemy import ColumnElement, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Plan, PlanCategory, ResellerPlan, ServiceAddonPack
@@ -227,17 +227,35 @@ async def get_owned_category(
     return cat
 
 
+def _same_owner(owner_id: int | None) -> ColumnElement[bool]:
+    """Categories of one catalog: the platform's (NULL owner) or one shop's."""
+    if owner_id is None:
+        return PlanCategory.owner_reseller_id.is_(None)
+    return PlanCategory.owner_reseller_id == int(owner_id)
+
+
+async def _next_sort_order(session: AsyncSession, owner_id: int | None, audience: str) -> int:
+    """One past the last category of this catalog and audience."""
+    last = await session.scalar(
+        select(func.max(PlanCategory.sort_order)).where(
+            _same_owner(owner_id), PlanCategory.audience == normalize_audience(audience)
+        )
+    )
+    return int(last) + 1 if last is not None else 0
+
+
 async def create_category(
     session: AsyncSession,
     staff: dict | None,
     *,
     name: str,
     description: str | None = None,
-    sort_order: int = 0,
+    sort_order: int | None = None,
     audience: str = AUDIENCE_USERS,
     button_style: str | None = None,
     icon_custom_emoji_id: str | None | object = ...,
 ) -> PlanCategory:
+    """A new category of the staff shop; without ``sort_order`` it goes last, so it is the last bot button."""
     owner_id = require_catalog_owner_id(staff)
     cleaned = (name or "").strip()
     if not cleaned:
@@ -273,7 +291,9 @@ async def create_category(
         description=desc,
         audience=aud,
         owner_reseller_id=owner_id,
-        sort_order=int(sort_order or 0),
+        sort_order=(
+            int(sort_order) if sort_order is not None else await _next_sort_order(session, owner_id, aud)
+        ),
         button_style=style_val,
         icon_custom_emoji_id=icon_val,
         is_active=True,
@@ -350,6 +370,81 @@ async def update_category(
     await session.commit()
     await session.refresh(cat)
     return cat
+
+
+async def find_or_create_user_category(
+    session: AsyncSession, staff: dict | None, *, name: str, button_style: str | None = None
+) -> tuple[PlanCategory, bool]:
+    """A user-audience category of the staff shop with this name, created when there is none.
+
+    The plan form adds categories in place; a second tap or a retried request with the same name returns the
+    category already made (with its own colour) instead of a duplicate. ``button_style`` is the bot button colour
+    of a new one, None to inherit the «ثابت» colour. Returns (category, created).
+    """
+    owner_id = require_catalog_owner_id(staff)
+    cleaned = (name or "").strip()
+    if not cleaned:
+        raise ValueError("نام دسته‌بندی الزامی است")
+    existing = await session.scalar(
+        select(PlanCategory)
+        .where(
+            _same_owner(owner_id),
+            PlanCategory.audience == AUDIENCE_USERS,
+            func.lower(PlanCategory.name) == cleaned.lower(),
+        )
+        .order_by(PlanCategory.id)
+        .limit(1)
+    )
+    if existing is not None:
+        if not existing.is_active:
+            raise ValueError("دسته‌ای با همین نام هست ولی خاموش است؛ از فهرست دسته‌ها روشنش کنید")
+        return existing, False
+    category = await create_category(
+        session, staff, name=cleaned, audience=AUDIENCE_USERS, button_style=button_style
+    )
+    return category, True
+
+
+MOVE_DIRECTIONS = {"up": -1, "down": 1}
+
+
+async def move_category(
+    session: AsyncSession, staff: dict | None, category_id: int, *, direction: str
+) -> bool:
+    """Swap a category with its neighbour in the shop's order for the same audience.
+
+    The order is the order of the category buttons in the bot. Every category of that shop and audience is
+    renumbered 0, 1, 2… so equal sort numbers no longer leave the order to the id. Returns False when the category
+    is already first (up) or last (down).
+    """
+    step = MOVE_DIRECTIONS.get(str(direction or "").strip().lower())
+    if step is None:
+        raise ValueError("جهت جابه‌جایی نامعتبر است")
+    cat = await get_owned_category(session, category_id, staff)
+    if not cat:
+        raise ShopScopeError("دسته‌بندی یافت نشد")
+    siblings = list(
+        (
+            await session.execute(
+                select(PlanCategory)
+                .where(
+                    _same_owner(cat.owner_reseller_id),
+                    PlanCategory.audience == normalize_audience(cat.audience),
+                )
+                .order_by(PlanCategory.sort_order, PlanCategory.id)
+                .with_for_update()
+            )
+        ).scalars()
+    )
+    index = next(i for i, row in enumerate(siblings) if row.id == cat.id)
+    target = index + step
+    if not 0 <= target < len(siblings):
+        return False
+    siblings[index], siblings[target] = siblings[target], siblings[index]
+    for position, row in enumerate(siblings):
+        row.sort_order = position
+    await session.commit()
+    return True
 
 
 async def _category_pack_count(session: AsyncSession, cat: PlanCategory) -> int:

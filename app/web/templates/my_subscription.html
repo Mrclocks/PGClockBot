@@ -1,14 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_title, card_title, row_actions %}
+{% from "macros.html" import card_title, row_actions, page_header %}
 {% from "_my_account_tabs.html" import my_account_tabs %}
 {% block title %}اشتراک من{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-<div class="page-head">
-  <div>
-    {{ page_title('payments', 'اشتراک من') }}
-  </div>
-</div>
+{{ page_header('payments', 'اشتراک من') }}
 
 {{ my_account_tabs('subscription') }}
 
@@ -108,7 +104,7 @@
     <label class="form-field">
       <span class="form-field-label">نرخ هر گیگ: <bdi dir="ltr">{{ extras.gb_price | money }}</bdi> تومان — یک پله انتخاب کنید</span>
       <select name="amount">
-        {% for n in extras.gb_options %}<option value="{{ n }}">{{ n }} گیگ — {{ (n * extras.gb_price) | money }} تومان</option>{% endfor %}
+        {% for n in extras.gb_options %}<option value="{{ n }}">{{ (n) | fa }} گیگ — {{ (n * extras.gb_price) | money }} تومان</option>{% endfor %}
       </select>
     </label>
     <button type="submit" class="btn btn-sm">خرید حجم</button>
@@ -126,7 +122,7 @@
     <label class="form-field">
       <span class="form-field-label">نرخ هر کاربر: <bdi dir="ltr">{{ extras.user_price | money }}</bdi> تومان — یک پله انتخاب کنید</span>
       <select name="amount">
-        {% for n in extras.user_options %}<option value="{{ n }}">{{ n }} کاربر — {{ (n * extras.user_price) | money }} تومان</option>{% endfor %}
+        {% for n in extras.user_options %}<option value="{{ n }}">{{ (n) | fa }} کاربر — {{ (n * extras.user_price) | money }} تومان</option>{% endfor %}
       </select>
     </label>
     <button type="submit" class="btn btn-sm">خرید کاربر</button>

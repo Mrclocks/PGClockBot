@@ -2,14 +2,14 @@
 const assert = require('assert');
 const chart = require('../app/web/static/sales-chart.js');
 
-assert.strictEqual(chart.compactToman(4820000), '4.82 میلیون');
-assert.strictEqual(chart.compactToman(250000), '250 هزار');
-assert.strictEqual(chart.compactToman(1000000), '1 میلیون');
-assert.strictEqual(chart.compactToman(900), '900');
-assert.strictEqual(chart.compactToman(0), '0');
-assert.strictEqual(chart.fullToman(27420000), '27,420,000');
+assert.strictEqual(chart.compactToman(4820000), '۴٫۸۲ میلیون');
+assert.strictEqual(chart.compactToman(250000), '۲۵۰ هزار');
+assert.strictEqual(chart.compactToman(1000000), '۱ میلیون');
+assert.strictEqual(chart.compactToman(900), '۹۰۰');
+assert.strictEqual(chart.compactToman(0), '۰');
+assert.strictEqual(chart.fullToman(27420000), '۲۷٬۴۲۰٬۰۰۰');
 
-assert.strictEqual(chart.compactToman(1500), '1.5 هزار');
+assert.strictEqual(chart.compactToman(1500), '۱٫۵ هزار');
 
 // The scale covers the peak with headroom but leaves no more than about half of the plot empty.
 for (const peak of [900, 1500, 5800000, 6100000, 8500000, 10000000, 27420000, 999999999]) {

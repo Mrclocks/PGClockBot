@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {# Shared home ops block: work queue and sales chart → period sales
    Expects: periods, action_center (optional)
 #}
@@ -33,7 +34,7 @@
   </div>
   {% else %}
   <div class="home-action-empty" role="status">
-    <svg class="home-action-empty-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/></svg>
+    {{ icon('check-circle', 'home-action-empty-ico') }}
     <strong>صف کار خالی است</strong>
     <span class="muted">الان کاری منتظر شما نیست؛ رسید، خطا یا سرویس رو به انقضا که بیاید، اینجا نشان داده می‌شود.</span>
   </div>
@@ -46,7 +47,7 @@
 <section class="card home-periods-card" aria-label="فروش دوره‌ای">
   <header class="home-periods-head">
     {{ card_title('sales', 'فروش دوره‌ای') }}
-    <p class="muted">امروز · 7 روز · 30 روز</p>
+    <p class="muted">امروز · ۷ روز · ۳۰ روز</p>
   </header>
   <div class="home-period-grid">
     <article class="home-period">
@@ -59,7 +60,7 @@
       </dl>
     </article>
     <article class="home-period">
-      <h3 class="home-period-label">7 روز</h3>
+      <h3 class="home-period-label">۷ روز</h3>
       <dl class="home-period-metrics">
         <div><dt>سفارش</dt><dd>{{ week.orders | num }}</dd></div>
         <div><dt>خرید موفق</dt><dd>{{ week.delivered | num }}</dd></div>
@@ -68,7 +69,7 @@
       </dl>
     </article>
     <article class="home-period">
-      <h3 class="home-period-label">30 روز</h3>
+      <h3 class="home-period-label">۳۰ روز</h3>
       <dl class="home-period-metrics">
         <div><dt>سفارش</dt><dd>{{ month.orders | num }}</dd></div>
         <div><dt>خرید موفق</dt><dd>{{ month.delivered | num }}</dd></div>

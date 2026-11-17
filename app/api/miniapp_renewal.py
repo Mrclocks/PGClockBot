@@ -33,7 +33,7 @@ def renewal_options_payload(choices: RenewalChoices, *, wallet_pay_enabled: bool
         "grouped": grouped,
         "current": _plan_row(choices, choices.current) if choices.current else None,
         "categories": [
-            {"id": int(c.id), "name": c.name, "plans": [_plan_row(choices, p) for p in choices.in_category(int(c.id))]}
+            {"id": int(c.id), "name": c.name, "description": c.description or "", "plans": [_plan_row(choices, p) for p in choices.in_category(int(c.id))]}
             for c in choices.categories
         ] if grouped else [],
         "other": [_plan_row(choices, p) for p in choices.uncategorized] if grouped else [],

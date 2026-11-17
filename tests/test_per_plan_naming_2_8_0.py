@@ -55,7 +55,56 @@ class ResolveUsernameNamingTests(unittest.TestCase):
         self.assertEqual(pattern, "{prefix}_{random}{suffix}")
 
 
+    def test_global_prefix_saved_empty_means_no_prefix(self):
+        from app.services.orders import resolve_username_naming
+
+        prefix, _suffix, _pattern = resolve_username_naming(
+            {"pg_username_prefix": "", "pg_username_suffix": "", "pg_username_pattern": ""}
+        )
+        self.assertEqual(prefix, "")
+
+    def test_missing_global_prefix_uses_builtin_default(self):
+        from app.services.orders import resolve_username_naming
+
+        prefix, _suffix, _pattern = resolve_username_naming({})
+        self.assertEqual(prefix, "clk")
+
+    def test_plan_prefix_still_overrides_empty_global(self):
+        from app.services.orders import resolve_username_naming
+
+        prefix, _suffix, _pattern = resolve_username_naming(
+            {"pg_username_prefix": ""}, plan_prefix="vip"
+        )
+        self.assertEqual(prefix, "vip")
+
+
 class GenerateWithPlanTests(unittest.IsolatedAsyncioTestCase):
+    async def test_empty_global_prefix_builds_name_without_clk_or_leading_separator(self):
+        from app.services.orders import generate_pg_username
+
+        settings = {
+            "pg_username_prefix": "",
+            "pg_username_suffix": "",
+            "pg_username_pattern": "{prefix}_{random}{suffix}",
+        }
+        with patch("app.services.users.get_all_settings", new=AsyncMock(return_value=settings)):
+            name = await generate_pg_username(AsyncMock(), user_id=7)
+        self.assertFalse(name.startswith("clk"))
+        self.assertFalse(name.startswith("_"))
+        self.assertRegex(name, r"^[A-Za-z0-9]{8}$")
+
+    async def test_pattern_rendering_only_separators_gets_full_random_name(self):
+        from app.services.orders import generate_pg_username
+
+        settings = {
+            "pg_username_prefix": "",
+            "pg_username_suffix": "",
+            "pg_username_pattern": "{prefix}_{id}",
+        }
+        with patch("app.services.users.get_all_settings", new=AsyncMock(return_value=settings)):
+            name = await generate_pg_username(AsyncMock())
+        self.assertRegex(name, r"^[A-Za-z0-9]{8}$")
+
     async def test_generate_uses_plan_fields(self):
         from app.services.orders import generate_pg_username
 

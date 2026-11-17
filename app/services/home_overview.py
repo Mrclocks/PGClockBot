@@ -92,6 +92,9 @@ async def close_bot_probe_client() -> None:
         await client.aclose()
 
 
+BOT_REFUSED_MESSAGE = "توکن نامعتبر است یا تلگرام ربات را نپذیرفت"
+
+
 async def _probe_bot(token: str) -> dict[str, Any]:
     try:
         resp = await _telegram_http().get(f"https://api.telegram.org/bot{token}/getMe")
@@ -109,8 +112,10 @@ async def _probe_bot(token: str) -> dict[str, Any]:
             "name": me.get("first_name"),
             "id": me.get("id"),
         }
+    # Telegram's own description is provider text: it is logged, and the dashboard shows a fixed reason.
     description = data.get("description") if isinstance(data, dict) else None
-    return {"ok": False, "error": description or "توکن نامعتبر", "username": None, "name": None}
+    _log.warning("Telegram getMe refused: %s", str(description or "")[:120])
+    return {"ok": False, "error": BOT_REFUSED_MESSAGE, "username": None, "name": None}
 
 
 async def check_bot_connection(token: str | None = None) -> dict[str, Any]:

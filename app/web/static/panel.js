@@ -495,13 +495,14 @@
       const toggle = document.getElementById('theme-toggle');
       const menu = document.getElementById('theme-menu');
       const label = document.getElementById('theme-label');
-      const ico = document.getElementById('theme-ico');
+      const ico = document.querySelector('#theme-ico svg');
       const labels = { system: 'تم · سیستم', light: 'تم · روشن', dark: 'تم · تیره' };
-      const icons = {
-        system: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
-        light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-        dark: '<path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/>'
-      };
+      /* The drawing of each choice comes from its own row in the menu (icon() in base.html), not a second copy here. */
+      const icons = {};
+      if (menu) menu.querySelectorAll('[data-theme-pref]').forEach((opt) => {
+        const svg = opt.querySelector('svg');
+        if (svg) icons[opt.getAttribute('data-theme-pref')] = svg.innerHTML;
+      });
       function resolve(pref){
         if (pref === 'light' || pref === 'dark') return pref;
         return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -946,6 +947,8 @@
       if (sel.disabled) toggle.disabled = true;
       const label = document.createElement('span');
       label.className = 'ui-select-label';
+      // A Latin option (grpc, a username) reads left to right and is centred on its letters (panel.css).
+      label.dir = 'auto';
       toggle.appendChild(label);
       const caret = document.createElement('span');
       caret.innerHTML = '<svg class="ui-select-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6L8 3l3.5 3"/><path d="M4.5 10L8 13l3.5-3"/></svg>';
@@ -1404,25 +1407,6 @@
       return modal.contains(scroller);
     }
 
-    function tryScrollModalTabs(e, modal){
-      /* Vertical-only wheel guard was killing horizontal tab scroll (loyalty etc.). */
-      const t = e.target;
-      const tabs = t && t.closest ? t.closest('.modal-section-tabs') : null;
-      if (!tabs || !modal.contains(tabs)) return false;
-      if (tabs.scrollWidth <= tabs.clientWidth + 1) return false;
-      const dxRaw = e.deltaX || 0;
-      const dyRaw = e.deltaY || 0;
-      const dx = Math.abs(dxRaw) > Math.abs(dyRaw) ? dxRaw : dyRaw;
-      if (!dx) return false;
-      const before = tabs.scrollLeft;
-      const max = tabs.scrollWidth - tabs.clientWidth;
-      const next = Math.max(0, Math.min(max, before + dx));
-      if (next === before) return false;
-      tabs.scrollLeft = next;
-      e.preventDefault();
-      return true;
-    }
-
     function findScrollableAncestor(start, modal){
       let node = start;
       while (node && node !== modal && node !== document.body) {
@@ -1468,7 +1452,6 @@
           e.preventDefault();
           return;
         }
-        if (tryScrollModalTabs(e, modal)) return;
         const scroller = findScrollableAncestor(e.target, modal);
         if (canScrollInside(scroller, e.deltaY)) return;
         /* Interior edge: overscroll-behavior:contain on .ui-modal-scroll blocks chain */
@@ -1496,11 +1479,6 @@
             || e.target === modal
             || (e.target.classList && e.target.classList.contains('ui-modal-backdrop'))) {
           e.preventDefault();
-          return;
-        }
-        /* Let native horizontal pan work on overflowing modal tab strips. */
-        const tabs = e.target.closest && e.target.closest('.modal-section-tabs');
-        if (tabs && modal.contains(tabs) && tabs.scrollWidth > tabs.clientWidth + 1) {
           return;
         }
         if (!e.touches || !e.touches.length) return;
@@ -1858,53 +1836,6 @@
       closeModal(open);
     });
 
-    /* Domain settings modals: inner tab buttons */
-    document.addEventListener('click', (e) => {
-      const tabBtn = e.target.closest('[data-modal-tabs] [data-modal-tab]');
-      if (!tabBtn) return;
-      const nav = tabBtn.closest('[data-modal-tabs]');
-      const root = tabBtn.closest('.ui-modal-panel') || tabBtn.closest('.ui-modal');
-      if (!nav || !root) return;
-      e.preventDefault();
-      const id = tabBtn.getAttribute('data-modal-tab');
-      nav.querySelectorAll('[data-modal-tab]').forEach((btn) => {
-        btn.classList.toggle('active', btn === tabBtn);
-      });
-      root.querySelectorAll('[data-modal-tab-panel]').forEach((panel) => {
-        const match = panel.getAttribute('data-modal-tab-panel') === id;
-        panel.hidden = !match;
-      });
-      const modalRoot = tabBtn.closest('.ui-modal');
-      if (modalRoot) pinModalStickySave(modalRoot);
-      try {
-        const u = new URL(window.location.href);
-        const inDomainModal = !!(
-          tabBtn.closest('#modal-loyalty-settings')
-          || tabBtn.closest('#modal-finance-settings')
-          || tabBtn.closest('#modal-supports-settings')
-          || u.searchParams.has('settings')
-          || u.searchParams.has('supports')
-          || u.searchParams.has('stab')
-        );
-        if (inDomainModal) {
-          if (id === 'payment' || id === 'billing') u.searchParams.set('settings', id);
-          else if (id === 'club') u.searchParams.set('settings', '1');
-          else if (id === 'referral' || id === 'rules' || id === 'rewards' || id === 'tiers') {
-            u.searchParams.set('settings', id);
-          }
-          else if (id === 'contacts') {
-            u.searchParams.set('supports', '1');
-            u.searchParams.set('stab', 'contacts');
-          } else if (id === 'text') {
-            u.searchParams.set('supports', '1');
-            u.searchParams.set('stab', 'text');
-          }
-          const next = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '') + u.hash;
-          window.history.replaceState({}, '', next);
-        }
-      } catch (err) {}
-    });
-
     /* Copy helpers (subscription links, etc.) — data-copy holds the text to copy */
     function markCopied(btn) {
       if (!btn) return;
@@ -1916,12 +1847,16 @@
             ? (btn.textContent || '').trim()
             : 'کپی');
       btn.dataset.copyIdle = idle;
+      // Keep the label's own nodes (a token's left-to-right box, an icon) to put back after «کپی شد».
+      if (!btn._copyNodes) btn._copyNodes = [...btn.childNodes];
       btn.textContent = 'کپی شد';
-      btn.classList.add('btn-ok', 'is-copied');
+      btn.classList.add('is-copied');
       if (btn._copyTimer) clearTimeout(btn._copyTimer);
       btn._copyTimer = setTimeout(() => {
-        btn.textContent = btn.dataset.copyIdle || 'کپی';
-        btn.classList.remove('btn-ok', 'is-copied');
+        if (btn._copyNodes && btn._copyNodes.length) btn.replaceChildren(...btn._copyNodes);
+        else btn.textContent = btn.dataset.copyIdle || 'کپی';
+        btn._copyNodes = null;
+        btn.classList.remove('is-copied');
       }, 1400);
     }
     document.addEventListener('click', (e) => {
@@ -1979,14 +1914,14 @@
         const wrap = ensureProgress(box);
         const bar = wrap.querySelector('.upload-box-progress-bar');
         wrap.hidden = false;
-        if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+        if (bar) bar.style.setProperty('--p', String(Math.max(0, Math.min(100, pct))));
         box.classList.add('is-uploading');
       }
       function clearProgress(box){
         const wrap = box.querySelector('.upload-box-progress');
         const bar = wrap && wrap.querySelector('.upload-box-progress-bar');
         if (wrap) wrap.hidden = true;
-        if (bar) bar.style.width = '0%';
+        if (bar) bar.style.setProperty('--p', '0');
         box.classList.remove('is-uploading');
       }
       function showToast(msg){
@@ -4204,7 +4139,7 @@ const root = document.getElementById('upd-root');
     setBusy(true, 'در حال راه‌اندازی مجدد…');
     if (stateEl) stateEl.textContent = (extra || RESTART_MSG);
     if (stepEl) stepEl.textContent = 'راه‌اندازی مجدد سرویس';
-    if (fill) fill.style.width = '98%';
+    if (fill) fill.style.setProperty('--p', '98');
     if (percentEl) percentEl.textContent = '۹۸٪';
   }
 
@@ -4307,7 +4242,7 @@ const root = document.getElementById('upd-root');
     }
     if (st.state === 'running' || st.state === 'error' || st.restart_required) showOps(true);
     const pct = Number(st.percent || 0);
-    fill.style.width = pct + '%';
+    fill.style.setProperty('--p', String(pct));
     if (percentEl) percentEl.textContent = pct + '٪';
     if (stepEl) {
       stepEl.textContent = (st.state === 'error' || st.restart_required)

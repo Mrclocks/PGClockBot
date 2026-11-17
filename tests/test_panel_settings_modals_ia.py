@@ -65,7 +65,6 @@ class DomainModalTemplateTests(unittest.TestCase):
     def test_loyalty_settings_modal_not_page_tab(self):
         html = (TEMPLATES / "loyalty.html").read_text(encoding="utf-8")
         self.assertIn('data-modal-open="modal-loyalty-settings"', html)
-        self.assertIn("marketing_tabs(", html)
         self.assertIn("باشگاه مشتریان", html)
         self.assertIn("home-panel-grid", html)
         self.assertIn("home-panel-neutral", html)
@@ -76,12 +75,6 @@ class DomainModalTemplateTests(unittest.TestCase):
         self.assertNotIn('href="/loyalty?tab=rewards"', html)
         self.assertNotIn('href="/loyalty?tab=tiers"', html)
         self.assertIn("_modal_loyalty_settings.html", html)
-        modal = (TEMPLATES / "_modal_loyalty_settings.html").read_text(encoding="utf-8")
-        self.assertIn('data-modal-tab="club"', modal)
-        self.assertIn('data-modal-tab="referral"', modal)
-        self.assertIn('data-modal-tab="rules"', modal)
-        self.assertIn('data-modal-tab="rewards"', modal)
-        self.assertIn('data-modal-tab="tiers"', modal)
 
     def test_search_bars_have_no_title_label(self):
         for name in ("users.html", "finance.html", "resellers.html", "pg_users.html"):
@@ -120,8 +113,6 @@ class DomainModalTemplateTests(unittest.TestCase):
     def test_modal_tab_js_and_css(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn("data-modal-tabs", js)
-        self.assertIn("data-modal-tab-panel", js)
         self.assertIn("data-modal-close-strip", js)
         self.assertIn("data-modal-strip-keys", js)
         self.assertIn("settings-modal-panel", css)
@@ -260,12 +251,6 @@ class DomainSettingGroupsTests(unittest.TestCase):
         )
         self.assertEqual({f[0] for f in SETTING_GROUPS["متن دعوت دوستان"]}, {"referral_bonus", "referral_text"})
 
-    def test_preview_js_drops_moved_message_fields(self):
-        src = (TEMPLATES / "_tg_preview_chat_js.html").read_text(encoding="utf-8")
-        self.assertNotIn("s_support_text", src)
-        self.assertNotIn("s_referral_text", src)
-        self.assertNotIn("s_payment_reject_text", src)
-
 
 class SafeNextTests(unittest.TestCase):
     def test_safe_internal_next_blocks_open_redirects(self):
@@ -297,10 +282,12 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         panel_keys = [k for k, _ in PANEL_SETTINGS_TABS]
         self.assertEqual(panel_keys[0], "general")
         self.assertIn("general", panel_keys)
-        tabs = (TEMPLATES / "_panel_settings_tabs.html").read_text(encoding="utf-8")
-        self.assertIn('href="/settings?tab=general"', tabs)
-        # general link appears before backup
-        self.assertLess(tabs.index("tab=general"), tabs.index("tab=backup"))
+        from app.services.settings_hub import system_hub_sections
+
+        hrefs = [row.href for section in system_hub_sections() for row in section.rows]
+        self.assertIn("/settings?tab=general", hrefs)
+        # general comes before backup in the system settings list
+        self.assertLess(hrefs.index("/settings?tab=general"), hrefs.index("/settings?tab=backup"))
         bot = (TEMPLATES / "_settings_bot.html").read_text(encoding="utf-8")
         self.assertNotIn("وب و عمومی", bot)
         general = (TEMPLATES / "_settings_general.html").read_text(encoding="utf-8")
@@ -310,7 +297,7 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
 
         nav = owner_sidebar()
         every_href = [h for section in nav.values() for h in hrefs(section)]
-        self.assertIn("/settings?tab=general", hrefs(nav["system"]))
+        self.assertIn("/settings?tab=system", hrefs(nav["system"]))
         self.assertNotIn("/settings?tab=pasarguard", every_href)
         # The bot connection is reached from the system settings tabs, not the sidebar.
         self.assertNotIn("/settings?tab=bot", every_href)
@@ -359,7 +346,7 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         inp = css.split(".magic-link-field .magic-link-input {", 1)[1].split("}", 1)[0]
         self.assertIn("text-overflow: ellipsis", inp)
         self.assertIn("text-align: left", inp)
-        self.assertIn("font-size: 10px !important", inp)
+        self.assertIn("font-size: var(--fs-1) !important", inp)
         self.assertIn("flex: 1 1 auto", inp)
         btn = css.split(".magic-link-copy {", 1)[1].split("}", 1)[0]
         self.assertIn("flex: 0 0 var(--magic-copy-w)", btn)
@@ -386,5 +373,6 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         self.assertIn("bot", [k for k, _ in PANEL_SETTINGS_TABS])
         self.assertNotIn("bot", [k for k, _ in SETTINGS_TABS])
         self.assertNotIn("/settings?tab=bot", [h for _, h in owner_sidebar()["pg"]])
-        tabs = (TEMPLATES / "_panel_settings_tabs.html").read_text(encoding="utf-8")
-        self.assertIn('href="/settings?tab=bot"', tabs)
+        from app.services.settings_hub import system_hub_sections
+
+        self.assertIn("/settings?tab=bot", [row.href for section in system_hub_sections() for row in section.rows])

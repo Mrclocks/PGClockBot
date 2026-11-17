@@ -81,9 +81,9 @@ class SidebarPerRoleTests(unittest.TestCase):
             items = [i.label for s in build_sidebar(v, path="/home") for i in s.items]
             self.assertEqual(len(items), len(set(items)), items)
 
-    def test_marketing_entry_opens_the_first_allowed_section(self) -> None:
+    def test_marketing_entry_opens_the_marketing_list(self) -> None:
         item = next(i for s in build_sidebar(RESELLER, path="/home") for i in s.items if i.key == "marketing")
-        self.assertEqual(item.href, "/catalog-discounts")
+        self.assertEqual(item.href, "/marketing")
 
 
 class ActiveItemTests(unittest.TestCase):
@@ -148,7 +148,7 @@ class RenderedSidebarTests(unittest.TestCase):
         self.assertIn("active", link)
         self.assertIn('aria-current="page"', link)
         self.assertIn('aria-label="اعلان خوانده‌نشده"', link)
-        self.assertIn('href="/loyalty"', html)
+        self.assertIn('href="/marketing"', html)
 
     def test_sections_start_collapsed_and_keep_their_keys(self) -> None:
         html = self.render({"role": "admin", "permissions": [], "pg_permissions": ["pg_users"]}, {"kind": "owner"},

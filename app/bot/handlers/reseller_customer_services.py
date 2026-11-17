@@ -52,6 +52,7 @@ from app.services.redact import user_safe_error
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
 from app.services.service_import import admin_delete_pg_flag, is_external_service
+from app.services.service_import_assign import ASSIGN_PERMISSION
 from app.services.shop_membership import is_shop_customer
 from app.services.staff_cards import (
     format_adjust_prompt,
@@ -126,11 +127,13 @@ def may_manage_customer_services(profile: ResellerProfile | None) -> bool:
     return has_bot_perm(profile, PERMISSION)
 
 
-def _services_keyboard(user_id: int, service_ids: list[int]) -> InlineKeyboardMarkup:
+def _services_keyboard(user_id: int, service_ids: list[int], *, can_import: bool = False) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(text=f"سرویس #{sid}", callback_data=f"{PREFIX}:svc:{user_id}:{sid}")]
         for sid in service_ids[:SERVICE_BUTTON_LIMIT]
     ]
+    if can_import:
+        rows.append([kb.service_import_button(user_id)])
     rows.append([kb.back_button(None, f"{PREFIX}:user:{user_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -294,15 +297,14 @@ async def res_user_services(
     if target is None:
         return
     await callback.answer()
+    can_import = has_bot_perm(target.profile, ASSIGN_PERMISSION)
     snaps = await list_service_snapshots(session, target.user_id, shop_id=target.owner_id)
     if not snaps:
         if callback.message:
             await safe_edit_text(
                 callback.message,
                 "این مشتری هنوز سرویسی در فروشگاه شما ندارد.",
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[[kb.back_button(None, f"{PREFIX}:user:{target.user_id}")]]
-                ),
+                reply_markup=_services_keyboard(target.user_id, [], can_import=can_import),
             )
         return
     text = format_services_list(
@@ -314,7 +316,7 @@ async def res_user_services(
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=_services_keyboard(target.user_id, [s.service.id for s in snaps]),
+            reply_markup=_services_keyboard(target.user_id, [s.service.id for s in snaps], can_import=can_import),
         )
 
 

@@ -27,10 +27,15 @@ from app.services import bot_feedback_texts as feedback
 router = Router(name="plan_catalog_manage")
 
 
+CATEGORY_DESCRIPTION_LIMIT = 255
+CLEAR_DESCRIPTION_TOKEN = "-"
+
+
 class PlanCatalogStates(StatesGroup):
     cat_name = State()
     cat_audience = State()
     cat_edit_name = State()
+    cat_edit_desc = State()
     addon_name = State()
     addon_kind = State()
     addon_amount = State()
@@ -135,6 +140,10 @@ def _cat_list_markup(
                 InlineKeyboardButton(
                     text="✏️",
                     callback_data=f"pcm:cat:edit:{c.id}",
+                ),
+                InlineKeyboardButton(
+                    text="📝",
+                    callback_data=f"pcm:cat:desc:{c.id}",
                 ),
                 InlineKeyboardButton(
                     text="🗑",
@@ -735,6 +744,114 @@ async def pcm_cat_edit_ask(
         cancel_code="pcm_hub",
         fsm_state=PlanCatalogStates.cat_edit_name,
         edit=True,
+    )
+
+
+@router.callback_query(F.data.startswith("pcm:cat:desc:"))
+async def pcm_cat_desc_ask(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.bot.nav_input import ask_text
+    from app.services.plan_categories import get_owned_category
+
+    staff = await _ctx_from_callback(
+        callback,
+        session,
+        db_user,
+        state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not staff:
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
+        return
+    try:
+        cid = int(callback.data.rsplit(":", 1)[-1])
+    except ValueError:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    cat = await get_owned_category(session, cid, staff)
+    if not cat:
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        return
+    await state.update_data(_pcm_edit_cat_id=cid)
+    await callback.answer()
+    current = html.escape(cat.description or "—")
+    await ask_text(
+        callback,
+        state,
+        prompt=(
+            f"توضیح «{html.escape(cat.name)}» که زیر لیست دسته‌ها به مشتری نمایش داده می‌شود.\n"
+            f"فعلی: {current}\n"
+            f"توضیح جدید را بفرستید (حداکثر {CATEGORY_DESCRIPTION_LIMIT} کاراکتر؛ برای حذف «-» بفرستید):"
+        ),
+        cancel_code="pcm_hub",
+        fsm_state=PlanCatalogStates.cat_edit_desc,
+        edit=True,
+    )
+
+
+@router.message(PlanCatalogStates.cat_edit_desc)
+async def pcm_cat_desc_save(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.plan_categories import list_categories, update_category
+
+    if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
+        await state.set_state(None)
+        await message.answer(feedback.CANCELLED)
+        return
+    staff = await resolve_catalog_staff(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    data = await state.get_data()
+    cid = int(data.get("_pcm_edit_cat_id") or 0)
+    if not staff or not cid:
+        await state.clear()
+        await message.answer(feedback.NO_ACCESS_REPLY)
+        return
+    text = (message.text or "").strip()
+    try:
+        await update_category(
+            session, staff, cid, description="" if text == CLEAR_DESCRIPTION_TOKEN else text
+        )
+    except (ShopScopeError, ValueError) as e:
+        await message.answer(user_safe_error(e))
+        return
+    await state.set_state(None)
+    cats = await list_categories(session, staff, active_only=False)
+    await finish_text_step(
+        message,
+        state,
+        text=feedback.SAVED_CHECK + "\n\nدسته‌ها:",
+        inline=_cat_list_markup(
+            cats,
+            ui=await _pcm_ui(session, reseller_owner_id=reseller_owner_id, state=state),
+        ),
     )
 
 

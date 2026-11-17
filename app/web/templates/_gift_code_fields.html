@@ -1,6 +1,12 @@
 {% from "macros.html" import switch, switch_chip %}
-{% macro gift_code_fields(c=none, details={}, plans=[]) %}
+{# A field label with the «نامحدود» toggle: an empty field means no limit (panel-ds.js). #}
+{% macro unlimited_label(label, target, default) %}
+<span class="ds-label-row"><span class="ds-label-text">{{ label }}</span>
+  <button type="button" class="ds-mini" aria-pressed="false" data-ds-unlimited="{{ target }}" data-ds-empty-is-unlimited data-ds-default="{{ default }}">نامحدود</button></span>
+{% endmacro %}
+{% macro gift_code_fields(c=none, details={}, plans=[], max_expiry_days=none) %}
 {% set kind = c.kind if c else 'wallet' %}
+{% set uid = 'gift-' ~ (c.id if c else 'new') %}
 <div class="settings-grid">
   <label class="form-field">نوع کد
     {% if c %}
@@ -13,38 +19,34 @@
     </select>
     {% endif %}
   </label>
-  <label class="form-field" data-gift-kind="wallet">مبلغ شارژ (تومان)
-    <input name="amount" type="number" data-money min="1" max="50000000" step="1" value="{{ c.amount if c and kind == 'wallet' else '' }}" data-gift-required placeholder="50,000" dir="ltr" />
-  </label>
-  <label class="form-field" data-gift-kind="discount" {% if kind != 'discount' %}hidden{% endif %}>درصد تخفیف
-    <input name="percent" type="number" min="1" max="100" value="{{ c.percent if c and kind == 'discount' else '' }}" data-gift-required placeholder="20" dir="ltr" />
-  </label>
-  <label class="form-field" data-gift-kind="discount" {% if kind != 'discount' %}hidden{% endif %}>سقف تخفیف (تومان)
-    <input name="max_discount_toman" type="number" data-money min="1" max="50000000" value="{{ c.max_discount_toman if c and c.max_discount_toman is not none else '' }}" placeholder="خالی = بدون سقف" dir="ltr" />
-  </label>
-  <label class="form-field">سقف استفاده کل
-    <input name="max_uses" type="number" min="1" max="1000" value="{{ (c.max_uses if c.max_uses is not none else '') if c else 1 }}" placeholder="خالی = نامحدود" dir="ltr" />
-  </label>
-  <label class="form-field">سقف استفاده هر کاربر
-    <input name="max_uses_per_user" type="number" min="1" max="1000" value="{{ (c.max_uses_per_user if c.max_uses_per_user is not none else '') if c else 1 }}" placeholder="خالی = نامحدود" dir="ltr" />
-  </label>
-  <label class="form-field gift-expires-field">تاریخ و ساعت انقضا (به وقت تهران)
-    {# Plain text — native date-time picker has a huge intrinsic min-width on
-       mobile WebViews; min-width:0 crushed the inner UI into a left-edge
-       sliver while still not matching sibling field widths. #}
-    <input
-      name="expires_at"
-      type="text"
-      inputmode="numeric"
-      autocomplete="off"
-      spellcheck="false"
-      maxlength="32"
-      placeholder="2030-01-01 23:59"
-      value="{{ details.get('expiry_input', '') }}"
-      dir="ltr"
-    />
-    <small class="muted">خالی = بدون انقضا · میلادی · YYYY-MM-DD HH:MM</small>
-  </label>
+  <div class="form-field" data-gift-kind="wallet">
+    <span class="ds-label-text">مبلغ شارژ</span>
+    <span class="ds-unit"><input name="amount" type="number" data-money min="1" max="50000000" step="1" value="{{ c.amount if c and kind == 'wallet' else '' }}" data-gift-required placeholder="50,000" inputmode="numeric" dir="ltr" aria-label="مبلغ شارژ (تومان)" /><span class="ds-unit-label">تومان</span></span>
+  </div>
+  <div class="form-field" data-gift-kind="discount" {% if kind != 'discount' %}hidden{% endif %}>
+    <span class="ds-label-text">درصد تخفیف</span>
+    <span class="ds-unit"><input name="percent" type="number" min="1" max="100" value="{{ c.percent if c and kind == 'discount' else '' }}" data-gift-required placeholder="20" inputmode="numeric" dir="ltr" aria-label="درصد تخفیف" /><span class="ds-unit-label">درصد</span></span>
+  </div>
+  <div class="form-field" data-gift-kind="discount" {% if kind != 'discount' %}hidden{% endif %}>
+    {{ unlimited_label('سقف تخفیف', '#' ~ uid ~ '-max-discount', 50000) }}
+    <span class="ds-unit" data-unlimited-label="بدون سقف"><input name="max_discount_toman" id="{{ uid }}-max-discount" type="number" data-money min="1" max="50000000" value="{{ c.max_discount_toman if c and c.max_discount_toman is not none else '' }}" inputmode="numeric" dir="ltr" aria-label="سقف تخفیف (تومان)" /><span class="ds-unit-label">تومان</span></span>
+  </div>
+  <div class="form-field">
+    {{ unlimited_label('سقف استفاده کل', '#' ~ uid ~ '-max-uses', 1) }}
+    <span class="ds-unit" data-unlimited-label="نامحدود"><input name="max_uses" id="{{ uid }}-max-uses" type="number" min="1" max="1000" value="{{ (c.max_uses if c.max_uses is not none else '') if c else 1 }}" inputmode="numeric" dir="ltr" aria-label="سقف استفاده کل (بار)" /><span class="ds-unit-label">بار</span></span>
+  </div>
+  <div class="form-field">
+    {{ unlimited_label('سقف استفاده هر کاربر', '#' ~ uid ~ '-max-per-user', 1) }}
+    <span class="ds-unit" data-unlimited-label="نامحدود"><input name="max_uses_per_user" id="{{ uid }}-max-per-user" type="number" min="1" max="1000" value="{{ (c.max_uses_per_user if c.max_uses_per_user is not none else '') if c else 1 }}" inputmode="numeric" dir="ltr" aria-label="سقف استفاده هر کاربر (بار)" /><span class="ds-unit-label">بار</span></span>
+  </div>
+  <div class="form-field">
+    {% set shown_days = details.get('expiry_days', '') %}
+    {{ unlimited_label('مدت اعتبار', '#' ~ uid ~ '-days', 30) }}
+    <span class="ds-unit" data-unlimited-label="بدون انقضا"><input name="expires_in_days" id="{{ uid }}-days" type="number" min="{{ 0 if shown_days == '0' else 1 }}" {% if max_expiry_days %}max="{{ max_expiry_days }}" {% endif %}step="1" value="{{ shown_days }}" inputmode="numeric" dir="ltr" aria-label="مدت اعتبار (روز)" /><span class="ds-unit-label">روز</span></span>
+    {# Saving the days shown here keeps the code's exact expiry; a new number starts counting from the save. #}
+    <input name="expires_in_days_shown" type="hidden" value="{{ shown_days }}" />
+    {% if details.get('expiry_label') and shown_days %}<small class="muted">انقضای فعلی: <bdi dir="ltr">{{ details.get('expiry_label') | fa }}</bdi> (تهران)</small>{% endif %}
+  </div>
   {% if not c %}
   <label class="form-field">کد سفارشی (اختیاری)
     <input name="code" dir="ltr" maxlength="64" placeholder="خالی = خودکار" />
@@ -54,29 +56,31 @@
     <input name="note" maxlength="255" value="{{ c.note or '' if c else '' }}" placeholder="مثلاً کمپین نوروز" />
   </label>
 </div>
-<div data-gift-kind="discount" {% if kind != 'discount' %}hidden{% endif %}>
-  {{ switch('first_purchase_only', 'فقط خرید اول', checked=c and c.first_purchase_only) }}
-  <p class="muted">فقط برای کاربرانی که در این فروشگاه هنوز خرید موفقی ندارند. تست رایگان و سفارش لغوشده حساب نمی‌شود.</p>
-  <fieldset class="form-field">
-    <legend>قابل استفاده برای</legend>
-    <div class="checks">
+<div class="form-stack" data-gift-kind="discount" {% if kind != 'discount' %}hidden{% endif %}>
+  <div class="form-field">
+    {{ switch('first_purchase_only', 'فقط خرید اول', checked=c and c.first_purchase_only) }}
+    <small class="muted">فقط برای کاربرانی که در این فروشگاه هنوز خرید موفقی ندارند. تست رایگان و سفارش لغوشده حساب نمی‌شود.</small>
+  </div>
+  <div class="form-field">
+    <span class="ds-label-text">قابل استفاده برای</span>
+    <div class="ui-switch-grid">
       {% for key, label in [('new', 'خرید جدید'), ('renew', 'تمدید'), ('volume', 'افزایش حجم'), ('duration', 'افزایش زمان')] %}
       {{ switch_chip('purchase_types', label, checked=c and key in (c.purchase_types or '').split(','), value=key) }}
       {% endfor %}
     </div>
-    <span class="muted">بدون انتخاب = همه نوع خرید. می‌توانید چند مورد را انتخاب کنید.</span>
-  </fieldset>
+    <small class="muted">بدون انتخاب = همه نوع خرید. می‌توانید چند مورد را انتخاب کنید.</small>
+  </div>
   {% if plans %}
   {% set chosen = (c.plan_ids or '').split(',') if c else [] %}
-  <fieldset class="form-field">
-    <legend>فقط برای این پلن‌ها</legend>
-    <div class="checks">
+  <div class="form-field">
+    <span class="ds-label-text">فقط برای این پلن‌ها</span>
+    <div class="ui-switch-grid">
       {% for plan_id, name, active in plans %}
       {{ switch_chip('plan_ids', name if active else name ~ ' (غیرفعال)', checked=plan_id|string in chosen, value=plan_id) }}
       {% endfor %}
     </div>
-    <span class="muted">بدون انتخاب = همه پلن‌ها. کد محدود به پلن فقط روی خرید جدید و تمدید همان پلن‌ها اعمال می‌شود، نه افزایش حجم یا زمان.</span>
-  </fieldset>
+    <small class="muted">بدون انتخاب = همه پلن‌ها. کد محدود به پلن فقط روی خرید جدید و تمدید همان پلن‌ها اعمال می‌شود، نه افزایش حجم یا زمان.</small>
+  </div>
   {% endif %}
   <p class="muted">کاربر کد تخفیف را هنگام پرداخت وارد می‌کند. سقف تخفیف روی مجموع مبلغ سفارش اعمال می‌شود.</p>
 </div>

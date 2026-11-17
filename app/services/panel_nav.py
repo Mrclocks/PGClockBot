@@ -30,6 +30,8 @@ DOT_LABELS: dict[str, str] = {
 }
 
 MARKETING_KEY = "marketing"
+# The marketing entry opens the list of the marketing area (app/api/marketing_pages.py).
+MARKETING_LIST_HREF = "/marketing"
 
 # Phone bottom bar: dashboard and action center, then the most used pages the viewer may open.
 # The owner can put other pages first (app/services/mobile_bar.py); these fill whatever is left.
@@ -112,7 +114,8 @@ class NavLocation:
     tab: str
 
     def is_panel_settings(self) -> bool:
-        return self.path.startswith("/settings") and self.tab in PANEL_SETTINGS_KEYS
+        # ``system`` is the list of the system settings area (settings_hub.SYSTEM_LIST_TAB).
+        return self.path.startswith("/settings") and (self.tab in PANEL_SETTINGS_KEYS or self.tab == "system")
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,7 +198,7 @@ _INBOX = _ItemSpec("inbox", "مرکز اقدام", "/inbox", "inbox", lambda v: 
 _SYSTEM_OWNER: tuple[_ItemSpec, ...] = (
     _DASHBOARD,
     _INBOX,
-    _ItemSpec("system_settings", "تنظیمات سیستم", "/settings?tab=general", "sliders", _owner,
+    _ItemSpec("system_settings", "تنظیمات سیستم", "/settings?tab=system", "gear", _owner,
               lambda loc: loc.is_panel_settings() or loc.path.startswith("/security")),
 )
 
@@ -214,9 +217,9 @@ _SHOP_ITEMS: tuple[_ItemSpec, ...] = (
     _ItemSpec("users", "کاربران ربات", "/users", "users", _owner, _starts("/users"), short="کاربران"),
     _ItemSpec("customers", "مشتریان", "/users", "users",
               lambda v: not v.is_owner and "dashboard" in v.perms, _starts("/users")),
-    _ItemSpec("my_resellers", "نمایندگان من", "/resellers", "users",
+    _ItemSpec("my_resellers", "نمایندگان من", "/resellers", "resellers",
               lambda v: not v.is_owner and v.can_add_representative, _starts("/resellers")),
-    _ItemSpec("resellers", "نمایندگان", "/resellers", "users-pair",
+    _ItemSpec("resellers", "نمایندگان", "/resellers", "resellers",
               lambda v: v.is_owner and v.can_manage_representatives, _starts("/resellers")),
     _ItemSpec("finance", "مالی", "/finance", "cart", _perm("orders", "payments"),
               _starts("/finance", "/orders", "/payments", "/service-cancellations"), DOT_CANCEL),
@@ -259,11 +262,12 @@ def _items(specs: Iterable[_ItemSpec], viewer: NavViewer, loc: NavLocation) -> l
 
 
 def _marketing_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> NavItem | None:
-    """One entry for every marketing section the viewer may open; it opens the first of them."""
+    """One entry for every marketing section the viewer may open; it opens the list of those sections."""
     if not viewer.marketing_hrefs:
         return None
-    active = any(loc.path.startswith(href.split("?")[0]) for href in viewer.marketing_hrefs)
-    return NavItem(spec.key, spec.label, viewer.marketing_hrefs[0], spec.icon, active)
+    paths = (MARKETING_LIST_HREF, *(href.split("?")[0] for href in viewer.marketing_hrefs))
+    active = any(loc.path.startswith(path) for path in paths)
+    return NavItem(spec.key, spec.label, MARKETING_LIST_HREF, spec.icon, active)
 
 
 def build_sidebar(viewer: NavViewer, *, path: str, tab: str = "") -> tuple[NavSection, ...]:

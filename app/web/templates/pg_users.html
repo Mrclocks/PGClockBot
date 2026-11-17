@@ -1,21 +1,19 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, switch_chip, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import row_actions, switch_chip, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, search_submit %}
 {% block title %}کاربران پاسارگارد{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    {{ page_title('user', 'کاربران پاسارگارد', 'pg', help='pg-users') }}
-  </div>
-  {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-pg-user-create">ساخت کاربر</button>
-  {% endif %}
-</div>
+{% call(slot) page_header('user', 'کاربران پاسارگارد', 'pg', help='pg-users') %}
+  {%- if slot == 'primary' and can_create %}
+  <button type="button" class="btn" data-modal-open="modal-pg-user-create">{{ act_label('ساخت کاربر', 'کاربر') }}</button>
+  {%- endif %}
+{% endcall %}
 <div class="card card-flush">
   <form method="get" action="/pg/users" class="search-bar">
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام کاربری یا بخشی از آن…" autocomplete="off" />
     </label>
-    <button class="btn btn-ghost" type="submit">جستجو</button>
+    {{ search_submit() }}
   </form>
 
   {% if not users %}
@@ -62,14 +60,15 @@
       {% endif %}
       <tr data-bulk-ops="{{ ns.ops.rstrip(',') }}">
         {% if can_disable or can_enable or can_reset or can_revoke or can_delete %}{% if uid %}{{ table_select_cell(uid) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
-        <td class="mono li-title" dir="ltr" data-sort-value="{{ u.get('username') or '' }}">{{ u.get('username') or '—' }}</td>
+        <td class="mono li-title" data-sort-value="{{ u.get('username') or '' }}"><bdi dir="ltr">{{ u.get('username') or '—' }}</bdi></td>
         <td class="li-badge" data-sort-value="{{ '0' if disabled else '1' }}">
           {% if disabled %}
           <span class="badge warn">غیرفعال</span>
           {% elif u.get('status') == 'on_hold' %}
           <span class="badge warn">در انتظار اتصال</span>
           {% else %}
-          <span class="badge active">{{ u.get('status') or 'فعال' }}</span>
+          {% set st = (u.get('status') or 'active') | string | lower %}
+          <span class="badge {% if st == 'active' %}active{% elif st == 'expired' %}danger{% else %}warn{% endif %}"><bdi dir="auto">{{ st | pg_user_status }}</bdi></span>
           {% endif %}
         </td>
         <td class="mono reseller-quota-cell li-sub" data-sort-value="{{ u.get('used_traffic') if u.get('used_traffic') is not none else '' }}">
@@ -82,15 +81,15 @@
           {% else %}—{% endif %}
           </span>
         </td>
-        <td class="mono muted col-hide-sm li-value" dir="ltr" data-sort-value="{{ days_left if days_left is not none else 9999 }}">
-          <span class="li-only">{% if days_left is not none %}{{ days_left }} روز{% else %}—{% endif %}</span><span class="li-hide">
-          {% if u.get('_expire_text') %}{{ u.get('_expire_text') }}{% elif u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}</span>
+        <td class="mono muted col-hide-sm li-value" data-sort-value="{{ days_left if days_left is not none else 9999 }}">
+          <span class="li-only">{% if days_left is not none %}{{ (days_left) | fa }} روز{% else %}—{% endif %}</span><span class="li-hide">
+          {% if u.get('_expire_text') %}{{ u.get('_expire_text') | fa }}{% elif u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}</span>
         </td>
         {% if is_admin %}
         {% set adm = u.get('admin') %}
         {% set adm_name = adm.get('username') if adm is mapping else (adm or u.get('owner_username') or '') %}
-        <td class="mono muted col-hide-sm" dir="ltr" data-sort-value="{{ adm_name or '' }}">
-          {{ adm_name or '—' }}
+        <td class="mono muted col-hide-sm" data-sort-value="{{ adm_name or '' }}">
+          <bdi dir="ltr">{{ adm_name or '—' }}</bdi>
         </td>
         {% endif %}
         <td class="col-actions">
@@ -142,7 +141,7 @@
       {% if pager.pages and pager.total is not none %}
       صفحه {{ pager.page }} از {{ pager.pages }}
       <span aria-hidden="true">·</span>
-      {{ pager.total }} کاربر
+      {{ (pager.total) | fa }} کاربر
       {% else %}
       صفحه {{ pager.page }}
       {% endif %}
@@ -172,7 +171,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('users', 'ساخت کاربر پاسارگارد', tone='pg', heading_id='pg-user-create-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/users" class="form-stack ds-body" id="pg-user-create-form">
@@ -212,7 +211,7 @@
         {% endif %}
       </label>
 
-      <div id="pg-user-mode-custom" class="form-stack" {% if default_mode != 'custom' %}style="display:none"{% endif %}>
+      <div id="pg-user-mode-custom" class="form-stack"{% if default_mode != 'custom' %} hidden{% endif %}>
         <div class="form-row">
           <label class="form-field">حجم (گیگابایت)
             <input name="data_limit_gb" type="number" min="0" step="0.1" placeholder="مثلاً 50" inputmode="decimal" />
@@ -239,7 +238,7 @@
         {% endif %}
       </div>
 
-      <div id="pg-user-mode-template" class="form-stack" {% if default_mode != 'template' %}style="display:none"{% endif %}>
+      <div id="pg-user-mode-template" class="form-stack"{% if default_mode != 'template' %} hidden{% endif %}>
         <label class="form-field">تمپلیت پاسارگارد
           <select name="template_id" id="pg-user-template">
             <option value="">— انتخاب —</option>
@@ -270,7 +269,7 @@
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
         {{ modal_title('users', 'ویرایش کاربر', tone='brand', heading_id='pg-user-edit-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <form method="post" action="/pg/users/0/edit" class="form-stack ds-body" id="pg-user-edit-form">
@@ -327,8 +326,8 @@
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-user-link-title">
     <div class="ui-modal-head ds-head">
       <div class="ds-head-row">
-        {{ modal_title('settings', 'لینک اشتراک', tone='brand', heading_id='pg-user-link-title') }}
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        {{ modal_title('device', 'لینک اشتراک', tone='brand', heading_id='pg-user-link-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
       </div>
     </div>
     <div class="form-stack">
@@ -359,10 +358,10 @@
     if (!btn) return;
     const prev = btn.textContent;
     btn.textContent = 'کپی شد';
-    btn.classList.add('btn-ok', 'is-copied');
+    btn.classList.add('is-copied');
     setTimeout(function () {
       btn.textContent = prev;
-      btn.classList.remove('btn-ok', 'is-copied');
+      btn.classList.remove('is-copied');
     }, 1500);
   }
 
@@ -375,8 +374,8 @@
   if (mode && custom && tpl) {
     function sync(){
       const isTpl = mode.value === 'template';
-      custom.style.display = isTpl ? 'none' : '';
-      tpl.style.display = isTpl ? '' : 'none';
+      custom.hidden = isTpl;
+      tpl.hidden = !isTpl;
       if (tplSelect) tplSelect.required = isTpl;
     }
     mode.addEventListener('change', sync);
