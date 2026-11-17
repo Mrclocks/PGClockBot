@@ -134,9 +134,10 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
     def test_reseller_sees_only_the_features_granted_to_them(self):
         self.assertEqual(
             _keys(_reseller(["loyalty", "campaigns"])),
-            [CLUB, CLUB_TRANSACTIONS, CAMPAIGNS],
+            [CLUB, CLUB_TRANSACTIONS, CAMPAIGNS, SHOP_BROADCAST],
         )
-        self.assertEqual(_keys(_reseller(["campaigns"])), [CAMPAIGNS])
+        # Campaigns were merged into group messages, so their permission also opens group messages.
+        self.assertEqual(_keys(_reseller(["campaigns"])), [CAMPAIGNS, SHOP_BROADCAST])
         self.assertEqual(_keys(_reseller(["loyalty"])), [CLUB, CLUB_TRANSACTIONS])
 
     def test_discounts_follow_their_own_permission(self):
@@ -162,9 +163,9 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         every_perm = ["loyalty", "campaigns", "broadcast", "shop_settings", "dashboard"]
         self.assertNotIn(BROADCAST, _keys(_reseller(every_perm)))
 
-    def test_reseller_sees_shop_broadcast_only_with_broadcast_permission(self):
+    def test_reseller_sees_shop_broadcast_only_with_broadcast_or_campaigns_permission(self):
         self.assertEqual(_keys(_reseller(["broadcast"])), [SHOP_BROADCAST])
-        self.assertNotIn(SHOP_BROADCAST, _keys(_reseller(["campaigns"])))
+        self.assertIn(SHOP_BROADCAST, _keys(_reseller(["campaigns"])))
         self.assertNotIn(SHOP_BROADCAST, _keys(_reseller(["shop_settings"])))
         self.assertEqual(_keys(_reseller(["broadcast"], shop_id=None)), [])
 
@@ -221,10 +222,10 @@ class MarketingGroupsTests(unittest.TestCase):
     def test_eight_pages_become_five_topics(self):
         groups = marketing_groups(marketing_sections(OWNER))
         self.assertEqual([g.label for g in groups],
-                         ["باشگاه مشتریان", "تخفیف و کد هدیه", "پیام و کمپین", "کاربران تست", "رفتار کاربر"])
+                         ["باشگاه مشتریان", "تخفیف و کد هدیه", "کاربران تست", "رفتار کاربر"])
         keys = [s.key for g in groups for s in g.sections]
-        # Group messages have their own sidebar entry, so the marketing list leaves them out.
-        expected = [s.key for s in marketing_sections(OWNER) if s.key not in (BROADCAST, SHOP_BROADCAST)]
+        # Group messages (and the campaigns merged into them) have their own sidebar entry, not a list row.
+        expected = [s.key for s in marketing_sections(OWNER) if s.key not in (BROADCAST, SHOP_BROADCAST, CAMPAIGNS)]
         self.assertEqual(sorted(keys), sorted(expected))
 
     def test_a_topic_without_allowed_pages_is_left_out(self):
@@ -285,7 +286,7 @@ class MarketingNavRenderedPageTests(unittest.TestCase):
         self.assertIn('<a href="/broadcast" class="nav-item', html)
         self.assertNotIn('aria-label="بازگشت به بازاریابی"', html)
 
-    def test_reseller_with_campaigns_only_gets_no_broadcast_or_club_links(self):
+    def test_reseller_with_campaigns_only_returns_to_group_messages_not_club_or_owner_pages(self):
         staff = _reseller(["campaigns"])
         html = _page(
             "customer_features.html",
@@ -298,8 +299,9 @@ class MarketingNavRenderedPageTests(unittest.TestCase):
             limit=10,
             campaigns=[],
             mode="campaigns",
+            group_page="/shop-broadcast",
         )
-        self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', html)
+        self.assertIn('href="/shop-broadcast" aria-label="بازگشت به پیام گروهی"', html)
         self.assertNotIn('href="/broadcast"', html)
         self.assertNotIn('href="/loyalty', html)
 

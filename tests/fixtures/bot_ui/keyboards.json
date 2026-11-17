@@ -41,7 +41,7 @@
         },
         {
           "callback_data": "adm:broadcast:aud:users",
-          "text": "👥 کاربران عادی"
+          "text": "👥 مشتریان (بدون ادمین)"
         }
       ],
       [
@@ -52,6 +52,17 @@
         {
           "callback_data": "adm:broadcast:aud:admins",
           "text": "🛠 ادمین‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:bc:seg",
+          "style": "primary",
+          "text": "🎯 مخاطبان هدفمند"
+        },
+        {
+          "callback_data": "nv:adm:cmp",
+          "text": "📣 کمپین‌ها"
         }
       ],
       [
@@ -309,25 +320,19 @@
       ],
       [
         {
-          "callback_data": "nv:adm:cmp",
-          "text": "📣 کمپین‌ها"
-        },
-        {
           "callback_data": "nv:adm:cb",
           "text": "💸 کش‌بک"
-        }
-      ],
-      [
+        },
         {
           "callback_data": "dsc:l",
           "text": "🏷 تخفیف‌ها"
-        },
-        {
-          "callback_data": "fnl:v",
-          "text": "📊 رفتار کاربر"
         }
       ],
       [
+        {
+          "callback_data": "fnl:v",
+          "text": "📊 رفتار کاربر"
+        },
         {
           "callback_data": "tru:l:all:0",
           "text": "🧪 کاربران تست"
@@ -3224,7 +3229,7 @@
           "text": "📢 همه"
         },
         {
-          "text": "👥 کاربران عادی"
+          "text": "👥 مشتریان (بدون ادمین)"
         }
       ],
       [

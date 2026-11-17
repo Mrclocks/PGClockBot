@@ -1,93 +1,140 @@
-{# Buttons under a staff message (message_buttons): the row list (target, text, colour, remove, «افزودن دکمه»)
-   and the saved-sets card. Rows are driven by message-buttons.js; the server validates every row again. #}
+{# Buttons under a staff message (message_buttons): one collapsible row per button (what it opens, its text,
+   link or plan, and colour), «افزودن دکمه», saved sets, and a Telegram-style preview of the message with its
+   buttons. Rows are driven by message-buttons.js; every row posts the same five fields (btn_target, btn_label,
+   btn_url, btn_plan, btn_style), hidden ones included, so the server reads them by position and checks each again. #}
 {% from "_ds.html" import ico %}
+{% from "_icons.html" import icon as icon_svg %}
 
-{% macro button_row(targets, styles) -%}
-<div class="ds-list-row" data-msg-btn-row>
-  <span class="ds-list-value">
-    <select name="btn_target" aria-label="کار دکمه" data-msg-btn-target>
-      <option value="">— انتخاب —</option>
-      {% for value, label in targets or [] %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-    </select>
-  </span>
-  <span class="ds-list-value msg-btn-text">
-    <input name="btn_label" maxlength="40" dir="auto" placeholder="متن (خالی: پیش‌فرض)" aria-label="متن دکمه" />
-    <input name="btn_url" type="url" dir="ltr" maxlength="256" placeholder="https://…" aria-label="لینک دکمه" data-msg-btn-url hidden />
-  </span>
-  <span class="ds-dot-select" data-ds-dot data-menu-min-width="168" data-value="" data-tone="default">
-    <select name="btn_style" class="btn-color-select" data-tone="default" aria-label="رنگ دکمه">
-      {% for value, label, tone in styles or [] %}<option value="{{ value }}" data-tone="{{ tone }}">{{ label }}</option>{% endfor %}
-    </select>
-  </span>
-  <button type="button" class="ds-del" data-msg-btn-remove aria-label="حذف دکمه">{{ ico('trash') }}</button>
-</div>
+{% macro button_item(groups, styles, plans) -%}
+<details class="ds-acc msg-btn" data-msg-btn-row open>
+  <summary>
+    <span class="msg-btn-dot" data-msg-btn-dot data-tone="default" aria-hidden="true"></span>
+    <span class="ds-acc-title" data-msg-btn-title dir="auto">دکمهٔ تازه</span>
+    <span class="ds-meta" data-msg-btn-kind>کارش را انتخاب کنید</span>
+    {{ icon_svg('chev', 'ds-chev') }}
+  </summary>
+  <div class="msg-btn-body">
+    <div class="form-field">
+      <span>کار دکمه</span>
+      <div class="msg-btn-targets" role="radiogroup" aria-label="کار دکمه" data-ds-choice data-ds-target="[data-msg-btn-target]">
+        <select name="btn_target" hidden aria-hidden="true" tabindex="-1" data-ui-select="1" data-msg-btn-target>
+          <option value=""></option>
+          {% for group, options in groups or [] %}{% for value, label in options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}{% endfor %}
+        </select>
+        {% for group, options in groups or [] %}
+        <div class="msg-btn-group">
+          <span class="msg-btn-group-title">{{ group }}</span>
+          <div class="ds-chips msg-btn-chips">
+            {% for value, label in options %}<button type="button" role="radio" aria-checked="false" data-value="{{ value }}"><span dir="auto">{{ label }}</span></button>{% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <label class="form-field">متن دکمه
+      <input name="btn_label" maxlength="40" dir="auto" placeholder="خالی بماند: متن پیش‌فرض" data-msg-btn-label />
+    </label>
+    <label class="form-field" data-msg-btn-url-field hidden>لینک
+      <input name="btn_url" type="url" dir="ltr" maxlength="256" placeholder="https://…" inputmode="url" data-msg-btn-url />
+      <small class="muted">فقط نشانی‌ای که با https:// شروع شود.</small>
+    </label>
+    <label class="form-field" data-msg-btn-plan-field hidden>پلن
+      <select name="btn_plan" data-msg-btn-plan>
+        <option value="">— یک پلن انتخاب کنید —</option>
+        {% for plan_id, name in plans or [] %}<option value="{{ plan_id }}">{{ name }}</option>{% endfor %}
+      </select>
+      <small class="muted">مشتری با لمس دکمه مستقیم به خرید همین پلن می‌رود.</small>
+    </label>
+    <div class="form-field">
+      <span>رنگ</span>
+      <span class="ds-dot-select" data-ds-dot data-menu-min-width="168" data-value="" data-tone="default">
+        <select name="btn_style" class="btn-color-select" data-tone="default" aria-label="رنگ دکمه" data-msg-btn-style>
+          {% for value, label, tone in styles or [] %}<option value="{{ value }}" data-tone="{{ tone }}">{{ label }}</option>{% endfor %}
+        </select>
+      </span>
+    </div>
+    <div class="msg-btn-actions">
+      <button type="button" class="icon-btn" data-msg-btn-move="-1" aria-label="جابه‌جایی به قبل">{{ icon_svg('chev-up', 'ico') }}</button>
+      <button type="button" class="icon-btn" data-msg-btn-move="1" aria-label="جابه‌جایی به بعد">{{ icon_svg('chev-down', 'ico') }}</button>
+      <button type="button" class="btn btn-danger btn-sm" data-msg-btn-remove>{{ ico('trash') }}حذف دکمه</button>
+    </div>
+  </div>
+</details>
 {%- endmacro %}
 
-{% macro button_list(targets=[], styles=[], presets=[], max=4) -%}
-<div class="ds-list ds-list--buttons" data-msg-btn-list data-max="{{ max or 4 }}" data-presets="{{ (presets or []) | tojson | forceescape }}">
-  <div class="ds-list-head" aria-hidden="true"><span>کار دکمه</span><span>متن</span><span>رنگ</span><span></span></div>
-  <div data-msg-btn-rows></div>
-  <template data-msg-btn-template>{{ button_row(targets, styles) }}</template>
+{# The editable list. ``preview`` is the selector of the Telegram preview that mirrors it (optional). #}
+{% macro button_list(groups=[], styles=[], plans=[], presets=[], max=4, preview='') -%}
+<div class="msg-btns" data-msg-btn-list data-max="{{ max or 4 }}"{% if preview %} data-preview="{{ preview }}"{% endif %}
+     data-presets="{{ (presets or []) | tojson | forceescape }}">
+  <div class="msg-btns-rows" data-msg-btn-rows></div>
+  <template data-msg-btn-template>{{ button_item(groups, styles, plans) }}</template>
   <button type="button" class="ds-add" data-msg-btn-add>{{ ico('plus') }}افزودن دکمه</button>
 </div>
 {%- endmacro %}
 
-{% macro buttons_field(targets=[], styles=[], presets=[], max=4) -%}
+{# Saved sets as chips that fill the list (one tap replaces the rows). #}
+{% macro preset_chips(presets=[]) -%}
+{% if presets %}
 <div class="form-field">
-  <span>دکمه‌های زیر پیام (اختیاری، تا {{ max or 4 }} دکمه)</span>
-  {% if presets %}
-  <select data-msg-btn-preset aria-label="پر کردن دکمه‌ها از یک قالب">
-    <option value="">پر کردن از قالب ذخیره‌شده…</option>
-    {% for p in presets %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
-  </select>
-  {% endif %}
-  {{ button_list(targets, styles, presets, max) }}
-  <small class="muted">هر دکمه صفحه‌ای از ربات را زیر همین پیام باز می‌کند{% for value, label in (targets or []) if value == 'link' %}، یا لینکی که با https:// شروع شود{% endfor %}.</small>
+  <span>از قالب‌های ذخیره‌شده</span>
+  <div class="msg-btn-presets" data-msg-btn-presets>
+    {% for p in presets %}<button type="button" class="btn btn-ghost btn-sm" data-msg-btn-preset="{{ p.id }}"><span dir="auto">{{ p.name }}</span></button>{% endfor %}
+  </div>
+</div>
+{% endif %}
+{%- endmacro %}
+
+{# The message as a customer will see it: text bubble, then the buttons two to a row (message-buttons.js). #}
+{% macro message_preview(source, id='', empty='متن پیام اینجا دیده می‌شود.') -%}
+<div class="tg-preview"{% if id %} id="{{ id }}"{% endif %} data-msg-preview data-source="{{ source }}" data-empty="{{ empty }}" role="img" aria-label="پیش‌نمایش پیام در تلگرام">
+  <div class="tg-bubble"><p class="tg-text" dir="auto" data-msg-preview-text>{{ empty }}</p></div>
+  <div class="tg-keys" data-msg-preview-keys></div>
 </div>
 {%- endmacro %}
 
-{% macro presets_card(presets=[], targets=[], styles=[], limit=30, max=4) -%}
-<div class="card">
-  <h2>قالب‌های دکمه</h2>
-  <p class="muted">یک دسته دکمه را یک بار بسازید و زیر هر پیام انتخابش کنید (در ربات و وب)؛ حداکثر {{ limit }} قالب.</p>
-  {% if presets %}
-  <div class="table-wrap">
-  <table class="table-compact table-list-sm">
-    <thead><tr><th>نام</th><th class="col-text">دکمه‌ها</th><th class="col-actions"></th></tr></thead>
-    <tbody>
-    {% for p in presets %}
-      <tr>
-        <td class="li-title"><span dir="auto">{{ p.name }}</span></td>
-        <td class="li-sub"><span dir="auto">{% for b in p.buttons %}{{ b.label or b.target }}{% if not loop.last %} · {% endif %}{% endfor %}</span></td>
-        <td class="col-actions">
-          <form method="post" action="/message-buttons/presets/{{ p.id }}/delete"
-                data-confirm="قالب «{{ p.name }}» حذف شود؟ پیام‌های فرستاده‌شده تغییری نمی‌کنند."
-                data-confirm-title="حذف قالب"
-                data-confirm-danger="1"
-                data-confirm-label="حذف">
-            <button class="btn btn-danger btn-sm" type="submit" aria-label="حذف قالب {{ p.name }}">حذف</button>
-          </form>
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+{# Saved sets: list with delete, and a form to save a new set (same editor). Opened from the page's «⋯». #}
+{% macro presets_modal(presets=[], groups=[], styles=[], plans=[], limit=30, max=4) -%}
+{% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
+<div class="ui-modal ds" id="modal-msg-presets" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-msg-presets-title">
+    {{ ds_modal_head('template', 'قالب‌های دکمه', 'modal-msg-presets-title') }}
+    <div class="ds-body form-stack">
+      {% call ds_sec('قالب‌های ذخیره‌شده', extra_class='ds-sec-first', flush=true) %}
+        {% if presets %}
+        <ul class="msg-preset-list">
+          {% for p in presets %}
+          <li class="msg-preset-row">
+            <span class="msg-preset-copy"><strong dir="auto">{{ p.name }}</strong>
+              <small dir="auto">{% for b in p.buttons %}{{ b.label or b.target }}{% if not loop.last %} · {% endif %}{% endfor %}</small></span>
+            <form method="post" action="/message-buttons/presets/{{ p.id }}/delete"
+                  data-confirm="قالب «{{ p.name }}» حذف شود؟ پیام‌های فرستاده‌شده تغییری نمی‌کنند."
+                  data-confirm-title="حذف قالب" data-confirm-danger="1" data-confirm-label="حذف">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="ds-del" type="submit" aria-label="حذف قالب {{ p.name }}">{{ ico('trash') }}</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted msg-preset-empty">هنوز قالبی ساخته نشده. یک دسته دکمه را یک بار بسازید و زیر هر پیام انتخابش کنید.</p>
+        {% endif %}
+      {% endcall %}
+      <form method="post" action="/message-buttons/presets" class="form-stack" id="msg-preset-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {% call ds_sec('قالب تازه') %}
+          <label class="form-field">نام قالب
+            <input type="text" name="name" required maxlength="40" dir="auto" />
+            <small class="muted">با همین نام، قالب قبلی جایگزین می‌شود؛ حداکثر {{ limit | fa }} قالب.</small>
+          </label>
+          <div class="form-field">
+            <span>دکمه‌ها</span>
+            {{ button_list(groups, styles, plans, [], max) }}
+          </div>
+        {% endcall %}
+        {{ ds_foot('ذخیرهٔ قالب') }}
+      </form>
+    </div>
   </div>
-  {% else %}
-  <p class="muted">هنوز قالبی ساخته نشده.</p>
-  {% endif %}
-  <form method="post" action="/message-buttons/presets" class="form-stack">
-    <label class="form-field">نام قالب
-      <input type="text" name="name" required maxlength="40" dir="auto" />
-      <small class="muted">با همین نام، قالب قبلی جایگزین می‌شود.</small>
-    </label>
-    <div class="form-field">
-      <span>دکمه‌ها</span>
-      {{ button_list(targets, styles, [], max) }}
-    </div>
-    <div class="actions">
-      <button class="btn btn-ghost" type="submit">ذخیرهٔ قالب</button>
-    </div>
-  </form>
 </div>
 {%- endmacro %}

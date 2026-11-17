@@ -33,6 +33,8 @@ NOTICE_SCREEN_PREFIXES: tuple[str, ...] = (
     "svc:auto:",
     "svc:renew:",
     "svc:addon:",
+    # A plan offered under a group message: its handler shows only the shop's own catalog plans.
+    "shop:plan:",
 )
 
 
@@ -48,6 +50,14 @@ NOTICE_SCREENS: frozenset[str] = frozenset({
     "nv:loy:home",
     "svc:list",
     "shop:list",
+    # Customer screens a group message button may open (message_buttons.SCREENS).
+    "shop:kind:trial",
+    "shop:kind:custom",
+    "nv:w:topup",
+    "nv:loy:ref",
+    "nv:loy:wheel",
+    "help:guide",
+    "help:faq",
 })
 
 

@@ -1,48 +1,123 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, empty_state %}
-{% from "_message_buttons.html" import buttons_field, presets_card %}
+{% from "_icons.html" import icon %}
+{% from "_ds.html" import ds_sec, ds_switch, ico %}
+{% from "_message_buttons.html" import button_list, preset_chips, message_preview, presets_modal %}
 {% block title %}پیام گروهی{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-{{ page_header('broadcast', 'پیام گروهی', help='broadcast') }}
+{% call(slot) page_header('broadcast', 'پیام گروهی', help='broadcast') %}
+  {%- if slot == 'more' %}
+  <button type="button" class="btn btn-ghost" data-modal-open="modal-msg-presets">{{ icon('template', 'more-ico') }}قالب‌های دکمه</button>
+  <a class="btn btn-ghost" href="#bc-history">{{ icon('receipt', 'more-ico') }}تاریخچهٔ ارسال</a>
+  {% if campaigns_page %}<a class="btn btn-ghost" href="{{ campaigns_page }}">{{ icon('megaphone', 'more-ico') }}کمپین‌ها</a>{% endif %}
+  {%- endif %}
+{% endcall %}
 
+<form method="post" action="{{ page_path }}" class="bc-compose ds-page-form" id="bc-form" data-bc-form
+      data-audience-url="{{ page_path }}/audience"
+      data-confirm="پیام برای گروه انتخاب‌شده در صف ارسال قرار بگیرد؟ پیامِ فرستاده‌شده پس گرفته نمی‌شود."
+      data-confirm-title="ارسال پیام گروهی"
+      data-confirm-label="ارسال">
+  <input type="hidden" name="request_token" value="{{ request_token }}" />
+  <div class="bc-main ds-page-stack">
 
-<div class="card">
-  <h2>ارسال پیام</h2>
-  <form method="post" action="/broadcast" class="form-stack"
-        data-confirm="پیام برای گروه انتخاب‌شده در صف ارسال قرار بگیرد؟ پیامِ فرستاده‌شده پس گرفته نمی‌شود."
-        data-confirm-title="ارسال پیام گروهی"
-        data-confirm-label="ارسال">
-    <input type="hidden" name="request_token" value="{{ broadcast_request_token }}" />
-    <label class="form-field">مخاطبان
-      <select name="audience">
-        <option value="all">همه کاربران فعال</option>
-        <option value="users">فقط کاربران عادی</option>
-        <option value="resellers">فقط نمایندگان</option>
-        <option value="admins">فقط ادمین‌ها</option>
+    {% call ds_sec('مخاطبان', extra_class='bc-audience') %}
+      <select name="segment" id="bc-segment" hidden aria-hidden="true" tabindex="-1" data-ui-select="1">
+        {% for g in segment_groups %}{% for s in g.segments %}
+        <option value="{{ s.key }}" data-group="{{ g.key }}" data-days="{{ s.days }}"{% if s.key == 'all' %} selected{% endif %}>{{ s.label }}</option>
+        {% endfor %}{% endfor %}
       </select>
-      <small class="muted">گروه دریافت‌کننده پیام را انتخاب کنید</small>
-    </label>
-    <label class="form-field">متن پیام
-      <textarea name="text" rows="8" required maxlength="4000" placeholder="متن پیام…"></textarea>
-      <small class="muted">برچسب‌های ساده تلگرام مثل <code dir="ltr">&lt;b&gt;</code> و <code dir="ltr">&lt;a href="…"&gt;</code> مجازند؛ علامت «&lt;» تنها هم بی‌خطر است. ارسال ممکن است چند دقیقه طول بکشد.</small>
-    </label>
-    {{ buttons_field(button_targets, button_styles, button_presets, button_max) }}
-    <div class="actions">
-      <button class="btn" type="submit">ارسال پیام</button>
+      <select id="bc-group" hidden aria-hidden="true" tabindex="-1" data-ui-select="1" data-bc-group>
+        {% for g in segment_groups %}<option value="{{ g.key }}">{{ g.label }}</option>{% endfor %}
+      </select>
+      <div class="sales-seg ds-seg bc-groups" role="radiogroup" aria-label="دستهٔ مخاطبان" data-ds-choice data-ds-target="#bc-group">
+        {% for g in segment_groups %}<button type="button" role="radio" data-value="{{ g.key }}">{{ g.label }}</button>{% endfor %}
+      </div>
+      {% for g in segment_groups %}
+      <div class="ds-types ds-types-2 bc-segments" role="radiogroup" aria-label="مخاطبان: {{ g.label }}"
+           data-ds-choice data-ds-target="#bc-segment" data-ds-show-when="#bc-group:{{ g.key }}">
+        {% for s in g.segments %}
+        <button type="button" class="ds-type" role="radio" data-value="{{ s.key }}">
+          <span class="ds-type-ico" aria-hidden="true">{{ ico(s.icon) }}</span>
+          <span class="ds-type-copy"><strong>{{ s.label }}</strong><small>{{ s.hint }}</small></span>
+          <span class="ds-radio" aria-hidden="true"></span>
+        </button>
+        {% endfor %}
+      </div>
+      {% endfor %}
+
+      <div class="ds-grid-2">
+        <div class="form-field" data-ds-show-when="#bc-segment:{{ days_segments }}">
+          <label for="bc-days">بازهٔ زمانی</label>
+          <span class="ds-unit"><input name="days" id="bc-days" type="number" min="{{ days_min }}" max="{{ days_max }}" inputmode="numeric" dir="ltr" data-bc-days /><span class="ds-unit-label">روز</span></span>
+          <small class="muted" data-bc-days-hint>خالی بماند: مقدار پیش‌فرض</small>
+        </div>
+        {% if audience_plans %}
+        <label class="form-field" data-ds-show-when="#bc-segment:{{ filter_segments }}">پلن
+          <select name="plan_id" data-bc-filter>
+            <option value="">همهٔ پلن‌ها</option>
+            {% for plan_id, name in audience_plans %}<option value="{{ plan_id }}">{{ name }}</option>{% endfor %}
+          </select>
+          <small class="muted">فقط کسانی که سرویسی از این پلن دارند.</small>
+        </label>
+        {% endif %}
+        <div class="form-field" data-ds-show-when="#bc-segment:{{ filter_segments }}">
+          <label for="bc-wallet">حداقل موجودی کیف پول</label>
+          <span class="ds-unit"><input name="min_wallet" id="bc-wallet" type="number" min="1" inputmode="numeric" dir="ltr" data-bc-filter /><span class="ds-unit-label">تومان</span></span>
+          <small class="muted">خالی بماند: بدون این شرط</small>
+        </div>
+      </div>
+
+      {% if is_platform %}
+      <div class="ds-rows">
+        {{ ds_switch('notice', 'اطلاعیهٔ سرویس', 'به کسانی هم می‌رسد که پیام تبلیغاتی را خاموش کرده‌اند؛ فقط برای قطعی، تغییر مهم یا خبر ضروری.', id='bc-notice') }}
+      </div>
+      {% endif %}
+
+      <div class="bc-reach" data-bc-reach role="status" aria-live="polite">
+        <span class="bc-reach-ico" aria-hidden="true">{{ ico('users') }}</span>
+        <span class="bc-reach-copy">
+          <strong><span data-bc-count>…</span> نفر</strong>
+          <small data-bc-label>در حال شمارش مخاطبان…</small>
+        </span>
+      </div>
+      {% if recipient_limit %}
+      <div class="ds-note">{{ ico('info') }}<span>هر پیام حداکثر به {{ recipient_limit | num }} نفر می‌رسد. پیام به «همه» یا «سرویس فعال» برای هر فروشگاه روزی یک بار است؛ گروه‌های دیگر این محدودیت را ندارند. مشتریانی که پیام تبلیغاتی را خاموش کرده‌اند پیامی نمی‌گیرند.</span></div>
+      {% endif %}
+    {% endcall %}
+
+    {% call ds_sec('متن پیام') %}
+      <label class="form-field">
+        <textarea name="text" id="bc-text" rows="7" required maxlength="4000" dir="auto" placeholder="متن پیام…" aria-label="متن پیام"></textarea>
+        <small class="muted">{% if is_platform %}برچسب‌های ساده تلگرام مثل <code dir="ltr">&lt;b&gt;</code> و <code dir="ltr">&lt;a href="…"&gt;</code> مجازند؛ علامت «&lt;» تنها هم بی‌خطر است.{% else %}متن همان‌طور که نوشته‌اید فرستاده می‌شود.{% endif %} ارسال به‌تدریج انجام می‌شود.</small>
+      </label>
+    {% endcall %}
+
+    {% set buttons_side %}<span class="ds-meta">اختیاری · تا {{ button_max | fa }} دکمه</span>{% endset %}
+    {% call ds_sec('دکمه‌های زیر پیام', side=buttons_side) %}
+      {{ preset_chips(button_presets) }}
+      {{ button_list(button_target_groups, button_styles, button_plans, button_presets, button_max, preview='#bc-preview') }}
+    {% endcall %}
+  </div>
+
+  <aside class="bc-side ds-page-stack">
+    {% call ds_sec('پیش‌نمایش در تلگرام') %}
+      {{ message_preview('#bc-text', id='bc-preview') }}
+    {% endcall %}
+    <div class="bc-send">
+      <button class="btn bc-send-btn" type="submit" data-bc-send>ارسال پیام</button>
     </div>
-  </form>
-</div>
+  </aside>
+</form>
 
-{{ presets_card(button_presets, button_targets, button_styles, button_preset_limit, button_max) }}
-
-<div class="card card-flush">
+<div class="card card-flush" id="bc-history">
   <div class="card-flush-head">
-    <h2>تاریخچه ارسال</h2>
+    <h2>تاریخچهٔ ارسال</h2>
     {% if history %}
-    <form method="post" action="/broadcast/history/clear"
-          data-confirm="همه تاریخچه پیام‌های گروهی پاک شود؟"
+    <form method="post" action="{{ page_path }}/history/clear"
+          data-confirm="همهٔ تاریخچهٔ پیام‌های گروهی پاک شود؟ پیام‌های فرستاده‌شده برنمی‌گردند."
           data-confirm-title="پاک کردن تاریخچه"
           data-confirm-danger="1"
           data-confirm-label="پاک کردن">
@@ -50,32 +125,36 @@
     </form>
     {% endif %}
   </div>
+  {% if is_platform %}
   {{ table_bulk_bar('/broadcast/history/bulk-action', [
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} رکورد تاریخچه حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
   ]) }}
+  {% endif %}
   <div class="table-wrap">
-  <table class="table-compact table-list-sm" data-bulk-select>
+  <table class="table-compact table-list-sm"{% if is_platform %} data-bulk-select{% endif %}>
+    {% if history %}
     <thead>
-      <tr>{{ table_select_head() }}<th class="col-id">#</th><th class="col-time">زمان</th><th class="col-hide-sm col-user">مخاطب</th><th class="col-text">متن</th><th class="col-status">نتیجه</th><th class="col-hide-sm col-user">توسط</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ history | length | num }} پیام</span></th></tr>
+      <tr>{% if is_platform %}{{ table_select_head() }}{% endif %}<th class="col-id">#</th><th class="col-time">زمان</th><th class="col-hide-sm col-user">مخاطب</th><th class="col-text">متن</th><th class="col-status">نتیجه</th><th class="col-hide-sm col-user">توسط</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ history | length | num }} پیام</span></th></tr>
     </thead>
+    {% endif %}
     <tbody>
     {% for row in history %}
-      <tr data-bulk-ops="delete">
-        {{ table_select_cell(row.id) }}
-        <td class="mono cell-tight">{{ row.id }}</td>
-        <td class="mono muted cell-tight">{{ row.created_at }}</td>
+      <tr{% if is_platform %} data-bulk-ops="delete"{% endif %}>
+        {% if is_platform %}{{ table_select_cell(row.id) }}{% endif %}
+        <td class="mono cell-tight"><bdi dir="ltr">{{ row.id }}</bdi></td>
+        <td class="mono muted cell-tight"><bdi dir="ltr">{{ (row.created_at|string)[:16] }}</bdi></td>
         <td class="col-hide-sm li-sub">
           {#- On phones line two: audience · time · sender. -#}
-          <span>{{ audience_labels.get(row.audience, row.audience) }}</span>
-          <span class="li-only">· <bdi dir="ltr">{{ (row.created_at|string)[:16] }}</bdi>{% if row.created_by %} · {{ row.created_by }}{% endif %}</span>
+          <span dir="auto">{{ (history_labels or {}).get(row.id, row.audience) }}</span>
+          <span class="li-only">· <bdi dir="ltr">{{ (row.created_at|string)[:16] }}</bdi>{% if row.created_by %} · <bdi dir="auto">{{ row.created_by }}</bdi>{% endif %}</span>
         </td>
         <td class="broadcast-snippet li-title"><span dir="auto">{{ row.text[:120] }}{% if row.text|length > 120 %}…{% endif %}</span></td>
-        <td class="mono cell-tight li-value"><bdi dir="ltr">{{ row.ok_count }}/{{ row.total }}</bdi><span class="li-hide">{% if row.fail_count %} · ناموفق {{ row.fail_count }}{% endif %}{% if row.review_count %} · نامشخص {{ row.review_count }}{% endif %}</span>{% if row.status in ['queued', 'running', 'cancelled'] %}<small class="muted text-block">{{ status_labels.get(row.status, row.status) }}</small>{% endif %}</td>
-        <td class="muted col-hide-sm">{{ row.created_by or '—' }}</td>
+        <td class="mono cell-tight li-value"><bdi dir="ltr">{{ row.ok_count | fa }}/{{ row.total | fa }}</bdi><span class="li-hide">{% if row.fail_count %} · ناموفق {{ row.fail_count | num }}{% endif %}{% if row.review_count %} · نامشخص {{ row.review_count | num }}{% endif %}</span>{% if row.status in ['queued', 'running', 'cancelled', 'failed'] %}<small class="muted text-block">{{ status_labels.get(row.status, row.status) }}</small>{% endif %}</td>
+        <td class="muted col-hide-sm"><bdi dir="auto">{{ row.created_by or '—' }}</bdi></td>
         <td class="col-actions">
           {% call row_actions() %}
           {% if row.status in ['queued', 'running'] %}
-          <form method="post" action="/broadcast/history/{{ row.id }}/cancel"
+          <form method="post" action="{{ page_path }}/history/{{ row.id }}/cancel"
                 data-confirm="ارسال متوقف شود؟ پیام‌های فرستاده‌شده برنمی‌گردند."
                 data-confirm-title="توقف ارسال"
                 data-confirm-danger="1"
@@ -83,7 +162,7 @@
             <button class="btn btn-danger btn-sm" type="submit">توقف</button>
           </form>
           {% else %}
-          <form method="post" action="/broadcast/history/{{ row.id }}/delete"
+          <form method="post" action="{{ page_path }}/history/{{ row.id }}/delete"
                 data-confirm="این رکورد حذف شود؟"
                 data-confirm-title="تأیید حذف"
                 data-confirm-danger="1"
@@ -93,17 +172,20 @@
           {% endif %}
           {% endcall %}
         </td>
-        <td class="li-only-cell li-badge">{% if row.status in ['queued', 'running'] %}<span class="badge pending">{{ status_labels.get(row.status, row.status) }}</span>{% elif row.fail_count %}<span class="badge rejected">{{ row.fail_count }} ناموفق</span>{% else %}<span class="badge ok">موفق</span>{% endif %}</td>
+        <td class="li-only-cell li-badge">{% if row.status in ['queued', 'running'] %}<span class="badge pending">{{ status_labels.get(row.status, row.status) }}</span>{% elif row.fail_count %}<span class="badge rejected">{{ row.fail_count | num }} ناموفق</span>{% else %}<span class="badge ok">موفق</span>{% endif %}</td>
       </tr>
     {% else %}
-      {{ empty_state('هنوز پیامی ارسال نشده', 'megaphone', colspan=8) }}
+      {{ empty_state('هنوز پیامی ارسال نشده', 'broadcast', colspan=9) }}
     {% endfor %}
     </tbody>
   </table>
   </div>
 </div>
+
+{{ presets_modal(button_presets, button_target_groups, button_styles, button_plans, button_preset_limit, button_max) }}
 </div>
 {% endblock %}
 {% block page_scripts %}
 <script src="/static/message-buttons.js?v={{ asset_v('message-buttons.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
+<script src="/static/broadcast-compose.js?v={{ asset_v('broadcast-compose.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 {% endblock %}

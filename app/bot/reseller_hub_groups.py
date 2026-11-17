@@ -41,7 +41,6 @@ RESELLER_GROUPS: tuple[ResellerGroup, ...] = (
         (
             "res_plans",
             "res_loyalty",
-            "res_campaigns",
             "res_gift_codes",
             "res_discounts",
             "res_cashback",
@@ -66,6 +65,9 @@ RESELLER_GROUPS: tuple[ResellerGroup, ...] = (
 )
 # Entries shown on the panel home itself, under the groups: used often enough to skip a level.
 RESELLER_HOME_ACTIONS: tuple[str, ...] = ("res_broadcast",)
+# Entries opened from another screen, and where their «بازگشت» leads: campaigns live in the group-message hub
+# (handlers/shop_broadcast.CB_HUB; a string here so this module imports nothing from the handlers).
+NESTED_ACTIONS: dict[str, str] = {"res_campaigns": "shp:bc:hub"}
 _BY_ID = {group.id: group for group in RESELLER_GROUPS}
 _BY_ACTION = {action: group for group in RESELLER_GROUPS for action in group.actions}
 # Screens reached from a queue shortcut rather than a hub entry.
@@ -90,5 +92,7 @@ def home_entries(entries: list[tuple[str, str]]) -> list[tuple[str, str]]:
 
 def back_callback_for(action: str) -> str:
     """Where «بازگشت» on the screen behind ``action`` leads: its group, else the panel."""
+    if action in NESTED_ACTIONS:
+        return NESTED_ACTIONS[action]
     group = _BY_ACTION.get(action)
     return group.callback if group else RESELLER_HOME_CALLBACK

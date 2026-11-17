@@ -51,7 +51,6 @@ class MarketingHubKeyboardTests(unittest.TestCase):
             [
                 "nv:adm:loy",
                 "nv:adm:gc",
-                "nv:adm:cmp",
                 "nv:adm:cb",
                 "dsc:l",
                 "fnl:v",
@@ -63,6 +62,10 @@ class MarketingHubKeyboardTests(unittest.TestCase):
     def test_club_and_broadcast_left_their_old_hubs(self):
         self.assertNotIn("nv:adm:loy", _callbacks(admin_people_hub_keyboard({})))
         self.assertNotIn("nv:adm:broadcast", _callbacks(admin_system_hub_keyboard({})))
+
+    def test_campaigns_moved_into_group_messages(self):
+        self.assertIn("nv:adm:cmp", _callbacks(admin_broadcast_hub_keyboard({})))
+        self.assertNotIn("nv:adm:cmp", _callbacks(admin_marketing_hub_keyboard({})))
 
     def test_leaf_hubs_return_to_where_they_are_opened_from(self):
         self.assertIn("nv:adm:home", _callbacks(admin_broadcast_hub_keyboard({})))

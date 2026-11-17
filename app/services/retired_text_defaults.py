@@ -14,6 +14,8 @@ RETIRED_TEXT_DEFAULTS: dict[str, tuple[str, ...]] = {
     "faq_text": ("❓ حجم تمام شد چه کنم؟\nاز بخش سرویس‌ها → تمدید.\n\n❓ لینک کار نمی‌کند؟\nQR یا لینک را دوباره از سرویس‌های من بگیرید.",),
     "payment_reject_text": ("پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید.",),
     "btn_adm_users_search": ("🔎 جستجو با آیدی تلگرام",),
+    # The audience always included resellers; «عادی» suggested it did not.
+    "btn_bc_aud_users": ("👥 کاربران عادی",),
     "btn_adm_hub_product": ("📦 محصول و PG",),
     "btn_adm_res_apps": ("📋 درخواست‌های منتظر",),
     "btn_adm_res_add": ("➕ افزودن دستی",),

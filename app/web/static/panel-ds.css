@@ -417,8 +417,6 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-list-value > input { display: block; width: 100%; max-width: var(--money-w); }
 .ds .ds-list-row { position: relative; padding-block: var(--g3); margin: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 /* Buttons under a message: what the button opens and its text (with the link under it) share the width. */
-.ds .ds-list--buttons .ds-list-head, .ds .ds-list--buttons .ds-list-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--num-w) var(--ctl-h); }
-.ds .msg-btn-text { display: flex; flex-direction: column; gap: var(--g1); }
 .ds .ds-list-row > * { margin: 0; }
 .ds .ds-list-row + .ds-list-row { border-top: 1px dashed var(--dash) !important; }
 .ds .ds-list-row input { height: var(--ctl-h); min-height: var(--ctl-h); font-size: var(--fs-3); font-weight: 600; }
@@ -834,3 +832,93 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 /* The one row of a settings page: its sections share the bar equally. */
 .ds .settings-sections { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; }
 .ds .settings-sections a { justify-content: center; text-align: center; }
+
+/* ===================================================================== 15. Group messages (DESIGN_SYSTEM.md §9)
+   Composer: audience cards, message, buttons and a Telegram-style preview. On wide screens the preview and the send
+   button stay beside the form; on phones everything is one column and the send button ends the form. */
+.ds .bc-compose { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); margin: 0; }
+.ds .bc-main, .ds .bc-side { display: flex; flex-direction: column; gap: var(--section-gap); min-width: 0; }
+.ds .bc-main > *, .ds .bc-side > * { margin: 0; }
+@media (min-width: 1100px) {
+  .ds .bc-compose { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); align-items: start; }
+  .ds .bc-side { position: sticky; top: var(--g4); }
+}
+.ds .bc-groups { width: 100%; }
+.ds .bc-groups button { flex: 1 1 0; }
+.ds .bc-reach {
+  display: flex; align-items: center; gap: var(--g3); padding: var(--g3) var(--g4);
+  border-radius: var(--inner-radius); background: var(--sel-bg); border: 1px solid var(--sel-line);
+}
+.ds .bc-reach-ico {
+  flex: 0 0 var(--ctl-h); height: var(--ctl-h); border-radius: var(--inner-radius); display: grid; place-items: center;
+  background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--sel-fg);
+}
+.ds .bc-reach-ico svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .bc-reach-copy { display: flex; flex-direction: column; gap: var(--g1); min-width: 0; }
+.ds .bc-reach-copy strong { font-size: var(--fs-4); font-weight: 700; color: var(--foreground); }
+.ds .bc-reach-copy small { font-size: var(--fs-2); color: var(--muted-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds .bc-reach.is-loading .bc-reach-copy strong { opacity: 0.5; }
+.ds .bc-reach.is-error { background: color-mix(in srgb, var(--destructive) 9%, transparent); border-color: color-mix(in srgb, var(--destructive) 30%, var(--line)); }
+.ds .bc-reach.is-error .bc-reach-ico { background: color-mix(in srgb, var(--destructive) 14%, transparent); color: var(--danger-text); }
+.ds .bc-reach.is-error small { color: var(--danger-text); white-space: normal; }
+.ds .bc-send { display: flex; margin: 0; }
+.ds .bc-send-btn { flex: 1 1 auto; }
+
+/* Buttons under a message: one collapsible row per button inside a framed list. */
+.ds .msg-btns { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--inner-radius); overflow: hidden; }
+.ds .msg-btns-rows:empty { display: none; }
+.ds .msg-btns .msg-btn:first-child { border-top: 0; }
+.ds .msg-btns-rows:not(:empty) + .ds-add { border-top: 1px dashed var(--dash); }
+.ds .msg-btn summary .ds-meta { max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.ds .msg-btn-dot, .ds .tg-key::before { flex: 0 0 auto; border-radius: var(--control-radius); }
+.ds .msg-btn-dot { width: 12px; height: 12px; border: 1px solid var(--line); background: var(--card); }
+.ds .msg-btn-dot[data-tone="primary"] { border-color: transparent; background: var(--info); }
+.ds .msg-btn-dot[data-tone="success"] { border-color: transparent; background: var(--ok); }
+.ds .msg-btn-dot[data-tone="danger"] { border-color: transparent; background: var(--destructive); }
+.ds .msg-btn-body { display: flex; flex-direction: column; gap: var(--g4); padding: 0 var(--g4) var(--g4); }
+.ds .msg-btn-body > * { margin: 0; }
+.ds .msg-btn-targets { display: flex; flex-direction: column; gap: var(--g3); }
+.ds .msg-btn-group { display: flex; flex-direction: column; gap: var(--g2); }
+.ds .msg-btn-group-title { font-size: var(--fs-2); color: var(--muted-fg); }
+.ds .msg-btn-chips { --ds-chip-cols: 3; }
+.ds .msg-btn-chips button span { overflow: hidden; text-overflow: ellipsis; }
+.ds .msg-btn-actions { display: flex; align-items: center; gap: var(--g2); }
+.ds .msg-btn-actions .btn-danger { margin-inline-start: auto; }
+.ds .msg-btn-actions svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .msg-btn-presets { display: flex; flex-wrap: wrap; gap: var(--g2); }
+@media (max-width: 600px) {
+  .ds .msg-btn-chips { --ds-chip-cols: 2; }
+}
+
+/* The message as the customer sees it: a chat background, the text bubble, then the buttons two to a row. */
+.ds .tg-preview {
+  display: flex; flex-direction: column; gap: var(--g1); padding: var(--g4);
+  border-radius: var(--inner-radius); background: color-mix(in srgb, var(--info) 7%, var(--muted));
+}
+.ds .tg-bubble { padding: var(--g3) var(--g4); border-radius: var(--inner-radius); background: var(--card); border: 1px solid var(--line); }
+.ds .tg-text { margin: 0; font-size: var(--fs-3); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
+.ds .tg-text.is-empty { color: var(--muted-fg); }
+.ds .tg-keys { display: flex; flex-direction: column; gap: var(--g1); }
+.ds .tg-keys:empty { display: none; }
+.ds .tg-key-row { display: flex; gap: var(--g1); }
+.ds .tg-key {
+  flex: 1 1 0; min-width: 0; min-height: var(--cmp-h); padding: 0 var(--g2); border: 0; border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--foreground) 9%, var(--card)); color: var(--foreground);
+  font: inherit; font-size: var(--fs-2); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.ds .tg-key:active { transform: scale(0.96); }
+.ds .tg-key[data-tone="primary"] { background: color-mix(in srgb, var(--info) 22%, var(--card)); color: var(--info-fg); }
+.ds .tg-key[data-tone="success"] { background: color-mix(in srgb, var(--ok) 22%, var(--card)); color: var(--ok-text); }
+.ds .tg-key[data-tone="danger"] { background: color-mix(in srgb, var(--destructive) 20%, var(--card)); color: var(--danger-text); }
+@media (prefers-reduced-motion: reduce) { .ds .tg-key { transition: none; } }
+
+/* Saved button sets in their modal. */
+.ds .msg-preset-list { list-style: none; margin: 0; padding: 0; }
+.ds .msg-preset-row { display: flex; align-items: center; gap: var(--g3); min-height: 56px; padding: var(--g2) var(--g4); }
+.ds .msg-preset-row + .msg-preset-row { border-top: 1px solid var(--line); }
+.ds .msg-preset-row form { margin: 0; }
+.ds .msg-preset-copy { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--g1); min-width: 0; }
+.ds .msg-preset-copy strong { font-size: var(--fs-3); font-weight: 600; }
+.ds .msg-preset-copy small { font-size: var(--fs-2); color: var(--muted-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds .msg-preset-empty { margin: 0; padding: var(--g4); font-size: var(--fs-2); }

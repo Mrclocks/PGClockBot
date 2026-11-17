@@ -45,6 +45,8 @@ GIFT_PANEL_LIMIT = 8
 CAMPAIGN_NOT_FOUND = "کمپین یافت نشد یا وضعیت آن تغییر کرده است"
 GIFT_NOT_FOUND = "کد یافت نشد"
 DONE = "انجام شد"
+# Campaigns were merged into group messages: their panel returns to the group-message hub.
+BROADCAST_HUB_CALLBACK = "nv:adm:broadcast"
 
 
 async def show_gift_panel(
@@ -66,7 +68,9 @@ async def show_campaign_panel(
     ui = await get_all_settings(session)
     campaigns = await list_recent_campaigns(session, shop_id=PLATFORM_SHOP, limit=CAMPAIGN_LIST_LIMIT)
     progress = await campaign_progress_map(session, [campaign.id for campaign in campaigns])
-    text, markup = campaigns_panel(campaigns, progress, ui=ui, web_url=panel_page_url("/campaigns"))
+    text, markup = campaigns_panel(
+        campaigns, progress, ui=ui, web_url=panel_page_url("/campaigns"), back_callback=BROADCAST_HUB_CALLBACK
+    )
     await nav.set_nav_level(state, nav.NAV_ADMIN_CAMPAIGNS, push=push)
     await present_nav_panel(message, text=text, inline=markup, state=state)
 

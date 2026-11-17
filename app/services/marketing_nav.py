@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from app.services.authz import authz_from_staff, can_shop
+from app.services.authz import authz_from_staff, can_group_message, can_shop
 from app.services.cashback_rules import cashback_scope
 from app.services.funnel_access import funnel_shop_scope
 from app.services.gift_codes import gift_code_scope
@@ -102,13 +102,18 @@ def _can_open_broadcast(staff: Mapping[str, Any]) -> bool:
 
 
 def _can_open_shop_broadcast(staff: Mapping[str, Any]) -> bool:
-    """Same rule as ``shop_broadcast_scope``: ``broadcast`` plus a concrete shop id."""
-    if not can_shop(authz_from_staff(staff), "broadcast"):
+    """Same rule as ``shop_broadcast_scope``: ``broadcast`` or ``campaigns`` plus a concrete shop id."""
+    if not can_group_message(authz_from_staff(staff)):
         return False
     try:
         return resolve_shop_scope_id(dict(staff)) is not None
     except ShopScopeError:
         return False
+
+
+def can_open_campaigns(staff: Mapping[str, Any] | None) -> bool:
+    """Same rule as the campaigns page, which now opens from the group-message page."""
+    return bool(staff) and _can_open_feature(staff, "campaigns")
 
 
 def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSection, ...]:
@@ -152,12 +157,11 @@ class MarketingGroup:
         return self.sections[0].href
 
 
-# (group key, label, section keys in display order)
+# (group key, label, section keys in display order). Group messages and campaigns are not listed: they have their own
+# sidebar entry (panel_nav.BROADCAST_KEY), and campaigns open from the group-message page.
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("club", "باشگاه مشتریان", (CLUB, CLUB_TRANSACTIONS)),
     ("offers", "تخفیف و کد هدیه", (DISCOUNTS, RANDOM_DISCOUNTS, GIFT_CODES, CASHBACK)),
-    # Group messages have their own sidebar entry (panel_nav.BROADCAST_KEY), so they are not listed here.
-    ("messages", "پیام و کمپین", (CAMPAIGNS,)),
     ("trials", "کاربران تست", (TRIAL_USERS,)),
     ("funnel", "رفتار کاربر", (FUNNEL,)),
 )

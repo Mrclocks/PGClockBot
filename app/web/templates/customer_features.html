@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_header %}
-{% block title %}کمپین هدفمند{% endblock %}
+{% from "_icons.html" import icon %}
+{% block title %}کمپین‌ها{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-{{ page_header('broadcast', self.title(), back='/marketing', back_label='بازاریابی') }}
+{{ page_header('megaphone', self.title(), back=group_page, back_label='پیام گروهی') }}
 {% if request.query_params.get('error') %}<div class="flash warn">{{ request.query_params.get('error') }}</div>{% endif %}
+<div class="ds-note">{{ icon('info') }}<span>پیام هدفمند تازه را از <a href="{{ group_page }}">«پیام گروهی»</a> بفرستید؛ آنجا گروه‌های بیشتر، فیلتر پلن و کیف پول، دکمه و پیش‌نمایش دارد. این صفحه کمپین‌های خودکار (اطلاع تغییر قیمت و پیام به کاربران تست) و کمپین‌های قبلی را نگه می‌دارد.</span></div>
 <div class="card"><h2>انتخاب مخاطبان</h2><form method="get" action="/campaigns" class="form-stack">
 <label class="form-field">گروه<select name="audience">{% for key, label in audiences.items() %}<option value="{{ key }}" {% if key == audience %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
 <label class="form-field">بازهٔ روز<input name="days" type="number" value="{{ days }}" min="1" max="365" required></label><button class="btn" type="submit">پیش‌نمایش مخاطبان</button></form>

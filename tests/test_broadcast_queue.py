@@ -237,6 +237,7 @@ class HistoryTemplateTests(unittest.TestCase):
         request = NS(url=NS(path="/broadcast"), query_params={}, state=NS(), cookies={}, headers={})
         return templates.env.get_template("broadcast.html").render(
             request=request, staff={"role": "admin"}, history=rows, audience_labels=AUDIENCE_LABELS,
+            page_path="/broadcast", is_platform=True,
             status_labels=STATUS_LABELS, flash_ok=None, flash_err=None, csp_nonce="n", csrf_token="TOK",
         )
 

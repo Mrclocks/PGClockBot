@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.bot.handlers import reseller, reseller_hub, reseller_reps
 from app.bot.nav_inline import reseller_group_hub_keyboard, reseller_manage_hub_keyboard
 from app.bot.reply_keyboards import _reseller_submenu_entries
-from app.bot.reseller_hub_groups import RESELLER_GROUPS, RESELLER_HOME_ACTIONS, back_callback_for
+from app.bot.reseller_hub_groups import NESTED_ACTIONS, RESELLER_GROUPS, RESELLER_HOME_ACTIONS, back_callback_for
 from app.services import bot_feedback_texts as feedback
 from app.services.admin_counters import PendingCounts
 from tests.test_bot_ui_keyboard_snapshots import sample_reseller_profile
@@ -46,6 +46,16 @@ class PanelLayoutTests(unittest.TestCase):
         self.assertNotIn(CB_HUB, _callbacks(shop_group))
         self.assertEqual(back_callback_for("res_broadcast"), "nv:res:home")
 
+    def test_campaigns_open_from_the_group_message_hub_and_return_there(self) -> None:
+        from app.bot.handlers.shop_broadcast import CB_HUB, _hub_keyboard
+        from app.bot.marketing_panels import SHOP_CAMPAIGN_PANEL_CALLBACK
+
+        with patch("app.bot.reply_keyboards._reseller_submenu_entries", return_value=[*ENTRIES, ("res_campaigns", "📣")]):
+            self.assertNotIn(SHOP_CAMPAIGN_PANEL_CALLBACK, _callbacks(reseller_group_hub_keyboard("shop", MagicMock(), {})))
+        self.assertIn(SHOP_CAMPAIGN_PANEL_CALLBACK, _callbacks(_hub_keyboard({})))
+        self.assertNotIn(SHOP_CAMPAIGN_PANEL_CALLBACK, _callbacks(_hub_keyboard({}, campaigns=False)))
+        self.assertEqual(back_callback_for("res_campaigns"), CB_HUB)
+
     def test_a_group_keeps_the_entries_buttons_and_backs_up_to_the_home(self) -> None:
         with patch("app.bot.reply_keyboards._reseller_submenu_entries", return_value=ENTRIES):
             markup = reseller_group_hub_keyboard("daily", MagicMock(), {})
@@ -56,7 +66,7 @@ class PanelLayoutTests(unittest.TestCase):
             self.assertEqual(_callbacks(reseller_group_hub_keyboard("admin", MagicMock(), {})), ["nv:res:home"])
 
     def test_every_panel_entry_has_a_group(self) -> None:
-        grouped = {action for group in RESELLER_GROUPS for action in group.actions} | set(RESELLER_HOME_ACTIONS)
+        grouped = {action for group in RESELLER_GROUPS for action in group.actions} | set(RESELLER_HOME_ACTIONS) | set(NESTED_ACTIONS)
         for mode in ("fixed", "payg"):
             with self.subTest(mode=mode), patch(
                 "app.bot.reply_keyboards._reseller_capacity_entries",

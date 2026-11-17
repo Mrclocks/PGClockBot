@@ -32,8 +32,8 @@ class MarketingListServiceTests(unittest.TestCase):
     def test_owner_rows_are_the_owner_sections_with_description_and_icon(self) -> None:
         sections = marketing_sections(OWNER)
         hub = marketing_hub_sections(sections)
-        # Group messages are a sidebar entry of their own, not a row of the marketing list.
-        listed = [s.href for s in sections if s.href not in ("/broadcast", "/shop-broadcast")]
+        # Group messages (with the campaigns merged into them) are a sidebar entry of their own, not a list row.
+        listed = [s.href for s in sections if s.href not in ("/broadcast", "/shop-broadcast", "/campaigns")]
         self.assertEqual(sorted(hrefs(hub)), sorted(listed))
         for section in hub:
             for row in section.rows:

@@ -131,6 +131,7 @@ def register_customer_features(app, *, render, require_staff, get_db):
             {
                 "staff": staff,
                 "mode": "campaigns",
+                "group_page": "/broadcast" if scope is None else "/shop-broadcast",
                 "audiences": AUDIENCES,
                 "audience": audience,
                 "days": days,

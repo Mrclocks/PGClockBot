@@ -36,6 +36,8 @@ BROADCAST_KEY = "broadcast"
 # Group messages have their own entry in «فروشگاه»: the platform page for the owner, the shop page for a shop.
 # Visibility comes from marketing_nav, which mirrors each route's guard, so the hrefs below are the only two.
 BROADCAST_HREFS: tuple[str, ...] = ("/broadcast", "/shop-broadcast")
+# Campaigns were merged into group messages: their page lights the group-message entry, not «بازاریابی».
+CAMPAIGNS_HREF = "/campaigns"
 
 # Phone bottom bar: dashboard and action center, then the most used pages the viewer may open.
 # The owner can put other pages first (app/services/mobile_bar.py); these fill whatever is left.
@@ -271,12 +273,12 @@ def _broadcast_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> Nav
     href = next((h for h in BROADCAST_HREFS if h in viewer.marketing_hrefs), None)
     if href is None:
         return None
-    return NavItem(spec.key, spec.label, href, spec.icon, loc.path.startswith(href))
+    return NavItem(spec.key, spec.label, href, spec.icon, loc.path.startswith((href, CAMPAIGNS_HREF)))
 
 
 def _marketing_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> NavItem | None:
     """One entry for every other marketing section the viewer may open; it opens the list of those sections."""
-    hrefs = [href for href in viewer.marketing_hrefs if href not in BROADCAST_HREFS]
+    hrefs = [href for href in viewer.marketing_hrefs if href not in (*BROADCAST_HREFS, CAMPAIGNS_HREF)]
     if not hrefs:
         return None
     paths = (MARKETING_LIST_HREF, *(href.split("?")[0] for href in hrefs))

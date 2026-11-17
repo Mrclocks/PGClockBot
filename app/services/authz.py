@@ -134,6 +134,15 @@ def can_shop(ctx: AuthzContext, key: str) -> bool:
     return key in ctx.shop_permissions
 
 
+# Targeted campaigns were merged into group messages: either permission opens the one group-message page.
+GROUP_MESSAGE_PERMISSIONS: tuple[str, ...] = ("broadcast", "campaigns")
+
+
+def can_group_message(ctx: AuthzContext) -> bool:
+    """Whether the staff member may open their shop's group messages (``broadcast`` or ``campaigns``)."""
+    return any(can_shop(ctx, key) for key in GROUP_MESSAGE_PERMISSIONS)
+
+
 def can_pg_page(ctx: AuthzContext, key: str) -> bool:
     """PasarGuard panel page key (pg_users, pg_hosts, …)."""
     return key in ctx.pg_permissions
