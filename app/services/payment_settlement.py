@@ -564,7 +564,13 @@ async def create_psp_checkout(
             raise ValueError("ساخت تسویه همزمان ناموفق بود — دوباره تلاش کنید")
         settlement = inserted
 
-    adapter = get_psp_adapter(provider, ui=gateway.adapter_settings(), public_base_url=base)
+    adapter = get_psp_adapter(
+        provider,
+        ui=gateway.adapter_settings(
+            tonpays_webhook_secret=str(ui.get("tonpays_webhook_secret") or "")
+        ),
+        public_base_url=base,
+    )
     token = settlement.checkout_token or secrets.token_urlsafe(24)
     settlement.checkout_token = token
     callback_url = f"{base}/payments/settlement/psp/{provider}/return/{int(settlement.id)}"
@@ -1039,11 +1045,18 @@ async def complete_psp_return(
 
     base = _public_base() or "http://127.0.0.1:8000"
     adapter = get_psp_adapter(
-        provider, ui=_verify_gateway(ui, settlement).adapter_settings(), public_base_url=base
+        provider,
+        ui=_verify_gateway(ui, settlement).adapter_settings(
+            tonpays_webhook_secret=str(ui.get("tonpays_webhook_secret") or "")
+        ),
+        public_base_url=base,
     )
-    callback_invoice_matches_settlement(
-        callback_params, settlement_id=int(settlement.id)
-    )
+    # TonPays echoes its own invoice_id, not our settlement row id — skip the
+    # callback invoice match check for TonPays (verified server-side instead).
+    if provider != "tonpays":
+        callback_invoice_matches_settlement(
+            callback_params, settlement_id=int(settlement.id)
+        )
     external_ref = _psp_return_external_ref(settlement, callback_params)
 
     # Real PSP: callback alone is never enough — adapter.verify talks to provider.

@@ -453,6 +453,9 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
             settlement_mock_allowed,
         )
         from app.services.psp_settlement_review import is_in_review
+        from app.services.users import get_all_settings as _tp_get_all_settings
+        from app.services.payment_providers import get_psp_adapter
+        from app.services.payment_settlement import _verify_gateway, _public_base
 
         provider_l = (provider or "").strip().lower()
         if provider_l == "mock" and not settlement_mock_allowed():
@@ -474,25 +477,24 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
 
         # TonPays webhook: POST with JSON body + X-TonPays-Signature. Verify the
         # gateway signature before trusting the callback. Enforced only when the shop
-        # has configured a webhook secret; otherwise falls through to the read-only
-        # provider verify (already secure, talks to TonPays directly). Invalid
-        # signature -> reject without touching the settlement.
+        # has configured a webhook secret. Invalid signature -> reject without
+        # touching the settlement. The amount is never trusted from the webhook
+        # body; complete_psp_return re-verifies server-side via the adapter.
         if provider_l == "tonpays" and request.method.upper() == "POST":
             signature = (request.headers.get("x-tonpays-signature") or "").strip()
-            if signature:
-                from app.services.payment_providers.tonpays import (
-                    verify_webhook as _tonpays_verify_webhook,
-                )
-                from app.services.users import get_all_settings as _tp_get_all_settings
+            body = await request.body()
+            tp_ui = await _tp_get_all_settings(session, reseller_id=reseller_id)
+            adapter = get_psp_adapter(
+                "tonpays",
+                ui=_verify_gateway(tp_ui, pre).adapter_settings(
+                    tonpays_webhook_secret=str(tp_ui.get("tonpays_webhook_secret") or "")
+                ),
+                public_base_url=_public_base() or "http://127.0.0.1:8000",
+            )
+            from app.services.payment_providers.tonpays import TonPaysAdapter
 
-                body = await request.body()
-                tp_ui = await _tp_get_all_settings(session, reseller_id=reseller_id)
-                wh = await _tonpays_verify_webhook(
-                    api_key=str(tp_ui.get("psp_merchant_id") or ""),
-                    body=body,
-                    signature=signature,
-                    webhook_secret=str(tp_ui.get("tonpays_webhook_secret") or "") or None,
-                )
+            if isinstance(adapter, TonPaysAdapter):
+                wh = await adapter.verify_webhook(body=body, signature=signature)
                 if wh is not None and not wh.ok:
                     return await _status(
                         request,

@@ -36,13 +36,14 @@ class PspGateway:
     sandbox: bool
     enabled: bool
 
-    def adapter_settings(self) -> dict[str, str]:
+    def adapter_settings(self, **extra: str) -> dict[str, str]:
         """The ``psp_*`` keys the provider adapters read, for this gateway only."""
         return {
             "psp_merchant_id": self.merchant_id,
             "psp_pay_url": self.pay_url,
             "psp_sunpay_request_method": self.request_method,
             "psp_sandbox": "1" if self.sandbox else "0",
+            **extra,
         }
 
 

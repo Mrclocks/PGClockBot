@@ -1140,6 +1140,7 @@ DEFAULT_SETTINGS = {
     # Telegram «ورود به درگاه»: direct PSP URL (default) or panel /go/ hop.
     "psp_checkout_link_mode": "direct",
     "psp_sandbox": "1",
+    "tonpays_webhook_secret": "",
     "psp_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
         "از دکمه زیر وارد درگاه شوید و پرداخت را تکمیل کنید.\n"

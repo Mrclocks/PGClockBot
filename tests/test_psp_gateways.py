@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import importlib.util
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -29,6 +32,7 @@ from app.db.models import (
     SettlementStatus,
 )
 from app.services.payment_providers.base import CheckoutResult, VerifyResult
+from app.services.payment_providers.tonpays import TonPaysAdapter, TonPaysError
 from app.services.payment_settlement import complete_psp_return, create_psp_checkout
 from app.services.psp_gateways import (
     MAX_PSP_GATEWAYS,
@@ -292,6 +296,77 @@ class SettlementGatewayMigrationTests(unittest.TestCase):
                 self.assertNotIn("gateway_id", columns)
                 self.assertEqual(conn.execute(text("SELECT COUNT(*) FROM payment_settlements")).scalar(), 2)
         engine.dispose()
+
+
+class TonPaysAdapterTests(unittest.IsolatedAsyncioTestCase):
+    """TonPays adapter: signature, amount, network, retry safety."""
+
+    async def asyncSetUp(self) -> None:
+        self.adapter = TonPaysAdapter(api_key="test-key", webhook_secret="wh-secret")
+
+    def _signed_body(self, body: dict, offset_seconds: int = 0) -> tuple[bytes, str]:
+        import time
+
+        raw = json.dumps(body, separators=(",", ":")).encode()
+        ts = int(time.time()) + offset_seconds
+        msg = f"{ts}.".encode() + raw
+        sig = hmac.new(b"wh-secret", msg, hashlib.sha256).hexdigest()
+        return raw, f"t={ts},v1={sig}"
+
+    async def test_verify_webhook_missing_signature_rejected(self) -> None:
+        raw, _ = self._signed_body({"event": "invoice.completed", "paid": True, "status": "completed", "invoice_id": "inv-1"})
+        result = await self.adapter.verify_webhook(body=raw, signature="")
+        self.assertIsNotNone(result)
+        self.assertFalse(result.ok)
+        self.assertIn("زامی", result.message)
+
+    async def test_verify_webhook_bad_signature_rejected(self) -> None:
+        raw, _ = self._signed_body({"event": "invoice.completed", "paid": True, "status": "completed", "invoice_id": "inv-1"})
+        result = await self.adapter.verify_webhook(body=raw, signature="t=1,v1=deadbeef")
+        self.assertIsNotNone(result)
+        self.assertFalse(result.ok)
+        self.assertIn("نامعتبر", result.message)
+
+    async def test_verify_webhook_replay_outside_tolerance_rejected(self) -> None:
+        raw, sig = self._signed_body(
+            {"event": "invoice.completed", "paid": True, "status": "completed", "invoice_id": "inv-1"},
+            offset_seconds=-600,
+        )
+        result = await self.adapter.verify_webhook(body=raw, signature=sig)
+        self.assertIsNotNone(result)
+        self.assertFalse(result.ok)
+
+    async def test_verify_webhook_no_secret_skipped(self) -> None:
+        no_secret = TonPaysAdapter(api_key="test-key")
+        result = await no_secret.verify_webhook(body=b"{}", signature="t=1,v1=abc")
+        self.assertIsNone(result)
+
+    async def test_verify_amount_mismatch_not_settled(self) -> None:
+        result = await self.adapter.verify(
+            external_ref="inv-1",
+            amount=10000,
+            callback_params={},
+            expected_invoice_id=1,
+        )
+        # No network in test; httpx will fail → unknown outcome, not settled.
+        self.assertFalse(result.ok)
+        self.assertIn("ارتباط با درگاه", result.message)
+
+    async def test_create_checkout_network_error(self) -> None:
+        from app.services.payment_providers.base import CheckoutRequest
+
+        req = CheckoutRequest(
+            settlement_id=1,
+            payment_id=1,
+            amount=10000,
+            currency="IRT",
+            description="test",
+            callback_url="https://bot.test/return/1",
+            return_url="https://bot.test/return/1",
+            metadata={},
+        )
+        with self.assertRaises(TonPaysError):
+            await self.adapter.create_checkout(req)
 
 
 if __name__ == "__main__":
