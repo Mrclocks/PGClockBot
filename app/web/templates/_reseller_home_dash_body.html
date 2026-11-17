@@ -17,15 +17,6 @@
   {%- if slot == 'more' and quick_links_page %}<a class="btn btn-ghost" href="{{ quick_links_page }}">{{ icon('external', 'more-ico') }}لینک‌های سریع</a>{% endif -%}
   {% endcall %}
 
-{% if alerts_off_page is defined and alerts_off_page %}
-<div class="flash warn home-update-banner">
-  <div class="home-update-copy">
-    <strong>هشدار کمبود سرویس برای مشتریان خاموش است</strong>
-    <span class="muted">مشتری پیش از تمام شدن زمان یا حجم سرویسش پیامی نمی‌گیرد و فرصت تمدید را از دست می‌دهد.</span>
-  </div>
-  <a class="btn btn-sm btn-ghost" href="{{ alerts_off_page }}">روشن کردن هشدار</a>
-</div>
-{% endif %}
 
 {% if bot_setup_needed %}
 <div class="flash err dash-bot-setup">

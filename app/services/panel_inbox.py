@@ -10,8 +10,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ResellerProfile
+from app.services.authz import authz_from_staff, can_shop
 from app.services.payg_charges import count_review_charges
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.usage_alert_messages import alerts_off_settings_page
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,8 @@ def inbox_alert_count(ctx: dict[str, Any]) -> int:
     if ctx.get("shop_maintenance"):
         n += 1
     if ctx.get("capacity_warn"):
+        n += 1
+    if ctx.get("customer_alerts_off"):
         n += 1
     pr = ctx.get("payg_risk") or {}
     if pr.get("suspended"):
@@ -161,6 +165,12 @@ async def _safe_action_center(
         return dict(_EMPTY_ACTION)
 
 
+def _customer_alerts_off_page(staff: dict, ui: dict, *, is_owner: bool) -> str | None:
+    """Settings page to switch customer low-service alerts on, shown as an inbox item while they are off."""
+    can_edit_shop = is_owner or can_shop(authz_from_staff(staff), "shop_settings")
+    return alerts_off_settings_page(ui, is_owner=is_owner, can_edit_shop=can_edit_shop)
+
+
 async def build_inbox_context(
     session: AsyncSession,
     request,
@@ -232,6 +242,7 @@ async def build_inbox_context(
             action_center_ok = False
 
     shop_maintenance = on(ui.get("shop_maintenance_enabled"))
+    customer_alerts_off = _customer_alerts_off_page(staff, ui, is_owner=admin_scope)
     capacity_warn = False
     payg_risk = dict(_EMPTY_PAYG)
 
@@ -268,6 +279,7 @@ async def build_inbox_context(
         "action_center": action_center or dict(_EMPTY_ACTION),
         "shop_maintenance": shop_maintenance,
         "capacity_warn": capacity_warn,
+        "customer_alerts_off": customer_alerts_off,
         "payg_risk": payg_risk,
         "inbox_count": 0,
         "inbox_has": False,

@@ -20,7 +20,6 @@ from app.services.pg_read_cache import NODE_LIST_MAX_AGE_SEC
 from app.services.pg_read_resilience import circuit_status
 from app.services.quick_links import quick_links_page
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
-from app.services.usage_alert_messages import alerts_off_settings_page
 from app.services.secret_box import reveal_bot_token
 
 # Same freshness as the node list on this page.
@@ -410,7 +409,6 @@ async def _owner_home_context(staff: dict, session: AsyncSession):
             "wallet_card": wallet_card,
             "trend": trend,
             "show_pg_nodes": show_pg_nodes,
-            "alerts_off_page": alerts_off_settings_page(ui, is_owner=True, can_edit_shop=True),
         },
     )
 
@@ -539,9 +537,6 @@ async def _shop_home_context(staff: dict, session: AsyncSession, rid: int):
             "periods": periods,
             "action_center": action_center,
             "dashboard_degraded": False,
-            "alerts_off_page": alerts_off_settings_page(
-                ui, is_owner=False, can_edit_shop=can_shop(authz_from_staff(staff), "shop_settings")
-            ),
         },
     )
 
