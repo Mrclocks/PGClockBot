@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus
+from app.services.authz import authz_from_staff, can_shop
 from app.services.bot_user_admin import load_user_services
 from app.services.color_tags import ColorTag, color_tag_meta
 from app.services.customer_marks import marks_of
@@ -22,11 +23,37 @@ from app.services.loyalty import points_balance
 from app.services.users_ops import ServiceSummary, build_user_ops_row
 from app.services.wallet import get_wallet_balance
 
+# The card and its message form are part of the users list, so they need its right.
+USER_CARD_PERMISSION = "dashboard"
+DEFAULT_CARD_PAGE = "users"
+# Panel pages whose tables open the card from a customer's name, and the page the card's message form returns to.
+USER_CARD_PAGES: dict[str, str] = {
+    "users": "/users",
+    "resellers": "/resellers",
+    "finance": "/finance",
+    "tickets": "/tickets",
+    "trials": "/trial-users",
+    "cleanup": "/service-cleanup",
+    "applications": "/resellers/applications",
+    "loyalty": "/loyalty",
+}
+
 PAID_ORDER_STATUSES = (
     OrderStatus.PAID.value,
     OrderStatus.DELIVERING.value,
     OrderStatus.DELIVERED.value,
 )
+
+
+def can_open_user_card(staff: dict | None) -> bool:
+    """Whether a customer's name in a panel table should open the card for this staff member."""
+    return bool(staff) and can_shop(authz_from_staff(staff), USER_CARD_PERMISSION)
+
+
+def user_card_page(opened_from: str | None) -> str:
+    """The known page a card was opened from; anything else counts as the users list."""
+    page = str(opened_from or "")
+    return page if page in USER_CARD_PAGES else DEFAULT_CARD_PAGE
 
 
 @dataclass(slots=True)

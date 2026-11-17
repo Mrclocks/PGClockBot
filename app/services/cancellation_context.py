@@ -60,7 +60,6 @@ def cancellation_detail_lines(
     lines = [kv_line("🧾", "درخواست", f"#{row.id}")]
     if user is not None:
         lines.append(kv_line("👤", "مشتری", format_user_label(user)))
-        lines.append(kv_line("🆔", "شناسه تلگرام", f"<code>{int(user.telegram_id)}</code>"))
     if service is not None:
         lines.append(kv_line("📦", "سرویس", f"<code>{html.escape(service.pg_username)}</code> (#{service.id})"))
         if plan_name:

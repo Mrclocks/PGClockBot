@@ -999,18 +999,42 @@ html[data-theme="light"] .badge.badge-risk-tag {
   border-color: color-mix(in srgb, var(--accent, #38bdf8) 40%, var(--border));
   font-weight: 600;
 }
-.users-row.is-focus > td {
-  background: color-mix(in srgb, var(--accent, #38bdf8) 12%, transparent);
-}
-a.cell-user-link {
+/* A customer's name in a table: a quiet underline says it opens the user card. */
+.cell-user-link {
   color: inherit;
   text-decoration: none;
   border-bottom: 1px solid color-mix(in srgb, var(--muted-fg) 35%, transparent);
 }
-a.cell-user-link:hover {
+button.cell-user-link {
+  padding: 0;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.cell-user-link:hover {
   color: var(--foreground);
   border-bottom-color: var(--foreground);
 }
+.cell-user-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+/* One muted line above a table whose names open the user card. */
+.user-card-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2);
+  color: var(--muted-fg);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+/* 16 above and below the line: the search bar already leaves 16 under itself and a flush title 8, so the hint
+   adds only what is missing on top. */
+.card.card-flush > .user-card-hint { margin: 0; padding: var(--space-2) var(--card-pad); }
+.card.card-flush > .search-bar ~ .user-card-hint { padding-top: 0; }
+.card.card-flush > .card-flush-head ~ .user-card-hint { padding-top: var(--space-1); }
+.user-card-hint-ico { flex: 0 0 auto; width: 16px; height: 16px; }
 
 .side-foot {
   margin-top: 0;
@@ -1679,7 +1703,30 @@ textarea,
 [contenteditable="true"] {
   font-size: var(--control-fs) !important;
 }
+/* No browser tap box: Android paints a sharp blue rectangle over whatever is tapped, ignoring its shape. A tapped
+   control dims a little instead, in its own shape and colour (touch screens only; hover screens have hover states). */
+html { -webkit-tap-highlight-color: transparent; }
+@media (hover: none) {
+  :is(a[href], button, [role="button"], summary, label:has(input), .ui-select-toggle):active:not(:disabled) {
+    opacity: 0.72;
+  }
+}
 /* Every button speaks the panel font: without this a bare <button> falls back to the browser's (Arial 13.3px). */
+/* Vazirmatn keeps room below the baseline for Persian letters, so a Latin label (an inbound tag, an address) sits
+   about 2px above the middle of its capsule. A label that reads left to right is trimmed to its cap height and
+   baseline, so the capsule centres the letters themselves; Persian labels keep the font's own box. */
+:is(.ui-switch-chip, .btn, .badge, .ds-badge, .ds-tag, .template-variable-token, .reseller-chip, .ui-select-toggle) :is([dir="ltr"], [dir="auto"]):dir(ltr),
+:is(.list-editor-chip, .list-editor-value):dir(ltr) {
+  text-box: trim-both cap alphabetic;
+}
+/* A select showing a Latin value: its label becomes a centred block so the same trim applies, still starting on
+   the right like every RTL field. */
+.ui-select-label:dir(ltr) {
+  display: block;
+  align-self: center;
+  text-align: right;
+  text-box: trim-both cap alphabetic;
+}
 button { font-family: inherit; }
 input, select, textarea {
   width: 100%;
@@ -1742,11 +1789,13 @@ textarea {
 [contenteditable="true"] {
   font-size: var(--control-fs);
 }
-input:focus, select:focus, textarea:focus, button:focus, a:focus {
+input:focus, select:focus, textarea:focus, button:focus, a:focus,
+summary:focus, [role="button"]:focus, [tabindex]:focus {
   outline: none;
 }
 /* Box-shadow ring follows border-radius (Android/WebKit outline is often a sharp rect). */
-input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible,
+summary:focus-visible, [role="button"]:focus-visible, [tabindex]:not([tabindex="-1"]):focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 45%, transparent);
 }
@@ -2430,10 +2479,11 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
   max-width: 100%;
   min-width: 0;
   text-decoration: none !important;
-  /* Main actions (save, confirm, add, select) follow the panel brand colour: strong edge, light fill. */
-  color: var(--brand-fg) !important;
-  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
-  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  /* Main actions (save, confirm, add, select) follow the panel brand colour: strong edge, light fill.
+     A coloured notice sets --btn-tone / --btn-fg, so its buttons take the notice's colour, text included. */
+  color: var(--btn-fg, var(--brand-fg)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--btn-tone, var(--brand)) 72%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 8%, transparent);
   box-sizing: border-box;
   transition:
     background var(--motion-fast) var(--ease-standard),
@@ -2444,7 +2494,7 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
     box-shadow var(--motion-fast) var(--ease-standard);
 }
 .btn:hover, a.btn:hover {
-  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
@@ -2482,13 +2532,13 @@ a.btn.btn-ghost:hover {
   transform: translateY(-1px);
 }
 .btn-ok {
-  color: var(--brand-fg) !important;
-  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent);
-  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  color: var(--btn-fg, var(--brand-fg)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--btn-tone, var(--brand)) 72%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 8%, transparent);
   font-weight: var(--btn-fw);
 }
 .btn-ok:hover {
-  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent);
   opacity: 1;
   transform: translateY(-1px);
 }
@@ -2917,7 +2967,6 @@ a.btn.btn-ghost:hover {
   }
   .table-list-sm > tbody > tr > td.li-sub > * { flex: 0 0 auto; }
   .table-list-sm .li-sub .users-svc-name { display: inline-flex; align-items: center; gap: var(--space-0); }
-  .table-list-sm .li-sub .cell-user-link { border: 0; text-decoration: none; color: inherit; }
 
   /* Side column: the value on line one, the status on line two, both at the inline end. */
   .table-list-sm .li-value {
@@ -2998,17 +3047,43 @@ a.btn.btn-ghost:hover {
   .table-list-sm .li-child > .li-badge .badge { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 20px; min-height: 0; padding: 0 var(--space-1); font-size: var(--fs-1); font-weight: 600; line-height: 1; }
 }
 
-/* User card (modal): account facts as label / value lines, then one block per service. */
-.user-card { display: flex; flex-direction: column; gap: var(--space-2); }
-.user-card-head { display: flex; align-items: center; gap: var(--space-3); }
-.user-card-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.user-card-who strong { font-size: var(--fs-4); font-weight: 700; }
-.user-card-who .muted { font-size: var(--fs-2); }
+/* Who the person is (_user_identity.html), at the top of the user card and the user and reseller edit modals:
+   photo and name with badges, then the @username and the id, each a full-width row that copies on tap. */
+.user-identity { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.user-identity-row { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.user-identity-main { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.ds .user-identity-name { margin: 0; font-size: var(--fs-4); font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.user-identity-badges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: 0; }
+.user-identity-ids { display: flex; flex-direction: column; gap: var(--space-2); }
+.user-id-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  height: var(--ctl-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--fs-3);
+  cursor: pointer;
+}
+.user-id-chip:hover { background: var(--control-bg-hover); }
+.user-id-chip:focus-visible { outline: 2px solid var(--ring, var(--brand)); outline-offset: 2px; }
+.user-id-chip-label { flex: 0 0 auto; color: var(--muted-fg); font-size: var(--fs-2); }
+.user-id-chip-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; text-align: end; }
+.user-id-chip-ico { flex: 0 0 auto; width: 16px; height: 16px; color: var(--muted-fg); }
+.user-id-chip.is-copied { justify-content: center; }
+
+/* User card (modal): the identity box, then account facts as label / value lines, then one line per service. */
+.user-card { display: flex; flex-direction: column; gap: var(--space-3); }
 .user-card-photo {
   position: relative;
-  flex: 0 0 48px;
-  width: 48px;
-  height: 48px;
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   overflow: hidden;
   display: inline-flex;
@@ -3021,20 +3096,6 @@ a.btn.btn-ghost:hover {
 }
 .user-card-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--motion-fast) ease; }
 .user-card-photo img.is-loaded { opacity: 1; }
-.user-card-label { margin: 0 0 var(--space-1); font-size: var(--fs-3); font-weight: 600; color: var(--muted-fg); }
-.kv-list { margin: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-.kv-list > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-1_5);
-  min-height: 44px;
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--fs-3);
-}
-.kv-list > div + div { border-top: 1px solid var(--border); }
-.kv-list dt { color: var(--muted-fg); }
-.kv-list dd { margin: 0; font-weight: 600; text-align: end; font-variant-numeric: tabular-nums; }
 .user-card-service {
   display: flex;
   flex-direction: column;
@@ -3049,13 +3110,31 @@ a.btn.btn-ghost:hover {
 .user-card-service > div.muted { font-size: var(--fs-2); }
 .user-card-service .li-tone-warn { color: var(--warn-fg); font-weight: 600; }
 .user-card-service .li-tone-danger { color: var(--danger); font-weight: 600; }
+/* Wallet, points, purchases and membership: a 2×2 grid of label over value, split by thin lines, not four boxes. */
+.ds .edit-section.user-card-stats { padding: 0; overflow: hidden; }
+.user-card-stats dl { display: grid; grid-template-columns: 1fr 1fr; margin: 0; }
+.user-card-stats dl > div { display: flex; flex-direction: column; gap: var(--space-0); min-width: 0; padding: var(--space-2) var(--space-3); }
+.user-card-stats dl > div:nth-child(even) { border-inline-start: 1px solid var(--border); }
+.user-card-stats dl > div:nth-child(n + 3) { border-top: 1px solid var(--border); }
+.user-card-stats dt { color: var(--muted-fg); font-size: var(--fs-2); }
+.user-card-stats dd { margin: 0; font-size: var(--fs-4); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.user-card-stats dd small { color: var(--muted-fg); font-size: var(--fs-2); font-weight: 400; }
+/* Inside a section box the services are plain lines split by dividers, not boxes inside a box. */
+.edit-section > .user-card-service { padding-inline: 0; border: 0; border-radius: 0; }
+.edit-section > .user-card-service + .user-card-service { margin-top: 0; border-top: 1px solid var(--border); }
 .user-card-empty { margin: 0; }
 .user-card-actions {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: var(--space-1);
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
 }
 .user-card-actions .btn { width: 100%; }
+/* The row's «⋯» actions copied into the card (user-card-actions.js): two equal columns of full-width buttons;
+   a form is one cell, so its button lines up with the plain buttons. */
+.user-card-row-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.user-card-row-actions-grid > form { display: flex; margin: 0; min-width: 0; }
+.user-card-row-actions-grid :is(.btn, button) { width: 100%; }
+.user-card-row-actions-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 .user-card-actions .btn:only-child { grid-column: 1 / -1; }
 
 .card > .table-wrap {
@@ -3357,6 +3436,11 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
 .flash.ok { background: rgba(34, 197, 94, 0.1); color: var(--ok-text); border-color: rgba(34, 197, 94, 0.28); }
 .flash.err { background: rgba(239, 68, 68, 0.1); color: var(--danger-text); border-color: rgba(239, 68, 68, 0.28); }
 .flash.warn { background: rgba(234, 179, 8, 0.1); color: var(--warn-text); border-color: rgba(234, 179, 8, 0.28); }
+/* A main-action button inside a coloured notice is that notice's colour, text and edge alike (never brand-orange
+   text on a yellow notice). Red and ghost buttons keep their own colour: they say something else. */
+.flash.ok { --btn-tone: var(--ok); --btn-fg: var(--ok-text); }
+.flash.err { --btn-tone: var(--destructive); --btn-fg: var(--danger-text); }
+.flash.warn { --btn-tone: var(--warn); --btn-fg: var(--warn-text); }
 
 /* Icon box — same footprint as .stat-ico; shape encodes severity */
 .flash.ok::before,
@@ -3996,8 +4080,7 @@ a.btn.btn-star:hover {
 }
 .btn-star svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .btn-star-gh { opacity: 0.9; }
-.btn.is-copied,
-.btn.btn-ok.is-copied {
+.btn.is-copied {
   color: var(--ok-fg) !important;
   border-color: rgba(34, 197, 94, 0.42);
   background: rgba(34, 197, 94, 0.12);
@@ -4016,13 +4099,6 @@ a.btn.btn-star:hover {
 .settings-grid > .form-field,
 .settings-grid > .setting-item {
   min-width: 0;
-}
-/* Gift expiry uses a plain text input (same chrome as siblings). Do not use a
-   native date-time picker here — mobile WebViews ignore width / crush the UI. */
-.form-field.gift-expires-field {
-  min-width: 0;
-  max-width: 100%;
-  grid-column: 1 / -1;
 }
 .setting-item.full { grid-column: 1 / -1; }
 .plan-name-cell {
@@ -4794,9 +4870,6 @@ form.settings-form > .actions.sticky-actions,
 }
 .settings-modal-body .settings-card {
   margin-top: 0;
-}
-.settings-modal-body .settings-card + .settings-card {
-  margin-top: var(--space-3);
 }
 .modal-tab-panel[hidden] {
   display: none !important;
@@ -6487,24 +6560,6 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
   font-size: var(--fs-2);
   line-height: 1.45;
 }
-.user-edit-identity {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-2);
-}
-.user-edit-name {
-  margin: 0 0 var(--space-0);
-  font-size: var(--fs-4);
-}
-.user-edit-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-0) var(--space-1);
-  margin: 0;
-  font-size: var(--fs-2);
-}
 .user-edit-wallet-pill {
   display: flex;
   flex-direction: row;
@@ -6986,14 +7041,9 @@ td.byte-size {
   font-weight: 700;
   font-size: var(--fs-3);
 }
-/* A number written left to right (dir="ltr") in the RTL panel still lines up on the right edge with the text
-   around it: table cells and transaction amounts. The phone list keeps its own placement for value cells. */
-td[dir="ltr"],
-th[dir="ltr"],
+/* A transaction amount written left to right still lines up on the right edge with the text around it. Table
+   cells stay right to left and isolate a Latin value in <bdi dir="ltr">, so they need no rule here. */
 .wallet-tx-amount { text-align: right; }
-@media (max-width: 880px) {
-  .table-list-sm td[dir="ltr"] { text-align: left; }
-}
 .wallet-tx-amount.is-credit { color: var(--ok-solid); }
 .wallet-tx-amount.is-debit { color: #dc2626; }
 .wallet-tx-reason {
@@ -9802,9 +9852,6 @@ html[data-theme="light"] .alert-dot {
 html[data-theme="light"] .users-ops-stats > .stat:hover {
   background: rgba(0, 0, 0, 0.03);
 }
-html[data-theme="light"] .users-row.is-focus > td {
-  background: color-mix(in srgb, var(--accent, #0284c7) 10%, transparent);
-}
 html[data-theme="light"] .ticket-attach {
   background: rgba(0, 0, 0, 0.02);
 }
@@ -10731,7 +10778,7 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .colors-groups-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--section-gap);
 }
 /* Kill .card flex/gap/padding — those push summary content off true center */
 .colors-groups-stack > .colors-group-details.card,
@@ -11784,7 +11831,7 @@ html[data-theme="light"] .st span { color: color-mix(in srgb, var(--t) 90%, tran
   stroke-linejoin: round;
 }
 html[data-theme="light"] .home-action-empty-ico { stroke: var(--ok-text); }
-.home-sales-card { padding: 18px; }
+.home-sales-card { padding: var(--space-2); }
 .home-sales-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); margin-bottom: 10px; }
 .home-sales-head h2 { flex: 1 1 auto; }
 .sales-seg { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: var(--control-radius); font-size: var(--fs-2); }
@@ -11917,7 +11964,6 @@ html[data-theme="light"] .sc-tip { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
   .st:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .home-update-note .home-update-go { display: none; }
   .home-main-grid { grid-template-columns: 1fr; gap: 12px; }
-  .home-sales-card { padding: 16px; }
   .sales-plot { height: 176px; margin-right: 0; }
   .sc-ytick { display: none; }
 }
@@ -12499,6 +12545,12 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
   margin-top: 0;
   margin-bottom: 0;
 }
+/* Stacks of boxes inside a page or a settings modal follow the same rule: the stack's gap is the only space between
+   its boxes, so no box brings a margin of its own (a margin added 24 or 16 on top of the gap). */
+:is(.settings-domain-stack, .loyalty-stack, .msg-vars-stack, .colors-groups-stack, .magic-links-stack) > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
 /* A wrapper that only groups blocks (the .ds scope around a page) passes the same gap through. */
 #main .main-body > .ds:not(.ui-modal):not(.ds-settings) {
   display: flex;
@@ -12511,3 +12563,145 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
   gap: var(--section-gap);
 }
 #main :is(.kpi-strip, .home-main-grid, .home-bottom-grid, .home-panels, .dash-cols, .ov-tables, .fin-charts) > * { margin-top: 0; margin-bottom: 0; }
+
+/* Plans grouped by category (plans page). Each group heading is a thin band in the colour of the category's bot
+   button, edge to edge, so it never reads as a plan row; its order is the order of the buttons in the bot. The id
+   outweighs the phone list rules that centre a full-width cell and grid every row. */
+:is(#plan-category-board > tr, .plan-cat-chips > button)[data-tone] { --plan-cat-tone: var(--muted-fg); }
+:is(#plan-category-board > tr, .plan-cat-chips > button)[data-tone="primary"] { --plan-cat-tone: var(--info); }
+:is(#plan-category-board > tr, .plan-cat-chips > button)[data-tone="success"] { --plan-cat-tone: var(--ok); }
+:is(#plan-category-board > tr, .plan-cat-chips > button)[data-tone="danger"] { --plan-cat-tone: var(--destructive); }
+#plan-category-board > tr:is(.plan-cat-head, .plan-cat-add, .plan-cat-intro) > td { padding: 0; }
+/* Padding sits on the cell's inner box: the phone list forces every full-width cell to padding 0. */
+.plan-cat-cell { padding: var(--space-1) var(--space-2); }
+#plan-category-board > tr.plan-cat-head > td {
+  background: color-mix(in srgb, var(--plan-cat-tone) 10%, var(--card));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  color: var(--foreground);
+  white-space: normal;
+}
+#plan-category-board > tr.plan-cat-head:first-child > td { border-top: 0; }
+.plan-cat-head-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--space-4);
+}
+.plan-cat-dot {
+  flex: 0 0 auto;
+  width: var(--space-1);
+  height: var(--space-1);
+  border-radius: var(--control-radius);
+  background: var(--plan-cat-tone);
+}
+.plan-cat-name {
+  font-size: var(--fs-3);
+  font-weight: 700;
+  color: color-mix(in srgb, var(--plan-cat-tone) 75%, var(--foreground));
+}
+#plan-category-board > tr[data-tone="default"] .plan-cat-name { color: var(--foreground); }
+.plan-cat-count { font-size: var(--fs-2); color: var(--muted-fg); }
+.plan-cat-actions { margin-inline-start: auto; display: flex; }
+/* The heading menu is always the round «⋯», on desktop too, whatever width the table has. */
+#plan-category-board .plan-cat-actions .row-actions-toggle--label { display: none; }
+#plan-category-board .plan-cat-actions .row-actions-toggle--icon { display: inline-flex; }
+.plan-cat-note { margin: var(--space-0) 0 0; font-size: var(--fs-2); color: var(--muted-fg); }
+#plan-category-board > tr:is(.plan-cat-add, .plan-cat-intro) .plan-cat-cell { padding: var(--space-1_5) var(--space-2); }
+#plan-category-board > tr.plan-cat-add > td,
+#plan-category-board > tr.plan-cat-intro > td {
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: normal;
+}
+.plan-cat-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  width: 100%;
+  height: var(--btn-h);
+  border: 1px dashed color-mix(in srgb, var(--brand) 55%, transparent);
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-size: var(--fs-3);
+  font-weight: var(--btn-fw);
+  cursor: pointer;
+}
+.plan-cat-add-btn .ico { width: 16px; height: 16px; }
+.plan-cat-intro-row { display: flex; align-items: center; gap: var(--space-1_5); }
+.plan-cat-intro-row p { flex: 1; margin: 0; display: flex; flex-direction: column; gap: var(--space-0); }
+.plan-cat-intro-row strong { font-size: var(--fs-3); color: var(--foreground); }
+.plan-cat-intro-row span { font-size: var(--fs-2); color: var(--muted-fg); line-height: 1.8; }
+.plan-cat-intro-row .btn { flex: 0 0 auto; }
+@media (max-width: 880px) {
+  #plan-category-board > tr:is(.plan-cat-head, .plan-cat-add, .plan-cat-intro) { display: block; padding: 0; }
+  .plan-cat-cell, #plan-category-board > tr:is(.plan-cat-add, .plan-cat-intro) .plan-cat-cell { padding: var(--space-1) var(--space-1_5); }
+}
+
+/* Back from saving a category, its group lights up once in its own colour and fades (opacity only). */
+#plan-category-board > tr.plan-cat-head > td { position: relative; }
+/* Landing on a group from its anchor leaves room for the floating header and the bottom bar. */
+#plan-category-board > tr.plan-cat-head {
+  scroll-margin-top: calc(var(--hdr-top) + var(--dock-h) + var(--section-gap));
+  scroll-margin-bottom: calc(var(--dock-h) + var(--section-gap));
+}
+#plan-category-board > tr.plan-cat-head.is-arrived > td::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--plan-cat-tone) 28%, transparent);
+  pointer-events: none;
+  animation: plan-cat-arrive calc(var(--motion-slow) * 4) ease-out both;
+}
+@keyframes plan-cat-arrive {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #plan-category-board > tr.plan-cat-head.is-arrived > td::after { animation-duration: 1ms; }
+}
+/* Category chips under the plan name: names vary in length, so three across (two on a phone), each cut with an
+   ellipsis and named in full by its title. */
+.ds .ds-chips.plan-cat-chips { --ds-chip-cols: 3; }
+.ds .plan-cat-chips > button { gap: var(--space-1); overflow: hidden; }
+.plan-cat-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.plan-cat-chip-off { font-size: var(--fs-1); color: var(--muted-fg); }
+.ds .plan-cat-chips > .plan-cat-chip-new { color: var(--brand); border-style: dashed; }
+/* Adding a category in the form: name, bot colour and a round «+», one row at field height. */
+.plan-cat-new { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.plan-cat-new input { flex: 1 1 8rem; min-width: 0; }
+.plan-cat-new-color { flex: 0 0 auto; width: 8.5rem; }
+.plan-cat-new-color .ui-select { width: 100%; margin: 0; }
+.plan-cat-new-color .ui-select[data-tone] { --plan-cat-tone: var(--muted-fg); }
+.plan-cat-new-color .ui-select[data-tone="primary"] { --plan-cat-tone: var(--info); }
+.plan-cat-new-color .ui-select[data-tone="success"] { --plan-cat-tone: var(--ok); }
+.plan-cat-new-color .ui-select[data-tone="danger"] { --plan-cat-tone: var(--destructive); }
+.plan-cat-new-color .ui-select:is([data-tone="primary"], [data-tone="success"], [data-tone="danger"]) .ui-select-toggle {
+  border-color: color-mix(in srgb, var(--plan-cat-tone) 45%, transparent);
+  background: color-mix(in srgb, var(--plan-cat-tone) 14%, transparent);
+  color: color-mix(in srgb, var(--plan-cat-tone) 75%, var(--foreground));
+}
+.ds .plan-cat-new .plan-cat-new-add {
+  flex: 0 0 var(--btn-h);
+  width: var(--btn-h);
+  height: var(--btn-h);
+  border: 1px solid color-mix(in srgb, var(--brand) 55%, transparent);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--brand);
+}
+.plan-cat-new-add svg { width: 20px; height: 20px; }
+.plan-cat-new-error { flex-basis: 100%; color: var(--destructive); }
+@media (max-width: 480px) {
+  .ds .ds-chips.plan-cat-chips { --ds-chip-cols: 2; }
+}
+
+/* «کپی شد» is always the success green, whatever the copy control looks like at rest (a token, a link, a button). */
+:is([data-copy], [data-copy-from]).is-copied {
+  color: var(--ok-fg);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);

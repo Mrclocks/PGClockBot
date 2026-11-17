@@ -14,6 +14,7 @@ from typing import Any, Mapping
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pg_admin_roles import AdminRoleError, resolve_new_admin_role_id
 from app.services.redact import user_safe_error
 from app.db.models import OrgPrincipal, OrgPrincipalProvision
 from app.services.authz import (
@@ -165,7 +166,12 @@ async def _resolve_pg_role(
     """
     _ = role_name  # intentionally unused for authority
     if pg_role_id is None:
-        return None, None
+        from app.services.pasarguard import get_pg
+
+        try:
+            return await resolve_new_admin_role_id(get_pg(), None), None
+        except AdminRoleError as exc:
+            raise PrincipalProvisionError(str(exc), code="role_required") from None
     try:
         rid = int(pg_role_id)
     except (TypeError, ValueError) as exc:

@@ -1,0 +1,81 @@
+{# A customer's name in any panel table opens the read-only user card. Import with context, because whether the
+   name is a link depends on the signed-in staff:
+     {% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
+   - user_card_link(user_id, name, page, title=false, context=none): the name as a button that opens the card, or
+     plain text without the right; ``title`` for the bold name cell of a list (cell-name-text). When the row has a
+     «⋯» menu, user-card-actions.js copies its actions into the card under «اقدام‌های {context}» (e.g. «پرداخت #۱۲»).
+   - user_card_button(user_id, label, page): the same card behind a row-menu or toolbar button.
+   - user_card_hint(): one muted line above the table saying that a name opens the card.
+   - user_card_modals(return_page=page): the card and the message form, once per page. ``page`` is a key of
+     USER_CARD_PAGES (app/services/user_card.py); the routes only ever match it against that list. #}
+{% from "_icons.html" import icon %}
+{% from "macros.html" import modal_title %}
+{% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
+{% macro user_card_link(user_id, name, page, title=false, context=none) -%}
+{%- if user_id and staff is defined and can_open_user_card is defined and can_open_user_card(staff) -%}
+<button type="button" class="{{ 'cell-name-text cell-name-link' if title else 'cell-user-link' }}"
+        data-modal-open="modal-user-card"
+        data-modal-load="/users/{{ user_id | int }}/card?from={{ page }}"
+        data-modal-load-target="user-card-body"{% if context %}
+        data-card-context="{{ context }}"{% endif %}
+        dir="auto">{{ name }}</button>
+{%- else -%}
+<span{% if title %} class="cell-name-text"{% endif %} dir="auto">{{ name }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro user_card_button(user_id, label, page) -%}
+{%- if user_id and staff is defined and can_open_user_card is defined and can_open_user_card(staff) -%}
+<button type="button" class="btn btn-ghost btn-sm"
+        data-modal-open="modal-user-card"
+        data-modal-load="/users/{{ user_id | int }}/card?from={{ page }}"
+        data-modal-load-target="user-card-body">{{ label }}</button>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro user_card_hint() -%}
+{%- if staff is defined and can_open_user_card is defined and can_open_user_card(staff) -%}
+<p class="user-card-hint">{{ icon('alert', 'user-card-hint-ico') }}<span>با کلیک روی نام هر کاربر اطلاعات نمایش داده می‌شود</span></p>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro user_card_modals(return_page='', return_filter=none, return_q=none, with_message=true) %}
+{% if staff is defined and can_open_user_card is defined and can_open_user_card(staff) %}
+<div class="ui-modal ds" id="modal-user-card" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-card-title">
+    <div class="ui-modal-head ds-head">
+      <div class="ds-head-row">
+        {{ modal_title('users', 'اطلاعات کاربر', tone='brand', heading_id='user-card-title') }}
+        <button type="button" class="icon-btn" data-modal-close aria-label="بستن">{{ icon('close', 'ico') }}</button>
+      </div>
+    </div>
+    <div id="user-card-body" class="edit-modal-body" data-load-fragment>
+      <p class="muted">در حال بارگذاری…</p>
+    </div>
+  </div>
+</div>
+{% if with_message %}
+<div class="ui-modal ds" id="modal-user-message" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-msg-title">
+    {{ ds_modal_head('users', 'پیام به کاربر', 'user-msg-title') }}
+    <form method="post" action="/users/0/message" class="form-stack ds-body" id="user-msg-form">
+      {% if return_page %}<input type="hidden" name="return_page" value="{{ return_page }}" />{% endif %}
+      {% if return_filter %}<input type="hidden" name="return_filter" value="{{ return_filter }}" />{% endif %}
+      {% if return_q %}<input type="hidden" name="return_q" value="{{ return_q }}" />{% endif %}
+      {% call ds_sec('پیام', extra_class='ds-sec-first') %}
+        <p class="ds-desc">گیرنده: <b id="user-msg-target">—</b></p>
+        <label class="form-field"><span>متن پیام <span class="ds-req" aria-hidden="true">*</span></span>
+          <textarea name="body" rows="6" required maxlength="2000" placeholder="پیام کوتاه پشتیبانی…"></textarea>
+        </label>
+      {% endcall %}
+      {{ ds_foot('ارسال') }}
+    </form>
+  </div>
+</div>
+{% endif %}
+<script src="/static/user-card-actions.js?v={{ asset_v('user-card-actions.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
+<script src="/static/user-message.js?v={{ asset_v('user-message.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
+{% endif %}
+{% endmacro %}

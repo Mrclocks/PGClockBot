@@ -30,8 +30,10 @@
   {% set pg_detail = 'بررسی نشده' if (pg_health and pg_health.unchecked) else (('نسخه ' ~ pg_health.version) if (pg_health and pg_health.ok and pg_health.version) else ('آنلاین' if (pg_health and pg_health.ok) else ((pg_health.error if pg_health else none) or 'قطع'))) %}
   {% set _ = tiles.append({'name': 'پاسارگارد', 'detail': pg_detail, 'state': pg_state, 'icon': 'pg', 'href': '/pg', 'id': 'home-pg-health'}) %}
   {% if show_pg_nodes %}
-  {% set node_state = 'ok' if (nodes.ok and nodes.overall == 'ok') else ('warn' if (nodes.ok and nodes.overall == 'warn') else ('err' if (not nodes.ok or nodes.overall == 'err') else 'neutral')) %}
-  {% set node_detail = (nodes.connected ~ '/' ~ nodes.total ~ ' متصل') if (nodes.ok and nodes.total) else (nodes.error or 'ثبت‌نشده') %}
+  {#- The fast shell has not asked the panel yet (unchecked): neutral, like the bot and PasarGuard tiles, so no red
+      banner flashes before /home/body brings the real state. -#}
+  {% set node_state = 'neutral' if nodes.unchecked else ('ok' if (nodes.ok and nodes.overall == 'ok') else ('warn' if (nodes.ok and nodes.overall == 'warn') else ('err' if (not nodes.ok or nodes.overall == 'err') else 'neutral'))) %}
+  {% set node_detail = 'بررسی نشده' if nodes.unchecked else ((nodes.connected ~ '/' ~ nodes.total ~ ' متصل') if (nodes.ok and nodes.total) else (nodes.error or 'ثبت‌نشده')) %}
   {% set _ = tiles.append({'name': 'نود', 'detail': node_detail, 'state': node_state, 'icon': 'nodes', 'href': '/pg/nodes'}) %}
   {% endif %}
   {{ connection_banner(tiles) }}

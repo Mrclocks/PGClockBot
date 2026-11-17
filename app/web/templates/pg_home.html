@@ -40,6 +40,16 @@
 </div>
 {% endif %}
 
+{% if admins_hint %}
+<div class="flash warn home-update-banner">
+  <div class="home-update-copy">
+    <strong>{{ admins_hint.title }}</strong>
+    <span class="muted">{{ admins_hint.detail }}</span>
+  </div>
+  <a class="btn btn-sm" href="{{ admins_hint.href }}">اتصال پاسارگارد</a>
+</div>
+{% endif %}
+
 {% if widgets_deferred %}
 {% include "_panel_widgets_defer.html" %}
 {% include "_pg_dash_body.html" %}

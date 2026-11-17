@@ -119,8 +119,8 @@ class UserCardTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_latin_name_keeps_the_header_right_to_left(self) -> None:
         self.staff = OWNER.copy()
         response = await self.client.get("/users/1/card")
-        self.assertIn("<strong><bdi>Platform customer</bdi></strong>", response.text)
-        self.assertNotIn('<strong dir="auto">', response.text)
+        self.assertIn('<h3 class="user-identity-name"><bdi>Platform customer</bdi></h3>', response.text)
+        self.assertNotIn('dir="auto"', response.text)
 
     async def test_owner_sees_the_platform_purse_and_services(self) -> None:
         self.staff = OWNER.copy()
@@ -142,6 +142,114 @@ class UserCardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([s.pg_username for s in card.services], ["shop_a_service"])
         self.assertEqual(card.services[0].plan_name, "Monthly")
         self.assertEqual(card.services[0].expire_tone, "warn")
+
+
+    async def test_the_card_is_section_boxes_with_the_status_once_in_the_header(self) -> None:
+        response = await self.client.get("/users/11/card")
+        self.assertIn('<section class="edit-section edit-section--identity">', response.text)
+        self.assertEqual(response.text.count('<section class="edit-section'), 3)
+        self.assertEqual(response.text.count(">فعال<"), 1)
+        self.assertNotIn("<dt>وضعیت</dt>", response.text)
+
+    async def test_owner_opening_a_reseller_from_the_resellers_list_edits_the_reseller(self) -> None:
+        self.staff = OWNER.copy()
+        response = await self.client.get(f"/users/{SHOP_A}/card?from=resellers")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f'data-edit-url="/resellers/{SHOP_A}/edit?fragment=1"', response.text)
+        self.assertNotIn('data-modal-open="modal-user-edit"', response.text)
+
+    async def test_the_same_reseller_from_the_users_list_edits_the_customer(self) -> None:
+        self.staff = OWNER.copy()
+        response = await self.client.get(f"/users/{SHOP_A}/card")
+        self.assertIn('data-modal-open="modal-user-edit"', response.text)
+        self.assertNotIn('data-modal-open="modal-reseller-edit"', response.text)
+
+    async def test_a_shop_cannot_reach_the_reseller_edit_through_the_resellers_hint(self) -> None:
+        response = await self.client.get("/users/11/card?from=resellers")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("modal-reseller-edit", response.text)
+        self.assertNotIn("modal-user-edit", response.text, "the resellers page has no user edit modal")
+
+    async def test_shop_staff_without_panel_service_rights_still_get_edit(self) -> None:
+        response = await self.client.get("/users/11/card")
+        self.assertIn('data-modal-load="/users/11/edit?fragment=1"', response.text)
+
+    async def test_username_and_telegram_id_copy_on_tap(self) -> None:
+        user = await self.session.get(BotUser, 11)
+        user.username = "shop_customer"
+        await self.session.commit()
+        response = await self.client.get("/users/11/card")
+        self.assertIn('data-copy="@shop_customer"', response.text)
+        self.assertIn('data-copy="9011"', response.text)
+
+    async def test_wallet_points_purchases_and_membership_sit_in_one_box(self) -> None:
+        response = await self.client.get("/users/11/card")
+        stats = response.text.split('class="edit-section user-card-stats"')[1].split("</section>")[0]
+        for label in ("کیف پول", "امتیاز", "خرید موفق", "عضویت"):
+            self.assertIn(f"<dt>{label}</dt>", stats)
+
+    async def test_a_blocked_customer_gets_no_message_button(self) -> None:
+        user = await self.session.get(BotUser, 11)
+        user.is_blocked = True
+        await self.session.commit()
+        response = await self.client.get("/users/11/card")
+        self.assertNotIn("modal-user-message", response.text)
+        self.assertIn(">مسدود<", response.text)
+
+    async def test_a_message_sent_from_the_resellers_list_returns_there(self) -> None:
+        self.staff = OWNER.copy()
+        response = await self.client.post(f"/users/{SHOP_A}/message", data={"body": "", "return_page": "resellers"})
+        self.assertEqual(response.status_code, 303)
+        self.assertTrue(response.headers["location"].startswith("/resellers?err="))
+
+    async def test_a_card_opened_from_another_table_links_to_the_users_edit(self) -> None:
+        for page in ("finance", "tickets", "trials", "cleanup", "applications", "loyalty"):
+            response = await self.client.get(f"/users/11/card?from={page}")
+            self.assertIn('<a class="btn" href="/users?uid=11&amp;edit=11">ویرایش</a>', response.text, page)
+            self.assertNotIn('data-modal-open="modal-user-edit"', response.text, page)
+
+    async def test_an_unknown_card_page_behaves_like_the_users_list(self) -> None:
+        response = await self.client.get("/users/11/card?from=https://evil.example")
+        self.assertIn('data-modal-open="modal-user-edit"', response.text)
+        self.assertNotIn("evil.example", response.text)
+
+    async def test_a_message_sent_from_another_table_returns_to_that_page(self) -> None:
+        for page, path in (("finance", "/finance"), ("tickets", "/tickets"), ("trials", "/trial-users"),
+                           ("cleanup", "/service-cleanup"), ("loyalty", "/loyalty")):
+            response = await self.client.post("/users/11/message", data={"body": "", "return_page": page})
+            self.assertEqual(response.status_code, 303)
+            self.assertTrue(response.headers["location"].startswith(f"{path}?err="), page)
+
+    async def test_staff_without_the_users_right_cannot_open_the_card(self) -> None:
+        self.staff = {"role": "reseller", "bot_user_id": SHOP_A, "permissions": ["finance"]}
+        app = FastAPI()
+        # The real permission dependency, so the right is checked as in production.
+        from app.services.authz import authz_from_staff, can_shop
+
+        def require_perm(perm: str):
+            async def _dep() -> dict[str, Any]:
+                if not can_shop(authz_from_staff(self.staff), perm):
+                    from fastapi import HTTPException
+
+                    raise HTTPException(status_code=403)
+                return self.staff
+            return _dep
+
+        async def get_db() -> AsyncIterator[AsyncSession]:
+            yield self.session
+
+        register_user_pages(app, render=lambda *a, **k: HTMLResponse(""), require_admin=require_perm("x"),
+                            get_db=get_db, require_perm=require_perm)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/users/11/card?from=finance")
+        self.assertEqual(response.status_code, 403)
+
+    async def test_an_unknown_return_page_falls_back_to_the_users_list(self) -> None:
+        self.staff = OWNER.copy()
+        response = await self.client.post(
+            f"/users/{SHOP_A}/message", data={"body": "", "return_page": "https://evil.example"}
+        )
+        self.assertTrue(response.headers["location"].startswith("/users"))
 
 
 class ExpireToneTests(unittest.TestCase):

@@ -81,6 +81,8 @@ tests/test_inbox_platform_scope_leak.py
 tests/test_live_pg_menus.py
 tests/test_miniapp_security_audit.py
 tests/test_miniapp_init_data_window.py
+tests/test_miniapp_onboarding.py
+tests/test_miniapp_main_app.py
 tests/test_miniapp_service_addons.py
 tests/test_addon_preview.py
 tests/test_miniapp_feeds.py
@@ -213,6 +215,8 @@ tests/test_service_import_config.py
 tests/test_service_import_settings_tab.py
 tests/test_service_import_approval.py
 tests/test_service_import_notify.py
+tests/test_service_import_assign.py
+tests/test_service_import_assign_bot.py
 tests/test_reseller_capacity_snapshot.py
 tests/test_reseller_capacity_view.py
 tests/test_random_payment_card.py
@@ -272,6 +276,8 @@ tests/test_manual_approve_undelivered.py
 tests/test_reseller_package.py
 tests/test_reseller_expire_claim.py
 tests/test_reseller_provision_limits.py
+tests/test_pg_admin_role_required.py
+tests/test_bot_make_reseller_plan.py
 tests/test_reseller_approve_idempotent.py
 tests/test_reseller_soft_deactivate_bot.py
 tests/test_reseller_phase5_failclosed.py
@@ -294,6 +300,7 @@ tests/test_shop_notify_isolation.py
 tests/test_user_search.py
 tests/test_psp_gateways.py
 tests/test_user_card.py
+tests/test_user_card_links.py
 tests/test_user_photo.py
 tests/test_custom_plan_shop_limits.py
 tests/test_custom_plan_cleanup.py
@@ -505,5 +512,12 @@ tests/test_settings_modal_list.py
 tests/test_empty_state.py
 tests/test_dashboard_layout.py
 tests/test_pg_capability_probe_credentials.py
+tests/test_pg_capability_outage_hold.py
 tests/test_platform_pg_access_end_to_end.py
 tests/test_plan_template_only_role.py
+tests/test_plan_category_board.py
+tests/test_entry_approval.py
+tests/test_platform_pg_admins_page.py
+tests/test_pg_role_parity.py
+tests/test_reseller_revoke_panel_admin.py
+tests/test_pg_quota_parity.py

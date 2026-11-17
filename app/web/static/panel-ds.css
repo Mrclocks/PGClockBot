@@ -46,12 +46,12 @@
 .ds .icon-btn .ico { width: 18px; height: 18px; }
 /* Warnings act like main actions: the brand colour, so a colour change in the panel settings reaches them. */
 .btn-warn, a.btn.btn-warn {
-  color: var(--brand-fg) !important;
-  border: 1.5px solid color-mix(in srgb, var(--brand) 72%, transparent) !important;
-  background: color-mix(in srgb, var(--brand) 8%, transparent) !important;
+  color: var(--btn-fg, var(--brand-fg)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--btn-tone, var(--brand)) 72%, transparent) !important;
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 8%, transparent) !important;
 }
-.btn-warn:hover, a.btn.btn-warn:hover { background: color-mix(in srgb, var(--brand) 15%, transparent) !important; }
-html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
+.btn-warn:hover, a.btn.btn-warn:hover { background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent) !important; }
+html[data-theme="light"] .btn-warn { color: var(--btn-fg, var(--brand-fg)) !important; }
 
 /* ===================================================================== 3. Modal shell */
 .ui-modal.ds .ui-modal-panel {
@@ -100,6 +100,9 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 }
 .ui-modal.ds .ui-modal-scroll > .ds-sec:first-of-type,
 .ui-modal.ds .ds-body > .ds-sec, .ui-modal.ds .ds-sec { padding: 0; margin: 0; scroll-margin-top: 160px; }
+
+/* Fragment bodies (user card, user and reseller edit) sit 16 below the header like a form body, not against its line. */
+.ui-modal.ds .edit-modal-body { padding-top: var(--g4); }
 
 /* Footer: pinned, same padding for one or two buttons, safe area included. */
 .ui-modal.ds .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save,
@@ -194,8 +197,8 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]), .ds select {
   height: var(--ctl-h); min-height: var(--ctl-h); margin: 0; line-height: normal; box-sizing: border-box;
 }
-/* A password field's wrapper starts where a plain field does, so «نام کاربری» and «رمز» side by side line up. */
-.ds .pw-field { margin-top: 0; }
+/* Field wrappers (password, custom select) start where a plain field does, so fields side by side line up. */
+.ds :is(.pw-field, .ui-select) { margin-top: 0; }
 .ds .ui-select-toggle { height: var(--ctl-h); min-height: var(--ctl-h); box-sizing: border-box; }
 .ds textarea { margin: 0; }
 .ds .ds-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); }
@@ -218,7 +221,7 @@ html[data-theme="light"] .btn-warn { color: var(--brand-fg) !important; }
 .ds .ds-unit.is-unlimited input { color: transparent; caret-color: transparent; }
 /* «نامحدود» shows where the number would: on the right. */
 .ds .ds-unit.is-unlimited::after {
-  content: attr(data-unlimited-label); position: absolute; inset-block: 0; left: 56px; right: var(--g3); display: flex; align-items: center; justify-content: flex-end;
+  content: attr(data-unlimited-label); position: absolute; inset-block: 0; left: 56px; right: var(--g3); display: flex; align-items: center; justify-content: flex-start;
   font-size: var(--fs-3); color: var(--muted-fg); pointer-events: none;
 }
 .ds .ds-mini {

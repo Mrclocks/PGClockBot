@@ -136,8 +136,9 @@ async def assert_provision_renew(
     data_limit: int | None = None,
     expire_ts: int | None = None,
     from_template: bool = False,
+    to_on_hold: bool = False,
 ) -> None:
-    """Gate for renewals / template re-apply."""
+    """Gate for renewals / template re-apply (``to_on_hold``: the renewal moves the user to on-hold)."""
     rid = reseller_user_id
     if rid is None and staff is not None:
         rid = reseller_id_from_staff(staff)
@@ -158,6 +159,7 @@ async def assert_provision_renew(
                     expire_ts=expire_ts,
                     data_limit_changed=data_limit is not None,
                     expire_changed=expire_ts is not None,
+                    to_on_hold=to_on_hold,
                     session=session,
                 )
         else:
@@ -167,6 +169,7 @@ async def assert_provision_renew(
                 data_limit=data_limit,
                 expire_ts=expire_ts,
                 from_template=from_template,
+                to_on_hold=to_on_hold,
                 session=session,
                 reseller_user_id=rid,
             )

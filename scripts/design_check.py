@@ -47,7 +47,7 @@ SVG_TAG = re.compile(r'<svg\b(?=[^>]*viewBox="0 0 (?:24 24|16 16)")')
 ICON_SET = "app/web/templates/_icons.html"
 
 # Rules with no finding left anywhere: one finding in any tracked file fails the check.
-STRICT_RULES = frozenset({"modal-not-ds", "form-modal-cancel", "inline-style", "bom", "token-loop"})
+STRICT_RULES = frozenset({"modal-not-ds", "form-modal-cancel", "inline-style", "bom", "token-loop", "cell-direction"})
 
 RULE_HELP = {
     "modal-not-ds": "every .ui-modal also carries .ds (DESIGN_SYSTEM.md §3)",
@@ -61,6 +61,7 @@ RULE_HELP = {
     "bom": "no byte order mark in a template: inside the page it prints an invisible character that takes a line (§1)",
     "inline-svg": "icons come from icon() in _icons.html, not hand-written <svg> in templates (§2)",
     "raw-gap": "gaps come from the spacing tokens (var(--space-*), var(--g*), var(--section-gap)) or 0 (§1)",
+    "cell-direction": "a table cell stays right to left; put a Latin value in <bdi dir=\"ltr\"> inside it (§2)",
     "layout-motion": "only transform, opacity and clip-path animate; a width, height or position transition lays out every frame (§7-1)",
 }
 
@@ -95,6 +96,9 @@ class _TemplateScanner(HTMLParser):
         line = self.getpos()[0]
         if "ui-modal" in classes and "ds" not in classes:
             self.findings.append(Finding("modal-not-ds", line, values.get("id", "")))
+        if tag in ("td", "th") and "dir" in values:
+            # A left-to-right cell aligns to the left and reverses any Persian words in it («۳۹ روز»).
+            self.findings.append(Finding("cell-direction", line, values["dir"]))
         if "style" in values and not _only_custom_properties(values["style"]):
             self.findings.append(Finding("inline-style", line, values["style"][:60]))
         if tag in ("button", "a") and "data-modal-close" in values and "btn" in classes:

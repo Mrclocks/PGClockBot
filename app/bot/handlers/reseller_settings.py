@@ -15,6 +15,8 @@ from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.user_errors import domain_error_text
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
+from app.bot.entry_gate import ENTRY_APPROVAL_BOT_FIELDS, ENTRY_APPROVAL_SUB, ENTRY_APPROVAL_SUB_TITLE
+from app.services.entry_approval_config import PERMISSION as ENTRY_APPROVAL_PERMISSION
 from app.services.resellers import get_reseller_profile, has_bot_perm
 from app.services.support_contacts import (
     delete_support_contact,
@@ -64,6 +66,8 @@ logger = logging.getLogger(__name__)
 router = Router(name="reseller_settings")
 
 Field = tuple[str, str, str]
+
+SUB_PERMISSIONS: dict[str, str] = {ENTRY_APPROVAL_SUB: ENTRY_APPROVAL_PERMISSION}
 
 SECTIONS: dict[str, dict] = {
     # Same IA as owner hub — shop-scoped only (no platform keys).
@@ -189,6 +193,7 @@ SECTIONS: dict[str, dict] = {
                 ("referral_required", "معرف اجباری", "toggle"),
                 ("referral_required_text", "پیام دریافت معرف", "textarea"),
             ]),
+            (ENTRY_APPROVAL_SUB, ENTRY_APPROVAL_SUB_TITLE, list(ENTRY_APPROVAL_BOT_FIELDS)),
         ],
     },
     "buy": {
@@ -455,6 +460,12 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
         await safe_edit_text(callback.message, panel[0], reply_markup=panel[1])
 
 
+async def _subs_without_permission(session: AsyncSession, reseller_id: int) -> set[str]:
+    """Subsections the shop's package does not include (nobody there could act on them)."""
+    profile = await get_reseller_profile(session, reseller_id)
+    return {sub for sub, perm in SUB_PERMISSIONS.items() if not has_bot_perm(profile, perm)}
+
+
 async def _section_panel(session: AsyncSession, sec_id: str, reseller_id: int) -> Panel | None:
     """One settings section (supports list, bot token, or its subsections); None for unknown ids."""
     sec = SECTIONS.get(sec_id)
@@ -499,10 +510,15 @@ async def _section_panel(session: AsyncSession, sec_id: str, reseller_id: int) -
             )
             return text, _kb(rows)
 
+        subs = sec.get("subs") or []
+        # Only a section with a permission-bound subsection needs the shop's profile.
+        gated = any(sub_id in SUB_PERMISSIONS for sub_id, *_ in subs)
+        hidden = await _subs_without_permission(session, reseller_id) if gated else set()
         rows = kb.pack_long_list(
             [
                 InlineKeyboardButton(text=label, callback_data=f"res:st:sub:{sec_id}:{sub_id}")
-                for sub_id, label, _fields in sec.get("subs") or []
+                for sub_id, label, _fields in subs
+                if sub_id not in hidden
             ]
         )
         if sec_id == GUIDES_SECTION:

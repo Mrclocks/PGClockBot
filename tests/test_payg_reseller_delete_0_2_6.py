@@ -159,9 +159,9 @@ class PaygResellerFullDeleteFkTests(unittest.IsolatedAsyncioTestCase):
             with patch("app.services.users.get_settings") as gs:
                 gs.return_value.admin_ids = []
                 with patch("app.services.pasarguard.get_pg", return_value=mock_pg):
-                    with patch(
-                        "app.services.reseller_bots.get_reseller_bot_manager",
-                        return_value=None,
+                    with (
+                        patch("app.services.reseller_bots.get_reseller_bot_manager", return_value=None),
+                        patch("app.services.resellers.assert_platform_may_delete_pg_admins", new=AsyncMock()),
                     ):
                         info = await delete_bot_user(session, uid)
 

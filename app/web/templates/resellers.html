@@ -2,6 +2,7 @@
 {% from "_icons.html" import icon %}
 {% from "macros.html" import switch, oversell_create_switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, empty_state, search_submit %}
 {% from "_ds.html" import ds_perm_groups %}
+{% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
 {% block title %}{% if owner_view %}نمایندگان{% else %}نمایندگان من{% endif %}{% endblock %}
 {% block content %}
 {% call(slot) page_header('resellers' if owner_view else 'users', 'نمایندگان' if owner_view else 'نمایندگان من', help='resellers') %}
@@ -134,6 +135,7 @@
     {'key': 'delete_user', 'label': 'حذف کاربر', 'class': 'btn-danger', 'confirm': '{n} کاربر کامل حذف شوند؟ برگشت‌ناپذیر است.', 'confirm_title': 'حذف کامل گروهی', 'confirm_label': 'حذف کامل', 'danger': true, 'reason': true, 'reason_label': 'علت حذف کامل'},
   ]) }}
   {% endif %}
+  {% if owner_view %}{{ user_card_hint() }}{% endif %}
   <div class="table-wrap">
   <table class="table-compact table-list-sm" data-sortable{% if owner_view %} data-bulk-select{% endif %}>
     <thead>
@@ -166,7 +168,7 @@
             <span class="cell-name-primary">
               {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
               {% set oversold = owner_view and oversold_shop_ids and u.id in oversold_shop_ids %}
-              <span class="cell-name-text" dir="auto">{{ u.full_name or u.username or '—' }}</span>
+              {{ user_card_link(u.id if owner_view else none, u.full_name or u.username or '—', 'resellers', title=true, context='این نماینده') }}
               <span class="li-only li-id" dir="ltr">({{ u.telegram_id }})</span>
               {% if tag %}<span class="badge badge-risk-tag li-hide" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
               {% if oversold %}
@@ -175,7 +177,7 @@
             </span>
           </div>
         </td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
+        <td class="mono col-hide-sm" data-sort-value="{{ u.telegram_id }}"><bdi dir="ltr">{{ u.telegram_id }}</bdi></td>
         <td class="col-hide-sm" data-sort-value="{{ u.role }}">
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
             {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
@@ -213,8 +215,8 @@
             {% endif %}
           </div>
         </td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ p.web_username or '' }}">{{ p.web_username or '—' }}</td>
-        <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ p.bot_username or '' }}">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
+        <td class="mono col-hide-sm" data-sort-value="{{ p.web_username or '' }}"><bdi dir="ltr">{{ p.web_username or '—' }}</bdi></td>
+        <td class="mono col-hide-sm" data-sort-value="{{ p.bot_username or '' }}"><bdi dir="ltr">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</bdi></td>
         <td class="col-hide-sm" data-sort-value="{% if p.setup_completed_at %}2{% elif p.web_username %}1{% else %}0{% endif %}">{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -401,6 +403,8 @@
     </div>
   </div>
 </div>
+
+{% if owner_view %}{{ user_card_modals(return_page='resellers') }}{% endif %}
 
 <div class="ui-modal ds" id="modal-reseller-color" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>

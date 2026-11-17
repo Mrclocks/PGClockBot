@@ -75,12 +75,14 @@ class UsersQuickUiTests(unittest.TestCase):
         self.assertIn("require_ops", pages)
 
     def test_finance_tickets_deep_links(self):
+        # A customer's name opens the user card in place (rendering is covered by test_user_card_links).
         fin = (ROOT / "app/web/templates/finance.html").read_text(encoding="utf-8")
-        self.assertIn('/users?uid={{ o.user.id }}', fin)
-        self.assertIn('/users?uid={{ payer.id }}', fin)
+        self.assertIn("user_card_link(o.user.id, uname, 'finance'", fin)
+        self.assertIn("user_card_link(payer.id, uname, 'finance'", fin)
         tix = (ROOT / "app/web/templates/tickets.html").read_text(encoding="utf-8")
-        self.assertIn('/users?uid={{ row.user_id }}', tix)
-        self.assertIn("cell-user-link", tix)
+        self.assertIn("user_card_link(row.user_id, row.user_label, 'tickets'", tix)
+        for source in (fin, tix):
+            self.assertNotIn("/users?uid=", source)
 
     def test_action_center_low_volume(self):
         ux = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")

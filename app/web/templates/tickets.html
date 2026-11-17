@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% from "macros.html" import tkt_status, page_header, act_label, panel_tkt_status, panel_tkt_priority, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state %}
+{% from "_user_card_modals.html" import user_card_link, user_card_button, user_card_hint, user_card_modals with context %}
 {% block title %}پشتیبانی{% endblock %}
 {% block content %}
 {% call(slot) page_header('tickets', 'پشتیبانی', help='tickets') %}
@@ -70,7 +71,7 @@
         <td class="li-badge">
           <span class="badge {{ status_badge.get(t.status, 'neutral') }}">{{ panel_tkt_status(t.status) }}</span>
         </td>
-        <td class="muted mono" dir="ltr">{{ t.updated_at }}</td>
+        <td class="muted mono"><bdi dir="ltr">{{ t.updated_at }}</bdi></td>
         <td class="col-actions">
           <a class="btn btn-sm btn-ghost li-hide" href="/tickets?view={{ t.id }}">مشاهده</a>
           <a class="li-only li-open" href="/tickets?view={{ t.id }}" aria-label="مشاهده تیکت #{{ t.id }}">{{ icon('chev', 'ico') }}</a>
@@ -92,6 +93,7 @@
     {{ table_bulk_bar('/tickets/bot/bulk-action', [
       {'key': 'close', 'label': 'بستن', 'confirm': '{n} تیکت بسته شوند؟', 'confirm_title': 'بستن گروهی', 'confirm_label': 'بستن', 'warn': true},
     ]) }}
+    {{ user_card_hint() }}
     <div class="table-wrap">
     <table class="table-list-sm" data-bulk-select>
       <thead><tr>
@@ -106,11 +108,7 @@
           <td class="mono">{{ t.id }}</td>
           <td class="li-sub">
             {#- On phones line two: who asked (with Telegram id) and when. -#}
-            {% if row.user_id %}
-            <a class="cell-user-link" href="/users?uid={{ row.user_id }}" dir="auto">{{ row.user_label }}</a>
-            {% else %}
-            <span dir="auto">{{ row.user_label }}</span>
-            {% endif %}
+            {{ user_card_link(row.user_id, row.user_label, 'tickets', context='تیکت ' ~ (t.id | num)) }}
             <span class="li-only">· <bdi dir="ltr">{{ ((t.updated_at or t.created_at)|string)[:16] }}</bdi></span>
           </td>
           <td class="li-title"><span dir="auto">{{ t.subject }}</span> <span class="li-only li-id" dir="ltr">(#{{ t.id }})</span></td>
@@ -119,7 +117,7 @@
               {{ tkt_status(t.status) }}
             </span>
           </td>
-          <td class="muted mono" dir="ltr">{{ t.updated_at or t.created_at }}</td>
+          <td class="muted mono"><bdi dir="ltr">{{ t.updated_at or t.created_at }}</bdi></td>
           <td class="col-actions">
             <a class="btn btn-sm btn-ghost li-hide" href="/tickets?tg={{ t.id }}">مشاهده</a>
             <a class="li-only li-open" href="/tickets?tg={{ t.id }}" aria-label="مشاهده تیکت #{{ t.id }}">{{ icon('chev', 'ico') }}</a>
@@ -284,15 +282,9 @@
     <div class="ticket-meta">
       <span class="badge {% if t.status=='open' %}open{% elif t.status=='closed' %}neutral{% else %}answered{% endif %}">{{ tkt_status(t.status) }}</span>
       <span class="muted">کاربر:
-        {% if active_tg_user and active_tg_user.id %}
-        <a class="cell-user-link" href="/users?uid={{ active_tg_user.id }}">{{ active_tg_user_label }}</a>
-        {% else %}
-        {{ active_tg_user_label }}
-        {% endif %}
+        {{ user_card_link(active_tg_user.id if active_tg_user else none, active_tg_user_label, 'tickets') }}
       </span>
-      {% if active_tg_user and active_tg_user.id %}
-      <a class="btn btn-sm btn-ghost" href="/users?uid={{ active_tg_user.id }}">پروفایل / کیف پول</a>
-      {% endif %}
+      {{ user_card_button(active_tg_user.id if active_tg_user else none, 'اطلاعات کاربر', 'tickets') }}
     </div>
 
     <div class="ticket-thread" id="tg-ticket-thread">
@@ -339,4 +331,5 @@
 {% if can_manage_supports %}
   {% include "_modal_supports_settings.html" %}
 {% endif %}
+{{ user_card_modals(return_page='tickets') }}
 {% endblock %}

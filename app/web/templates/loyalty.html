@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% from "macros.html" import modal_title, page_header, act_label, empty_state %}
+{% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
 {% block title %}باشگاه مشتریان{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
@@ -93,13 +94,14 @@
 
 <div class="card card-flush">
   <div class="card-flush-head"><h2>برترین معرف‌ها</h2></div>
+  {{ user_card_hint() }}
   <div class="table-wrap loyalty-referrers">
   <table class="table-compact" data-sortable>
     <thead><tr><th data-sort-type="text">کاربر</th><th class="col-count" data-sort-type="num">تعداد دعوت</th></tr></thead>
     <tbody>
     {% for r in metrics.top_referrers %}
       <tr>
-        <td data-sort-value="{{ r.label }}">{{ r.label }}</td>
+        <td data-sort-value="{{ r.label }}">{{ user_card_link(r.user_id, r.label, 'loyalty') }}</td>
         <td class="mono col-count" data-sort-value="{{ r.count }}">{{ r.count | num }}</td>
       </tr>
     {% else %}
@@ -150,6 +152,7 @@
   {% endif %}
   <div class="card card-flush">
     <div class="card-flush-head"><h2>آخرین تراکنش‌های امتیاز</h2></div>
+    {{ user_card_hint() }}
     <div class="table-wrap">
     <table class="table-compact table-list-sm" data-sortable>
       <thead><tr><th class="col-id" data-sort-type="num" data-list-sort-label="جدیدترین" data-list-sort-dir="descending" data-list-sort-order="1">#</th><th class="col-user" data-sort-type="num">کاربر</th><th class="col-amount" data-sort-type="num" data-list-sort-label="بیشترین مقدار" data-list-sort-dir="descending" data-list-sort-order="2">مقدار</th><th class="col-amount" data-sort-type="num">مانده</th><th class="col-text" data-sort-type="text">شرح</th><th class="col-time" data-sort-type="text">زمان</th><th class="li-head" scope="col"><span class="li-count">تراکنش‌ها</span><select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select></th></tr></thead>
@@ -157,8 +160,8 @@
       {% for t in txs %}
         <tr>
           <td class="mono" data-sort-value="{{ t.id }}">{{ t.id }}</td>
-          <td class="li-title" data-sort-value="{{ t.user_label }}"><span dir="auto">{{ t.user_label }}</span> <span class="li-only li-id" dir="ltr">(#{{ t.id }})</span></td>
-          <td class="mono li-value li-tone-{{ 'none' if t.amount > 0 else 'danger' }}" data-sort-value="{{ t.amount }}" dir="ltr">{% if t.amount > 0 %}+{% endif %}{{ t.amount | num }}</td>
+          <td class="li-title" data-sort-value="{{ t.user_label }}">{{ user_card_link(t.user_id, t.user_label, 'loyalty') }} <span class="li-only li-id" dir="ltr">(#{{ t.id }})</span></td>
+          <td class="mono li-value li-tone-{{ 'none' if t.amount > 0 else 'danger' }}" data-sort-value="{{ t.amount }}"><bdi dir="ltr">{% if t.amount > 0 %}+{% endif %}{{ t.amount | num }}</bdi></td>
           <td class="mono li-badge" data-sort-value="{{ t.balance_after }}"><span class="li-only">مانده&nbsp;</span>{{ t.balance_after | num }}</td>
           <td class="li-sub" data-sort-value="{{ t.description }}"><span dir="auto">{{ t.description }}</span> <span class="li-only">· <bdi dir="ltr">{{ (t.created_at|string)[:16] }}</bdi></span></td>
           <td class="muted mono" data-sort-value="{{ t.created_at }}">{{ t.created_at }}</td>
@@ -175,4 +178,5 @@
 
 {% include "_modal_loyalty_settings.html" %}
 </div>
+{{ user_card_modals(return_page='loyalty') }}
 {% endblock %}

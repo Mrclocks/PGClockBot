@@ -195,8 +195,15 @@ async def _detach_pg_staff_fk_deps(session: AsyncSession, staff_id: int) -> None
     )
 
 
-async def purge_orphaned_staff_access(session: AsyncSession) -> int:
-    """Delete PgStaffAccess rows whose PG admin no longer exists in PasarGuard."""
+async def purge_orphaned_staff_access(session: AsyncSession, *, sees_every_admin: bool) -> int:
+    """Delete PgStaffAccess rows whose PG admin no longer exists in PasarGuard.
+
+    Only a PasarGuard owner is sure to list every admin. A role that merely reads admins may get
+    a scoped list, and an admin missing from it is not proof the admin is gone, so nothing is
+    deleted then.
+    """
+    if not sees_every_admin:
+        return 0
     rows = await list_access_rows(session)
     if not rows:
         return 0

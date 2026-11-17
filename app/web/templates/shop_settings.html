@@ -147,6 +147,9 @@
     {% if tab == 'service_import' %}
       {% include "_settings_service_import.html" %}
     {% endif %}
+    {% if tab == 'limits' %}
+      {% include "_settings_entry_approval.html" %}
+    {% endif %}
     <form method="post" action="/shop-settings?tab={{ tab }}" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
       {% set fields = groups[group_name] %}
@@ -170,6 +173,8 @@
 
   </div>
 </div>
+{# Fields tied to a switch or a choice (SETTING_VISIBILITY) appear as soon as it changes, before saving. #}
+<script src="/static/settings-show-when.js?v={{ asset_v('settings-show-when.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 
 {% if tab == 'menu' %}
 <script>

@@ -907,6 +907,7 @@ async def open_pg_home(
         bot_may_open_pg_hub,
         bot_migrated_pg_features,
         bot_pg_can_create_user,
+        bot_pg_can_list_users,
     )
     from app.bot.nav_inline import present_nav_panel, pg_hub_keyboard
     from app.services.bot_principal_identity import shop_bot_actor_is_operator
@@ -941,6 +942,14 @@ async def open_pg_home(
     except Exception:
         feats = frozenset()
         can_create = False
+    try:
+        can_list = await bot_pg_can_list_users(
+            session, db_user, is_reseller_bot=is_reseller_bot
+        )
+    except Exception:
+        # Fail closed for the list buttons only; the rest of the hub stays usable.
+        logger.warning("pg hub: users.read check failed", exc_info=True)
+        can_list = False
     body = (
         with_caption(screen_heading(ui, "a.pg"), screen_caption(ui, "a.pg"))
     )
@@ -970,6 +979,7 @@ async def open_pg_home(
             ui,
             features=feats,
             can_create_user=can_create,
+            can_list_users=can_list,
             back_callback=back_callback,
         ),
         state=state,

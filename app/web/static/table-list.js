@@ -101,17 +101,21 @@
     if (row) row.classList.toggle('is-expanded', open);
   }
 
-  async function loadFragment(url, target) {
+  /* After a fragment lands, panel:fragment-loaded tells page scripts which button opened it (ok is false on failure). */
+  async function loadFragment(url, target, button) {
     target.innerHTML = '<p class="muted">در حال بارگذاری…</p>';
+    var ok = false;
     try {
       var resp = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'text/html' } });
       var html = await resp.text();
+      ok = resp.ok;
       target.innerHTML = resp.ok || resp.status === 403 || resp.status === 404
         ? html
         : '<div class="flash err">بارگذاری ناموفق بود.</div>';
     } catch (e) {
       target.innerHTML = '<div class="flash err">بارگذاری ناموفق بود.</div>';
     }
+    target.dispatchEvent(new CustomEvent('panel:fragment-loaded', { bubbles: true, detail: { ok: ok, button: button || null } }));
   }
 
   document.addEventListener('click', function (e) {
@@ -143,7 +147,7 @@
     var d = ev.detail || {};
     var target = d.target && document.getElementById(d.target);
     if (!target || !target.hasAttribute('data-load-fragment') || !d.url) return;
-    loadFragment(d.url, target);
+    loadFragment(d.url, target, d.button);
   });
 
   /* .has-more on a second line that runs past its edge and is not scrolled to the end. */

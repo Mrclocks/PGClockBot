@@ -3,6 +3,7 @@
 {% from "macros.html" import ord_status, pay_status, row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state, search_submit %}
 {% from "_stuck_order_actions.html" import stuck_close_actions %}
 {% from "_finance_tabs.html" import finance_tabs %}
+{% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot, ds_switch, ico %}
 {% block title %}
 {%- if finance_tab == 'reports' -%}گزارشات
@@ -39,6 +40,7 @@
     {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': '{n} سفارش رد شوند؟', 'confirm_title': 'رد گروهی', 'confirm_label': 'رد', 'danger': true},
     {'key': 'cancel', 'label': 'لغو', 'confirm': '{n} سفارش لغو شوند؟', 'confirm_title': 'لغو گروهی', 'confirm_label': 'لغو', 'warn': true},
   ]) }}
+  {{ user_card_hint() }}
   <div class="table-wrap">
   <table class="table-compact table-list-sm" data-sortable data-bulk-select>
     <thead>
@@ -80,7 +82,7 @@
         <td class="mono" data-sort-value="{{ o.id }}">{{ o.id }}</td>
         <td class="li-title" data-sort-value="{{ uname }}">
           {% if o.user and o.user.id %}
-          <a class="cell-user-link" href="/users?uid={{ o.user.id }}" dir="auto">{{ uname }}</a>
+          {{ user_card_link(o.user.id, uname, 'finance', context='سفارش ' ~ (o.id | num)) }}
           <span class="li-only li-id" dir="ltr">(#{{ o.id }})</span>
           {% if o.user.is_demo %}<span class="badge neutral li-hide" title="در گزارش‌های مالی محاسبه نمی‌شود">دمو</span>{% endif %}
           {% else %}
@@ -95,7 +97,7 @@
           <span>{{ pname }}</span>
           <span class="li-only">· {% if o.payment_method=='card' %}کارت به کارت{% elif o.payment_method=='wallet' %}کیف پول{% elif o.payment_method=='psp' %}درگاه آنلاین{% elif o.payment_method=='bbc' %}بزن به کارت{% elif o.payment_method=='gateway' %}درگاه لینک{% elif o.payment_method=='crypto' %}رمزارز{% elif o.payment_method=='stars' %}استارز{% else %}{{ o.payment_method or "—" }}{% endif %} · <bdi dir="ltr">{{ (o.created_at|string)[:16] }}</bdi></span>
         </td>
-        <td class="mono li-value" data-sort-value="{{ o.amount }}" dir="ltr">{{ o.amount | money }}</td>
+        <td class="mono li-value" data-sort-value="{{ o.amount }}">{{ o.amount | money }}</td>
         <td class="li-badge" data-sort-value="{{ o.status }}">
           <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled','failed'] %}rejected{% else %}neutral{% endif %}">
             {{ ord_status(o.status) }}
@@ -212,6 +214,7 @@
     {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': '{n} پرداخت تأیید شوند؟', 'confirm_title': 'تأیید گروهی', 'confirm_label': 'تأیید'},
     {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': '{n} پرداخت رد شوند؟', 'confirm_title': 'رد گروهی', 'confirm_label': 'رد', 'danger': true},
   ]) }}
+  {{ user_card_hint() }}
   <div class="table-wrap">
   <table class="table-compact table-list-sm" data-sortable data-bulk-select>
     <thead><tr>
@@ -240,14 +243,14 @@
         <td class="mono" data-sort-value="{{ p.id }}">{{ p.id }}</td>
         <td class="li-title" data-sort-value="{{ uname }}">
           {% if payer and payer.id %}
-          <a class="cell-user-link" href="/users?uid={{ payer.id }}" dir="auto">{{ uname }}</a>
+          {{ user_card_link(payer.id, uname, 'finance', context='پرداخت ' ~ (p.id | num)) }}
           {% if payer.is_demo %}<span class="badge neutral li-hide" title="در گزارش‌های مالی محاسبه نمی‌شود">دمو</span>{% endif %}
           {% else %}
           <span dir="auto">{{ uname }}</span>
           {% endif %}
           <span class="li-only li-id" dir="ltr">(#{{ p.id }})</span>
         </td>
-        <td class="mono li-value" data-sort-value="{{ p.amount }}" dir="ltr">{{ p.amount | money }}</td>
+        <td class="mono li-value" data-sort-value="{{ p.amount }}">{{ p.amount | money }}</td>
         <td class="col-hide-sm li-sub" data-sort-value="{{ 'wallet' if p.is_wallet_topup else 'buy' }}">
           {#- On phones line two: the tags that matter, then kind · order. -#}
           {% if payer and payer.is_demo %}<span class="li-only badge neutral">دمو</span>{% endif %}
@@ -335,6 +338,7 @@
     {'key': 'retry', 'label': 'اجرای اکشن تشخیص', 'class': 'btn-ok', 'confirm': 'برای {n} سفارش، اکشن تشخیص‌شده (ادامه تحویل / ارسال مجدد) اجرا شود؟', 'confirm_title': 'اجرای گروهی', 'confirm_label': 'اجرا'},
     {'key': 'dismiss', 'label': 'حذف از لیست', 'class': 'btn-ghost', 'confirm': '{n} سفارش از لیست تحویل ناموفق حذف شود؟ چیزی ارسال نمی‌شود و خود سفارش تغییری نمی‌کند.', 'confirm_title': 'حذف از لیست', 'confirm_label': 'حذف از لیست'},
   ]) }}
+  {{ user_card_hint() }}
   <div class="table-wrap">
   <table class="table-compact table-list-sm" data-sortable data-bulk-select>
     <thead>
@@ -362,7 +366,7 @@
       <tr data-bulk-ops="retry">
         {{ table_select_cell(oid) }}
         <td class="mono" data-sort-value="{{ oid }}">#{{ oid }} <span class="badge warn badge-inline">گیرکرده</span></td>
-        <td class="li-title" data-sort-value="{{ uname }}"><span dir="auto">{{ uname }}</span> <span class="li-only li-id" dir="ltr">(#{{ oid }})</span></td>
+        <td class="li-title" data-sort-value="{{ uname }}">{{ user_card_link(o.user.id if o and o.user else none, uname, 'finance', context='سفارش ' ~ (oid | num)) }} <span class="li-only li-id" dir="ltr">(#{{ oid }})</span></td>
         <td class="li-sub" data-sort-value="{{ diag.kind if diag else 'stuck' }}">
           <span class="li-only badge warn">گیرکرده</span>
           {% set why = (stuck_reasons or {}).get(oid) %}
@@ -395,7 +399,7 @@
       <tr data-bulk-ops="retry,dismiss">
         {{ table_select_cell(f.order_id) }}
         <td class="mono" data-sort-value="{{ f.order_id }}">#{{ f.order_id }}{% if f.order_id in (stuck_order_ids or []) %} <span class="badge warn badge-inline">گیرکرده</span>{% endif %}</td>
-        <td class="li-title" data-sort-value="{{ uname }}"><span dir="auto">{{ uname }}</span> <span class="li-only li-id" dir="ltr">(#{{ f.order_id }})</span></td>
+        <td class="li-title" data-sort-value="{{ uname }}">{{ user_card_link(o.user.id if o and o.user else none, uname, 'finance', context='سفارش ' ~ (f.order_id | num)) }} <span class="li-only li-id" dir="ltr">(#{{ f.order_id }})</span></td>
         <td class="li-sub" data-sort-value="{{ diag.kind if diag else 'fail' }}">
           {% if f.order_id in (stuck_order_ids or []) %}<span class="li-only badge warn">گیرکرده</span>{% endif %}
           {% if diag and diag.kind == 'approved_resend' %}
@@ -529,4 +533,5 @@
 </div>
 <script src="/static/payment-void.js?v={{ asset_v('payment-void.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% endif %}
+{{ user_card_modals(return_page='finance') }}
 {% endblock %}

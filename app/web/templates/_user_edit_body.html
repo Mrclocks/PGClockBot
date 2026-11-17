@@ -1,22 +1,19 @@
 {% from "macros.html" import num_stepper %}
+{% from "_ds.html" import ds_switch %}
+{% from "_user_identity.html" import user_identity %}
 {% set wallet_amt = display_wallet if display_wallet is defined else (user.wallet_balance or 0) %}
 {% set points_amt = display_points if display_points is defined else 0 %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
 <section class="edit-section edit-section--identity">
-  <div class="user-edit-identity">
-    <div class="user-edit-identity-main">
-      <h3 class="user-edit-name">{{ user.full_name or user.username or 'کاربر' }}</h3>
-      <p class="user-edit-meta muted">
-        <span dir="ltr" class="mono">{{ user.telegram_id }}</span>
-        {% if user.username %}<span>@{{ user.username }}</span>{% endif %}
-        {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
-        {% if user.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
-        {% set tag = color_tag_meta(marks.tag) if (color_tag_meta is defined and marks is defined) else none %}
-        {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
-      </p>
-    </div>
+  {% call(part) user_identity(user) %}
+    {%- if part == 'badges' -%}
+    {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
+    {% if user.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
+    {% set tag = color_tag_meta(marks.tag) if (color_tag_meta is defined and marks is defined) else none %}
+    {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
+    {%- elif part == 'after' -%}
     <div class="user-edit-wallet-pill{% if wallet_amt > 0 %} is-positive{% elif wallet_amt < 0 %} is-negative{% endif %}"
          dir="ltr">
       <span class="user-edit-wallet-label muted">کیف پول</span>
@@ -26,7 +23,8 @@
       <span class="user-edit-wallet-label muted">امتیاز</span>
       <strong class="user-edit-wallet-amt"><span dir="ltr">{{ points_amt | num }}</span></strong>
     </div>
-  </div>
+    {%- endif -%}
+  {% endcall %}
 </section>
 
 {% set manage_user = can_manage_users if can_manage_users is defined else false %}
@@ -93,14 +91,26 @@
         data-confirm="نقش این کاربر تغییر کند؟"
         data-confirm-title="تأیید تغییر نقش"
         data-confirm-label="اعمال نقش">
-    <div class="user-edit-inline-row">
-      <label class="form-field user-edit-grow">نقش جدید
-        <select name="role" class="select-block">
-          <option value="user" {% if user.role=='user' %}selected{% endif %}>کاربر</option>
-          <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
-          <option value="admin" {% if user.role=='admin' %}selected{% endif %}>مدیر</option>
-        </select>
-      </label>
+    <label class="form-field">نقش جدید
+      <select name="role" id="user-{{ user.id }}-role" class="select-block">
+        <option value="user" {% if user.role=='user' %}selected{% endif %}>کاربر</option>
+        <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
+        <option value="admin" {% if user.role=='admin' %}selected{% endif %}>مدیر</option>
+      </select>
+    </label>
+    {% if user.role != 'reseller' %}
+    {# Only a new reseller takes a package, so the field shows right under the role once «نماینده» is picked. #}
+    <label class="form-field" data-ds-show-when="#user-{{ user.id }}-role:reseller" hidden>پلن نمایندگی
+      <select name="reseller_plan_id" class="select-block">
+        <option value="">— بدون پلن —</option>
+        {% for p in reseller_plans or [] %}
+        <option value="{{ p.id }}">{% if (p.billing_mode or 'fixed') == 'payg' %}[PAYG] {% else %}[ثابت] {% endif %}{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      <small class="muted">نقش پاسارگارد، سقف‌ها و دسترسی‌ها از همین پلن گرفته می‌شود؛ اگر پنل چند نقش دارد، انتخاب پلن لازم است.</small>
+    </label>
+    {% endif %}
+    <div class="actions">
       <button class="btn" type="submit">اعمال نقش</button>
     </div>
   </form>
@@ -245,6 +255,42 @@
   {% endif %}
 </section>
 
+{% endif %}
+{% if can_assign_existing_services|default(false) %}
+<section class="edit-section" id="user-import-service">
+  <header class="edit-section-head">
+    <h3>افزودن سرویس قبلی</h3>
+    <p class="muted">سرویسی که مشتری از قبل در پنل دارد با لینک اشتراک یا نام کاربری پنل به «سرویس‌های من» او وصل می‌شود. چیزی در پنل تغییر نمی‌کند؛ سرویس قابل تمدید است ولی لغو و بازگشت وجه ندارد.</p>
+  </header>
+  <form method="post" action="/users/{{ user.id }}/import-service" class="form-stack"
+        data-si-assign data-si-preview-url="/users/{{ user.id }}/import-service/preview"
+        data-confirm="سرویس بررسی‌شده به سرویس‌های این مشتری اضافه شود؟ در پنل چیزی تغییر نمی‌کند."
+        data-confirm-title="افزودن سرویس قبلی"
+        data-confirm-reason="1"
+        data-confirm-reason-label="علت افزودن"
+        data-confirm-reason-name="reason"
+        data-confirm-label="افزودن سرویس">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="reason" value="" />
+    <input type="hidden" name="panel_user_id" value="" data-si-assign-id />
+    <label class="form-field">نوع ورودی
+      <select name="kind" class="select-block" data-si-assign-input>
+        <option value="link" selected>لینک اشتراک</option>
+        <option value="username">نام کاربری پنل</option>
+      </select>
+    </label>
+    <div class="user-edit-inline-row">
+      <label class="form-field user-edit-grow">لینک یا نام کاربری
+        <input type="text" name="value" required maxlength="2048" dir="ltr" autocomplete="off" spellcheck="false"
+               data-si-assign-input />
+      </label>
+      <button class="btn btn-ghost" type="button" data-si-assign-check>بررسی</button>
+    </div>
+    <div data-si-assign-result role="status" aria-live="polite" hidden></div>
+    <div class="ds-rows">{{ ds_switch('notify', 'پیام به مشتری', 'بعد از افزودن، ربات با ذکر علت به مشتری خبر می‌دهد', checked=true) }}</div>
+    <div class="actions"><button class="btn" type="submit" data-si-assign-submit disabled>افزودن سرویس</button></div>
+  </form>
+</section>
 {% endif %}
 {% if can_view_services|default(false) %}
 <section class="edit-section" id="user-services">

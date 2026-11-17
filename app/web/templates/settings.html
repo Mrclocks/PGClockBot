@@ -46,6 +46,7 @@
   {% elif tab == 'links' %}
     {% include "_settings_links.html" %}
   {% elif tab == 'limits' %}
+    {% include "_settings_entry_approval.html" %}
     <form method="post" action="/settings?tab=limits" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
       {% set fields = groups[group_name] %}
@@ -172,6 +173,8 @@
 
   </div>
 </div>
+{# Fields tied to a switch or a choice (SETTING_VISIBILITY) appear as soon as it changes, before saving. #}
+<script src="/static/settings-show-when.js?v={{ asset_v('settings-show-when.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 
 {% if tab == 'naming' %}
 <script>
@@ -181,7 +184,7 @@
   if (!form || !sample) return;
   function rnd(){ return Math.random().toString(36).slice(2,10); }
   function render(){
-    const prefix = (form.querySelector('[name="s_pg_username_prefix"]')||{}).value || 'clk';
+    const prefix = ((form.querySelector('[name="s_pg_username_prefix"]')||{}).value || '').trim();
     const suffix = (form.querySelector('[name="s_pg_username_suffix"]')||{}).value || '';
     const pattern = (form.querySelector('[name="s_pg_username_pattern"]')||{}).value || '{prefix}_{random}{suffix}';
     let out;
@@ -195,9 +198,9 @@
         .replaceAll('{plan_unit}', 'GB')
         .replaceAll('{username}', 'ali_user');
     } catch (e) {
-      out = prefix + '_' + rnd() + suffix;
+      out = (prefix ? prefix + '_' : '') + rnd() + suffix;
     }
-    sample.textContent = out;
+    sample.textContent = out.replace(/^_+|_+$/g, '');
   }
   form.addEventListener('input', render);
   form.addEventListener('change', render);

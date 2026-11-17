@@ -91,7 +91,10 @@ class RevokeResellerOrgPrincipalFkTests(unittest.IsolatedAsyncioTestCase):
 
             mock_pg = AsyncMock()
             mock_pg.delete_admin = AsyncMock(return_value=None)
-            with patch("app.services.pasarguard.get_pg", return_value=mock_pg):
+            with (
+                patch("app.services.pasarguard.get_pg", return_value=mock_pg),
+                patch("app.services.resellers.assert_platform_may_delete_pg_admins", new=AsyncMock()),
+            ):
                 info = await revoke_reseller(session, uid, delete_pg_admin=True)
 
             self.assertEqual(info["user_id"], uid)
@@ -171,7 +174,10 @@ class RevokeResellerOrgPrincipalFkTests(unittest.IsolatedAsyncioTestCase):
 
             mock_pg = AsyncMock()
             mock_pg.delete_admin = AsyncMock(return_value=None)
-            with patch("app.services.pasarguard.get_pg", return_value=mock_pg):
+            with (
+                patch("app.services.pasarguard.get_pg", return_value=mock_pg),
+                patch("app.services.resellers.assert_platform_may_delete_pg_admins", new=AsyncMock()),
+            ):
                 await revoke_reseller(session, parent_uid, delete_pg_admin=True)
 
             self.assertIsNone(await session.get(ResellerProfile, parent_pid))

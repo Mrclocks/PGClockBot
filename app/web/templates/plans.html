@@ -39,74 +39,54 @@
   <div class="table-wrap">
   <table class="table-compact table-list-sm" data-bulk-select>
     <thead>
-      <tr>{{ table_select_head() }}<th>نام</th><th class="col-hide-sm">برچسب</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ plans | length | num }} پلن ثابت</span></th></tr>
+      <tr>{{ table_select_head() }}<th>نام</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th><th class="li-head" scope="col"><span class="li-count">{{ plans | length | num }} پلن ثابت</span></th></tr>
     </thead>
-    <tbody>
-    {% for p in plans %}
-      {% set tpl_missing = p.pg_template_id and (p.pg_template_id|int) not in (pg_live_template_ids or []) %}
-      {% set pg_empty = (not p.pg_template_id) and not p.pg_group_ids %}
-      <tr data-bulk-ops="toggle,delete">
-        {{ table_select_cell(p.id) }}
-        <td class="li-title">
-          <span class="plan-name-cell">
-            {% if tpl_missing or pg_empty %}<span class="plan-pg-warn-dot" title="منبع پاسارگارد ناقص یا تمپلیت حذف‌شده" aria-label="هشدار"></span>{% endif %}
-            <span dir="auto">{{ p.name }}</span>
-          </span>
-        </td>
-        <td class="col-hide-sm muted">{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %}{{ plan_category_map.get(p.category_id).name }}{% else %}—{% endif %}</td>
-        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
-        <td class="col-hide-sm">{% if p.duration_days %}{{ (p.duration_days) | fa }} روز{% else %}نامحدود{% endif %}</td>
-        <td class="li-sub">
-          {#- On phones line two: the warnings, then volume · duration · category. -#}
-          {% if plan_limit_issues and plan_limit_issues.get(p.id) %}<span class="li-only badge warn">خارج از سقف</span>{% endif %}
-          {% if tpl_missing or pg_empty %}<span class="li-only badge warn">منبع ناقص</span>{% endif %}
-          <span>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}</span>
-          <span class="li-only">· {% if p.duration_days %}{{ (p.duration_days) | fa }} روز{% else %}نامحدود{% endif %}{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %} · {{ plan_category_map.get(p.category_id).name }}{% endif %}</span>
-        </td>
-        <td class="mono col-hide-sm">
-          {% if p.pg_template_id %}
-            تمپلیت #{{ p.pg_template_id }}
-            {% if tpl_missing %}<span class="badge warn" title="این تمپلیت در پاسارگارد پیدا نشد">خالی</span>{% endif %}
-          {% elif p.pg_group_ids %}گروه {{ p.pg_group_ids }}
-          {% else %}—{% endif %}
-        </td>
-        <td class="li-badge">
-          <div class="status-tags">
-            {% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}
-            {% if plan_limit_issues and plan_limit_issues.get(p.id) %}
-            <span class="badge warn li-hide" title="{{ plan_limit_issues.get(p.id) }}">خارج از سقف</span>
-            {% endif %}
-          </div>
-        </td>
-        <td class="col-actions">
-          {% call row_actions() %}
-            <a class="btn btn-sm" href="/plans/{{ p.id }}/edit">ویرایش</a>
-            <form method="post" action="/plans/{{ p.id }}/clone"
-                  data-confirm="یک کپی خاموش از این پلن ساخته شود؟"
-                  data-confirm-title="کپی پلن"
-                  data-confirm-label="کپی">
-              <button class="btn btn-ghost btn-sm" type="submit">کپی</button>
-            </form>
-            <form method="post" action="/plans/{{ p.id }}/toggle">
-              <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
-            </form>
-            <form method="post" action="/plans/{{ p.id }}/delete"
-                  data-confirm="حذف پلن از فروشگاه؟"
-                  data-confirm-title="تأیید حذف پلن"
-                  data-confirm-danger="1"
-                  data-confirm-label="حذف پلن">
-              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
-            </form>
-          {% endcall %}
-        </td>
-      </tr>
+    <tbody id="plan-category-board">
+    {% set board = plan_board %}
+    {% if not plans %}
+      {{ empty_state('هنوز پلن ثابتی نساخته‌اید.', 'plans', colspan=8, action_label='افزودن پلن', action_modal='modal-plan-unified') }}
+    {% elif board and board.has_categories %}
+      {% for g in board.groups %}
+        {{ category_head(g, loop.first, loop.last) }}
+        {% for p in g.plans %}{{ fixed_plan_row(p) }}{% endfor %}
+      {% endfor %}
+      <tr class="plan-cat-add"><td colspan="8"><div class="plan-cat-cell"><button type="button" class="plan-cat-add-btn" data-modal-open="modal-plan-categories" data-category-new data-category-back="list">{{ icon('plus', 'ico') }}دستهٔ جدید</button></div></td></tr>
+      {% if board.other_plans %}
+        <tr class="plan-cat-head" data-tone="default">
+          <td colspan="8"><div class="plan-cat-cell">
+            <div class="plan-cat-head-row">
+              <span class="plan-cat-name">{{ board.other_title }}</span>
+              <span class="plan-cat-count">{{ board.other_plans | length | num }} پلن</span>
+            </div>
+            <p class="plan-cat-note">{{ board.other_note }}</p>
+          </div></td>
+        </tr>
+        {% for p in board.other_plans %}{{ fixed_plan_row(p) }}{% endfor %}
+      {% endif %}
     {% else %}
-      {{ empty_state('هنوز پلن ثابتی نساخته‌اید.', 'plans', colspan=9, action_label='افزودن پلن', action_modal='modal-plan-unified') }}
-    {% endfor %}
+      <tr class="plan-cat-intro">
+        <td colspan="8"><div class="plan-cat-cell">
+          <div class="plan-cat-intro-row">
+            <p><strong>دسته‌بندی پلن‌ها</strong><span>با دسته، مشتری در ربات اول دسته را انتخاب می‌کند (مثلاً «ویژه» یا «اقتصادی») و بعد پلن را.</span></p>
+            <button type="button" class="btn btn-sm" data-modal-open="modal-plan-categories" data-category-new data-category-back="list">ساخت دسته</button>
+          </div>
+        </div></td>
+      </tr>
+      {% for p in plans %}{{ fixed_plan_row(p) }}{% endfor %}
+    {% endif %}
+    {% if board and board.has_categories %}
+      <tr class="plan-cat-head" data-tone="default">
+        <td colspan="8"><div class="plan-cat-cell">
+          <div class="plan-cat-head-row">
+            <span class="plan-cat-name">انواع دیگر</span>
+            <span class="plan-cat-count">تست، دلخواه و عمده دسته نمی‌گیرند</span>
+          </div>
+        </div></td>
+      </tr>
+    {% endif %}
       <tr>
         <td class="col-select"></td>
         <td class="li-title">پلن تست{% if trial %} — <span dir="auto">{{ trial.name }}</span>{% endif %}</td>
-        <td class="col-hide-sm muted">—</td>
         <td class="mono li-value">رایگان</td>
         <td class="col-hide-sm">{% if trial %}{{ (trial.duration_days) | fa }} روز{% else %}—{% endif %}</td>
         <td class="li-sub">
@@ -137,7 +117,6 @@
       <tr>
         <td class="col-select"></td>
         <td class="li-title">پلن دلخواه</td>
-        <td class="col-hide-sm muted">—</td>
         <td class="mono li-value">هر گیگ / روز</td>
         <td class="col-hide-sm">{{ (values.get('custom_plan_min_days','1')) | fa }}–{{ (values.get('custom_plan_max_days','365')) | fa }} روز</td>
         <td class="li-sub">
@@ -168,7 +147,6 @@
       <tr>
         <td class="col-select"></td>
         <td class="li-title">فروش عمده</td>
-        <td class="col-hide-sm muted">—</td>
         <td class="mono li-value">تخفیف پلکانی</td>
         <td class="col-hide-sm">—</td>
         <td class="li-sub"><span>{{ (values.get('wholesale_min_qty','5')) | fa }}–{{ values.get('wholesale_max_qty','20') }} عدد</span></td>
@@ -216,7 +194,7 @@
           <span class="li-only">· {% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %} · {% if a.is_general or not a.category_id %}عمومی{% elif plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</span>
         </td>
         <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
-        <td class="mono li-value" dir="ltr">{{ a.price | money }}</td>
+        <td class="mono li-value">{{ a.price | money }}</td>
         <td class="li-badge">{% if a.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -291,7 +269,7 @@
         {{ table_select_cell(p.id) }}
         {% set is_system_plan = p.is_system or (p.plan_kind or '') == 'current_capacity' %}
         <td class="li-title"><span dir="auto">{{ p.name }}</span>{% if is_system_plan %} <span class="badge li-hide">سیستمی</span>{% endif %}{% if p.description %}<br class="li-hide"><small class="muted li-hide">{{ p.description }}</small>{% endif %}</td>
-        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="mono li-value">{{ p.price | money }}</td>
         <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -343,7 +321,7 @@
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
         <td class="li-title"><span dir="auto">{{ p.name }}</span>{% if p.description %}<br class="li-hide"><small class="muted li-hide">{{ p.description }}</small>{% endif %}</td>
-        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="mono li-value">{{ p.price | money }}</td>
         <td class="col-hide-sm li-sub"><span class="li-only">هر گیگ</span> <bdi dir="ltr">{% if p.price_per_gb %}{{ p.price_per_gb | money }}{% else %}—{% endif %}</bdi> <span class="li-only">· گروه <bdi dir="ltr">{{ p.pg_group_ids or '—' }}</bdi></span></td>
         <td class="mono col-hide-sm">{{ p.pg_group_ids or '—' }}</td>
         <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
@@ -402,7 +380,7 @@
           <span class="li-only">· {% if p.plan_kind == 'addon_users' %}+{{ (p.addon_users or 0) | fa }} کاربر{% else %}+{{ (p.addon_gb or 0) | fa }} گیگ{% endif %}{% if p.category_id and reseller_plan_category_map and reseller_plan_category_map.get(p.category_id) %} · {{ reseller_plan_category_map.get(p.category_id).name }}{% endif %}</span>
         </td>
         <td class="mono">{% if p.plan_kind == 'addon_users' %}+{{ (p.addon_users or 0) | fa }} کاربر{% else %}+{{ (p.addon_gb or 0) | fa }} گیگ{% endif %}</td>
-        <td class="mono li-value" dir="ltr">{{ p.price | money }}</td>
+        <td class="mono li-value">{{ p.price | money }}</td>
         <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -434,6 +412,7 @@
 <script src="/static/addon-pack-form.js?v={{ asset_v('addon-pack-form.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 <script src="/static/reseller-extra-packs.js?v={{ asset_v('reseller-extra-packs.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 <script src="/static/user-plan-addon-packs.js?v={{ asset_v('user-plan-addon-packs.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+<script src="/static/plan-categories.js?v={{ asset_v('plan-categories.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 <script src="/static/plans-tabs.js?v={{ asset_v('plans-tabs.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 
 {# —— Unified plan modal —— #}
@@ -547,6 +526,8 @@
     </div>
     {% endif %}
     <form method="post" action="/plans/categories" class="form-stack ds-body plan-cat-form" id="plan-category-form" data-create-action="/plans/categories">
+      {# "list" when opened from the plans list, so saving goes back there (plan-categories.js). #}
+      <input type="hidden" name="back" id="plan-category-back" value="" />
       <section class="ds-sec ds-sec-first"><div class="ds-card">
       <div class="settings-grid">
         <label class="form-field">نام برچسب
@@ -561,11 +542,8 @@
           </select>
           <small class="muted">در «افزودن پلن» فقط برای همین مخاطب دیده می‌شود</small>
         </label>
-        <label class="form-field">ترتیب
-          <input name="sort_order" id="plan-category-sort" type="number" value="0" />
-        </label>
         <label class="form-field">توضیح (اختیاری)
-          <input name="description" id="plan-category-desc" maxlength="255" placeholder="نمایش داخلی" />
+          <input name="description" id="plan-category-desc" maxlength="255" placeholder="نمایش در ربات" />
         </label>
         {% set plan_button_style = 'inherit' %}
         {% set button_style_name = 'button_style' %}
@@ -592,7 +570,6 @@
               <th>مخاطب</th>
               <th class="col-hide-sm">رنگ دکمه</th>
               <th class="col-hide-sm">پلن‌ها</th>
-              <th class="col-hide-sm">ترتیب</th>
               <th>وضعیت</th>
               <th class="col-actions"></th>
             </tr>
@@ -631,7 +608,6 @@
                   <div class="muted">بسته‌ها: {{ linked_packs | map(attribute='name') | join('، ') }}</div>
                 {% endif %}
               </td>
-              <td class="col-hide-sm mono">{{ c.sort_order }}</td>
               <td>{% if c.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
               <td class="col-actions">
                 {% call row_actions() %}
@@ -639,7 +615,6 @@
                           data-category-edit
                           data-id="{{ c.id }}"
                           data-name="{{ c.name }}"
-                          data-sort="{{ c.sort_order }}"
                           data-audience="{{ c.audience or 'users' }}"
                           data-description="{{ c.description or '' }}"
                           data-button-style="{% if c.button_style is none %}inherit{% else %}{{ c.button_style }}{% endif %}">ویرایش</button>
@@ -662,7 +637,7 @@
               </td>
             </tr>
           {% else %}
-            {{ empty_state('هنوز برچسبی نیست — از فرم بالا بسازید.', 'plans', colspan=7) }}
+            {{ empty_state('هنوز برچسبی نیست — از فرم بالا بسازید.', 'plans', colspan=6) }}
           {% endfor %}
           </tbody>
         </table>
@@ -789,7 +764,7 @@
             <td class="col-hide-sm muted">{% if a.is_general or not a.category_id %}عمومی{% elif plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
             <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
             <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
-            <td class="mono" dir="ltr">{{ a.price | money }}</td>
+            <td class="mono">{{ a.price | money }}</td>
             <td>{% if a.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
             <td class="col-actions">
               {% call row_actions() %}
@@ -1223,10 +1198,10 @@
   function renderNaming(root){
     const sample = root.querySelector('[data-naming-sample]');
     if (!sample) return;
-    const gPrefix = root.getAttribute('data-global-prefix') || 'clk';
+    const gPrefix = root.getAttribute('data-global-prefix') ?? 'clk';
     const gSuffix = root.getAttribute('data-global-suffix') || '';
     const gPattern = root.getAttribute('data-global-pattern') || '{prefix}_{random}{suffix}';
-    const prefix = ((root.querySelector('[data-naming-prefix]') || {}).value || '').trim() || gPrefix || 'clk';
+    const prefix = ((root.querySelector('[data-naming-prefix]') || {}).value || '').trim() || gPrefix;
     const suffix = ((root.querySelector('[data-naming-suffix]') || {}).value || '').trim() || gSuffix || '';
     const pattern = ((root.querySelector('[data-naming-pattern]') || {}).value || '').trim() || gPattern || '{prefix}_{random}{suffix}';
     const form = root.closest('form');
@@ -1244,9 +1219,9 @@
         .replaceAll('{plan_unit}', 'GB')
         .replaceAll('{username}', 'ali_user');
     } catch (e) {
-      out = prefix + '_' + rnd() + suffix;
+      out = (prefix ? prefix + '_' : '') + rnd() + suffix;
     }
-    sample.textContent = out;
+    sample.textContent = out.replace(/^_+|_+$/g, '');
   }
   document.querySelectorAll('[data-plan-naming]').forEach((root) => {
     const form = root.closest('form') || root;
@@ -1311,7 +1286,6 @@
     if (!form) return;
     const createAction = form.getAttribute('data-create-action') || '/plans/categories';
     const nameEl = document.getElementById('plan-category-name');
-    const sortEl = document.getElementById('plan-category-sort');
     const descEl = document.getElementById('plan-category-desc');
     const audEl = document.getElementById('plan-category-audience');
     const styleEl = form.querySelector('select[name="button_style"]');
@@ -1320,7 +1294,6 @@
     function resetCreate(){
       form.action = createAction;
       if (nameEl) nameEl.value = '';
-      if (sortEl) sortEl.value = '0';
       if (descEl) descEl.value = '';
       if (audEl) audEl.value = 'users';
       if (styleEl) {
@@ -1335,7 +1308,6 @@
         const id = btn.getAttribute('data-id');
         form.action = '/plans/categories/' + id + '/edit';
         if (nameEl) nameEl.value = btn.getAttribute('data-name') || '';
-        if (sortEl) sortEl.value = btn.getAttribute('data-sort') || '0';
         if (descEl) descEl.value = btn.getAttribute('data-description') || '';
         if (audEl) {
           const aud = btn.getAttribute('data-audience') || 'users';
@@ -1430,3 +1402,108 @@
 })();
 </script>
 {% endblock %}
+
+{# One fixed plan in the users list; the list renders it inside its category group. #}
+{% macro fixed_plan_row(p) %}
+      {% set tpl_missing = p.pg_template_id and (p.pg_template_id|int) not in (pg_live_template_ids or []) %}
+      {% set pg_empty = (not p.pg_template_id) and not p.pg_group_ids %}
+      <tr data-bulk-ops="toggle,delete">
+        {{ table_select_cell(p.id) }}
+        <td class="li-title">
+          <span class="plan-name-cell">
+            {% if tpl_missing or pg_empty %}<span class="plan-pg-warn-dot" title="منبع پاسارگارد ناقص یا تمپلیت حذف‌شده" aria-label="هشدار"></span>{% endif %}
+            <span dir="auto">{{ p.name }}</span>
+          </span>
+        </td>
+        <td class="mono li-value"><bdi dir="ltr">{{ p.price | money }}</bdi></td>
+        <td class="col-hide-sm">{% if p.duration_days %}{{ (p.duration_days) | fa }} روز{% else %}نامحدود{% endif %}</td>
+        <td class="li-sub">
+          {#- On phones line two: the warnings, then volume · duration (the category is the group the row sits in). -#}
+          {% if plan_limit_issues and plan_limit_issues.get(p.id) %}<span class="li-only badge warn">خارج از سقف</span>{% endif %}
+          {% if tpl_missing or pg_empty %}<span class="li-only badge warn">منبع ناقص</span>{% endif %}
+          <span>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}</span>
+          <span class="li-only">· {% if p.duration_days %}{{ (p.duration_days) | fa }} روز{% else %}نامحدود{% endif %}</span>
+        </td>
+        <td class="mono col-hide-sm">
+          {% if p.pg_template_id %}
+            تمپلیت #{{ p.pg_template_id }}
+            {% if tpl_missing %}<span class="badge warn" title="این تمپلیت در پاسارگارد پیدا نشد">خالی</span>{% endif %}
+          {% elif p.pg_group_ids %}گروه {{ p.pg_group_ids }}
+          {% else %}—{% endif %}
+        </td>
+        <td class="li-badge">
+          <div class="status-tags">
+            {% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}
+            {% if plan_limit_issues and plan_limit_issues.get(p.id) %}
+            <span class="badge warn li-hide" title="{{ plan_limit_issues.get(p.id) }}">خارج از سقف</span>
+            {% endif %}
+          </div>
+        </td>
+        <td class="col-actions">
+          {% call row_actions() %}
+            <a class="btn btn-sm" href="/plans/{{ p.id }}/edit">ویرایش</a>
+            <form method="post" action="/plans/{{ p.id }}/clone"
+                  data-confirm="یک کپی خاموش از این پلن ساخته شود؟"
+                  data-confirm-title="کپی پلن"
+                  data-confirm-label="کپی">
+              <button class="btn btn-ghost btn-sm" type="submit">کپی</button>
+            </form>
+            <form method="post" action="/plans/{{ p.id }}/toggle">
+              <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
+            </form>
+            <form method="post" action="/plans/{{ p.id }}/delete"
+                  data-confirm="حذف پلن از فروشگاه؟"
+                  data-confirm-title="تأیید حذف پلن"
+                  data-confirm-danger="1"
+                  data-confirm-label="حذف پلن">
+              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+            </form>
+          {% endcall %}
+        </td>
+      </tr>
+{% endmacro %}
+
+{# The heading of one category group: the colour and name of its bot button, how many plans it holds, why it is
+   missing from the bot when it is, and its actions. Order in the list is the order of the buttons in the bot. #}
+{% macro category_head(g, is_first, is_last) %}
+{% set c = g.category %}
+<tr class="plan-cat-head" id="plan-cat-{{ c.id }}" data-tone="{{ g.tone }}">
+  <td colspan="8"><div class="plan-cat-cell">
+    <div class="plan-cat-head-row">
+      <span class="plan-cat-dot" aria-hidden="true"></span>
+      <span class="plan-cat-name" dir="auto">{{ c.name }}</span>
+      <span class="plan-cat-count">{{ g.plans | length | num }} پلن</span>
+      {% if not c.is_active %}<span class="badge warn">خاموش</span>{% endif %}
+      <span class="plan-cat-actions">
+      {% call row_actions() %}
+        {% if c.is_active %}
+        <button type="button" class="btn btn-sm" data-modal-open="modal-plan-unified" data-plan-audience="users" data-plan-kind="fixed" data-plan-category="{{ c.id }}">پلن در این دسته</button>
+        {% endif %}
+        <button type="button" class="btn btn-ghost btn-sm"
+                data-modal-open="modal-plan-categories"
+                data-category-edit
+                data-category-back="list"
+                data-id="{{ c.id }}"
+                data-name="{{ c.name }}"
+                data-audience="{{ c.audience or 'users' }}"
+                data-description="{{ c.description or '' }}"
+                data-button-style="{% if c.button_style is none %}inherit{% else %}{{ c.button_style }}{% endif %}">ویرایش نام و رنگ</button>
+        {% if not is_first %}
+        <form method="post" action="/plans/categories/{{ c.id }}/move"><input type="hidden" name="direction" value="up" /><button class="btn btn-ghost btn-sm" type="submit">بالاتر در ربات</button></form>
+        {% endif %}
+        {% if not is_last %}
+        <form method="post" action="/plans/categories/{{ c.id }}/move"><input type="hidden" name="direction" value="down" /><button class="btn btn-ghost btn-sm" type="submit">پایین‌تر در ربات</button></form>
+        {% endif %}
+        <form method="post" action="/plans/categories/{{ c.id }}/toggle"><input type="hidden" name="back" value="list" /><button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش کردن{% else %}روشن کردن{% endif %}</button></form>
+        <form method="post" action="/plans/categories/{{ c.id }}/delete"
+              data-confirm="دستهٔ «{{ c.name }}» حذف شود؟ پلن‌هایش بدون دسته می‌مانند و در ربات زیر «سایر» می‌آیند."
+              data-confirm-title="حذف دسته"
+              data-confirm-danger="1"
+              data-confirm-label="حذف دسته"><input type="hidden" name="back" value="list" /><button class="btn btn-danger btn-sm" type="submit">حذف دسته</button></form>
+      {% endcall %}
+      </span>
+    </div>
+    {% if g.bot_note %}<p class="plan-cat-note">{{ g.bot_note }}</p>{% endif %}
+  </div></td>
+</tr>
+{% endmacro %}

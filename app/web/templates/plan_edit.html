@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import switch_chip, page_header %}
 {% from "_ds.html" import ds_sec, ds_switch %}
+{% from "_plan_category_field.html" import plan_category_field %}
 {% block title %}ویرایش پلن{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
@@ -15,6 +16,7 @@
     <label class="form-field"><span class="ds-label-text">نام پلن <span class="ds-req" aria-hidden="true">*</span></span>
       <input name="name" required value="{{ plan.name }}" data-ds-label="نام پلن" />
     </label>
+    {{ plan_category_field(plan_categories, plan_category_tones or {}, selected=plan.category_id, field_id="edit-plan-category", style_options=category_style_options or []) }}
     <label class="form-field"><span class="ds-label-text">قیمت <span class="ds-req" aria-hidden="true">*</span></span>
       <span class="ds-unit"><input name="price" type="number" data-money min="0" required value="{{ plan.price }}" inputmode="numeric" dir="ltr" data-ds-label="قیمت" /><span class="ds-unit-label">تومان</span></span>
     </label>
@@ -106,17 +108,6 @@
   </section>
 
   {% call ds_sec('نمایش در ربات') %}
-    <label class="form-field">برچسب دسته
-      <select name="category_id">
-        <option value="">بدون برچسب</option>
-        {% for c in plan_categories or [] %}
-          {% if (c.audience or 'users') == 'users' or plan.category_id == c.id %}
-          <option value="{{ c.id }}" {% if plan.category_id == c.id %}selected{% endif %}>{{ c.name }}{% if not c.is_active %} (خاموش){% endif %}</option>
-          {% endif %}
-        {% endfor %}
-      </select>
-      <small class="muted">نوع پلن (ثابت/تست/…) عوض نمی‌شود؛ برچسب خاموش فعلی قابل نگه‌داشتن است</small>
-    </label>
     <div class="ds-grid-2">
       <label class="form-field">ترتیب نمایش
         <input name="sort_order" type="number" value="{{ plan.sort_order }}" inputmode="numeric" dir="ltr" />
@@ -171,10 +162,10 @@
     function render(){
       const sample = root.querySelector('[data-naming-sample]');
       if (!sample) return;
-      const gPrefix = root.getAttribute('data-global-prefix') || 'clk';
+      const gPrefix = root.getAttribute('data-global-prefix') ?? 'clk';
       const gSuffix = root.getAttribute('data-global-suffix') || '';
       const gPattern = root.getAttribute('data-global-pattern') || '{prefix}_{random}{suffix}';
-      const prefix = ((root.querySelector('[data-naming-prefix]') || {}).value || '').trim() || gPrefix || 'clk';
+      const prefix = ((root.querySelector('[data-naming-prefix]') || {}).value || '').trim() || gPrefix;
       const suffix = ((root.querySelector('[data-naming-suffix]') || {}).value || '').trim() || gSuffix || '';
       const pattern = ((root.querySelector('[data-naming-pattern]') || {}).value || '').trim() || gPattern || '{prefix}_{random}{suffix}';
       const form = root.closest('form');
@@ -192,9 +183,9 @@
           .replaceAll('{plan_unit}', 'GB')
           .replaceAll('{username}', 'ali_user');
       } catch (e) {
-        out = prefix + '_' + rnd() + suffix;
+        out = (prefix ? prefix + '_' : '') + rnd() + suffix;
       }
-      sample.textContent = out;
+      sample.textContent = out.replace(/^_+|_+$/g, '');
     }
     const form = root.closest('form') || root;
     form.addEventListener('input', render);
@@ -203,5 +194,6 @@
   })();
 })();
 </script>
+<script src="/static/plan-categories.js?v={{ asset_v('plan-categories.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 </div>
 {% endblock %}

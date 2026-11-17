@@ -45,10 +45,12 @@ from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.panel_nav import DOT_LABELS as NAV_DOT_LABELS
 from app.services.panel_nav import build_dock, sidebar_for_template
 from app.services.resellers import feature_perm_groups
+from app.services.user_card import can_open_user_card
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.miniapp_branding import ACCENT_PRESETS
+from app.services.miniapp_main_app import platform_main_app_guide
 from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 from app.services.payer_notify import notify_payer
 from app.services.pg_panel_access import apply_pg_panel_access, is_pg_panel_blocked, pg_panel_allowed
@@ -162,7 +164,9 @@ from app.services.backup_settings import apply_backup_retention, normalize_backu
 from app.services.bbc_settlement import bbc_enable_error
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
+from app.api.service_import_assign_pages import register_service_import_assign_pages
 from app.api.service_import_pages import register_service_import_pages
+from app.api.entry_approval_pages import register_entry_approval_pages
 from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
 from app.api.login_guard import (
     client_ip as _client_ip,
@@ -176,12 +180,14 @@ logger = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
-from app.services.formatting import order_status_fa, ticket_status_fa
+from app.services.formatting import node_status_fa, order_status_fa, pg_user_status_fa, ticket_status_fa
 from app.services.web_numbers import WEB_NUMBER_FILTERS
 
 templates.env.filters.update(WEB_NUMBER_FILTERS)
 templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
+templates.env.filters["node_status"] = node_status_fa
+templates.env.filters["pg_user_status"] = pg_user_status_fa
 templates.env.globals["app_version"] = local_version()
 templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
@@ -219,6 +225,7 @@ templates.env.globals["panel_sidebar"] = sidebar_for_template
 templates.env.globals["panel_dock"] = build_dock
 templates.env.globals["nav_dot_labels"] = NAV_DOT_LABELS
 templates.env.globals["feature_perm_groups"] = feature_perm_groups
+templates.env.globals["can_open_user_card"] = can_open_user_card
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["template_variable_specs"] = template_variable_specs
 
@@ -1593,6 +1600,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     from app.api.miniapp_feeds import register_miniapp_feeds
     from app.api.miniapp_guides import register_miniapp_guides
     from app.api.miniapp_loyalty import register_miniapp_loyalty
+    from app.api.miniapp_onboarding import register_miniapp_onboarding
     from app.api.miniapp_pages import register_miniapp_pages
     from app.api.miniapp_renewal import register_miniapp_renewal
     from app.api.miniapp_reseller import register_miniapp_reseller
@@ -1610,6 +1618,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_miniapp_loyalty(app, get_db=get_db)
     register_miniapp_reseller(app, get_db=get_db)
     register_miniapp_review(app, get_db=get_db)
+    register_miniapp_onboarding(app, get_db=get_db)
     from app.api.customer_features import register_customer_features
 
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)
@@ -1647,6 +1656,8 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_panel_brand_pages(app, require_staff=require_staff, get_db=get_db)
     register_mobile_bar_settings(app, require_admin=require_admin, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
+    register_service_import_assign_pages(app, require_staff=require_staff, get_db=get_db)
+    register_entry_approval_pages(app, require_staff=require_staff, get_db=get_db)
     register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
 
     @app.get("/settings/ssl/progress")
@@ -2658,6 +2669,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 pg_roles = []
 
         plan_categories: list = []
+        plan_board = None
+        plan_category_tones: dict = {}
         plan_category_map: dict = {}
         reseller_plan_category_map: dict = {}
         category_linked_plans: dict = {}
@@ -2668,10 +2681,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 category_plans_map,
                 list_categories,
             )
+            from app.services.plan_category_board import build_plan_board, category_tones
             from app.services.service_addons import list_packs
 
             if is_platform_admin(staff) or rid:
                 plan_categories = await list_categories(session, staff)
+                plan_board = build_plan_board(sale_plans, plan_categories, ui=values)
+                plan_category_tones = category_tones(plan_categories, values)
                 plan_category_map = await category_map_for_plans(
                     session, staff, sale_plans
                 )
@@ -2725,6 +2741,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
                 "plan_categories": plan_categories,
+                "plan_board": plan_board,
+                "plan_category_tones": plan_category_tones,
                 "plan_category_map": plan_category_map,
                 "reseller_plan_category_map": reseller_plan_category_map,
                 "category_linked_plans": category_linked_plans,
@@ -3235,11 +3253,13 @@ def create_api_app(lifespan=None) -> FastAPI:
         else:
             values = await get_all_settings(session, reseller_id=rid)
         from app.services.plan_categories import list_categories
+        from app.services.plan_category_board import category_tones
 
         cats = []
         if is_platform_admin(staff) or rid:
             cats = await list_categories(session, staff, active_only=False)
         from app.services.button_styles import (
+            CATEGORY_BUTTON_STYLE_OPTIONS,
             ITEM_BUTTON_STYLE_OPTIONS,
             PLAN_BUTTON_STYLE_OPTIONS,
         )
@@ -3274,12 +3294,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "plan": plan,
                 "values": values,
                 "plan_categories": cats,
+                "plan_category_tones": category_tones(cats, values),
                 "plan_vol_packs": plan_vol_packs,
                 "plan_dur_packs": plan_dur_packs,
             },
         )
         ctx["plan_style_options"] = PLAN_BUTTON_STYLE_OPTIONS
         ctx["pack_style_options"] = ITEM_BUTTON_STYLE_OPTIONS
+        ctx["category_style_options"] = CATEGORY_BUTTON_STYLE_OPTIONS
         return render(request, "plan_edit.html", ctx)
 
     @app.post("/plans/{plan_id}/edit")
@@ -3877,7 +3899,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "users": [r.user for r in rows],
                 "counts": counts,
                 "filter": filter_key,
-                "focus_uid": focus_uid,
                 "filter_href": _users_href,
                 "q": search_q,
                 "color_filter": color_filter,
@@ -3934,14 +3955,19 @@ def create_api_app(lifespan=None) -> FastAPI:
                 format_credentials_message,
                 get_reseller_panel_base_url,
                 provision_reseller,
+                reseller_plan_from_form,
             )
 
             try:
+                # A package brings its own PasarGuard role, limits and permissions.
+                plan = await reseller_plan_from_form(session, staff, form.get("reseller_plan_id"))
+                perms = None if plan is not None else DEFAULT_FEATURE_PERMS
                 creds = await provision_reseller(
                     session,
                     user=user,
-                    web_permissions=DEFAULT_FEATURE_PERMS,
-                    bot_permissions=DEFAULT_FEATURE_PERMS,
+                    plan=plan,
+                    web_permissions=perms,
+                    bot_permissions=perms,
                     create_pg_admin=True,
                     panel_base_url=await get_reseller_panel_base_url(session),
                 )
@@ -3975,7 +4001,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         else:
             # Demoting a reseller must tear down profile / PG admin / shop bot
             if user.role == Role.RESELLER.value and role != Role.RESELLER.value:
-                from app.services.resellers import notify_reseller_revoked, revoke_reseller
+                from app.services.resellers import (
+                    PanelAdminNotRemoved,
+                    notify_reseller_revoked,
+                    revoke_reseller,
+                )
 
                 try:
                     info = await revoke_reseller(
@@ -3984,6 +4014,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                         delete_pg_admin=True,
                         reason=reason,
                     )
+                except PanelAdminNotRemoved as e:
+                    # The shop and its role stay as they are while its admin is still in PasarGuard.
+                    return _redirect_msg("/users", err=str(e))
                 except ValueError:
                     user.role = role
                     await session.commit()
@@ -4637,6 +4670,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["ssl"] = st
         elif tab == "miniapp":
             ctx["miniapp_url"] = get_settings().miniapp_url
+            ctx["main_app"] = await platform_main_app_guide()
         elif tab == "appearance":
             from app.services.bot_appearance import load_appearance_context
             from app.services.setup_wizard import current_setup_values

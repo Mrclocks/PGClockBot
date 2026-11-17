@@ -33,8 +33,8 @@
             <span>{{ event }}{% if c.quantity and c.quantity > 1 %} × <bdi dir="ltr">{{ c.quantity }}</bdi>{% endif %}</span>
             <span class="li-only">· <bdi dir="ltr">{{ c.pg_username or '—' }}</bdi></span>
           </td>
-          <td class="col-hide-sm" dir="ltr">{{ c.pg_username or '—' }}</td>
-          <td class="col-hide-sm mono" dir="ltr">{{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '—' }}</td>
+          <td class="col-hide-sm"><bdi dir="ltr">{{ c.pg_username or '—' }}</bdi></td>
+          <td class="col-hide-sm mono"><bdi dir="ltr">{{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '—' }}</bdi></td>
           <td class="cell-tight li-value"><span dir="ltr">{{ c.amount | money }}</span></td>
           <td class="col-actions">
             {% call row_actions() %}

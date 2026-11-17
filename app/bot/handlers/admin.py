@@ -71,6 +71,7 @@ from app.bot.handlers.automation_review import review_button
 from app.bot.handlers.cancellation_review import show_card as show_cancellation_card
 from app.bot.handlers import stuck_orders
 from app.bot.handlers.payment_voids import void_button
+from app.bot.handlers.make_reseller_plan import ask_reseller_plan
 from app.bot.handlers.subscription_lookup import (
     RESELLER_SEARCH_PROMPT,
     SEARCH_PROMPT,
@@ -2820,9 +2821,10 @@ async def adm_users_services(
                 "این کاربر هنوز سرویسی ندارد.",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
+                        [kb.service_import_button(user_id)],
                         [
                             kb.back_button(None, f"adm:users:view:{user_id}")
-                        ]
+                        ],
                     ]
                 ),
             )
@@ -4683,39 +4685,9 @@ async def make_res(
     if not user:
         await message.answer("کاربر باید حداقل یک بار ربات را استارت کرده باشد.")
         return
-    from app.services.resellers import (
-        format_credentials_message,
-        get_reseller_panel_base_url,
-        provision_reseller,
+    await ask_reseller_plan(
+        message, state, session, user_id=int(user.id), can_approve=can_approve
     )
-
-    perms = "dashboard,orders,tickets,stats"
-    if can_approve:
-        perms = "dashboard,orders,payments,tickets,stats"
-    try:
-        creds = await provision_reseller(
-            session,
-            user=user,
-            can_approve_receipts=can_approve,
-            web_permissions=perms,
-            bot_permissions=perms,
-            create_pg_admin=True,
-            panel_base_url=await get_reseller_panel_base_url(session),
-        )
-    except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}")
-        return
-    await state.clear()
-    try:
-        with keep_sent():  # a notice or review item, never a temporary panel
-            await message.bot.send_message(
-                user.telegram_id,
-                format_credentials_message(creds),
-                parse_mode="HTML",
-            )
-    except Exception:
-        logger.debug("make_res: ignored failure", exc_info=True)
-    await message.answer(f"کاربر {tg_id} نماینده شد ✅ — اطلاعات ورود ارسال شد")
 
 @router.callback_query(F.data == "adm:tickets")
 @require_bot_owner_handler

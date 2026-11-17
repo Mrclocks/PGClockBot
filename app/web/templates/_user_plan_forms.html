@@ -1,6 +1,7 @@
 {# Customer plan forms inside the unified plan modal (design language: panel-ds.css).
    Field names and element ids are the ones the /plans routes and the plans.html script expect. #}
 {% from "_ds.html" import ds_sec, ds_switch, ds_foot_warn, ico %}
+{% from "_plan_category_field.html" import plan_category_field %}
 
 {% macro group_tags(selected=()) -%}
 <div class="ds-tags">
@@ -48,6 +49,7 @@
       <label class="form-field"><span class="ds-label-text">نام پلن <span class="ds-req" aria-hidden="true">*</span></span>
         <input name="name" required placeholder="مثلاً ویژه ۴۰ گیگ" data-ds-label="نام پلن" />
       </label>
+      {{ plan_category_field(plan_categories, plan_category_tones or {}, style_options=category_style_options or []) }}
       <label class="form-field"><span class="ds-label-text">قیمت <span class="ds-req" aria-hidden="true">*</span></span>
         <span class="ds-unit"><input name="price" type="number" data-money min="0" required placeholder="150,000" inputmode="numeric" dir="ltr" data-ds-label="قیمت" /><span class="ds-unit-label">تومان</span></span>
       </label>
@@ -121,17 +123,6 @@
     </section>
 
     {% call ds_sec('نمایش در ربات', sid='up-sec-bot') %}
-      <label class="form-field">برچسب دسته
-        <select name="category_id" data-plan-category-select data-category-audience="users">
-          <option value="">بدون برچسب</option>
-          {% for c in plan_categories or [] %}
-            {% if c.is_active and (c.audience or 'users') == 'users' %}
-            <option value="{{ c.id }}">{{ c.name }}</option>
-            {% endif %}
-          {% endfor %}
-        </select>
-        <small class="muted">بسته‌های حجم و زمان همین دسته فقط روی سرویس‌های همین برچسب دیده می‌شوند</small>
-      </label>
       {% set plan_button_style = 'inherit' %}
       {% set plan_color_compact = true %}
       <div class="form-field">رنگ دکمه{% include "_plan_button_style_field.html" %}<small class="muted">«ارث از دسته»: رنگ دکمهٔ دسته</small></div>

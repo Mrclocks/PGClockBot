@@ -575,7 +575,17 @@ class Phase4DBotPgObjectsTests(unittest.IsolatedAsyncioTestCase):
                 fake_pg=fake_pg,
                 callback_data="adm:pg:recon:11",
             )
+            # PasarGuard has no hosts.delete: removing a host needs hosts.update.
             host_del = await self._auth(
+                session,
+                db_user=fx.ua,
+                kind="hosts",
+                action="delete",
+                permissions=VIEW_ONLY,
+                fake_pg=fake_pg,
+                object_id=23,
+            )
+            host_del_with_update = await self._auth(
                 session,
                 db_user=fx.ua,
                 kind="hosts",
@@ -588,6 +598,7 @@ class Phase4DBotPgObjectsTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(node_del.allowed)
             self.assertFalse(recon.allowed)
             self.assertFalse(host_del.allowed)
+            self.assertTrue(host_del_with_update.allowed, host_del_with_update.reason)
             read = await self._auth(
                 session,
                 db_user=fx.ua,

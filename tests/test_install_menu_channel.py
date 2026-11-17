@@ -29,7 +29,7 @@ class InstallMenuChannelTests(unittest.TestCase):
 
     def test_readme_is_stable_0_6_not_beta(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("0.6.1", readme)
+        self.assertIn("0.6.2", readme)
         self.assertIn("Install main", readme)
         self.assertIn("Update main", readme)
         self.assertNotIn("نسخه بتا", readme)
