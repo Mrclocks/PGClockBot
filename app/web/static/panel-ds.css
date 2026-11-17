@@ -369,6 +369,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   min-height: var(--ctl-h); align-items: center !important; gap: var(--g3);
 }
 .ds .ui-switch-copy { display: flex; flex-direction: column; gap: var(--g1); min-width: 0; }
+/* Risk switch: the switch, then its danger note, 12 apart inside one settings cell. */
+.ds .setting-item--risk:not([hidden]) { display: flex; flex-direction: column; gap: var(--g3); }
 .ds .ui-switch-copy strong { font-size: var(--fs-3); font-weight: 500; }
 .ds .ui-switch-copy small { font-size: var(--fs-2); line-height: 1.6; }
 /* Consecutive switches: one divided list, 12 above and below every divider; none at the ends. */
@@ -414,6 +416,9 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 /* A price typed in a list row is a compact box too, wide enough for a seven-digit amount. */
 .ds .ds-list-value > input { display: block; width: 100%; max-width: var(--money-w); }
 .ds .ds-list-row { position: relative; padding-block: var(--g3); margin: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+/* Buttons under a message: what the button opens and its text (with the link under it) share the width. */
+.ds .ds-list--buttons .ds-list-head, .ds .ds-list--buttons .ds-list-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--num-w) var(--ctl-h); }
+.ds .msg-btn-text { display: flex; flex-direction: column; gap: var(--g1); }
 .ds .ds-list-row > * { margin: 0; }
 .ds .ds-list-row + .ds-list-row { border-top: 1px dashed var(--dash) !important; }
 .ds .ds-list-row input { height: var(--ctl-h); min-height: var(--ctl-h); font-size: var(--fs-3); font-weight: 600; }

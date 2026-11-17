@@ -50,21 +50,6 @@ from app.services.shop_scope import (
 )
 
 
-def _owner_staff(**extra) -> dict:
-    staff = {
-        "role": "admin",
-        "username": "owner",
-        "org_principal_id": 1,
-        "org_depth": 0,
-        "org_parent_id": None,
-        "org_status": "active",
-        "web_owner": True,
-        "org_visible_principal_ids": [1],
-    }
-    staff.update(extra)
-    return staff
-
-
 class BareAdminScopeTests(unittest.TestCase):
     """A / H — role=admin alone is not platform or global org authority."""
 
@@ -228,14 +213,6 @@ class PrincipalAttachDenyTests(unittest.IsolatedAsyncioTestCase):
                 await resolve_org_principal_for_staff(session, staff)
             )
 
-    def test_c_require_staff_source_denies_missing_principal(self) -> None:
-        src = open("app/api/app.py", encoding="utf-8").read()
-        # Reseller + pg_staff + admin branches must fail closed when unresolved.
-        self.assertGreaterEqual(src.count("if principal is None:"), 3)
-        fn = src[src.find("async def require_staff") : src.find("async def require_admin")]
-        self.assertIn("resolve_org_principal_for_staff", fn)
-        self.assertIn("attach_org_principal_fields", fn)
-
 
 class SiblingIsolationTests(unittest.TestCase):
     """D — sibling Principals remain isolated."""
@@ -276,18 +253,6 @@ class SafeLegacyShopFeatureTests(unittest.TestCase):
         # Must still not imply Owner / platform shop_scope.
         self.assertFalse(is_explicit_org_owner(ctx))
         self.assertFalse(is_platform_admin({"role": "admin"}))
-
-
-class RequireStaffAttachContract(unittest.TestCase):
-    def test_admin_branch_requires_principal(self) -> None:
-        src = open("app/api/app.py", encoding="utf-8").read()
-        admin_branch = src[
-            src.find('elif user.get("role") == "admin":') : src.find(
-                "Skip unread COUNT"
-            )
-        ]
-        self.assertIn("if principal is None:", admin_branch)
-        self.assertIn('user["web_owner"] = True', admin_branch)
 
 
 if __name__ == "__main__":

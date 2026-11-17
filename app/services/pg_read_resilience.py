@@ -27,8 +27,10 @@ logger = logging.getLogger(__name__)
 READ_COOLDOWN_SEC = 5.0
 MAX_READ_COOLDOWN_SEC = 60.0
 # One slow or dropped read must not hide PasarGuard from every shop: reads
-# pause only after this many outage signals inside the window.
-FAILURES_TO_PAUSE = 3
+# pause only after this many outage signals inside the window. Five (not three)
+# so a brief keep-alive drop or a couple of slow dashboard loads do not blank
+# every shop's panel widgets for the first cooldown.
+FAILURES_TO_PAUSE = 5
 FAILURE_WINDOW_SEC = 30.0
 # Gateway errors mean the panel behind a reverse proxy is down; other 5xx
 # answers come from one endpoint of a reachable panel.

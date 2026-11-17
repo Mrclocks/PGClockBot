@@ -37,6 +37,7 @@ from app.services.backup_env import (
     env_value,
     merge_restored_env,
     stored_secrets_readable,
+    write_private_bytes,
     write_private_file,
 )
 from app.services.backup_postgres import (
@@ -122,6 +123,15 @@ def _sha256_file(path: Path, *, chunk: int = 1024 * 1024) -> str:
             block = f.read(chunk)
             if not block:
                 break
+            h.update(block)
+    return h.hexdigest()
+
+
+def _sha256_member(zf: zipfile.ZipFile, name: str, *, chunk: int = 1024 * 1024) -> str:
+    """Hash one archive member in chunks; a database dump can be far larger than memory allows."""
+    h = hashlib.sha256()
+    with zf.open(name) as member:
+        while block := member.read(chunk):
             h.update(block)
     return h.hexdigest()
 
@@ -310,8 +320,7 @@ def validate_backup_archive(zip_path: Path) -> tuple[bool, str, dict[str, Any] |
                         continue
                     if rel not in names:
                         return False, f"فایل اعلام‌شده در بکاپ نیست: {rel}", None
-                    digest = hashlib.sha256(zf.read(rel)).hexdigest()
-                    if digest != expect:
+                    if _sha256_member(zf, rel) != expect:
                         return False, f"هش فایل بکاپ نامعتبر است: {rel}", None
             return True, "ok", manifest
     except zipfile.BadZipFile:
@@ -839,6 +848,33 @@ def start_restore_async(
     return {"ok": True, "status": read_restore_status()}
 
 
+SQLITE_SIDE_FILES = ("-wal", "-shm", "-journal")
+
+
+def _remove_sqlite_side_files(db_path: Path) -> None:
+    for suffix in SQLITE_SIDE_FILES:
+        Path(f"{db_path}{suffix}").unlink(missing_ok=True)
+
+
+def _replace_sqlite_database(restored_db: Path, live_db: Path) -> None:
+    """Swap in the restored database file atomically.
+
+    The live database runs in WAL mode: a ``-wal`` file left from it would be replayed
+    onto the restored file at the next open and corrupt it, so it is removed with the swap.
+    """
+    live_db.parent.mkdir(parents=True, exist_ok=True)
+    tmp_db = live_db.with_suffix(".db.restoring")
+    shutil.copy2(restored_db, tmp_db)
+    _remove_sqlite_side_files(live_db)
+    os.replace(tmp_db, live_db)
+    # A connection still open on the old file may have written a new WAL meanwhile.
+    _remove_sqlite_side_files(live_db)
+    try:
+        live_db.chmod(0o600)
+    except OSError:
+        log.debug("could not restrict permissions of %s", live_db.name, exc_info=True)
+
+
 def _restore_env_file(env_src: Path) -> None:
     """Install the backed-up .env but keep this server's database and listen settings."""
     env_dest = ROOT_DIR / ".env"
@@ -984,16 +1020,7 @@ def restore_backup(
                 if archive_engine == "postgresql":
                     restore_database(extracted_pg)
                 else:
-                    live_db = sqlite_db_path()
-                    live_db.parent.mkdir(parents=True, exist_ok=True)
-                    # Replace DB via temp then rename (atomic on same FS)
-                    tmp_db = live_db.with_suffix(".db.restoring")
-                    shutil.copy2(extracted_db, tmp_db)
-                    os.replace(tmp_db, live_db)
-                    try:
-                        live_db.chmod(0o600)
-                    except OSError:
-                        pass
+                    _replace_sqlite_database(extracted_db, sqlite_db_path())
 
                 # web_admin.json
                 auth_src = tmp_root / "data" / "web_admin.json"
@@ -1116,7 +1143,8 @@ def save_uploaded_backup(content: bytes, *, filename: str = "") -> dict[str, Any
     stamp = _utcnow_stamp()
     backup_id = f"upload-{stamp}-{uuid4().hex[:8]}"
     dest = BACKUP_DIR / f"{BACKUP_PREFIX}{backup_id}.zip"
-    dest.write_bytes(content)
+    # An uploaded archive may carry .env; it is never readable by other users of the server.
+    write_private_bytes(dest, content)
 
     ok, err, manifest = validate_backup_archive(dest)
     if not ok:
@@ -1129,7 +1157,7 @@ def save_uploaded_backup(content: bytes, *, filename: str = "") -> dict[str, Any
     meta["archive_size"] = dest.stat().st_size
     meta["uploaded_as"] = (filename or "")[:120]
     meta["uploaded_at"] = _now_iso()
-    sidecar.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_private_file(sidecar, json.dumps(meta, ensure_ascii=False, indent=2))
     _prune_old_backups()
     return {
         "ok": True,

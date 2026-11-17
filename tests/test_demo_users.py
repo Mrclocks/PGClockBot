@@ -23,7 +23,7 @@ from app.db.models import (
     Base, BotUser, DeliveryFailure, FunnelEvent, LoyaltyReward, Order, Payment, Plan,
     PointsTransaction, ReferralEvent, RewardRedemption, ShopWallet, Ticket, UserService, WalletTransaction,
 )
-from app.services.daily_report import _scoped_totals, _today_activity
+from app.services.daily_report import _scoped_totals, previous_day_activity
 from app.services.demo_users import set_demo_user
 from app.services.finance_reports import build_finance_report
 from app.services.formatting import format_money, format_number
@@ -140,6 +140,7 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
             assert order is not None and service is not None
             order.created_at = mid
             order.updated_at = mid
+            order.delivered_at = mid
             service.created_at = mid
         await self.session.commit()
 
@@ -147,7 +148,7 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
             summary = await _scoped_totals(self.session, reseller_id=shop_id)
             self.assertEqual(summary["orders_total"], 2)
             self.assertEqual(summary["revenue_total"], 100)
-            activity = await _today_activity(self.session, reseller_id=shop_id)
+            activity = await previous_day_activity(self.session, reseller_id=shop_id)
             self.assertEqual(activity["revenue_today"], 100)
             self.assertEqual(activity["services_new"], 1)
             if shop_id is not None:
@@ -174,7 +175,8 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_subordinate_report_excludes_demo_customers_orders_and_services(self) -> None:
         shops = [SubordinateShop(principal_id=10, reseller_profile_id=10, reseller_user_id=10, display_name="Shop", is_active=True)]
-        row = (await collect_subordinate_stats(self.session, shops))[0]
+        # The digest covers the previous Tehran day, so look from the day after the activity.
+        row = (await collect_subordinate_stats(self.session, shops, now=self.now + timedelta(days=1)))[0]
         self.assertEqual(row.users_total, 1)
         self.assertEqual(row.services_total, 1)
         self.assertEqual(row.orders_new, 2)

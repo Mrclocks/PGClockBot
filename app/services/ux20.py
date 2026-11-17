@@ -35,7 +35,6 @@ from app.services.pasarguard import is_pg_permission_denied
 from app.services.pg_read_resilience import PG_READ_UNAVAILABLE_MESSAGE, PgReadUnavailable
 from app.services.service_scope import shop_services_clause
 from app.services.staff_audit import StaffActor
-from app.services.secret_box import reveal_bot_token
 from app.services.ticket_scope import ticket_shop_clause
 from app.services import bot_feedback_texts as feedback
 
@@ -763,13 +762,19 @@ async def record_funnel_event(
 
 
 async def funnel_summary(
-    session: AsyncSession, *, reseller_id: int | None = None, days: int = 7
+    session: AsyncSession,
+    *,
+    reseller_id: int | None = None,
+    days: int = 7,
+    window: tuple[datetime, datetime] | None = None,
 ) -> dict[str, int]:
-    """Step counts for the behavior panel (7d default)."""
-    since = _utcnow() - timedelta(days=max(1, min(90, days)))
+    """Step counts for the behavior panel: the last ``days`` days, or the half-open ``window``."""
+    since, until = window or (_utcnow() - timedelta(days=max(1, min(90, days))), None)
     q = select(FunnelEvent.step, func.count()).where(
         FunnelEvent.created_at >= since, non_demo_customer(FunnelEvent.user_id),
     )
+    if until is not None:
+        q = q.where(FunnelEvent.created_at < until)
     if reseller_id is None:
         q = q.where(FunnelEvent.reseller_id.is_(None))
     else:
@@ -785,6 +790,8 @@ async def funnel_summary(
         oq = select(Order.status, func.count()).where(
             Order.created_at >= since, non_demo_customer(Order.user_id),
         )
+        if until is not None:
+            oq = oq.where(Order.created_at < until)
         if reseller_id is None:
             oq = oq.where(Order.reseller_id.is_(None))
         else:
@@ -1005,40 +1012,6 @@ async def shop_bot_https_url(
         await resolve_shop_bot_username(session, shop_owner_id=shop_owner_id),
         "",
     )
-
-
-async def build_magic_links_context(session: AsyncSession, staff: dict) -> dict[str, Any]:
-    """Username + deep links for settings «لینک‌های سریع» tab."""
-    from app.config import get_settings
-    from app.db.models import ResellerProfile
-    from app.services.home_overview import check_bot_connection
-    from app.services.shop_scope import is_platform_admin, shop_owner_id
-
-    rid = None if is_platform_admin(staff) else shop_owner_id(staff)
-    bot_username = None
-    if rid:
-        profile = (
-            await session.execute(
-                select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
-            )
-        ).scalar_one_or_none()
-        bot_username = (profile.bot_username if profile else None) or None
-        token = reveal_bot_token(profile.bot_token) if profile else None
-        if not bot_username and token:
-            # Shop tokens are stored sealed; Telegram needs the plain token.
-            st = await check_bot_connection(token)
-            bot_username = st.get("username")
-    else:
-        st = await check_bot_connection(get_settings().bot_token)
-        bot_username = st.get("username")
-    links = {
-        "renew": bot_deep_link(bot_username, "renew"),
-        "wallet": bot_deep_link(bot_username, "wallet"),
-        "support": bot_deep_link(bot_username, "support"),
-        "config": bot_deep_link(bot_username, "config"),
-        "gift": bot_deep_link(bot_username, "gift"),
-    }
-    return {"bot_username": bot_username, "links": links}
 
 
 # Credentials never leave the server in a downloadable settings file.

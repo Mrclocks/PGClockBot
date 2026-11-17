@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -14,22 +15,36 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.models import Base, Setting
 from app.jobs import scheduler
-from app.services.daily_report import is_report_due, report_hour
+from app.services.daily_report import DEFAULT_REPORT_HOUR, is_report_due, report_day_key, report_hour
 from app.services.users import clear_settings_cache
+
+TEHRAN = ZoneInfo("Asia/Tehran")
 
 
 def at(hour: int, minute: int = 0) -> datetime:
-    return datetime(2026, 10, 31, hour, minute, tzinfo=timezone.utc)
+    """A moment on 31 October 2026, Tehran wall-clock time."""
+    return datetime(2026, 10, 31, hour, minute, tzinfo=TEHRAN)
 
 
 class DueTests(unittest.TestCase):
-    def test_due_from_the_configured_hour_until_the_end_of_the_day(self) -> None:
+    def test_due_from_the_configured_tehran_hour_until_the_end_of_the_tehran_day(self) -> None:
         self.assertFalse(is_report_due(at(19, 59), "20"))
         self.assertTrue(is_report_due(at(20, 0), "20"))
         self.assertTrue(is_report_due(at(23, 30), "20"))
 
+    def test_hour_is_read_in_tehran_even_for_a_utc_clock(self) -> None:
+        # 00:30 UTC is 04:00 in Tehran.
+        utc = datetime(2026, 10, 31, 0, 30, tzinfo=timezone.utc)
+        self.assertTrue(is_report_due(utc, "4"))
+        self.assertFalse(is_report_due(utc, "5"))
+
+    def test_day_key_is_the_tehran_date(self) -> None:
+        # 21:00 UTC on the 31st is already 1 November in Tehran.
+        self.assertEqual(report_day_key(datetime(2026, 10, 31, 21, 0, tzinfo=timezone.utc)), "2026-11-01")
+
     def test_unreadable_or_out_of_range_hours_are_clamped(self) -> None:
-        self.assertEqual([report_hour(v) for v in ("", None, "abc", "-5", "99", " 7 ")], [0, 0, 0, 0, 23, 7])
+        d = DEFAULT_REPORT_HOUR
+        self.assertEqual([report_hour(v) for v in ("", None, "abc", "-5", "99", " 7 ")], [d, d, d, 0, 23, 7])
 
 
 class JobTests(unittest.IsolatedAsyncioTestCase):
@@ -53,14 +68,11 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
     async def run_at(self, now: datetime) -> MagicMock:
         bot = MagicMock(id=1)
         bot.send_message = AsyncMock(return_value=SimpleNamespace(chat=SimpleNamespace(id=501), message_id=1))
-        clock = MagicMock(wraps=datetime)
-        clock.now = MagicMock(return_value=now)
         clear_settings_cache()
         with patch.object(scheduler, "SessionLocal", self.Session), \
-                patch("datetime.datetime", clock), \
-                patch("app.config.get_settings", return_value=SimpleNamespace(admin_ids=[501])), \
-                patch("app.services.daily_report.build_daily_report_outbound", AsyncMock(return_value=("📊", {}))):
-            await scheduler.run_admin_daily_report(bot)
+                patch("app.services.daily_report_delivery.get_settings", return_value=SimpleNamespace(admin_ids=[501])), \
+                patch("app.services.daily_report_delivery.build_daily_report_outbound", AsyncMock(return_value=("📊", {}))):
+            await scheduler.run_admin_daily_report(bot, now=now)
         return bot
 
     async def last_sent(self) -> str | None:

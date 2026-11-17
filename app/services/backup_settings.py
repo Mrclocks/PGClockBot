@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import re
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.services.backup import prune_backups
 from app.services.secret_box import seal_bot_token
+from app.services.users import get_setting
 
 KEEP_CHOICES = (5, 10, 15)
 DEFAULT_KEEP = 10
@@ -76,3 +79,9 @@ async def apply_backup_retention(payload: dict[str, str]) -> int:
     if KEEP_KEY not in payload:
         return 0
     return await asyncio.to_thread(prune_backups, keep_count(payload[KEEP_KEY]))
+
+
+async def prune_to_configured_retention(session: AsyncSession) -> int:
+    """Apply the saved retention after a new backup; returns how many old backups were removed."""
+    keep = keep_count(await get_setting(session, KEEP_KEY, str(DEFAULT_KEEP)))
+    return await asyncio.to_thread(prune_backups, keep)

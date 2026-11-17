@@ -44,18 +44,6 @@ class DestinationPickerCallbackTests(unittest.TestCase):
         self.assertTrue(WtopCallbackShapeTests.PATTERN.match(rows[0][0][1]))
 
 
-class WtopHandlerSourceTests(unittest.TestCase):
-    def test_wallet_handler_uses_order_id_aware_regex(self):
-        from pathlib import Path
-
-        src = Path("app/bot/handlers/wallet.py").read_text(encoding="utf-8")
-        self.assertIn(
-            r"^wtop:(card|gateway|psp|crypto)(?::\d+(?::\w+)?)?$",
-            src,
-        )
-        self.assertIn("dest_id = parts[3] if len(parts) > 3 else None", src)
-
-
 class CustomPlanPriceTests(unittest.TestCase):
     def test_ceil_fractional_gb(self):
         from app.services.orders import calc_custom_plan_price

@@ -18,9 +18,11 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from app.bot.chat_cleanup import note_throwaway, sweep_above
 from app.bot.edit_mode import editable_screen
 from app.bot.hub_entries import (
+    ADMIN_QUICK_LINKS,
     ADMIN_STAFF_AUDIT,
     ADMIN_TRIAL_USERS,
     SERVICE_SHOP_REVIEW,
+    SHOP_QUICK_LINKS,
     SHOP_STAFF_AUDIT,
     SHOP_TRIAL_USERS,
     HubEntry,
@@ -638,6 +640,7 @@ def admin_groups_hub_keyboard(
         rows.append(shortcuts)
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i : i + 2])
+    rows.append([_hub_entry_button(ui, ADMIN_QUICK_LINKS)])
     rows.append(
         [
             _ikb(
@@ -1042,6 +1045,7 @@ def reseller_manage_hub_keyboard(
         rows.append(shortcuts)
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i : i + 2])
+    rows.append([_hub_entry_button(ui, SHOP_QUICK_LINKS)])
     rows.append(_hub_back_row(ui, callback_data="menu:home"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

@@ -92,6 +92,10 @@ from app.services.psp_gateways import psp_gateways_form_json
 from app.services.panel_assets import asset_version, get_panel_asset_cache_key
 from app.services.redact import operator_error
 from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.button_styles import STYLE_OPTIONS
+from app.services.message_buttons import target_options as message_button_target_options
+from app.services.staff_audit import actor_from_staff
+from app.services.usage_alert_messages import ALERT_NUMBER_KEYS, clamp_alert_setting
 from app.services.mobile_bar import load_bar_form, load_bar_order
 from app.services.panel_brand import (
     BRAND_PRESET_CSS,
@@ -114,6 +118,7 @@ from app.services.settings_hub import (
     system_settings_groups,
 )
 from app.services.users import (
+    SETTING_RISK_NOTES,
     SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
     SETTING_GROUPS,
@@ -192,7 +197,11 @@ templates.env.globals["app_version"] = local_version()
 templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
 templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
+templates.env.globals["setting_risk_notes"] = SETTING_RISK_NOTES
 templates.env.globals["brand_presets"] = BRAND_PRESETS
+# The direct-message modal sits on many pages: its button targets and colours come from one place.
+templates.env.globals["message_button_dm_targets"] = message_button_target_options(renew=True, links=True)
+templates.env.globals["message_button_styles"] = STYLE_OPTIONS
 templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
 # Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).
 templates.env.globals["hub_sections"] = hub_sections
@@ -1629,9 +1638,11 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_automation_review_pages(app, require_staff=require_staff, get_db=get_db)
     register_payment_void_pages(app, require_staff=require_staff, get_db=get_db)
     register_broadcast_queue_pages(app, require_admin=require_admin, get_db=get_db)
+    from app.api.message_button_pages import register_message_button_pages
     from app.api.shop_broadcast_pages import register_shop_broadcast_pages
 
     register_shop_broadcast_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_message_button_pages(app, require_staff=require_staff, get_db=get_db)
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
     register_random_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
@@ -3539,7 +3550,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "/finance?tab=orders",
                             err="تأیید رسید نیاز به دسترسی «پرداخت‌ها» دارد",
                         )
-                delivered = await approve_payment(session, payment, reviewer_tg=0)
+                delivered = await approve_payment(session, payment, reviewer_tg=0, actor=actor_from_staff(staff, shop_id=None))
                 await _notify_order_user(session, payment, delivered or order)
             elif order.status == OrderStatus.PAID.value:
                 had_service = bool(order.service_id)
@@ -3607,7 +3618,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 )
         try:
             if pending_pay:
-                await reject_payment(session, pending_pay, reviewer_tg=0, note="web order reject")
+                await reject_payment(
+                    session, pending_pay, reviewer_tg=0, note="web order reject", actor=actor_from_staff(staff, shop_id=None)
+                )
             else:
                 await reject_order(session, order, note="web order reject")
         except Exception as e:
@@ -3698,7 +3711,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if payment.status != PaymentStatus.PENDING.value:
             return _redirect_msg("/finance?tab=payments", err="این پرداخت قابل تأیید نیست")
         try:
-            order = await approve_payment(session, payment, reviewer_tg=0)
+            order = await approve_payment(session, payment, reviewer_tg=0, actor=actor_from_staff(staff, shop_id=None))
         except Exception as e:
             return _redirect_msg("/finance?tab=payments", err=operator_error(e))
         user = await session.get(BotUser, payment.user_id)
@@ -3777,7 +3790,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     ),
                 )
         try:
-            await reject_payment(session, payment, reviewer_tg=0, note="web reject")
+            await reject_payment(session, payment, reviewer_tg=0, note="web reject", actor=actor_from_staff(staff, shop_id=None))
         except Exception as e:
             return _redirect_msg("/finance?tab=payments", err=operator_error(e))
         reject_order = await session.get(Order, payment.order_id) if payment.order_id else None
@@ -4652,7 +4665,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             )
             ctx["webhook_full_url"] = (wh_base + wh_path) if wh_base else ""
         elif tab == "links":
-            from app.services.ux20 import build_magic_links_context
+            from app.services.quick_links import build_magic_links_context
 
             ctx.update(await build_magic_links_context(session, staff))
         elif tab == "ssl":
@@ -5211,10 +5224,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                     from app.services.button_styles import normalize_style
 
                     val = normalize_style(val)
-                if key in ("user_alert_low_traffic_pct", "user_alert_low_time_pct"):
-                    from app.services.users import clamp_alert_percent
-
-                    val = clamp_alert_percent(val)
+                if key in ALERT_NUMBER_KEYS:
+                    val = clamp_alert_setting(key, val)
                 if key == "force_join_channel":
                     from app.services.users import normalize_force_join_channel_value
 
@@ -5317,17 +5328,20 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.broadcast import AUDIENCE_LABELS, list_broadcast_history
-        from app.services.broadcast_queue import STATUS_LABELS
+        from app.services.broadcast_queue import STATUS_LABELS, new_request_token
+        from app.services.message_buttons import buttons_form_context
 
         history = await list_broadcast_history(session, limit=40)
         return render(
             request,
             "broadcast.html",
             {
+                **(await buttons_form_context(session, None)),
                 "staff": staff,
                 "history": history,
                 "audience_labels": AUDIENCE_LABELS,
                 "status_labels": STATUS_LABELS,
+                "broadcast_request_token": new_request_token(),
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -5340,15 +5354,23 @@ def create_api_app(lifespan=None) -> FastAPI:
         session: AsyncSession = Depends(get_db),
         text: str = Form(...),
         audience: str = Form("all"),
+        request_token: str = Form(""),
     ):
-        from app.services.broadcast_queue import queue_broadcast
+        from app.services.broadcast_queue import BroadcastRequest, queue_broadcast
+        from app.services.message_buttons import broadcast_buttons, form_inputs
 
         audience = (audience or "all").strip()
         if audience not in {"all", "users", "resellers", "admins"}:
             audience = "all"
         try:
             log = await queue_broadcast(
-                session, text=text, audience=audience, created_by=str(staff.get("username") or "admin")
+                session,
+                text=text,
+                audience=audience,
+                created_by=str(staff.get("username") or "admin"),
+                request=BroadcastRequest(
+                    request_token, await broadcast_buttons(session, form_inputs(await request.form()), shop_id=None)
+                ),
             )
         except ValueError as e:
             return _redirect_msg("/broadcast", err=str(e))

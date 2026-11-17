@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, empty_state %}
+{% from "_message_buttons.html" import buttons_field, presets_card %}
 {% block title %}پیام گروهی{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
@@ -9,7 +10,11 @@
 
 <div class="card">
   <h2>ارسال پیام</h2>
-  <form method="post" action="/broadcast" class="form-stack">
+  <form method="post" action="/broadcast" class="form-stack"
+        data-confirm="پیام برای گروه انتخاب‌شده در صف ارسال قرار بگیرد؟ پیامِ فرستاده‌شده پس گرفته نمی‌شود."
+        data-confirm-title="ارسال پیام گروهی"
+        data-confirm-label="ارسال">
+    <input type="hidden" name="request_token" value="{{ broadcast_request_token }}" />
     <label class="form-field">مخاطبان
       <select name="audience">
         <option value="all">همه کاربران فعال</option>
@@ -19,15 +24,18 @@
       </select>
       <small class="muted">گروه دریافت‌کننده پیام را انتخاب کنید</small>
     </label>
-    <label class="form-field">متن پیام (HTML ساده تلگرام مجاز است)
+    <label class="form-field">متن پیام
       <textarea name="text" rows="8" required maxlength="4000" placeholder="متن پیام…"></textarea>
-      <small class="muted">ارسال ممکن است چند دقیقه طول بکشد. از اسپم خودداری کنید.</small>
+      <small class="muted">برچسب‌های ساده تلگرام مثل <code dir="ltr">&lt;b&gt;</code> و <code dir="ltr">&lt;a href="…"&gt;</code> مجازند؛ علامت «&lt;» تنها هم بی‌خطر است. ارسال ممکن است چند دقیقه طول بکشد.</small>
     </label>
+    {{ buttons_field(button_targets, button_styles, button_presets, button_max) }}
     <div class="actions">
       <button class="btn" type="submit">ارسال پیام</button>
     </div>
   </form>
 </div>
+
+{{ presets_card(button_presets, button_targets, button_styles, button_preset_limit, button_max) }}
 
 <div class="card card-flush">
   <div class="card-flush-head">
@@ -95,4 +103,7 @@
   </div>
 </div>
 </div>
+{% endblock %}
+{% block page_scripts %}
+<script src="/static/message-buttons.js?v={{ asset_v('message-buttons.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 {% endblock %}

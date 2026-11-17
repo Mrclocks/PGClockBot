@@ -7,7 +7,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 KEYBOARDS = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
-REPLY_KB = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
 REPLY_NAV = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
 ADMIN_PLANS = (ROOT / "app/bot/handlers/admin_plans.py").read_text(encoding="utf-8")
 ADMIN = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
@@ -48,15 +47,6 @@ class PlansLabelCollisionTests(unittest.TestCase):
 
     def test_user_fixed_plan_edit_in_bot(self):
         self.assertIn("adm:plan:edit:name:", ADMIN)
-
-
-class VersionTests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,9 @@ Security:
 
 from __future__ import annotations
 
+import html
 import json
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
@@ -17,7 +19,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, Order, UserService
+from app.db.models import BotUser, Order, ShopStaffAction, UserService
 from app.services.demo_users import non_demo_customer
 from app.services.home_overview import bot_panel_summary, reseller_shop_summary
 from app.services.safe_format import safe_format
@@ -33,22 +35,35 @@ ACTOR_OWNER = "owner"
 ACTOR_SHOP = "shop"  # reseller L1 or principal with shop_settings on that shop
 
 
+# Send hour when none is stored: 04:00 Tehran, after the reported day has closed.
+DEFAULT_REPORT_HOUR = 4
+
+
 def report_hour(raw: object) -> int:
-    """The configured send hour (UTC, 0–23); anything unreadable means midnight UTC."""
+    """The configured send hour (Asia/Tehran, 0–23); anything unreadable means the default hour."""
     try:
-        hour = int(str(raw if raw is not None else "0").strip() or "0")
+        hour = int(str(raw if raw is not None else "").strip())
     except ValueError:
-        return 0
+        return DEFAULT_REPORT_HOUR
     return max(0, min(23, hour))
 
 
-def is_report_due(now: datetime, hour_raw: object) -> bool:
-    """From the configured UTC hour to the end of that UTC day.
+def _tehran(now: datetime) -> datetime:
+    return (now if now.tzinfo else now.replace(tzinfo=timezone.utc)).astimezone(_TEHRAN)
 
-    The caller still checks the day's «already sent» marker, so the report goes out once a day
-    even when the bot was down or restarting during the configured hour.
+
+def is_report_due(now: datetime, hour_raw: object) -> bool:
+    """From the configured Tehran hour to the end of that Tehran day.
+
+    The caller still checks the day's «already sent» marker (``report_day_key``), so the report
+    goes out once a day even when the bot was down or restarting during the configured hour.
     """
-    return now.hour >= report_hour(hour_raw)
+    return _tehran(now).hour >= report_hour(hour_raw)
+
+
+def report_day_key(now: datetime) -> str:
+    """The Tehran date a report run belongs to; the «already sent» marker stores it."""
+    return _tehran(now).date().isoformat()
 
 
 def previous_tehran_day_bounds(
@@ -56,8 +71,8 @@ def previous_tehran_day_bounds(
 ) -> tuple[datetime, datetime, datetime]:
     """UTC half-open window ``[start, end)`` for the previous Asia/Tehran calendar day.
 
-    Also returns that day's local midnight (for Jalali header labels). Default send hour
-    ``0`` UTC (= 03:30 Tehran) is after that day has closed, so the digest is complete.
+    Also returns that day's local midnight (for Jalali header labels). Any send hour of the
+    next Tehran day is after that day has closed, so the digest is complete.
     """
     now_utc = now or datetime.now(timezone.utc)
     if now_utc.tzinfo is None:
@@ -212,8 +227,16 @@ _METRICS: tuple[DailyMetric, ...] = (
         actors=frozenset({ACTOR_OWNER, ACTOR_SHOP}),
     ),
     DailyMetric(
+        key="staff_summary",
+        title_fa="کارکنان در روز گزارش",
+        group="ops",
+        description_fa="هر نفر چند اقدام ثبت کرده (از گزارش کارکنان)؛ پرکارترین‌ها، هر نفر در یک خط.",
+        example="• علی: ۱۲ اقدام (۱۰ تأیید رسید، ۲ رد رسید)",
+        actors=frozenset({ACTOR_OWNER, ACTOR_SHOP}),
+    ),
+    DailyMetric(
         key="funnel_pay_start",
-        title_fa="شروع پرداخت (امروز)",
+        title_fa="شروع پرداخت (روز گزارش)",
         group="funnel",
         description_fa="رویداد رفتار کاربر: شروع پرداخت.",
         example="۸",
@@ -222,7 +245,7 @@ _METRICS: tuple[DailyMetric, ...] = (
     ),
     DailyMetric(
         key="funnel_receipt",
-        title_fa="رسید (امروز)",
+        title_fa="رسید (روز گزارش)",
         group="funnel",
         description_fa="رویداد رفتار کاربر: ارسال رسید.",
         example="۶",
@@ -231,7 +254,7 @@ _METRICS: tuple[DailyMetric, ...] = (
     ),
     DailyMetric(
         key="funnel_delivered",
-        title_fa="تحویل قیف (امروز)",
+        title_fa="تحویل قیف (روز گزارش)",
         group="funnel",
         description_fa="رویداد رفتار کاربر: تحویل.",
         example="۵",
@@ -286,9 +309,9 @@ _BY_KEY = {m.key: m for m in ALL_METRICS}
 
 GROUP_LABELS_FA: dict[str, str] = {
     "header": "سربرگ تاریخ و هویت",
-    "activity": "فعالیت امروز",
+    "activity": "فعالیت روز گزارش",
     "ops": "عملیات باز",
-    "funnel": "رفتار کاربر امروز",
+    "funnel": "رفتار کاربر در روز گزارش",
     "totals": "آمار کل",
 }
 
@@ -308,13 +331,16 @@ DEFAULT_REPORT_TEMPLATE = (
     "• کاربران جدید: {users_new}\n"
     "• سفارش‌ها: {orders_new}\n"
     "• تحویل‌شده: {orders_delivered}\n"
-    "• درآمد امروز: {revenue_today}\n"
+    "• درآمد روز: {revenue_today}\n"
     "• سرویس جدید: {services_new}\n"
     "\n"
     "🛠 <b>عملیات باز:</b>\n"
     "• رسید معلق: {pending}\n"
     "• تیکت باز: {tickets_open}\n"
     "• تحویل ناموفق: {failures}\n"
+    "\n"
+    "👥 <b>کارکنان:</b>\n"
+    "{staff_summary}\n"
     "\n"
     "📈 <b>آمار کل:</b>\n"
     "• کل کاربران: {users_total}\n"
@@ -475,9 +501,11 @@ async def _scoped_totals(session: AsyncSession, *, reseller_id: int | None) -> d
     }
 
 
-async def _today_activity(session: AsyncSession, *, reseller_id: int | None) -> dict[str, int]:
-    """Previous Tehran calendar day: new orders by ``created_at``, deliveries by ``updated_at``."""
-    start, end, _ = previous_tehran_day_bounds()
+async def previous_day_activity(
+    session: AsyncSession, *, reseller_id: int | None, now: datetime | None = None
+) -> dict[str, int]:
+    """Previous Tehran calendar day: new orders by ``created_at``, deliveries by ``delivered_at``."""
+    start, end, _ = previous_tehran_day_bounds(now)
     if reseller_id is None:
         scope_orders = Order.reseller_id.is_(None)
         scope_users = shop_member_clause(None)
@@ -490,7 +518,7 @@ async def _today_activity(session: AsyncSession, *, reseller_id: int | None) -> 
 
     created_in_day = and_(Order.created_at >= start, Order.created_at < end)
     delivered = Order.status == "delivered"
-    delivered_in_day = and_(delivered, Order.updated_at >= start, Order.updated_at < end)
+    delivered_in_day = and_(delivered, Order.delivered_at >= start, Order.delivered_at < end)
 
     orders_row = (
         await session.execute(
@@ -548,6 +576,40 @@ async def _today_activity(session: AsyncSession, *, reseller_id: int | None) -> 
     }
 
 
+# Staff lines in the report: the busiest few, so a large team does not flood the message.
+STAFF_SUMMARY_LIMIT = 5
+_STAFF_DECISIONS = (("payment_approve", "تأیید رسید"), ("payment_reject", "رد رسید"), ("free_checkout", "تحویل رایگان"))
+
+
+def _staff_line(label: str, counts: Counter[str]) -> str:
+    total = sum(counts.values())
+    parts = [f"{counts[action]} {title}" for action, title in _STAFF_DECISIONS if counts[action]]
+    detail = f" ({'، '.join(parts)})" if parts else ""
+    return f"• {html.escape(label)}: {total} اقدام{detail}"
+
+
+async def staff_summary(
+    session: AsyncSession, *, reseller_id: int | None, start: datetime, end: datetime
+) -> str:
+    """One line per staff member with their actions in ``[start, end)``; "—" when nobody acted.
+
+    Labels are staff display names, so they are escaped for the Telegram HTML report.
+    """
+    shop = ShopStaffAction.shop_id.is_(None) if reseller_id is None else ShopStaffAction.shop_id == int(reseller_id)
+    rows = (
+        await session.execute(
+            select(ShopStaffAction.actor_label, ShopStaffAction.action, func.count())
+            .where(shop, ShopStaffAction.created_at >= start, ShopStaffAction.created_at < end)
+            .group_by(ShopStaffAction.actor_label, ShopStaffAction.action)
+        )
+    ).all()
+    per_actor: dict[str, Counter[str]] = defaultdict(Counter)
+    for label, action, count in rows:
+        per_actor[str(label)][str(action)] += int(count or 0)
+    busiest = sorted(per_actor.items(), key=lambda item: (-sum(item[1].values()), item[0]))[:STAFF_SUMMARY_LIMIT]
+    return "\n".join(_staff_line(label, counts) for label, counts in busiest) or "—"
+
+
 async def collect_report_values(
     session: AsyncSession,
     *,
@@ -555,6 +617,7 @@ async def collect_report_values(
     actor: str,
     admin_name: str,
     enabled_keys: list[str] | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     """Compute values for enabled keys only (no cross-shop bleed)."""
     from app.services.formatting import format_toman
@@ -565,8 +628,8 @@ async def collect_report_values(
     allowed = {m.key for m in metrics_for_actor(actor)}
     keys = [k for k in keys if k in allowed]
 
-    now = datetime.now(timezone.utc)
-    _start, _end, report_local = previous_tehran_day_bounds(now)
+    now = now or datetime.now(timezone.utc)
+    day_start, day_end, report_local = previous_tehran_day_bounds(now)
     j_day = format_jalali_parts(report_local)
 
     need_activity = any(
@@ -587,7 +650,7 @@ async def collect_report_values(
     need_ops_extra = "failures" in keys
     need_funnel = any(k.startswith("funnel_") for k in keys)
 
-    activity = await _today_activity(session, reseller_id=reseller_id) if need_activity else {}
+    activity = await previous_day_activity(session, reseller_id=reseller_id, now=now) if need_activity else {}
     totals = await _scoped_totals(session, reseller_id=reseller_id) if need_totals else {}
 
     failures = 0
@@ -599,9 +662,15 @@ async def collect_report_values(
         if "tickets_open" not in totals:
             totals["tickets_open"] = int(ac.get("tickets") or 0)
 
+    staff = (
+        await staff_summary(session, reseller_id=reseller_id, start=day_start, end=day_end)
+        if "staff_summary" in keys
+        else ""
+    )
+
     funnel: dict[str, Any] = {}
     if need_funnel:
-        funnel = await funnel_summary(session, reseller_id=reseller_id, days=1)
+        funnel = await funnel_summary(session, reseller_id=reseller_id, window=(day_start, day_end))
 
     currency = get_settings().currency
     raw: dict[str, Any] = {
@@ -621,6 +690,7 @@ async def collect_report_values(
         "pending": totals.get("pending", 0),
         "tickets_open": totals.get("tickets_open", 0),
         "failures": failures,
+        "staff_summary": staff,
         "funnel_pay_start": int(funnel.get("pay_start") or 0),
         "funnel_receipt": int(funnel.get("receipt") or 0),
         "funnel_delivered": int(funnel.get("delivered") or 0),
@@ -707,6 +777,7 @@ async def build_daily_report_outbound(
     admin_name: str,
     template: str | None,
     metrics_raw: str | None,
+    now: datetime | None = None,
 ) -> tuple[str, dict]:
     keys = parse_metric_keys(metrics_raw, actor=actor)
     values = await collect_report_values(
@@ -715,6 +786,7 @@ async def build_daily_report_outbound(
         actor=actor,
         admin_name=admin_name,
         enabled_keys=keys,
+        now=now,
     )
     return render_daily_report_outbound(template, values, enabled_keys=keys)
 

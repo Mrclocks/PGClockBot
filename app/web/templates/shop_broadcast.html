@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, page_header, empty_state %}
+{% from "_message_buttons.html" import buttons_field, presets_card %}
 {% block title %}پیام گروهی{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
@@ -21,11 +22,14 @@
       <textarea name="text" rows="8" required maxlength="4000" placeholder="متن پیام…"></textarea>
       <small class="muted">متن به‌صورت امن ارسال می‌شود. ارسال از صف محدود انجام می‌شود؛ از اسپم خودداری کنید. سقف گسترده: روزی یک‌بار.</small>
     </label>
+    {{ buttons_field(button_targets, button_styles, button_presets, button_max) }}
     <div class="actions">
       <button class="btn" type="submit">ارسال پیام</button>
     </div>
   </form>
 </div>
+
+{{ presets_card(button_presets, button_targets, button_styles, button_preset_limit, button_max) }}
 
 <div class="card card-flush">
   <div class="card-flush-head">
@@ -88,4 +92,7 @@
   </div>
 </div>
 </div>
+{% endblock %}
+{% block page_scripts %}
+<script src="/static/message-buttons.js?v={{ asset_v('message-buttons.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 {% endblock %}

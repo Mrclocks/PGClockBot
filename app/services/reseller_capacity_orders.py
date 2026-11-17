@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, Order, OrderStatus, ResellerPlan, ResellerProfile
+from app.db.models import BotUser, Order, OrderStatus, ResellerPlan, ResellerProfile, delivered_stamp
 from app.services.db_safe import rollback_quiet
 from app.services.reseller_capacity import (
     CapacityOffer,
@@ -122,7 +122,7 @@ async def _set_state(session: AsyncSession, order_id: int, *, expected: str, sta
     result = await session.execute(
         update(Order)
         .where(Order.id == order_id, Order.status == expected)
-        .values(status=status, service_mutation_pending=pending)
+        .values(status=status, service_mutation_pending=pending, **delivered_stamp(status))
         .execution_options(synchronize_session=False)
     )
     return bool(result.rowcount == 1)

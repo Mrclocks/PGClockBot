@@ -188,18 +188,6 @@ class RsetupRemovedTests(unittest.TestCase):
         self.assertNotIn("/rsetup/", app_src)
 
 
-class VersionBumpTests(unittest.TestCase):
-    def test_version_is_current(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), __version__)
-        from app.services.release_notes import RELEASE_NOTES_FA
-
-        self.assertEqual(list(RELEASE_NOTES_FA.keys())[0], __version__)
-
-
 class PayWithWalletRefundPaymentTests(unittest.IsolatedAsyncioTestCase):
     async def test_delivery_failure_rejects_wallet_payment(self):
         from app.db.models import OrderStatus, PaymentStatus

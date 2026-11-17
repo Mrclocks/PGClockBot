@@ -19,6 +19,7 @@ from app.db.models import (
     BotUser,
     Order,
     OrderStatus,
+    delivered_stamp,
     Plan,
     ServiceAddonPack,
     UserService,
@@ -1315,7 +1316,7 @@ async def apply_service_addon(
                     Order.id == order_id,
                     Order.status == OrderStatus.DELIVERING.value,
                 )
-                .values(status=OrderStatus.DELIVERED.value, service_mutation_pending=False)
+                .values(status=OrderStatus.DELIVERED.value, service_mutation_pending=False, **delivered_stamp(OrderStatus.DELIVERED.value))
                 .execution_options(synchronize_session=False)
             )
         if done.rowcount != 1:
@@ -1347,7 +1348,7 @@ async def apply_service_addon(
                         Order.id == order_id,
                         Order.status == OrderStatus.DELIVERING.value,
                     )
-                    .values(status=OrderStatus.DELIVERED.value, service_mutation_pending=False)
+                    .values(status=OrderStatus.DELIVERED.value, service_mutation_pending=False, **delivered_stamp(OrderStatus.DELIVERED.value))
                     .execution_options(synchronize_session=False)
                 )
                 from app.services.loyalty import consume_loyalty_discount_for_order

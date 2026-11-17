@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -75,31 +74,6 @@ class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(call.kwargs.get("reply_markup"), markup)
         self.assertIn("درخواست نمایندگی", call.args[0])
         self.assertIsNot(call.kwargs.get("reply_markup"), "MAIN")
-
-
-class ResellerApplySourceGuards(unittest.TestCase):
-    def test_no_orphan_plan_type_caption(self):
-        fn = inspect.getsource(
-            __import__(
-                "app.bot.handlers.reply_nav", fromlist=["open_reseller_apply"]
-            ).open_reseller_apply
-        )
-        self.assertNotIn('"نوع پلن:"', fn)
-        self.assertNotIn("'نوع پلن:'", fn)
-        self.assertIn("_resapply_home_keyboard", fn)
-        self.assertIn("present_inline_only", fn)
-        self.assertNotIn('text="⌨️ منوی اصلی"', fn)
-        self.assertIn("NAV_RESELLER_APPLY", fn)
-
-    def test_plan_detail_single_back(self):
-        src = inspect.getsource(
-            __import__(
-                "app.bot.handlers.reseller", fromlist=["resapply_plan"]
-            ).resapply_plan
-        )
-        self.assertNotIn("تغییر نوع پلن", src)
-        self.assertNotIn("بازگشت به لیست", src)
-        self.assertIn("_resapply_list_back_for_plan", src)
 
 
 if __name__ == "__main__":

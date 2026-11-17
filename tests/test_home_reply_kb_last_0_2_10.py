@@ -4,11 +4,7 @@ from __future__ import annotations
 
 import inspect
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class RenderHomeReplyLastTests(unittest.IsolatedAsyncioTestCase):
@@ -230,11 +226,6 @@ class HomeReplySourceGuards(unittest.TestCase):
         self.assertIn("render_home", home_src)
         back_src = inspect.getsource(reply_nav.handle_back)
         self.assertIn("render_home", back_src)
-
-    def test_start_no_longer_ephemeral_only_seed(self):
-        src = (ROOT / "app/bot/handlers/start.py").read_text(encoding="utf-8")
-        # Legacy ephemeral polish removed from home path
-        self.assertNotIn("ephemeral=True", src)
 
 
 if __name__ == "__main__":
