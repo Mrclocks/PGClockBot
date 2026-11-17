@@ -66,7 +66,8 @@
     <article class="home-period">
       <h3 class="home-period-label">مراحل هر درخواست</h3>
       <dl class="home-period-metrics">
-        <div><dt>اتصال تازه</dt><dd>{{ timing.new_connection_pct | num }}٪ از {{ timing.requests | num }} درخواست</dd></div>
+        <div><dt>درخواست‌ها</dt><dd>{{ timing.requests | num }}</dd></div>
+        <div><dt>با اتصال تازه</dt><dd>{{ timing.new_connection_pct | num }}٪</dd></div>
         {% for key, label in [('pool', 'انتظار در صف'), ('connect', 'اتصال TCP و DNS'), ('tls', 'دست‌دادن TLS'), ('first_byte', 'تا اولین پاسخ')] %}
         {% set phase = timing[key] or {} %}
         {% if phase.count %}
