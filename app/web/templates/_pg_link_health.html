@@ -61,6 +61,31 @@
         {% endif %}
       </dl>
     </article>
+    {% set timing = health.timing or {} %}
+    {% if timing.requests %}
+    <article class="home-period">
+      <h3 class="home-period-label">مراحل هر درخواست</h3>
+      <dl class="home-period-metrics">
+        <div><dt>اتصال تازه</dt><dd>{{ timing.new_connection_pct | num }}٪ از {{ timing.requests | num }} درخواست</dd></div>
+        {% for key, label in [('pool', 'انتظار در صف'), ('connect', 'اتصال TCP و DNS'), ('tls', 'دست‌دادن TLS'), ('first_byte', 'تا اولین پاسخ')] %}
+        {% set phase = timing[key] or {} %}
+        {% if phase.count %}
+        <div><dt>{{ label }}</dt><dd><span dir="ltr">{{ phase.p50_ms | num }} / {{ phase.p95_ms | num }} ms</span></dd></div>
+        {% endif %}
+        {% endfor %}
+      </dl>
+    </article>
+    {% if timing.endpoints %}
+    <article class="home-period">
+      <h3 class="home-period-label">کندترین درخواست‌ها (میانه / ۹۵٪)</h3>
+      <dl class="home-period-metrics">
+        {% for row in timing.endpoints %}
+        <div><dt><span dir="ltr">{{ row.endpoint }}</span></dt><dd><span dir="ltr">{{ row.p50_ms | num }} / {{ row.p95_ms | num }} ms</span></dd></div>
+        {% endfor %}
+      </dl>
+    </article>
+    {% endif %}
+    {% endif %}
   </div>
   {% if health.from_prior_boot %}
   <p class="muted link-health-note">{{ health.prior_boot_note }}</p>
