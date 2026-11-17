@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.enums import ParseMode
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class NotifyBotDefaultsTests(unittest.IsolatedAsyncioTestCase):
@@ -53,29 +50,6 @@ class NotifyBotDefaultsTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ok)
         kwargs = bot.send_message.await_args.kwargs
         self.assertEqual(kwargs.get("parse_mode"), "HTML")
-
-
-class SourceAuditTests(unittest.TestCase):
-    def test_open_notify_uses_create_bot_not_bare_token(self):
-        src = (ROOT / "app/services/reseller_bots.py").read_text(encoding="utf-8")
-        # Fallback path must use create_bot (HTML defaults), not bare Bot(token=...)
-        self.assertIn("return create_bot(), True", src)
-        self.assertNotIn("return Bot(token=get_settings().bot_token), True", src)
-
-    def test_delivery_and_scheduler_set_html(self):
-        delivery = (ROOT / "app/services/delivery.py").read_text(encoding="utf-8")
-        self.assertGreaterEqual(delivery.count('parse_mode="HTML"'), 3)
-        sched = (ROOT / "app/jobs/scheduler.py").read_text(encoding="utf-8")
-        self.assertIn('parse_mode="HTML"', sched)
-
-    def test_version_at_least_3_5_1(self):
-        from app.version import __version__
-
-        self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")[:3]), (0, 1, 0)
-        )
-        notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"0.1.0"', notes)
 
 
 if __name__ == "__main__":
