@@ -16,15 +16,13 @@ from app.services.backup import (
     create_backup,
     delete_backup,
     get_backup_path,
-    prune_backups,
     resolve_stale_restore_status,
     save_uploaded_backup,
     start_restore_async,
 )
-from app.services.backup_settings import KEEP_KEY, keep_count
+from app.services.backup_settings import prune_to_configured_retention
 from app.services.backup_telegram import BackupTelegramError, send_backup, send_test_message
 from app.services.redact import user_safe_error
-from app.services.users import get_setting
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +50,7 @@ def _status_payload() -> dict:
 
 async def _after_manual_backup(session: AsyncSession, result: dict) -> str:
     """Apply the retention limit and Telegram delivery to a backup the admin just made; returns a flash suffix."""
-    await asyncio.to_thread(prune_backups, keep_count(await get_setting(session, KEEP_KEY, "10")))
+    await prune_to_configured_retention(session)
     try:
         sent = await send_backup(
             session, Path(str(result.get("path"))), include_env=bool(result.get("include_env")),
@@ -61,7 +59,7 @@ async def _after_manual_backup(session: AsyncSession, result: dict) -> str:
     except Exception:  # noqa: BLE001 - a failed delivery must not hide a good backup
         logger.exception("manual backup telegram delivery failed")
         return " — ارسال به تلگرام ناموفق بود"
-    return {"ok": " — برای تلگرام هم ارسال شد", "skipped": " — برای تلگرام ارسال نشد (حجم یا .env)",
+    return {"ok": " — برای تلگرام هم ارسال شد", "skipped": " — برای تلگرام ارسال نشد؛ دلیل در «وضعیت ارسال به تلگرام» آمده است",
             "error": " — ارسال به تلگرام ناموفق بود"}.get(sent, "")
 
 
