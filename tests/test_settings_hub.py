@@ -193,7 +193,8 @@ class SettingsMenuPageTests(unittest.TestCase):
     def test_the_list_page_has_no_menu_and_opens_its_first_page_on_a_desktop(self) -> None:
         html = self.bot_page()
         self.assertNotIn('<nav class="settings-nav', html)
-        self.assertIn('data-settings-first="/settings?tab=identity"', html)
+        first_row = re.search(r'class="hub-row" href="([^"]+)"', html).group(1)
+        self.assertIn(f'data-settings-first="{first_row}"', html)
         self.assertLess(html.index("data-settings-first"), html.index('class="settings-hub'))
 
     def test_the_system_list_opens_general_and_a_system_page_marks_itself(self) -> None:
