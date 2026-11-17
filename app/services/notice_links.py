@@ -20,7 +20,8 @@ CALLBACK_DATA_LIMIT = 64
 
 M = TypeVar("M")
 
-# Read-only screens a notice may open. Each handler still checks the actor and the shop.
+# Screens a notice may open: read-only screens, and the customer's renewal and pack pickers, which only
+# offer choices until the customer confirms. Each handler still checks the actor and the shop.
 NOTICE_SCREEN_PREFIXES: tuple[str, ...] = (
     "adm:users:view:",
     "adm:users:svc:",
@@ -30,6 +31,8 @@ NOTICE_SCREEN_PREFIXES: tuple[str, ...] = (
     "cnrv:v:",
     "payvoid:v:",
     "svc:auto:",
+    "svc:renew:",
+    "svc:addon:",
 )
 
 
@@ -44,6 +47,7 @@ NOTICE_SCREENS: frozenset[str] = frozenset({
     "nv:w:home",
     "nv:loy:home",
     "svc:list",
+    "shop:list",
 })
 
 

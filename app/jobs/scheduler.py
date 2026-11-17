@@ -240,8 +240,7 @@ async def check_expiring_services(bot: Bot) -> None:
                                         user.telegram_id,
                                         f"⏰ زمان سرویس <b>{svc.pg_username}</b> به کمتر از "
                                         f"<b>{time_pct}٪</b> رسیده است.\n"
-                                        "از بخش سرویس‌ها تمدید کنید."
-                                        + ("\nیا دکمه زیر را بزنید:" if one_tap else "")
+                                        + ("برای تمدید، دکمهٔ زیر را بزنید." if one_tap else "از «سرویس‌های من» تمدید کنید.")
                                         + extras.note_for(svc.id),
                                         parse_mode="HTML",
                                         reply_markup=markup,
