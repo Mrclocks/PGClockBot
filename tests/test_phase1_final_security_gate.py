@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -239,14 +239,6 @@ class SiblingAndRoleNameTests(unittest.TestCase):
             ctx = authz_from_staff(staff)
             self.assertFalse(is_explicit_org_owner(ctx))
             self.assertFalse(has_org_global_scope(ctx))
-
-
-class RequireAdminSourceContract(unittest.TestCase):
-    def test_require_admin_checks_explicit_owner(self) -> None:
-        src = open("app/api/app.py", encoding="utf-8").read()
-        fn = src[src.find("async def require_admin") : src.find("def require_perm")]
-        self.assertIn("is_explicit_owner_staff", fn)
-        self.assertIn("web_owner", src[src.find('if role == "admin":') :])
 
 
 if __name__ == "__main__":

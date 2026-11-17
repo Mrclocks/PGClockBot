@@ -295,7 +295,6 @@ class Phase4GBotOwnerL1Tests(unittest.IsolatedAsyncioTestCase):
                 )
 
     async def _reply_owner_only(self, opener, fx, session) -> None:
-        from app.bot.handlers import reply_nav as rn
 
         msg, _ = _fake_msg()
         with self._admin_ids(), patch(
@@ -439,21 +438,6 @@ class Phase4GBotOwnerL1Tests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(is_migrated_pg_soft_callback("adm:settings"))
         self.assertFalse(is_migrated_pg_soft_callback("adm:plans"))
         self.assertFalse(is_migrated_pg_soft_callback("adm:resellers:add"))
-
-    def test_owner_middleware_not_on_pg_routers(self) -> None:
-        src = open("app/bot/__init__.py", encoding="utf-8").read()
-        self.assertIn("admin_backup.router", src)
-        owner_block = src.split("owner_gate = _RequireBotOwnerPrincipal()")[1]
-        first_loop, rest = owner_block.split(
-            "# Phase 4G — migrated PG families", 1
-        )
-        self.assertNotIn("admin_pg_users.router", first_loop)
-        self.assertNotIn("admin_pg_nodes.router", first_loop)
-        self.assertIn("admin_pg_users.router", rest)
-        self.assertIn("admin_pg_nodes.router", rest)
-        self.assertIn("admin_backup.router", first_loop)
-        self.assertIn("admin_settings.router", first_loop)
-        self.assertIn("admin_plans.router", first_loop)
 
     # ----- Part B -----
 

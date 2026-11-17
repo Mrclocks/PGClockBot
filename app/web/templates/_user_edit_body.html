@@ -323,10 +323,16 @@
             <strong>{{ s.time_label }}</strong>
           </div>
         </div>
-        {% if s.subscription_url %}
+        {% set renew_link = (renew_links or {}).get(s.service.id) %}
+        {% if s.subscription_url or renew_link %}
         <div class="svc-item-links">
+          {% if s.subscription_url %}
           <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ s.subscription_url }}">کپی لینک</button>
           <a class="btn btn-sm btn-ghost" href="{{ s.subscription_url }}" target="_blank" rel="noopener">باز کردن</a>
+          {% endif %}
+          {% if renew_link %}
+          <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ renew_link }}" aria-label="کپی لینک تمدید همین سرویس در ربات برای فرستادن به مشتری">کپی لینک تمدید</button>
+          {% endif %}
         </div>
         {% endif %}
       </div>

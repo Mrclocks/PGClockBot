@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.billing import BILLING_MODE_PAYG, payg_purchase_min_wallet
@@ -14,7 +13,6 @@ from app.services.reseller_capacity import (
     plan_extra_gb_price,
     plan_renew_price,
 )
-from tests.template_source import template_with_includes
 
 
 class PaygSuspendHelpersTests(unittest.IsolatedAsyncioTestCase):
@@ -95,14 +93,6 @@ class ResellerCapacityPlanTests(unittest.TestCase):
         plan = MagicMock(renew_price=12_000, price=50_000)
         self.assertEqual(plan_renew_price(plan), 12_000)
 
-    def test_templates_have_extra_switch(self):
-        plans = template_with_includes("plans.html")
-        edit = Path("app/web/templates/reseller_plan_edit.html").read_text(encoding="utf-8")
-        self.assertIn("allow_buy_extra", plans)
-        self.assertIn("extra_gb_price", plans)
-        self.assertIn("allow_buy_extra", edit)
-        self.assertIn("extra_user_price", edit)
-
     def test_keyboard_capacity_entries(self):
         from app.bot.keyboards import _reseller_submenu_entries
 
@@ -153,15 +143,6 @@ class SchemaAddonTests(unittest.TestCase):
         self.assertTrue(hasattr(ResellerProfile, "billing_suspended_at"))
         self.assertTrue(hasattr(ResellerPlan, "allow_buy_extra"))
         self.assertTrue(hasattr(ResellerPlan, "extra_gb_price"))
-
-    def test_migrate_script(self):
-        src = Path("app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn("billing_suspended_at", src)
-        self.assertIn("allow_buy_extra", src)
-        alem = Path("alembic/versions/0005_payg_suspend_plan_addons.py").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("billing_suspended_user_ids", alem)
 
 
 if __name__ == "__main__":

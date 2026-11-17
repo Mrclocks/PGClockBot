@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from app.config import get_settings, normalize_pg_subscription_path
+from app.services.numbers import normalize_digits
 
 KEY_ENABLED = "service_import_enabled"
 KEY_MODE = "service_import_mode"
@@ -25,7 +26,12 @@ MODE_APPROVAL = "approval"
 MODES = (MODE_INSTANT, MODE_APPROVAL)
 
 DEFAULT_MAX_PER_USER = 5
-MAX_PER_USER_LIMIT = 20
+MIN_PER_USER = 1
+# Upper bound only to reject absurd input; a shop wanting no cap stores UNLIMITED_VALUE.
+MAX_PER_USER_LIMIT = 100_000
+# Stored when the «نامحدود» button is on: a customer may add any number of earlier services.
+UNLIMITED_VALUE = "unlimited"
+UNLIMITED_WORDS = frozenset({UNLIMITED_VALUE, "نامحدود"})
 MAX_LIST_ITEMS = 10
 _ADMIN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _LIST_SEPARATORS = re.compile(r"[\s,;،]+")
@@ -35,13 +41,18 @@ _LIST_SEPARATORS = re.compile(r"[\s,;،]+")
 class ImportSettings:
     enabled: bool
     mode: str
-    max_per_user: int
+    # None means no per-customer cap.
+    max_per_user: int | None
     extra_paths: tuple[str, ...]
     extra_admins: tuple[str, ...]
 
     @property
     def needs_approval(self) -> bool:
         return self.mode == MODE_APPROVAL
+
+    @property
+    def is_unlimited(self) -> bool:
+        return self.max_per_user is None
 
 
 def split_list(raw: str | None) -> list[str]:
@@ -70,12 +81,24 @@ def normalize_admins(raw: str | None) -> list[str]:
     return out[:MAX_LIST_ITEMS]
 
 
-def normalize_max_per_user(raw: object) -> int:
-    try:
-        value = int(str(raw).strip())
-    except (TypeError, ValueError):
+def normalize_max_per_user(raw: object) -> int | None:
+    """Per-customer cap in ``[MIN_PER_USER, MAX_PER_USER_LIMIT]``, ``None`` for unlimited, junk -> default."""
+    if raw is None or isinstance(raw, bool):
         return DEFAULT_MAX_PER_USER
-    return min(max(value, 1), MAX_PER_USER_LIMIT)
+    text = normalize_digits(str(raw)).strip().lower()
+    if text in UNLIMITED_WORDS:
+        return None
+    try:
+        value = int(text)
+    except ValueError:
+        return DEFAULT_MAX_PER_USER
+    return min(max(value, MIN_PER_USER), MAX_PER_USER_LIMIT)
+
+
+def stored_max_per_user(raw: object) -> str:
+    """Canonical stored text of the cap: a whole number or ``UNLIMITED_VALUE``."""
+    value = normalize_max_per_user(raw)
+    return UNLIMITED_VALUE if value is None else str(value)
 
 
 def normalize_setting_value(key: str, value: str) -> str:
@@ -83,7 +106,8 @@ def normalize_setting_value(key: str, value: str) -> str:
     if key == KEY_MODE:
         return value if value in MODES else MODE_INSTANT
     if key == KEY_MAX_PER_USER:
-        return str(normalize_max_per_user(value))
+        # The web field's «نامحدود» button empties the input, as in the gift-code and plan forms.
+        return UNLIMITED_VALUE if not str(value).strip() else stored_max_per_user(value)
     if key == KEY_PATHS:
         return "\n".join(normalize_paths(value))
     if key == KEY_ADMINS:

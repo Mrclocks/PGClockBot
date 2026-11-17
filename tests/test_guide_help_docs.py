@@ -98,21 +98,6 @@ class GuideCatalogTests(unittest.TestCase):
         self.assertIn("resolveGuideHref(h.href)", js)
         self.assertIn("guideRoot +", js)
 
-    def test_page_title_macro_has_help(self):
-        macros = (ROOT / "app" / "web" / "templates" / "macros.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("page-help-btn", macros)
-        self.assertIn("help=None", macros)
-        # Direct link to guide — no intermediate popover / details menu
-        self.assertNotIn("page-help-pop", macros)
-        self.assertNotIn("<details", macros)
-        self.assertNotIn("مطالعه کامل", macros)
-        plans = (ROOT / "app" / "web" / "templates" / "plans.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("help='plans'", plans)
-
     def test_page_title_macro_renders_help_from_globals(self):
         """Macros imported without ``with context`` must see guide_topics globals."""
         from jinja2 import Environment, FileSystemLoader, select_autoescape

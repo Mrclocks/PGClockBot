@@ -141,7 +141,7 @@ class CardTests(unittest.TestCase):
             snap = health.snapshot()
         self.assertEqual(snap["last_ok_time"], "11:30:00")
         html = self._render(snap)
-        self.assertIn('<span dir="ltr">11:30:00</span> (تهران)', html)
+        self.assertIn('<dt>آخرین پاسخ موفق (تهران)</dt><dd><span dir="ltr">11:30:00</span></dd>', html)
         self.assertNotIn("UTC", html)
 
     def test_status_badge_sits_in_its_own_header_row(self) -> None:

@@ -265,6 +265,8 @@ tests/test_replaceable_notices.py
 tests/test_risk_mark.py
 tests/test_overview_redesign.py
 tests/test_backup_retention_telegram.py
+tests/test_backup_archive_safety.py
+tests/test_backup_schedule.py
 tests/test_reseller_wallet_debit.py
 tests/test_py_compat.py
 tests/test_bbc_https_requirement.py
@@ -429,6 +431,7 @@ tests/test_mini_addon_packs.py
 # PasarGuard link watchdog job: heal, one rebuild, lock and disable.
 tests/test_pg_link_watchdog.py
 tests/test_pg_link_alerts.py
+tests/test_pg_link_timing.py
 tests/test_pg_link_health_persist.py
 tests/test_pg_stop_missing_user_poll.py
 tests/test_pg_cache_capability_probe.py
@@ -513,6 +516,7 @@ tests/test_empty_state.py
 tests/test_dashboard_layout.py
 tests/test_pg_capability_probe_credentials.py
 tests/test_pg_capability_outage_hold.py
+tests/test_terms_acceptance_race.py
 tests/test_platform_pg_access_end_to_end.py
 tests/test_plan_template_only_role.py
 tests/test_plan_category_board.py
