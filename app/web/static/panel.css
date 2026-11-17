@@ -1029,7 +1029,11 @@ button.cell-user-link {
   font-size: var(--fs-2);
   line-height: 1.5;
 }
+/* 16 above and below the line: the search bar already leaves 16 under itself and a flush title 8, so the hint
+   adds only what is missing on top. */
 .card.card-flush > .user-card-hint { margin: 0; padding: var(--space-2) var(--card-pad); }
+.card.card-flush > .search-bar ~ .user-card-hint { padding-top: 0; }
+.card.card-flush > .card-flush-head ~ .user-card-hint { padding-top: var(--space-1); }
 .user-card-hint-ico { flex: 0 0 auto; width: 16px; height: 16px; }
 
 .side-foot {
