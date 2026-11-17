@@ -418,7 +418,7 @@ SECTIONS: dict[str, dict] = {
             ("daily", "گزارش روزانه", [
                 ("admin_daily_report_enabled", "ارسال گزارش روزانه", "toggle"),
                 ("subordinate_report_enabled", "گزارش نمایندگان زیرمجموعه", "toggle"),
-                ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، UTC)", "number"),
+                ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، به وقت تهران)", "number"),
             ]),
         ],
     },

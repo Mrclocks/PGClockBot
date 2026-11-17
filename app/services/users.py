@@ -1208,7 +1208,7 @@ DEFAULT_SETTINGS = {
     "admin_daily_report_enabled": "1",
     "pg_link_watchdog_enabled": "1",
     "pg_link_alerts_enabled": "1",
-    "admin_daily_report_hour": "0",
+    "admin_daily_report_hour": "4",
     "admin_daily_report_last": "",
     "admin_daily_report_template": "",
     "admin_daily_report_metrics": "",
@@ -1638,9 +1638,9 @@ SETTING_GROUPS = {
         ),
         (
             "admin_daily_report_hour",
-            "ساعت ارسال (۰–۲۳، UTC)",
+            "ساعت ارسال (۰–۲۳، به وقت تهران)",
             "number",
-            "گزارش روز کامل قبل تهران را می‌فرستد · تهران = UTC + ۳:۳۰ · پیش‌فرض ۰ = ۰۳:۳۰ تهران · اگر ربات خاموش باشد همان روز بعداً فرستاده می‌شود",
+            "گزارش روز کامل قبل را می‌فرستد · پیش‌فرض ۴ = ساعت ۰۴:۰۰ بامداد · اگر ربات در این ساعت خاموش باشد، همان روز بعداً فرستاده می‌شود",
         ),
         (
             "admin_daily_report_template",

@@ -124,7 +124,9 @@ class DailyReportJobTests(NoticeCase):
         from app.jobs import scheduler
         from app.services.users import clear_settings_cache
 
-        hour = str(datetime.now(timezone.utc).hour)
+        from zoneinfo import ZoneInfo
+
+        hour = str(datetime.now(ZoneInfo("Asia/Tehran")).hour)
         async with self.Session() as session:
             session.add_all([Setting(key="admin_daily_report_hour", value=hour),
                              Setting(key="subordinate_report_enabled", value="0")])
@@ -135,8 +137,8 @@ class DailyReportJobTests(NoticeCase):
         clear_settings_cache()
         self.addCleanup(clear_settings_cache)
         with patch.object(scheduler, "SessionLocal", self.Session), \
-                patch("app.config.get_settings", return_value=SimpleNamespace(admin_ids=[501])), \
-                patch("app.services.daily_report.build_daily_report_outbound", AsyncMock(return_value=("📊", {}))):
+                patch("app.services.daily_report_delivery.get_settings", return_value=SimpleNamespace(admin_ids=[501])), \
+                patch("app.services.daily_report_delivery.build_daily_report_outbound", AsyncMock(return_value=("📊", {}))):
             await scheduler.run_admin_daily_report(bot)
             async with self.Session() as session:
                 await session.execute(Setting.__table__.delete().where(Setting.key == "admin_daily_report_last"))

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.db.models import Base, BotUser, Order, OrderStatus, Plan, UserService
 from app.services.daily_report import (
     ACTOR_OWNER,
-    _today_activity,
+    previous_day_activity,
     collect_report_values,
     format_jalali_parts,
     previous_tehran_day_bounds,
@@ -71,6 +71,7 @@ class PreviousDayActivityTests(unittest.IsolatedAsyncioTestCase):
                 status=OrderStatus.DELIVERED.value,
                 created_at=self.mid,
                 updated_at=self.mid,
+                delivered_at=self.mid,
             )
             today_partial = Order(
                 user_id=user.id,
@@ -79,6 +80,7 @@ class PreviousDayActivityTests(unittest.IsolatedAsyncioTestCase):
                 status=OrderStatus.DELIVERED.value,
                 created_at=self.now,
                 updated_at=self.now,
+                delivered_at=self.now,
             )
             # Registered before the report day, delivered during the report day.
             late_delivery = Order(
@@ -88,8 +90,19 @@ class PreviousDayActivityTests(unittest.IsolatedAsyncioTestCase):
                 status=OrderStatus.DELIVERED.value,
                 created_at=self.start - timedelta(hours=5),
                 updated_at=self.mid,
+                delivered_at=self.mid,
             )
-            session.add_all([yesterday, today_partial, late_delivery])
+            # Delivered days earlier and only edited during the report day: not a delivery of that day.
+            edited_old = Order(
+                user_id=user.id,
+                plan_id=plan.id,
+                amount=50000,
+                status=OrderStatus.DELIVERED.value,
+                created_at=self.start - timedelta(days=3),
+                delivered_at=self.start - timedelta(days=3),
+                updated_at=self.mid,
+            )
+            session.add_all([yesterday, today_partial, late_delivery, edited_old])
             session.add(
                 UserService(
                     bot_user_id=user.id,
@@ -104,7 +117,7 @@ class PreviousDayActivityTests(unittest.IsolatedAsyncioTestCase):
                 "app.services.daily_report.previous_tehran_day_bounds",
                 return_value=(self.start, self.end, self.local),
             ):
-                activity = await _today_activity(session, reseller_id=None)
+                activity = await previous_day_activity(session, reseller_id=None)
 
             self.assertEqual(activity["orders_new"], 1)  # yesterday only
             self.assertEqual(activity["orders_delivered"], 2)  # yesterday + late delivery
