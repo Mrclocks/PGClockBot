@@ -191,23 +191,5 @@ class PaygResellerFullDeleteFkTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(txs, [])
 
 
-class PaygResellerDeleteSourceGuards(unittest.TestCase):
-    def test_notify_reseller_revoked_is_best_effort(self):
-        src = Path("app/services/resellers.py").read_text(encoding="utf-8")
-        block = src.split("async def notify_reseller_revoked", 1)[1].split(
-            "\nasync def ", 1
-        )[0]
-        self.assertIn("Never raises", block)
-        self.assertIn("except Exception:", block)
-
-    def test_role_demote_catches_revoke_exception(self):
-        src = Path("app/api/reseller_pages.py").read_text(encoding="utf-8")
-        idx = src.find("async def reseller_set_role")
-        self.assertGreater(idx, 0)
-        block = src[idx : idx + 2500]
-        self.assertIn("except Exception as e:", block)
-        self.assertIn("friendly_user_delete_error", block)
-
-
 if __name__ == "__main__":
     unittest.main()

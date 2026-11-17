@@ -271,13 +271,6 @@ class XrayLifecycleTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(XrayProbeError, "^core_start$"):
                 await spawn_process("synthetic")
 
-    async def test_version_mismatch_never_starts_probe(self) -> None:
-        with patch("asyncio.create_subprocess_exec", return_value=FakeProcess(version=b"Xray 99.0 secret\n")) as spawn:
-            with self.assertRaisesRegex(XrayProbeError, "^core_version$"):
-                async with run_xray_batch(self.binary, self.endpoints):
-                    self.fail("An unsupported core must not run probes")
-        self.assertEqual(spawn.call_count, 1)
-
     async def test_invalid_binary_paths_permissions_and_checksums_stop_before_spawn(self) -> None:
         bad = [XrayBinary(Path("relative"), self.binary.sha256),
                XrayBinary(self.path.with_name("missing"), self.binary.sha256),

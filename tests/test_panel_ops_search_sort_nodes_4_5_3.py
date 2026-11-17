@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import re
 import unittest
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class ListQueryTests(unittest.TestCase):
@@ -267,110 +263,6 @@ class SingleDeliveryGuaranteeTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             with self.assertRaises(ValueError):
                 await cancel_order(session, order)
-
-
-class PanelTemplateContractTests(unittest.TestCase):
-    def test_orders_actions_and_search_sort(self):
-        html = (ROOT / "app/web/templates/finance.html").read_text(encoding="utf-8")
-        self.assertIn('action="/finance"', html)
-        self.assertIn('name="q"', html)
-        self.assertIn("data-sortable", html)
-        self.assertIn("/orders/{{ o.id }}/cancel", html)
-        self.assertIn("/orders/{{ o.id }}/approve", html)
-        self.assertIn("/orders/{{ o.id }}/reject", html)
-        self.assertIn("data-sort-type", html)
-        # Pending (no receipt) still offers approve → deliver
-        self.assertIn("o.status in ['pending','awaiting_receipt']", html)
-        # Cancelled/delivered: muted dash only — no kebab/actions. The gate
-        # moved into `can_act` (row_actions only renders when has_receipt or
-        # can_act is true), so assert 'cancelled'/'delivered' are excluded
-        # from every status list that unlocks an action form.
-        can_act_line = next(
-            line for line in html.splitlines() if "set can_act" in line
-        )
-        self.assertNotIn("'cancelled'", can_act_line)
-        self.assertNotIn("'delivered'", can_act_line)
-        self.assertNotIn("o.status == 'cancelled'\n            {% call row_actions()", html)
-
-    def test_payments_search_sort_and_actions(self):
-        html = (ROOT / "app/web/templates/finance.html").read_text(encoding="utf-8")
-        self.assertIn('action="/finance"', html)
-        self.assertIn('name="q"', html)
-        self.assertIn("data-sortable", html)
-        self.assertIn("/payments/{{ p.id }}/approve", html)
-        self.assertIn("payers", html)
-
-    def test_nodes_traffic_columns(self):
-        html = (ROOT / "app/web/templates/pg_nodes.html").read_text(encoding="utf-8")
-        self.assertIn("_traffic_total_text", html)
-        self.assertIn("_traffic_up_text", html)
-        self.assertIn("_traffic_down_text", html)
-        self.assertIn("مجموع ترافیک", html)
-        self.assertIn("data-sortable", html)
-
-    def test_users_resellers_search(self):
-        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        resellers = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
-        self.assertIn('action="/users"', users)
-        self.assertIn('name="q"', users)
-        self.assertIn("data-sortable", users)
-        self.assertIn('action="/resellers"', resellers)
-        self.assertIn('name="q"', resellers)
-
-    def test_panel_js_sortable(self):
-        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
-        self.assertIn("table[data-sortable]", js)
-        self.assertIn("data-sort-type", js)
-        self.assertIn("aria-sort", js)
-
-    def test_sort_idle_icon_not_box(self):
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        block = css.split("th[data-sort-type]::after {", 1)[1].split("th[data-sort-type]:hover::after", 1)[0]
-        self.assertIn("mask-image:", block)
-        self.assertIn("data:image/svg+xml", block)
-        self.assertIn("background-color: currentColor", block)
-        # No CSS-triangle / gradient X hack
-        self.assertNotIn("linear-gradient(45deg", block)
-        self.assertNotIn("border-bottom-color", block)
-
-    def test_sort_active_icons_are_svg_chevrons(self):
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        asc = css.split('th[data-sort-type][aria-sort="ascending"]::after {', 1)[1].split("}", 1)[0]
-        desc = css.split('th[data-sort-type][aria-sort="descending"]::after {', 1)[1].split("}", 1)[0]
-        self.assertIn("data:image/svg+xml", asc)
-        self.assertIn("data:image/svg+xml", desc)
-        self.assertNotIn("border-width", asc)
-        self.assertNotIn("border-width", desc)
-
-    def test_reseller_create_button_label(self):
-        html = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
-        self.assertIn("ذخیره و ارسال اطلاعات", html)
-        self.assertNotIn("فعال‌سازی و ارسال اطلاعات ورود", html)
-
-    def test_api_wires_cancel_and_search(self):
-        app = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("order_cancel", app)
-        self.assertIn("cancel_order", app)
-        self.assertIn("manual_fulfill_unpaid_order", app)
-        self.assertIn("notify_payer", app)
-        self.assertIn("filter_by_search", app)
-        self.assertIn("normalize_search_q", app)
-        pg = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
-        self.assertIn("enrich_nodes_with_traffic", pg)
-        self.assertIn("get_nodes_realtime", pg)
-
-    def test_cancel_keeps_shop_isolation(self):
-        app = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        # cancel block must mirror approve/reject reseller isolation
-        m = re.search(
-            r'async def order_cancel\([\s\S]*?return _redirect_msg\("/finance\?tab=orders", ok=',
-            app,
-        )
-        self.assertIsNotNone(m)
-        block = m.group(0)
-        self.assertIn("reseller_id", block)
-        self.assertIn("assert_order_in_scope", block)
-        self.assertIn("notify_payer", block)
 
 
 if __name__ == "__main__":

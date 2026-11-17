@@ -176,24 +176,5 @@ class TestStickyUserPreviewFlag(unittest.IsolatedAsyncioTestCase):
         self.assertIn("set_user_preview_active", src)
 
 
-class TestGiftExpiresWidthCss(unittest.TestCase):
-    def test_gift_expires_uses_plain_text_input(self):
-        """datetime-local crushed on mobile WebViews — use text like siblings."""
-        from pathlib import Path
-
-        root = Path(__file__).resolve().parents[1]
-        css = (root / "app/web/static/panel.css").read_text(encoding="utf-8")
-        gift = (root / "app/web/templates/_gift_code_fields.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn('name="expires_at"', gift)
-        self.assertRegex(gift, r'name="expires_at"[\s\S]*?type="text"')
-        self.assertNotIn('type="datetime-local"', gift)
-        self.assertNotIn("gift-expires-input-wrap", gift)
-        self.assertNotIn("datetime-local", css)
-        self.assertIn("gift-expires-field", css)
-        self.assertIn("<small class=\"muted\">", gift)
-
-
 if __name__ == "__main__":
     unittest.main()

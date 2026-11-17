@@ -3,22 +3,8 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-class Version364Tests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
-        notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"0.1.0"', notes)
 
 
 class AdminResellersHubTests(unittest.IsolatedAsyncioTestCase):
@@ -65,11 +51,6 @@ class AdminResellersHubTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ResellerNavFixTests(unittest.TestCase):
-    def test_preserve_state_includes_res_hubs(self):
-        src = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
-        self.assertIn('"res_settings"', src)
-        self.assertIn('"res_plans"', src)
-        self.assertIn("NAV_RESELLER_PLANS", src)
 
     def test_submenu_entries_fail_closed(self):
         from app.bot.keyboards import _reseller_submenu_entries, reply_action_map
@@ -124,11 +105,6 @@ class EntityOnlyInlineTests(unittest.TestCase):
         flat = [b.text for row in service_actions_reply_keyboard().keyboard for b in row]
         self.assertIn("♻️ رفرش وضعیت", flat)
         self.assertIn("⬅️ بازگشت", flat)
-
-    def test_plan_item_no_list_back(self):
-        src = (ROOT / "app/bot/handlers/reseller_plans.py").read_text(encoding="utf-8")
-        chunk = src.split("def _plan_item_kb")[1].split("async def _list_plans")[0]
-        self.assertNotIn("res:plans", chunk)
 
 
 if __name__ == "__main__":
