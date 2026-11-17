@@ -1,7 +1,7 @@
 """Approve a card receipt that nobody reviewed for the shop's chosen number of minutes.
 
 Each shop (``None`` = the platform) decides in its own settings; off by default. Only a new
-service purchase paid by card qualifies: not a wallet top-up, renewal, add-on or agency fee. A
+service or a renewal paid by card qualifies: not a wallet top-up, add-on or agency fee. A
 receipt that is a duplicate of another payment's, or whose fingerprint is unknown, stays for a
 person. Approval itself goes through ``approve_payment``, whose atomic claim makes a second
 attempt harmless.
@@ -20,7 +20,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentMethod, PaymentReceiptFingerprint, PaymentStatus
-from app.services.approval_rule import MUTATION_NOTE_PREFIXES, ApprovalRule, rule_from_settings
+from app.services.approval_rule import NO_WAIT_NOTE_PREFIXES, ApprovalRule, rule_from_settings
 from app.services.db_safe import rollback_quiet
 from app.services.receipts import auto_approve_receipt
 
@@ -35,7 +35,7 @@ def _shop_clause(shop_id: int | None) -> ColumnElement[bool]:
 
 
 def _waiting_clause() -> ColumnElement[bool]:
-    """A card receipt of a service purchase, attached and still undecided."""
+    """A card receipt of a new service or a renewal, attached and still undecided."""
     return and_(
         Payment.status == PaymentStatus.PENDING.value,
         Payment.method == PaymentMethod.CARD.value,
@@ -43,7 +43,7 @@ def _waiting_clause() -> ColumnElement[bool]:
         Payment.receipt_at.is_not(None),
         Payment.receipt_file_id.is_not(None),
         Order.status == OrderStatus.AWAITING_APPROVAL.value,
-        or_(Order.note.is_(None), and_(*[~Order.note.like(f"{prefix}%") for prefix in MUTATION_NOTE_PREFIXES])),
+        or_(Order.note.is_(None), and_(*[~Order.note.like(f"{prefix}%") for prefix in NO_WAIT_NOTE_PREFIXES])),
     )
 
 
