@@ -7,7 +7,7 @@ import logging
 from app.db.session import SessionLocal
 from app.services import pg_link_health
 from app.services.pg_link_alerts import evaluate_after_watchdog
-from app.services.pg_link_watchdog import run_watchdog_tick
+from app.services.pg_link_watchdog import consecutive_failures, run_watchdog_tick
 from app.services.pg_read_resilience import circuit_status
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ async def run_pg_link_watchdog() -> None:
                     session,
                     watchdog_ok=watchdog_ok,
                     failure_kind=result.failure_kind,
+                    consecutive_failures=consecutive_failures(),
                 )
         except Exception:
             logger.warning("PasarGuard link alert after watchdog failed", exc_info=True)
