@@ -15,7 +15,7 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.shop_broadcast_pages import SHOP_BROADCAST_PATH, shop_broadcast_scope
-from app.services.message_buttons import ButtonRules, delete_preset, form_inputs, save_preset, shop_may_link
+from app.services.message_buttons import delete_preset, form_inputs, save_preset, sender_rules
 from app.services.shop_scope import is_platform_admin
 
 PRESETS_PATH = "/message-buttons/presets"
@@ -48,7 +48,7 @@ def register_message_button_pages(app: FastAPI, *, require_staff: Callable, get_
                 shop_id,
                 name=str(form.get("name") or ""),
                 items=form_inputs(form),
-                rules=ButtonRules(allow_links=await shop_may_link(session, shop_id)),
+                rules=await sender_rules(session, shop_id),
             )
         except ValueError as exc:
             return _back(shop_id, err=str(exc))

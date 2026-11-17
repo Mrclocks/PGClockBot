@@ -25,7 +25,7 @@ from app.bot.nav_input import finish_text_step
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
-from app.services.broadcast import AUDIENCE_LABELS
+from app.services.broadcast_audience import describe, make_spec
 from app.services.broadcast_queue import BroadcastRequest, count_platform_targets, new_request_token, queue_broadcast
 from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard
 from app.services.redact import user_safe_error
@@ -112,7 +112,7 @@ async def _preview(
         return
     await state.set_state(BroadcastConfirmStates.confirm)
     await state.update_data(bc_buttons=stored, bc_token=new_request_token())
-    label = html.escape(AUDIENCE_LABELS.get(audience, audience))
+    label = html.escape(describe(make_spec(audience, shop_id=None)))
     await message.answer(f"👆 پیش‌نمایش پیام بالا.\nبرای «{label}» ({total} نفر) فرستاده شود؟", reply_markup=confirm_markup(total))
 
 

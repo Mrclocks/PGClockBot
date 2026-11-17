@@ -51,7 +51,7 @@ class SidebarPerRoleTests(unittest.TestCase):
         nav = labels(OWNER)
         self.assertEqual(nav["system"], ["داشبورد", "مرکز اقدام", "تنظیمات سیستم"])
         self.assertEqual(nav["shop"], ["نمای کلی فروشگاه", "کاربران ربات", "نمایندگان", "مالی", "پلن‌ها", "پشتیبانی",
-                                       "بازاریابی", "پاکسازی سرویس‌ها", "گزارش کارکنان", "تنظیمات ربات"])
+                                       "پیام گروهی", "بازاریابی", "پاکسازی سرویس‌ها", "گزارش کارکنان", "تنظیمات ربات"])
         self.assertEqual(nav["pg"][0], "نمای کلی پاسارگارد")
         self.assertEqual(nav["pg"][-1], "تست اتصال سرویس")
 
@@ -97,7 +97,26 @@ class ActiveItemTests(unittest.TestCase):
         self.assertEqual(active(OWNER, "/message-variables"), ["تنظیمات ربات"])
 
     def test_marketing_pages_light_the_marketing_entry(self) -> None:
-        self.assertEqual(active(OWNER, "/broadcast"), ["بازاریابی"])
+        self.assertEqual(active(OWNER, "/loyalty"), ["بازاریابی"])
+
+    def test_group_messages_have_their_own_entry_in_the_shop_section(self) -> None:
+        self.assertEqual(active(OWNER, "/broadcast"), ["پیام گروهی"])
+        shop = viewer("reseller", perms=("broadcast",), marketing=("/shop-broadcast",))
+        items = {i.key: i for s in build_sidebar(shop, path="/shop-broadcast") for i in s.items}
+        self.assertEqual(items["broadcast"].href, "/shop-broadcast")
+        self.assertTrue(items["broadcast"].active)
+        # A shop whose only marketing page is group messages gets no empty «بازاریابی» entry.
+        self.assertNotIn("marketing", items)
+
+    def test_campaigns_light_marketing_for_staff_without_group_messages(self) -> None:
+        campaigns_only = viewer("reseller", perms=("campaigns",), marketing=("/campaigns",))
+        self.assertEqual(active(campaigns_only, "/campaigns"), ["بازاریابی"])
+        both = viewer("reseller", perms=("campaigns", "broadcast"), marketing=("/campaigns", "/shop-broadcast"))
+        self.assertEqual(active(both, "/campaigns"), ["پیام گروهی"])
+        self.assertNotIn("بازاریابی", labels(both)["shop"])
+
+    def test_group_messages_entry_follows_the_route_guard(self) -> None:
+        self.assertNotIn("پیام گروهی", labels(RESELLER)["shop"])
 
     def test_finance_subpages_light_finance(self) -> None:
         self.assertEqual(active(OWNER, "/service-cancellations"), ["مالی"])

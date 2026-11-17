@@ -41,7 +41,7 @@
         },
         {
           "callback_data": "adm:broadcast:aud:users",
-          "text": "👥 کاربران عادی"
+          "text": "👥 مشتریان (بدون ادمین)"
         }
       ],
       [
@@ -56,13 +56,24 @@
       ],
       [
         {
+          "callback_data": "adm:bc:seg",
+          "style": "primary",
+          "text": "🎯 مخاطبان هدفمند"
+        },
+        {
+          "callback_data": "nv:adm:cmp",
+          "text": "📣 کمپین‌ها"
+        }
+      ],
+      [
+        {
           "callback_data": "bch:l",
           "text": "📜 تاریخچهٔ ارسال‌ها"
         }
       ],
       [
         {
-          "callback_data": "nv:adm:marketing",
+          "callback_data": "nv:adm:home",
           "text": "⬅️ بازگشت"
         }
       ]
@@ -104,6 +115,12 @@
           "callback_data": "cma:home:0",
           "style": "primary",
           "text": "📡 وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:broadcast",
+          "text": "📢 پیام گروهی"
         }
       ],
       [
@@ -179,6 +196,12 @@
           "callback_data": "cma:home:0",
           "style": "primary",
           "text": "📡 وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:broadcast",
+          "text": "📢 پیام گروهی"
         }
       ],
       [
@@ -291,18 +314,8 @@
           "text": "⭐ باشگاه مشتریان"
         },
         {
-          "callback_data": "nv:adm:broadcast",
-          "text": "📢 پیام گروهی"
-        }
-      ],
-      [
-        {
           "callback_data": "nv:adm:gc",
           "text": "🎁 کدهای هدیه"
-        },
-        {
-          "callback_data": "nv:adm:cmp",
-          "text": "📣 کمپین‌ها"
         }
       ],
       [
@@ -996,6 +1009,13 @@
       ],
       [
         {
+          "callback_data": "shp:bc:hub",
+          "style": "primary",
+          "text": "📢 پیام گروهی"
+        }
+      ],
+      [
+        {
           "callback_data": "qlk:v",
           "text": "🔗 لینک‌های سریع"
         }
@@ -1033,6 +1053,13 @@
           "callback_data": "nv:res:grp:account",
           "style": "primary",
           "text": "💼 حساب من"
+        }
+      ],
+      [
+        {
+          "callback_data": "shp:bc:hub",
+          "style": "primary",
+          "text": "📢 پیام گروهی"
         }
       ],
       [
@@ -3202,7 +3229,7 @@
           "text": "📢 همه"
         },
         {
-          "text": "👥 کاربران عادی"
+          "text": "👥 مشتریان (بدون ادمین)"
         }
       ],
       [
@@ -3257,6 +3284,11 @@
         {
           "style": "primary",
           "text": "📡 وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "text": "📢 پیام گروهی"
         }
       ],
       [
@@ -3361,9 +3393,6 @@
         {
           "style": "success",
           "text": "⭐ باشگاه مشتریان"
-        },
-        {
-          "text": "📢 پیام گروهی"
         }
       ],
       [

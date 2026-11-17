@@ -32,6 +32,12 @@ DOT_LABELS: dict[str, str] = {
 MARKETING_KEY = "marketing"
 # The marketing entry opens the list of the marketing area (app/api/marketing_pages.py).
 MARKETING_LIST_HREF = "/marketing"
+BROADCAST_KEY = "broadcast"
+# Group messages have their own entry in «فروشگاه»: the platform page for the owner, the shop page for a shop.
+# Visibility comes from marketing_nav, which mirrors each route's guard, so the hrefs below are the only two.
+BROADCAST_HREFS: tuple[str, ...] = ("/broadcast", "/shop-broadcast")
+# Campaigns were merged into group messages: their page lights the group-message entry, not «بازاریابی».
+CAMPAIGNS_HREF = "/campaigns"
 
 # Phone bottom bar: dashboard and plans, then the most used pages the viewer may open. The action center
 # is not here: it has its own button with a count in the phone header.
@@ -227,7 +233,8 @@ _SHOP_ITEMS: tuple[_ItemSpec, ...] = (
     _ItemSpec("plans", "پلن‌ها", "/plans", "plans", _perm("plans"), _starts("/plans")),
     _ItemSpec("tickets", "پشتیبانی", "/tickets", "ticket",
               lambda v: v.is_owner or "tickets" in v.perms, _starts("/tickets"), DOT_TICKETS),
-    # Placeholder: href and visibility come from marketing_nav (see _marketing_item).
+    # Placeholders: href and visibility come from marketing_nav (see _broadcast_item and _marketing_item).
+    _ItemSpec(BROADCAST_KEY, "پیام گروهی", "", "broadcast", lambda v: False, lambda loc: False),
     _ItemSpec(MARKETING_KEY, "بازاریابی", "", "megaphone", lambda v: False, lambda loc: False),
     _ItemSpec("service_cleanup", "پاکسازی سرویس‌ها", "/service-cleanup", "trash",
               lambda v: v.is_owner or "service_cleanup" in v.perms, _starts("/service-cleanup")),
@@ -253,22 +260,40 @@ _PG_ITEMS: tuple[_ItemSpec, ...] = (
 def _items(specs: Iterable[_ItemSpec], viewer: NavViewer, loc: NavLocation) -> list[NavItem]:
     items: list[NavItem] = []
     for spec in specs:
-        if spec.key == MARKETING_KEY:
-            marketing = _marketing_item(spec, viewer, loc)
-            if marketing is not None:
-                items.append(marketing)
+        if spec.key in _DYNAMIC_ITEMS:
+            item = _DYNAMIC_ITEMS[spec.key](spec, viewer, loc)
+            if item is not None:
+                items.append(item)
         elif spec.visible(viewer):
             items.append(NavItem(spec.key, spec.label, spec.href, spec.icon, bool(spec.active(loc)), spec.dot, spec.short))
     return items
 
 
-def _marketing_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> NavItem | None:
-    """One entry for every marketing section the viewer may open; it opens the list of those sections."""
-    if not viewer.marketing_hrefs:
+def _broadcast_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> NavItem | None:
+    """The group-message page the viewer may open (platform or shop), as its own entry."""
+    href = next((h for h in BROADCAST_HREFS if h in viewer.marketing_hrefs), None)
+    if href is None:
         return None
-    paths = (MARKETING_LIST_HREF, *(href.split("?")[0] for href in viewer.marketing_hrefs))
+    return NavItem(spec.key, spec.label, href, spec.icon, loc.path.startswith((href, CAMPAIGNS_HREF)))
+
+
+def _marketing_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> NavItem | None:
+    """One entry for every other marketing section the viewer may open; it opens the list of those sections."""
+    # Campaigns open from the group-message page when the viewer has one; otherwise they stay in this list.
+    has_group_page = any(href in viewer.marketing_hrefs for href in BROADCAST_HREFS)
+    nested = (*BROADCAST_HREFS, CAMPAIGNS_HREF) if has_group_page else BROADCAST_HREFS
+    hrefs = [href for href in viewer.marketing_hrefs if href not in nested]
+    if not hrefs:
+        return None
+    paths = (MARKETING_LIST_HREF, *(href.split("?")[0] for href in hrefs))
     active = any(loc.path.startswith(path) for path in paths)
     return NavItem(spec.key, spec.label, MARKETING_LIST_HREF, spec.icon, active)
+
+
+_DYNAMIC_ITEMS: dict[str, Callable[[_ItemSpec, NavViewer, NavLocation], NavItem | None]] = {
+    BROADCAST_KEY: _broadcast_item,
+    MARKETING_KEY: _marketing_item,
+}
 
 
 def build_sidebar(viewer: NavViewer, *, path: str, tab: str = "") -> tuple[NavSection, ...]:
@@ -339,7 +364,7 @@ def dock_choices() -> tuple[DockChoice, ...]:
 
 
 _ALL_SPECS: dict[str, _ItemSpec] = {
-    s.key: s for s in (*_SYSTEM_OWNER, *_SYSTEM_STAFF, *_SHOP_ITEMS, *_PG_ITEMS) if s.key != MARKETING_KEY
+    s.key: s for s in (*_SYSTEM_OWNER, *_SYSTEM_STAFF, *_SHOP_ITEMS, *_PG_ITEMS) if s.key not in _DYNAMIC_ITEMS
 }
 
 # Mini App «پنل وب» shortcuts in display order: (id the Mini App script knows, registry key).

@@ -1,8 +1,9 @@
-// Buttons under a staff message (message-buttons.js): limits, the link field and filling from a saved set.
+// Buttons under a staff message (message-buttons.js): limits, the link and plan fields, filling from a saved set,
+// and the Telegram-style preview (two buttons to a row, tags dropped from the text).
 "use strict";
 
 const assert = require("assert");
-const { canAdd, needsUrl, presetButtons } = require("../app/web/static/message-buttons.js");
+const { canAdd, needsUrl, needsPlan, presetButtons, previewRows, plainText } = require("../app/web/static/message-buttons.js");
 
 assert.strictEqual(canAdd(0, 4), true);
 assert.strictEqual(canAdd(3, 4), true);
@@ -18,5 +19,16 @@ const presets = [
 assert.deepStrictEqual(presetButtons(presets, "3", 4).map((b) => b.target), ["shop", "wallet", "support", "club"]);
 assert.deepStrictEqual(presetButtons(presets, "9", 4), []);
 assert.deepStrictEqual(presetButtons(null, "3", 4), []);
+
+assert.strictEqual(needsPlan("plan"), true);
+assert.strictEqual(needsPlan("shop"), false);
+
+assert.deepStrictEqual(previewRows([1, 2, 3]), [[1, 2], [3]]);
+assert.deepStrictEqual(previewRows([1, 2, 3, 4]), [[1, 2], [3, 4]]);
+assert.deepStrictEqual(previewRows([]), []);
+
+assert.strictEqual(plainText("<b>سلام</b> &lt;دوست&gt;<br>خط دوم"), "سلام <دوست>\nخط دوم");
+assert.strictEqual(plainText('<a href="https://x.example">لینک</a>'), "لینک");
+assert.strictEqual(plainText(null), "");
 
 console.log("message_buttons tests passed");

@@ -230,6 +230,8 @@ def _reply_admin_hub_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         (REPLY_ACTION_ADM_HUB_MARKETING, _t(ui, "btn_adm_hub_marketing")),
         (REPLY_ACTION_ADM_HUB_SYSTEM, _t(ui, "btn_adm_hub_system")),
         ("connection_status_admin", _t(ui, "btn_connection_status_admin")),
+        # Group messages are used often enough to sit at the top level, not inside «بازاریابی».
+        (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
     ]
 
 
@@ -274,7 +276,6 @@ def _reply_admin_product_entries(
 def _reply_admin_marketing_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
         (REPLY_ACTION_ADMIN_LOYALTY, _t(ui, "btn_adm_loyalty")),
-        (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
     ]
 
 
@@ -300,6 +301,7 @@ def _reply_admin_entries(
         ),
         *_reply_admin_product_entries(ui, pg_features=pg_features),
         *_reply_admin_marketing_entries(ui),
+        (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
         *_reply_admin_system_entries(ui),
     ]
 
@@ -572,7 +574,6 @@ _RESELLER_FEATURE_LEAVES: tuple[tuple[str, str, str], ...] = (
     ("payments", "res_payments", "btn_res_payments"),
     ("tickets", "res_tickets", "btn_res_tickets"),
     ("loyalty", "res_loyalty", "btn_res_loyalty"),
-    ("broadcast", "res_broadcast", "btn_res_broadcast"),
     ("cashback", "res_cashback", "btn_res_cashback"),
     ("gift_codes", "res_gift_codes", "btn_res_gift_codes"),
     ("campaigns", "res_campaigns", "btn_res_campaigns"),
@@ -617,6 +618,9 @@ def _reseller_submenu_entries(
     for perm, action, label_key in _RESELLER_FEATURE_LEAVES:
         if shop_feature_allowed(key=perm, profile=profile):
             entries.append((action, _t(ui, label_key)))
+    # Group messages sit on the panel home itself (reseller_hub_groups.RESELLER_HOME_ACTIONS).
+    if shop_feature_allowed(key="broadcast", profile=profile):
+        entries.append(("res_broadcast", _t(ui, "btn_res_broadcast")))
     # Login card: shop owner only (never bot_admin assistants).
     if show_owner_creds:
         entries.append((REPLY_ACTION_CREDS, _t(ui, "btn_reseller_creds") or "🔑 اطلاعات ورود"))

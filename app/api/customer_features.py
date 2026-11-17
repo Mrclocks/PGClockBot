@@ -15,6 +15,7 @@ from app.services.campaigns import (
     change_campaign_state,
     create_campaign,
 )
+from app.services.marketing_nav import group_message_page
 from app.services.panel_sidebar_cache import invalidate_sidebar_counts, sidebar_cache_key
 from app.services.service_cancellations import approve_cancellation, reject_cancellation
 from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
@@ -131,6 +132,7 @@ def register_customer_features(app, *, render, require_staff, get_db):
             {
                 "staff": staff,
                 "mode": "campaigns",
+                "group_page": group_message_page(staff),
                 "audiences": AUDIENCES,
                 "audience": audience,
                 "days": days,

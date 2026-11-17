@@ -376,6 +376,9 @@ class InputAndFailureTests(ShopBroadcastCase):
 
 class AuthzWebTests(ShopBroadcastCase):
     def test_shop_broadcast_scope_requires_broadcast_permission_and_shop(self):
+        self.assertEqual(
+            shop_broadcast_scope({"role": "reseller", "permissions": ["broadcast"], "bot_user_id": SHOP_A}), SHOP_A
+        )
         with self.assertRaises(HTTPException):
             shop_broadcast_scope({"role": "reseller", "permissions": ["campaigns"], "bot_user_id": SHOP_A})
         with self.assertRaises(HTTPException):

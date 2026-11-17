@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.bot.handlers import shop_marketing_bot as view
 from app.bot.nav_inline import admin_marketing_hub_keyboard, reseller_group_hub_keyboard
-from app.bot.reseller_hub_groups import reseller_group
+from app.bot.reseller_hub_groups import NESTED_ACTIONS, reseller_group
 from app.db import Base
 from app.db.models import BotUser, CatalogDiscount, ChargeCode, FunnelEvent, TargetedCampaign
 from app.services import bot_feedback_texts as feedback
@@ -211,6 +211,12 @@ class HubEntryTests(unittest.TestCase):
         entries = [(action, action) for action in view.SHOP_LEAF_OPENERS]
         with patch("app.bot.reply_keyboards._reseller_submenu_entries", return_value=entries):
             found = callbacks(reseller_group_hub_keyboard("shop", MagicMock(), dict(DEFAULT_SETTINGS)))
-        for expected in ("res:gc", "res:cmp", "dsc:l", "fnl:v"):
+        for expected in ("res:gc", "dsc:l", "fnl:v"):
             self.assertIn(expected, found)
+        # Staff without group messages open campaigns here; with group messages they open from that hub instead.
+        self.assertIn("res:cmp", found)
         self.assertTrue(set(view.SHOP_LEAF_OPENERS) <= set(reseller_group("shop").actions))
+        with patch("app.bot.reply_keyboards._reseller_submenu_entries", return_value=[*entries, ("res_broadcast", "b")]):
+            found = callbacks(reseller_group_hub_keyboard("shop", MagicMock(), dict(DEFAULT_SETTINGS)))
+        self.assertNotIn("res:cmp", found)
+        self.assertIn("res_campaigns", NESTED_ACTIONS)
