@@ -24,6 +24,13 @@ ROLE_AMBIGUOUS = (
 )
 ROLE_NOT_FOUND = "نقش پاسارگارد انتخاب‌شده در پنل یافت نشد — نقش پلن را دوباره انتخاب کنید"
 OWNER_ROLE_FORBIDDEN = "نمی‌توان نقش مالک پاسارگارد را به ادمین جدید داد"
+ROLE_LIST_UNREADABLE = (
+    "پاسارگارد برای ساخت ادمین «نقش» می‌خواهد ولی ربات نتوانست فهرست نقش‌ها را بخواند "
+    "(معمولاً کلید API یا ادمین متصل به ربات اجازهٔ خواندن نقش‌ها را ندارد). "
+    "راه حل: پلن نمایندگی‌ای انتخاب کنید که نقش پاسارگارد دارد، "
+    "یا به اتصال پاسارگارد ربات دسترسی خواندن نقش‌ها بدهید."
+)
+VALIDATION_STATUS = 422
 
 
 class AdminRoleError(ValueError):
@@ -80,6 +87,26 @@ async def resolve_new_admin_role_id(client: _RoleSource, requested: int | None) 
         raise AdminRoleError(ROLE_AMBIGUOUS)
     logger.info("new PasarGuard admin gets the only non-owner role id=%s", candidates[0])
     return candidates[0]
+
+
+def _names_role_field(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    loc = item.get("loc")
+    return isinstance(loc, (list, tuple)) and "role_id" in loc
+
+
+def is_missing_role_rejection(exc: BaseException) -> bool:
+    """True when the panel refused a create-admin call only for lacking ``role_id``.
+
+    A validation refusal means no admin was created, so the caller may report it
+    plainly instead of treating the outcome as unknown.
+    """
+    if getattr(exc, "status_code", None) != VALIDATION_STATUS:
+        return False
+    body = getattr(exc, "body", None)
+    detail = body.get("detail") if isinstance(body, dict) else None
+    return isinstance(detail, list) and any(_names_role_field(item) for item in detail)
 
 
 def apply_admin_role(payload: dict[str, Any], role_id: int | None) -> None:

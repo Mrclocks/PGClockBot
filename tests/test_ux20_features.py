@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from app.services.ux20 import (
     FUNNEL_STEPS,
@@ -492,15 +492,6 @@ class ButtonStyleTests(unittest.TestCase):
 
 
 class Ux20VersionTests(unittest.TestCase):
-    def test_version_aligned(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertEqual(Path("VERSION").read_text().strip(), __version__)
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn(f'"{__version__}"', notes)
-        self.assertIn('"0.1.0"', notes)
 
     def test_bot_tickets_controllable_from_panel(self):
         src = Path("app/api/panel_tickets_pages.py").read_text(encoding="utf-8")

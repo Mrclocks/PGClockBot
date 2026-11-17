@@ -19,6 +19,10 @@ from app.services.screen_titles import SCREEN_TEXT_TAB, screen_text_defaults, sc
 from app.services.settings_button_labels import appearance_button_subs, shop_button_subs
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
+from app.services.service_import_config import (
+    DEFAULT_MAX_PER_USER as IMPORT_DEFAULT_MAX_PER_USER,
+    UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
+)
 from app.services.entry_approval_config import (
     ENTRY_APPROVAL_DEFAULTS,
     GROUP_TITLE as ENTRY_APPROVAL_GROUP,
@@ -886,6 +890,10 @@ DEFAULT_SETTINGS = {
     "user_alert_low_enabled": "0",
     "user_alert_low_traffic_pct": "20",
     "user_alert_low_time_pct": "20",
+    "user_alert_low_days": "0",
+    # Empty = the built-in alert texts (usage_alert_messages).
+    "user_alert_time_text": "",
+    "user_alert_traffic_text": "",
     "first_use_nudge_enabled": "0",
     # Expired / volume-finished service cleanup (service_cleanup.py keeps the same defaults).
     "expired_cleanup_enabled": "0",
@@ -1214,6 +1222,7 @@ DEFAULT_SETTINGS = {
     "backup_last_verify_ok": "",
     "backup_keep_count": "10",
     "backup_telegram_enabled": "0",
+    "backup_telegram_allow_env": "0",
     "backup_telegram_custom_bot": "0",
     "backup_telegram_bot_token": "",
     "backup_telegram_chat_ids": "",
@@ -1235,7 +1244,7 @@ DEFAULT_SETTINGS = {
     "miniapp_accent_color": "",
     "miniapp_notice": "",
     "service_import_mode": "instant",
-    "service_import_max_per_user": "5",
+    "service_import_max_per_user": str(IMPORT_DEFAULT_MAX_PER_USER),
     "service_import_paths": "",
     "service_import_admins": "",
 }
@@ -1298,7 +1307,7 @@ ALL_SETTINGS_TABS: list[tuple[str, str]] = [*SETTINGS_TABS, *PANEL_SETTINGS_TABS
 
 BUTTON_LABELS_GROUP = "متن دکمه‌های منو"
 
-# Settings fields shown only while another select field has one of the listed values:
+# Settings fields shown only while another select or switch field has one of the listed values:
 # key -> (controlling key, values that show it). The form hides the rest and keeps their saved values.
 SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
     "auto_approve_after_minutes": ("auto_approve_payments", ("1",)),
@@ -1311,7 +1320,17 @@ SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
     "crypto_rate_api_url": ("crypto_rate_mode", ("api",)),
     "crypto_rate_api_path": ("crypto_rate_mode", ("api",)),
     "crypto_rate_api_divisor": ("crypto_rate_mode", ("api",)),
+    "backup_telegram_allow_env": ("backup_telegram_enabled", ("1",)),
     **entry_approval_visibility(),
+}
+
+# Switches whose "on" accepts a security risk: the warning is shown under the switch in danger tone.
+SETTING_RISK_NOTES: dict[str, str] = {
+    "backup_telegram_allow_env": (
+        "با روشن کردن این گزینه، بکاپ‌هایی که .env دارند همراه توکن ربات، WEB_SECRET، رمز دیتابیس "
+        "و دسترسی پاسارگارد در تلگرام نگه داشته می‌شوند. هر کس به این گفتگو یا حساب تلگرام گیرنده "
+        "دسترسی پیدا کند، کنترل کامل پنل و ربات را به دست می‌گیرد. فقط برای گفتگوی خصوصی و امن روشن کنید."
+    ),
 }
 
 # Main-bot switch only: a shop gets the name step from its package permission instead.
@@ -1580,6 +1599,24 @@ SETTING_GROUPS = {
             "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام برود",
         ),
         (
+            "user_alert_low_days",
+            "یا وقتی چند روز مانده؟",
+            "number",
+            "۰ تا ۶۰ — مثلاً ۳ یعنی سه روز مانده به پایان هم پیام برود، هر کدام زودتر برسد؛ ۰ = فقط درصد",
+        ),
+        (
+            "user_alert_time_text",
+            "متن هشدار کمبود زمان",
+            "textarea",
+            "خالی = متن پیش‌فرض. متغیرها: {service_name} {days_left} {expire_date} {shop_title}",
+        ),
+        (
+            "user_alert_traffic_text",
+            "متن هشدار کمبود حجم",
+            "textarea",
+            "خالی = متن پیش‌فرض. متغیرها: {service_name} {traffic_used} {shop_title}",
+        ),
+        (
             "first_use_nudge_enabled",
             "پیام کمکی برای سرویس بدون مصرف",
             "toggle",
@@ -1623,7 +1660,7 @@ SETTING_GROUPS = {
             "pg_link_alerts_enabled",
             "اعلان قطع و برقراری ارتباط پاسارگارد",
             "toggle",
-            "به مالک تلگرام اطلاع می‌دهد وقتی لینک قطع یا دوباره برقرار می‌شود. حداکثر یک پیام از هر نوع در ۱۵ دقیقه. پیش‌فرض روشن است.",
+            "به مالک تلگرام اطلاع می‌دهد وقتی لینک حدود یک دقیقه قطع بماند و بعد از بازیابی پایدار دوباره برقرار شود. قطع لحظه‌ای پیام نمی‌دهد؛ حداکثر یک پیام قطع در ۳۰ دقیقه. پیش‌فرض روشن است.",
         ),
     ],
     "گزارش و عملیات": [
@@ -1635,9 +1672,9 @@ SETTING_GROUPS = {
         ),
         (
             "one_tap_renew_enabled",
-            "دکمه تمدید یک‌ضرب در هشدار انقضا",
+            "دکمهٔ تمدید سرویس در هشدارها",
             "toggle",
-            "در پیام هشدار انقضا دکمه تمدید سریع نمایش داده شود",
+            "در پیام هشدار کمبود زمان و حجم، دکمهٔ «تمدید سرویس» نمایش داده شود",
         ),
         (
             "capacity_warn_pct",
@@ -1685,7 +1722,13 @@ SETTING_GROUPS = {
             "backup_telegram_enabled",
             "ارسال بکاپ به تلگرام",
             "toggle",
-            "بعد از هر بکاپ بدون .env، فایل برای گیرنده‌ها فرستاده می‌شود (تا ۵۰ مگابایت).",
+            "بعد از هر بکاپ، فایل برای گیرنده‌ها فرستاده می‌شود (تا ۵۰ مگابایت). بکاپ شامل .env فقط با «تأیید ریسک» فرستاده می‌شود.",
+        ),
+        (
+            "backup_telegram_allow_env",
+            "تأیید ریسک: ارسال بکاپ همراه .env",
+            "toggle",
+            "خاموش: بکاپی که .env دارد ساخته می‌شود ولی به تلگرام نمی‌رود.",
         ),
         (
             "backup_telegram_custom_bot",
@@ -1965,8 +2008,10 @@ SETTING_GROUPS = {
         (
             "service_import_max_per_user",
             "سقف سرویس افزوده‌شده برای هر مشتری",
-            "number",
-            "بین ۱ تا ۲۰ — پیش‌فرض ۵",
+            "number_unlimited",
+            "با دکمهٔ «نامحدود» سقفی نمی‌ماند — پیش‌فرض ۵",
+            # (value stored by the «نامحدود» button, number shown when nothing valid is stored)
+            (IMPORT_UNLIMITED_VALUE, str(IMPORT_DEFAULT_MAX_PER_USER)),
         ),
     ],
     "مسیرها و ادمین‌های مجاز": [
@@ -2258,15 +2303,6 @@ async def get_all_settings(
 
 def on(value: str | None) -> bool:
     return (value or "").strip() in {"1", "true", "yes", "on", "True"}
-
-
-def clamp_alert_percent(raw: str | None, default: int = 20) -> str:
-    """Keep user-alert thresholds in 1..99."""
-    try:
-        n = int(float(str(raw).strip()))
-    except Exception:
-        n = default
-    return str(max(1, min(99, n)))
 
 
 def is_protected_admin(user: BotUser) -> bool:

@@ -124,7 +124,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "buy_continue", "label": "ادامه خرید / تأیید پلن", "group": "فروشگاه", "default": "primary"},
     {"id": "force_join_check", "label": "عضو شدم (کانال اجباری)", "group": "فروشگاه", "default": "primary"},
     {"id": "guides", "label": "آموزش اتصال (فهرست)", "group": "فروشگاه", "default": "primary"},
-    {"id": "one_tap_renew", "label": "تمدید یک‌ضربی (هشدار انقضا)", "group": "فروشگاه", "default": "primary"},
+    {"id": "one_tap_renew", "label": "تمدید سرویس (هشدارها)", "group": "فروشگاه", "default": "primary"},
     # Terms/rules accept buttons — own group (also editable on تنظیمات ← قوانین)
     {"id": "terms_entry", "label": "موافقم (قوانین ورود)", "group": "قوانین", "default": "primary"},
     {"id": "terms_buy_user", "label": "موافقم (قوانین خرید کاربر)", "group": "قوانین", "default": "primary"},

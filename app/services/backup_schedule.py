@@ -13,8 +13,8 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.backup import create_backup, prune_backups, validate_backup_archive
-from app.services.backup_settings import KEEP_KEY, keep_count
+from app.services.backup import create_backup, validate_backup_archive
+from app.services.backup_settings import prune_to_configured_retention
 from app.services.backup_telegram import notify_backup_problem, send_backup
 from app.services.users import get_setting, on, set_setting
 
@@ -78,7 +78,7 @@ async def run_nightly_backup(session: AsyncSession, now: datetime) -> str:
     if verified:
         await set_setting(session, LAST_OK_KEY, now.isoformat())
     await session.commit()
-    await asyncio.to_thread(prune_backups, keep_count(await get_setting(session, KEEP_KEY, "10")))
+    await prune_to_configured_retention(session)
     if not verified:
         logger.warning("scheduled backup verify failed: %s", error)
         await notify_backup_problem(session, UNVERIFIED_MESSAGE)

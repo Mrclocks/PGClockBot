@@ -84,7 +84,8 @@ class SaveTests(unittest.IsolatedAsyncioTestCase):
             ("auto_approve_after_minutes", "1441"),
             ("auto_approve_after_max_amount", "2000000001"),
             ("service_import_max_per_user", "0"),
-            ("service_import_max_per_user", "21"),
+            ("service_import_max_per_user", "-1"),
+            ("service_import_max_per_user", "100001"),
             ("service_import_max_per_user", "NaN"),
             ("auto_approve_after_minutes", "1.5"),
         ):
@@ -94,11 +95,26 @@ class SaveTests(unittest.IsolatedAsyncioTestCase):
                 message.answer.assert_awaited_once()
 
     async def test_numbers_inside_the_bounds_are_saved(self) -> None:
-        for key, good in (("admin_daily_report_hour", "23"), ("service_import_max_per_user", "20"), ("auto_approve_after_minutes", "۳۰")):
+        for key, good in (
+            ("admin_daily_report_hour", "23"),
+            ("service_import_max_per_user", "500"),
+            ("auto_approve_after_minutes", "۳۰"),
+        ):
             with self.subTest(key=key):
                 saved, _ = await self.save(key, good)
                 self.assertEqual(saved.await_args.args[1], key)
                 self.assertTrue(saved.await_args.args[2].isdigit())
+
+    async def test_the_import_cap_takes_the_word_unlimited(self) -> None:
+        for word in ("نامحدود", "Unlimited"):
+            with self.subTest(word=word):
+                saved, _ = await self.save("service_import_max_per_user", word)
+                self.assertEqual(saved.await_args.args[1:], ("service_import_max_per_user", "unlimited"))
+
+    async def test_other_number_settings_refuse_the_word_unlimited(self) -> None:
+        saved, message = await self.save("admin_daily_report_hour", "نامحدود")
+        saved.assert_not_awaited()
+        message.answer.assert_awaited_once()
 
     async def test_the_mini_app_notice_is_one_plain_line_within_the_limit(self) -> None:
         saved, _ = await self.save("miniapp_notice", "  تخفیف\nامروز  ")

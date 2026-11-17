@@ -20,6 +20,7 @@ from app.services.pg_read_cache import NODE_LIST_MAX_AGE_SEC
 from app.services.pg_read_resilience import circuit_status
 from app.services.quick_links import quick_links_page
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
+from app.services.usage_alert_messages import alerts_off_settings_page
 from app.services.secret_box import reveal_bot_token
 
 # Same freshness as the node list on this page.
@@ -366,7 +367,8 @@ async def _owner_home_context(staff: dict, session: AsyncSession):
     await recover_session(session)
     show_pg_nodes = "pg_nodes" in (staff.get("pg_permissions") or [])
     # Settings come from a short in-process cache; everything slow below runs at the same time.
-    funnel_enabled, expire_days = _ops_options(await _safe_settings(session, reseller_id=None))
+    ui = await _safe_settings(session, reseller_id=None)
+    funnel_enabled, expire_days = _ops_options(ui)
 
     async def overview_then_health() -> tuple[dict, dict]:
         # The health probe follows the overview so it reuses the system stats the overview just read.
@@ -408,6 +410,7 @@ async def _owner_home_context(staff: dict, session: AsyncSession):
             "wallet_card": wallet_card,
             "trend": trend,
             "show_pg_nodes": show_pg_nodes,
+            "alerts_off_page": alerts_off_settings_page(ui, is_owner=True, can_edit_shop=True),
         },
     )
 
@@ -507,7 +510,8 @@ async def _shop_home_context(staff: dict, session: AsyncSession, rid: int):
     await recover_session(session)
     profile = await _shop_profile(session, rid)
     bot_setup_needed = bot_needs_setup(profile)
-    funnel_enabled, expire_days = _ops_options(await _safe_settings(session, reseller_id=rid))
+    ui = await _safe_settings(session, reseller_id=rid)
+    funnel_enabled, expire_days = _ops_options(ui)
     # Only the shop stats use the request session; the bot probe needs none and the rest open their own.
     stats, bot, (pg_limits, pg_health), (funnel, periods, action_center), trend = await asyncio.gather(
         _shop_stats(session, rid, bot_setup_needed=bot_setup_needed),
@@ -535,6 +539,9 @@ async def _shop_home_context(staff: dict, session: AsyncSession, rid: int):
             "periods": periods,
             "action_center": action_center,
             "dashboard_degraded": False,
+            "alerts_off_page": alerts_off_settings_page(
+                ui, is_owner=False, can_edit_shop=can_shop(authz_from_staff(staff), "shop_settings")
+            ),
         },
     )
 

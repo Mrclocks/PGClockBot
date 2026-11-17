@@ -30,11 +30,12 @@ valid current-admin response marks discovery complete, so an initial outage does
 not permanently keep API-key clients on a dashboard URL after the panel recovers.
 
 A timeout, transport failure, DNS failure or 502/503/504 answer fails the rest of
-that page's reads at once. Reads for everyone pause only after three such failures
-within thirty seconds, so one slow request does not hide PasarGuard from every
-shop. The first pause lasts five seconds; each failed recovery probe doubles it up
-to sixty seconds, and a successful read resets it. A request that started before
-the pause and fails late does not extend it. Other 5xx answers fail only that read.
+that page's reads at once. Reads for everyone pause only after five such failures
+within thirty seconds, so one slow request or a couple of concurrent dashboard
+loads do not hide PasarGuard from every shop. The first pause lasts five seconds;
+each failed recovery probe doubles it up to sixty seconds, and a successful read
+resets it. A request that started before the pause and fails late does not extend
+it. Other 5xx answers fail only that read.
 `/pg/metrics` polling honours a pause but never starts one. Health is shared for
 the configured panel's origin, with at most eight concurrent reads and no waiting
 queue. After the pause, one read probes recovery. An older concurrent success

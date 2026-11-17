@@ -33,7 +33,12 @@ from app.services.pg_access import (
     staff_from_platform_caps,
     staff_may_delete_pg_admin,
 )
-from app.services.pg_admin_roles import apply_admin_role, resolve_new_admin_role_id
+from app.services.pg_admin_roles import (
+    ROLE_LIST_UNREADABLE,
+    apply_admin_role,
+    is_missing_role_rejection,
+    resolve_new_admin_role_id,
+)
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.pg_panel_access import (
     close_access_warning,
@@ -1323,6 +1328,9 @@ async def provision_reseller(
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
+            if role_id is None and is_missing_role_rejection(e):
+                # The role list was unreadable, so no role was sent; the panel created nothing.
+                raise ValueError(ROLE_LIST_UNREADABLE) from e
             # No second create: the first one may have succeeded on the panel.
             raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
 
