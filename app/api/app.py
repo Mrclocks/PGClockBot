@@ -2974,11 +2974,13 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
         enabled = str(form.get("trial_enabled") or "") in {"1", "on", "true", "yes"}
         await set_setting(session, "trial_enabled", "1" if enabled else "0", reseller_id=owner_id)
-        for_service_owners = str(form.get(TRIAL_SERVICE_OWNERS_KEY) or "") in {"1", "on", "true", "yes"}
-        await set_setting(
-            session, TRIAL_SERVICE_OWNERS_KEY, "1" if for_service_owners else "0", reseller_id=owner_id
-        )
+        # Both fields came with the placement choice: a form without it (an older page) keeps both saved values,
+        # since an unchecked switch and a missing one look the same.
         if placement is not None:
+            for_service_owners = str(form.get(TRIAL_SERVICE_OWNERS_KEY) or "") in {"1", "on", "true", "yes"}
+            await set_setting(
+                session, TRIAL_SERVICE_OWNERS_KEY, "1" if for_service_owners else "0", reseller_id=owner_id
+            )
             await save_trial_placement(session, placement, reseller_id=owner_id)
         name = str(form.get("name") or "تست رایگان").strip() or "تست رایگان"
         try:

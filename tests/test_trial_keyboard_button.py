@@ -347,6 +347,36 @@ class KeyboardTapTests(TrialCase):
             message.text = "خرید"
             self.assertFalse(await trial_menu.TrialMenuLabel()(message, session))
 
+    async def test_cached_labels_match_the_aliases_of_the_full_settings(self) -> None:
+        from app.services.reply_label_aliases import ALIAS_SETTING_KEY, register_aliases_on_mapping
+
+        ui = dict(DEFAULT_SETTINGS)
+        ui["btn_trial"] = "تست مجانی"
+        ui["btn_shop"] = "فروشگاه"
+        ui[ALIAS_SETTING_KEY] = '{"trial": ["تست قدیمی"], "shop": ["خرید قدیمی"]}'
+        expected = {"تست مجانی": "trial"}
+        register_aliases_on_mapping(expected, ui)
+        self.assertEqual(trial_menu.trial_menu_labels(ui), frozenset(expected))
+        self.assertIn("تست قدیمی", trial_menu.trial_menu_labels(ui))
+        self.assertNotIn("خرید قدیمی", trial_menu.trial_menu_labels(ui))
+
+    async def test_the_label_typed_as_a_settings_value_is_not_a_trial_tap(self) -> None:
+        from aiogram.fsm.context import FSMContext
+        from aiogram.fsm.storage.base import StorageKey
+        from aiogram.fsm.storage.memory import MemoryStorage
+
+        from app.bot.handlers.admin_settings import SettingsStates
+
+        handler = next(h for h in trial_menu.router.message.handlers if h.callback is trial_menu.keyboard_get_trial)
+        message, _ = self._tap()
+        for fsm_state, expected in ((SettingsStates.edit_value, False), (None, True)):
+            state = FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=1, user_id=1))
+            await state.set_state(fsm_state)
+            async with self.Session() as session:
+                matched, _ = await handler.check(message, state=state, session=session)
+            with self.subTest(state=fsm_state):
+                self.assertEqual(matched, expected)
+
     async def test_a_tap_starts_the_shop_purchase_of_the_single_trial_plan(self) -> None:
         message, screen = self._tap()
         replay, heal, edit = await self._run(message)
@@ -495,22 +525,25 @@ class TrialSettingsRouteTests(ImportCase):
 
     async def test_the_service_owner_switch_is_saved_for_that_shop_only(self) -> None:
         shop_staff = {"role": "reseller", "permissions": ["plans"], "bot_user_id": SHOP}
-        await self._post(shop_staff, {offer.TRIAL_SERVICE_OWNERS_KEY: "1"})
+        await self._post(shop_staff, {"trial_button_placement": "offer", offer.TRIAL_SERVICE_OWNERS_KEY: "1"})
         async with self.Session() as session:
             self.assertEqual(await get_setting(session, offer.TRIAL_SERVICE_OWNERS_KEY, reseller_id=SHOP), "1")
             self.assertEqual(await get_setting(session, offer.TRIAL_SERVICE_OWNERS_KEY), "")
-        await self._post(shop_staff, {})
+        await self._post(shop_staff, {"trial_button_placement": "offer"})
         async with self.Session() as session:
             self.assertEqual(await get_setting(session, offer.TRIAL_SERVICE_OWNERS_KEY, reseller_id=SHOP), "0")
 
     async def test_an_older_form_without_the_field_keeps_the_saved_choice(self) -> None:
         async with self.Session() as session:
             await offer.save_trial_placement(session, "both", reseller_id=SHOP)
+            await set_settings_bulk(session, {offer.TRIAL_SERVICE_OWNERS_KEY: "1"}, reseller_id=SHOP)
         shop_staff = {"role": "reseller", "permissions": ["plans"], "bot_user_id": SHOP}
         response = await self._post(shop_staff, {})
         self.assertNotIn("err=", response.headers["location"])
         async with self.Session() as session:
             self.assertEqual(await get_setting(session, offer.TRIAL_PLACEMENT_KEY, reseller_id=SHOP), "both")
+            # An unchecked switch and a missing one look the same: the older page must not turn it off.
+            self.assertEqual(await get_setting(session, offer.TRIAL_SERVICE_OWNERS_KEY, reseller_id=SHOP), "1")
 
 
 if __name__ == "__main__":
