@@ -890,6 +890,10 @@ DEFAULT_SETTINGS = {
     "user_alert_low_enabled": "0",
     "user_alert_low_traffic_pct": "20",
     "user_alert_low_time_pct": "20",
+    "user_alert_low_days": "0",
+    # Empty = the built-in alert texts (usage_alert_messages).
+    "user_alert_time_text": "",
+    "user_alert_traffic_text": "",
     "first_use_nudge_enabled": "0",
     # Expired / volume-finished service cleanup (service_cleanup.py keeps the same defaults).
     "expired_cleanup_enabled": "0",
@@ -1593,6 +1597,24 @@ SETTING_GROUPS = {
             "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام برود",
         ),
         (
+            "user_alert_low_days",
+            "یا وقتی چند روز مانده؟",
+            "number",
+            "۰ تا ۶۰ — مثلاً ۳ یعنی سه روز مانده به پایان هم پیام برود، هر کدام زودتر برسد؛ ۰ = فقط درصد",
+        ),
+        (
+            "user_alert_time_text",
+            "متن هشدار کمبود زمان",
+            "textarea",
+            "خالی = متن پیش‌فرض. متغیرها: {service_name} {days_left} {expire_date} {shop_title}",
+        ),
+        (
+            "user_alert_traffic_text",
+            "متن هشدار کمبود حجم",
+            "textarea",
+            "خالی = متن پیش‌فرض. متغیرها: {service_name} {traffic_used} {shop_title}",
+        ),
+        (
             "first_use_nudge_enabled",
             "پیام کمکی برای سرویس بدون مصرف",
             "toggle",
@@ -2279,15 +2301,6 @@ async def get_all_settings(
 
 def on(value: str | None) -> bool:
     return (value or "").strip() in {"1", "true", "yes", "on", "True"}
-
-
-def clamp_alert_percent(raw: str | None, default: int = 20) -> str:
-    """Keep user-alert thresholds in 1..99."""
-    try:
-        n = int(float(str(raw).strip()))
-    except Exception:
-        n = default
-    return str(max(1, min(99, n)))
 
 
 def is_protected_admin(user: BotUser) -> bool:
