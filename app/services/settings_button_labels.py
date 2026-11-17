@@ -54,7 +54,6 @@ BTN_MAIN_MENU: list[Field] = [
     ("btn_loyalty", "باشگاه مشتریان", "text"),
     ("btn_reseller_apply", "درخواست نمایندگی", "text"),
     ("btn_wholesale", "فروش عمده", "text"),
-    ("btn_trial", "دریافت تست", "text"),
 ]
 
 BTN_WALLET_SUB: list[Field] = [
@@ -125,6 +124,7 @@ BTN_STORE_EXTRA: list[Field] = [
 # The shop's first step; a shop renames its own copy, like the other customer buttons.
 BTN_SHOP_KINDS: list[Field] = [
     ("btn_shop_kind_trial", "تست", "text"),
+    ("btn_trial", "دریافت تست (کیبورد اصلی)", "text"),
     ("btn_shop_kind_fixed", "پلن ثابت", "text"),
     ("btn_shop_kind_custom", "پلن دلخواه", "text"),
 ]
