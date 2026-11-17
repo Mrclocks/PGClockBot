@@ -1,4 +1,4 @@
-"""Short-lived in-process cache for sidebar unread / inbox / cancel dots."""
+"""Short-lived in-process cache for sidebar unread / cancel dots and the inbox badge count."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from typing import Any
 
 _TTL_SEC = 20.0
 _MAX = 256
-# (monotonic_ts, tickets_unread, inbox_alert, cancel_alert)
-_STORE: dict[str, tuple[float, int, bool, bool]] = {}
+# (monotonic_ts, tickets_unread, inbox_count, cancel_alert)
+_STORE: dict[str, tuple[float, int, int, bool]] = {}
 
 
 def sidebar_cache_key(staff: dict[str, Any] | None) -> str:
@@ -26,19 +26,19 @@ def sidebar_cache_key(staff: dict[str, Any] | None) -> str:
     return f"staff:{role}"
 
 
-def peek_sidebar_counts(key: str) -> tuple[int, bool, bool] | None:
+def peek_sidebar_counts(key: str) -> tuple[int, int, bool] | None:
     hit = _STORE.get(key)
     if not hit:
         return None
-    ts, unread, alert, cancel_alert = hit
+    ts, unread, inbox_count, cancel_alert = hit
     if time.monotonic() - ts > _TTL_SEC:
         _STORE.pop(key, None)
         return None
-    return int(unread), bool(alert), bool(cancel_alert)
+    return int(unread), int(inbox_count), bool(cancel_alert)
 
 
 def store_sidebar_counts(
-    key: str, unread: int, alert: bool, cancel_alert: bool = False
+    key: str, unread: int, inbox_count: int, cancel_alert: bool = False
 ) -> None:
     if len(_STORE) >= _MAX:
         oldest = min(_STORE, key=lambda k: _STORE[k][0])
@@ -46,7 +46,7 @@ def store_sidebar_counts(
     _STORE[key] = (
         time.monotonic(),
         int(unread or 0),
-        bool(alert),
+        max(0, int(inbox_count or 0)),
         bool(cancel_alert),
     )
 

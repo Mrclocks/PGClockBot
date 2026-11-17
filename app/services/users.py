@@ -985,7 +985,7 @@ DEFAULT_SETTINGS = {
     "btn_backup_upload": "📤 آپلود فایل بکاپ",
     "btn_backup_refresh": "🔄 تازه‌سازی لیست",
     "btn_bc_aud_all": "📢 همه",
-    "btn_bc_aud_users": "👥 کاربران عادی",
+    "btn_bc_aud_users": "👥 مشتریان (بدون ادمین)",
     "btn_bc_aud_resellers": "🤝 فقط نمایندگان",
     "btn_bc_aud_admins": "🛠 ادمین‌ها",
     "btn_adm_plans_aud_users": "📦 پلن‌های کاربران",

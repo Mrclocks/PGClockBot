@@ -95,7 +95,7 @@ from app.services.panel_assets import asset_version, get_panel_asset_cache_key
 from app.services.redact import operator_error
 from app.services.shop_scope import is_platform_admin, payment_shop_id
 from app.services.button_styles import STYLE_OPTIONS
-from app.services.message_buttons import target_options as message_button_target_options
+from app.services.message_buttons import target_groups as message_button_target_groups
 from app.services.staff_audit import actor_from_staff
 from app.services.usage_alert_messages import ALERT_NUMBER_KEYS, clamp_alert_setting
 from app.services.mobile_bar import load_bar_form, load_bar_order
@@ -202,7 +202,7 @@ templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
 templates.env.globals["setting_risk_notes"] = SETTING_RISK_NOTES
 templates.env.globals["brand_presets"] = BRAND_PRESETS
 # The direct-message modal sits on many pages: its button targets and colours come from one place.
-templates.env.globals["message_button_dm_targets"] = message_button_target_options(renew=True, links=True)
+templates.env.globals["message_button_dm_groups"] = message_button_target_groups(links=True, plans=False, renew=True)
 templates.env.globals["message_button_styles"] = STYLE_OPTIONS
 templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
 # Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).
@@ -379,8 +379,12 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["update"] = upd
     if "tickets_unread" not in ctx:
         ctx["tickets_unread"] = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
+    # The inbox page counts its own items; every other page uses the count read during authentication.
+    if "inbox_badge_count" not in ctx:
+        inbox_count = ctx.get("inbox_count", getattr(request.state, "panel_inbox_count", 0))
+        ctx["inbox_badge_count"] = max(0, int(inbox_count or 0))
     if "inbox_alert" not in ctx:
-        ctx["inbox_alert"] = bool(getattr(request.state, "panel_inbox_alert", False))
+        ctx["inbox_alert"] = ctx["inbox_badge_count"] > 0
     if "cancel_alert" not in ctx:
         ctx["cancel_alert"] = bool(getattr(request.state, "panel_cancel_alert", False))
     # Keep env global fresh too — macros import without ``with context``.
@@ -811,7 +815,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
             if should_skip_unread_count(request.url.path, request.method):
                 request.state.panel_tickets_unread = 0
-                request.state.panel_inbox_alert = False
+                request.state.panel_inbox_count = 0
                 request.state.panel_cancel_alert = False
             else:
                 from app.services.panel_sidebar_cache import (
@@ -824,13 +828,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 cached = peek_sidebar_counts(cache_key)
                 if cached is not None:
                     request.state.panel_tickets_unread = cached[0]
-                    request.state.panel_inbox_alert = cached[1]
+                    request.state.panel_inbox_count = cached[1]
                     request.state.panel_cancel_alert = cached[2]
                 else:
                     unread = await sidebar_unread_count(session, user)
-                    from app.services.panel_inbox import sidebar_inbox_has_alerts
+                    from app.services.panel_inbox import sidebar_inbox_count
 
-                    alert = await sidebar_inbox_has_alerts(session, request, user)
+                    inbox_count = await sidebar_inbox_count(session, request, user)
                     cancel_alert = False
                     try:
                         from app.services.authz import authz_from_staff, can_shop
@@ -844,16 +848,16 @@ def create_api_app(lifespan=None) -> FastAPI:
                         cancel_alert = False
                     except Exception:
                         cancel_alert = False
-                    store_sidebar_counts(cache_key, unread, alert, cancel_alert)
+                    store_sidebar_counts(cache_key, unread, inbox_count, cancel_alert)
                     request.state.panel_tickets_unread = unread
-                    request.state.panel_inbox_alert = alert
+                    request.state.panel_inbox_count = inbox_count
                     request.state.panel_cancel_alert = cancel_alert
         except Exception:
             from app.services.db_safe import rollback_quiet
 
             await rollback_quiet(session)
             request.state.panel_tickets_unread = 0
-            request.state.panel_inbox_alert = False
+            request.state.panel_inbox_count = 0
             request.state.panel_cancel_alert = False
         from app.services.db_safe import recover_session
 
@@ -1634,12 +1638,13 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)
     from app.api.automation_review_pages import register_automation_review_pages
-    from app.api.broadcast_queue_pages import register_broadcast_queue_pages
+    from app.api.broadcast_queue_pages import register_broadcast_queue_pages, register_platform_broadcast_pages
     from app.api.payment_void_pages import register_payment_void_pages
 
     register_automation_review_pages(app, require_staff=require_staff, get_db=get_db)
     register_payment_void_pages(app, require_staff=require_staff, get_db=get_db)
     register_broadcast_queue_pages(app, require_admin=require_admin, get_db=get_db)
+    register_platform_broadcast_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     from app.api.message_button_pages import register_message_button_pages
     from app.api.shop_broadcast_pages import register_shop_broadcast_pages
 
@@ -5336,84 +5341,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             sep = "&" if "?" in next_url else "?"
             return RedirectResponse(f"{next_url}{sep}saved=1", status_code=303)
         return RedirectResponse(f"/settings?tab={tab}&saved=1", status_code=303)
-
-    @app.get("/broadcast", response_class=HTMLResponse)
-    async def broadcast_page(
-        request: Request,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from app.services.broadcast import AUDIENCE_LABELS, list_broadcast_history
-        from app.services.broadcast_queue import STATUS_LABELS, new_request_token
-        from app.services.message_buttons import buttons_form_context
-
-        history = await list_broadcast_history(session, limit=40)
-        return render(
-            request,
-            "broadcast.html",
-            {
-                **(await buttons_form_context(session, None)),
-                "staff": staff,
-                "history": history,
-                "audience_labels": AUDIENCE_LABELS,
-                "status_labels": STATUS_LABELS,
-                "broadcast_request_token": new_request_token(),
-                "flash_ok": request.query_params.get("ok"),
-                "flash_err": request.query_params.get("err"),
-            },
-        )
-
-    @app.post("/broadcast")
-    async def broadcast_send(
-        request: Request,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-        text: str = Form(...),
-        audience: str = Form("all"),
-        request_token: str = Form(""),
-    ):
-        from app.services.broadcast_queue import BroadcastRequest, queue_broadcast
-        from app.services.message_buttons import broadcast_buttons, form_inputs
-
-        audience = (audience or "all").strip()
-        if audience not in {"all", "users", "resellers", "admins"}:
-            audience = "all"
-        try:
-            log = await queue_broadcast(
-                session,
-                text=text,
-                audience=audience,
-                created_by=str(staff.get("username") or "admin"),
-                request=BroadcastRequest(
-                    request_token, await broadcast_buttons(session, form_inputs(await request.form()), shop_id=None)
-                ),
-            )
-        except ValueError as e:
-            return _redirect_msg("/broadcast", err=str(e))
-        return _redirect_msg("/broadcast", ok=f"در صف ارسال قرار گرفت: {log.total} مخاطب. پیشرفت را در تاریخچه ببینید.")
-
-    @app.post("/broadcast/history/clear")
-    async def broadcast_history_clear(
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from app.services.broadcast import clear_broadcast_history
-
-        n = await clear_broadcast_history(session)
-        return _redirect_msg("/broadcast", ok=f"{n} رکورد تاریخچه حذف شد")
-
-    @app.post("/broadcast/history/{log_id}/delete")
-    async def broadcast_history_delete(
-        log_id: int,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from app.services.broadcast import delete_broadcast_log
-
-        ok = await delete_broadcast_log(session, log_id)
-        if not ok:
-            return _redirect_msg("/broadcast", err="رکورد یافت نشد")
-        return _redirect_msg("/broadcast", ok="رکورد حذف شد")
 
     # Outermost: compress AFTER CSP nonce injection. If GZip runs first, HTML is
     # binary gzip and bare <script> tags never receive nonces → browsers block them

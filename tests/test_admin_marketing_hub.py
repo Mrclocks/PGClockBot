@@ -1,4 +1,4 @@
-"""Admin «بازاریابی» hub: club and broadcast live behind one Owner-only group."""
+"""Admin «بازاریابی» hub: the club lives behind one Owner-only group; group messages sit at the top level."""
 
 from __future__ import annotations
 
@@ -35,17 +35,22 @@ class MarketingHubKeyboardTests(unittest.TestCase):
         groups = _callbacks(admin_groups_hub_keyboard({}))
         self.assertEqual(
             groups,
-            ["nv:adm:ops", "nv:adm:people", "nv:adm:product", "nv:adm:marketing", "nv:adm:system", "cma:home:0", "ed:a:h", "menu:home"],
+            ["nv:adm:ops", "nv:adm:people", "nv:adm:product", "nv:adm:marketing", "nv:adm:system", "cma:home:0",
+             "nv:adm:broadcast", "qlk:v", "ed:a:h", "menu:home"],
         )
+
+    def test_group_messages_get_their_own_full_width_row_in_the_admin_panel(self):
+        rows = admin_groups_hub_keyboard({}).inline_keyboard
+        broadcast_rows = [row for row in rows if any(b.callback_data == "nv:adm:broadcast" for b in row)]
+        self.assertEqual(len(broadcast_rows), 1)
+        self.assertEqual(len(broadcast_rows[0]), 1)
 
     def test_hub_lists_its_leaves_and_returns_home(self):
         self.assertEqual(
             _callbacks(admin_marketing_hub_keyboard({})),
             [
                 "nv:adm:loy",
-                "nv:adm:broadcast",
                 "nv:adm:gc",
-                "nv:adm:cmp",
                 "nv:adm:cb",
                 "dsc:l",
                 "fnl:v",
@@ -58,8 +63,12 @@ class MarketingHubKeyboardTests(unittest.TestCase):
         self.assertNotIn("nv:adm:loy", _callbacks(admin_people_hub_keyboard({})))
         self.assertNotIn("nv:adm:broadcast", _callbacks(admin_system_hub_keyboard({})))
 
-    def test_leaf_hubs_return_to_the_marketing_hub(self):
-        self.assertIn("nv:adm:marketing", _callbacks(admin_broadcast_hub_keyboard({})))
+    def test_campaigns_moved_into_group_messages(self):
+        self.assertIn("nv:adm:cmp", _callbacks(admin_broadcast_hub_keyboard({})))
+        self.assertNotIn("nv:adm:cmp", _callbacks(admin_marketing_hub_keyboard({})))
+
+    def test_leaf_hubs_return_to_where_they_are_opened_from(self):
+        self.assertIn("nv:adm:home", _callbacks(admin_broadcast_hub_keyboard({})))
         self.assertIn("nv:adm:marketing", _callbacks(admin_loyalty_manage_hub_keyboard({})))
 
     def test_admin_can_rename_the_group_button(self):
@@ -106,8 +115,12 @@ class MarketingReplyRoutingTests(unittest.TestCase):
     def test_marketing_reply_keyboard_lists_only_its_leaves(self):
         flat = [b.text for row in rk.admin_marketing_reply_keyboard(dict(DEFAULT_SETTINGS)).keyboard for b in row]
         self.assertIn("⭐ باشگاه مشتریان", flat)
-        self.assertIn("📢 پیام گروهی", flat)
+        self.assertNotIn("📢 پیام گروهی", flat)
         self.assertNotIn("⚙️ تنظیمات", flat)
+
+    def test_admin_panel_reply_keyboard_lists_group_messages_at_the_top_level(self):
+        flat = [b.text for row in rk.admin_reply_keyboard(dict(DEFAULT_SETTINGS)).keyboard for b in row]
+        self.assertIn("📢 پیام گروهی", flat)
         self.assertNotIn("👥 کاربران", flat)
 
 

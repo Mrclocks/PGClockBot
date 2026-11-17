@@ -76,8 +76,11 @@
   {% set is_reseller = staff.role == 'reseller' %}
   {% set is_pg_staff = staff.role == 'pg_staff' %}
   {% set ident = identity if identity is defined and identity else {} %}
+  {% set nav_dots = {'inbox_alert': inbox_alert, 'tickets_unread': tickets_unread, 'cancel_alert': cancel_alert} %}
+  {# Environments built outside the panel app (template unit tests) have no registry global. #}
+  {% set nav_sections = panel_sidebar(staff, ident, is_owner, marketing_sections if marketing_sections is defined else (), path, request.query_params.get('tab') or '') if panel_sidebar is defined else () %}
   <div class="shell">
-    {# Phone header: logo, brand and version, and the panel search. The menu opens from «منو» in the bottom bar. #}
+    {# Phone header: logo, brand and version, the action center and the panel search. The menu opens from «منو» in the bottom bar. #}
     <header class="topbar mobile-only">
       <a class="topbar-brand" href="/home" aria-label="داشبورد">
         <span class="brand-logo{% if brand_custom_logo %} brand-logo--custom{% endif %}" aria-hidden="true"><img src="{{ brand_logo }}" alt="" width="40" height="40" /></span>
@@ -103,6 +106,13 @@
         </button>
         <div id="panel-search-results-top" class="side-search-results" role="listbox" aria-label="نتیجه‌های جستجو" hidden data-panel-search-results></div>
       </div>
+      {% set inbox_badge = inbox_badge_count|default(0) %}
+      {% set inbox_here = path.startswith('/inbox') %}
+      <a class="topbar-inbox{% if inbox_here %} is-active{% endif %}" href="/inbox"
+         aria-label="مرکز اقدام{% if inbox_badge %}، {{ inbox_badge | num }} اعلان{% endif %}"{% if inbox_here %} aria-current="page"{% endif %}>
+        {{ icon('inbox', 'nav-ico') }}
+        {% if inbox_badge %}<span class="topbar-inbox-count" aria-hidden="true">{% if inbox_badge > 99 %}{{ 99 | num }}+{% else %}{{ inbox_badge | num }}{% endif %}</span>{% endif %}
+      </a>
     </header>
 
     <aside class="side" id="sidebar" aria-label="منوی اصلی">
@@ -152,9 +162,6 @@
         </div>
       </div>
       <nav class="side-nav" data-side-nav>
-        {% set nav_dots = {'inbox_alert': inbox_alert, 'tickets_unread': tickets_unread, 'cancel_alert': cancel_alert} %}
-        {# Environments built outside the panel app (template unit tests) have no registry global. #}
-        {% set nav_sections = panel_sidebar(staff, ident, is_owner, marketing_sections if marketing_sections is defined else (), path, request.query_params.get('tab') or '') if panel_sidebar is defined else () %}
         {% for section in nav_sections %}
         <div class="nav-section is-collapsed nav-section-{{ section.tone }}" data-nav-mode="{{ section.key }}" id="nav-panel-{{ section.key }}">
           <button type="button" class="nav-label nav-label-{{ section.tone }} nav-label-toggle" data-nav-collapse="{{ section.key }}" aria-expanded="false">

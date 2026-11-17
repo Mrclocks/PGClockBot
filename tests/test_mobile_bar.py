@@ -52,16 +52,16 @@ def bar(viewer: NavViewer, order: tuple[str, ...], path: str = "/home") -> list[
 
 class BarOrderTests(unittest.TestCase):
     def test_without_a_setting_the_bar_keeps_its_default_order(self) -> None:
-        self.assertEqual(bar(OWNER_VIEW, ()), ["home", "inbox", "finance", "users"])
+        self.assertEqual(bar(OWNER_VIEW, ()), ["home", "plans", "finance", "users"])
 
     def test_chosen_pages_come_first_in_the_chosen_order(self) -> None:
         self.assertEqual(bar(OWNER_VIEW, ("plans", "pg_nodes", "home", "tickets")), ["plans", "pg_nodes", "home", "tickets"])
 
     def test_empty_places_are_filled_with_the_default_order(self) -> None:
-        self.assertEqual(bar(OWNER_VIEW, ("plans",)), ["plans", "home", "inbox", "finance"])
+        self.assertEqual(bar(OWNER_VIEW, ("finance",)), ["finance", "home", "plans", "users"])
 
     def test_a_page_the_viewer_may_not_open_is_skipped_and_filled(self) -> None:
-        self.assertEqual(bar(SHOP_VIEW, ("pg_nodes", "plans")), ["plans", "home", "inbox", "finance"])
+        self.assertEqual(bar(SHOP_VIEW, ("pg_nodes", "plans")), ["plans", "home", "finance", "customers"])
         for viewer in (OWNER_VIEW, SHOP_VIEW, PG_STAFF_VIEW):
             sidebar_keys = {i.key for s in build_sidebar(viewer, path="/home") for i in s.items}
             keys = bar(viewer, ("system_settings", "pg_admins", "service_cleanup", "plans"))
@@ -203,7 +203,7 @@ class RouteTests(StoreTestCase):
         page = (await self.client.get("/probe")).text
         bar_html = page.split("data-bottom-dock>")[1].split("</nav>")[0]
         self.assertEqual(re.findall(r'<a href="([^"]+)" class="bottom-dock-item', bar_html),
-                         ["/plans", "/tickets", "/home", "/inbox"])
+                         ["/plans", "/tickets", "/home", "/finance"])
 
     async def test_reset_returns_to_the_default_order(self) -> None:
         await self.post(OWNER, bar_slot_1="plans")

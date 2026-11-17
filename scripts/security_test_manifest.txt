@@ -328,6 +328,11 @@ tests/test_broadcast_queue.py
 tests/test_shop_broadcast.py
 # Buttons under staff messages: link permission per shop, presets per shop, renewal of own services only.
 tests/test_message_buttons.py
+# Group-message audiences, pages and buttons: tenant scope, opt-out, plan buttons, forged segments.
+tests/test_broadcast_audience.py
+tests/test_broadcast_pages.py
+tests/test_message_button_targets.py
+tests/test_broadcast_segments_bot.py
 # First-use nudge: once per service, per-shop switch, shop bot only.
 tests/test_first_use_nudge.py
 # The app must compile and import (guards a broken merge).
@@ -529,3 +534,4 @@ tests/test_pg_role_parity.py
 tests/test_reseller_revoke_panel_admin.py
 tests/test_pg_quota_parity.py
 tests/test_trial_keyboard_button.py
+tests/test_inbox_customer_alerts_off.py

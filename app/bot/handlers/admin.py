@@ -48,6 +48,7 @@ from app.services.automation_review import count_review_queue
 from app.services.payment_voids import offers_void
 from app.services.chat_records import keep_sent
 from app.services.db_safe import rollback_quiet
+from app.services.broadcast_audience import describe as describe_audience, make_spec as make_audience
 from app.services.plans_catalog import plan_groups_denial, plan_template_denial, role_requires_template
 from app.services.redact import user_safe_error
 from app.services.subscription_lookup import link_token
@@ -4948,17 +4949,13 @@ async def adm_broadcast_audience(callback: CallbackQuery, db_user: BotUser, stat
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     audience = callback.data.rsplit(":", 1)[-1]
-    if audience not in {"all", "users", "resellers", "admins"}:
+    try:
+        audience_fa = html.escape(describe_audience(make_audience(audience, shop_id=None)))
+    except ValueError:
         await callback.answer(feedback.INVALID, show_alert=True)
         return
     await callback.answer()
     await state.update_data(broadcast_audience=audience)
-    audience_fa = {
-        "all": "همه",
-        "users": "کاربران عادی",
-        "resellers": "نمایندگان",
-        "admins": "ادمین‌ها",
-    }.get(audience, audience)
     if callback.message:
         await callback.message.edit_text(
             f"📢 مخاطب: <b>{audience_fa}</b>\nمتن پیام را بفرستید؛ بولد، لینک و قالب‌بندی تلگرام حفظ می‌شود.\n"

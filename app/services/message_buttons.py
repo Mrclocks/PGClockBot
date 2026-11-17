@@ -24,7 +24,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import MessageButtonPreset, ResellerProfile
+from app.db.models import MessageButtonPreset, Plan, ResellerProfile
 from app.services.button_styles import STYLE_OPTIONS, normalize_style
 from app.services.notice_links import notice_open_data
 from app.services.resellers import has_bot_perm
@@ -32,8 +32,10 @@ from app.services.resellers import has_bot_perm
 KIND_SCREEN = "screen"
 KIND_URL = "url"
 KIND_RENEW = "renew"
+KIND_PLAN = "plan"
 TARGET_LINK = "link"
 TARGET_RENEW = "renew"
+TARGET_PLAN = "plan"
 LINKS_PERMISSION = "broadcast_links"
 BUTTONS_MAX = 4
 PER_ROW = 2
@@ -41,16 +43,32 @@ LABEL_MAX = 40
 URL_MAX = 256
 PRESET_NAME_MAX = 40
 PRESETS_PER_SHOP = 30
+PLAN_OPTIONS_LIMIT = 200
 RENEW_LABEL = "🔄 تمدید سرویس"
 LINK_LABEL = "🔗 لینک"
-# key -> (screen callback, default label)
-SCREENS: dict[str, tuple[str, str]] = {
-    "shop": ("shop:list", "🛒 خرید سرویس"),
-    "services": ("svc:list", "📦 سرویس‌های من"),
-    "wallet": ("nv:w:home", "👛 کیف پول"),
-    "support": ("nv:s:home", "✉️ پشتیبانی"),
-    "club": ("nv:loy:home", "⭐ باشگاه مشتریان"),
+PLAN_LABEL = "💎 پلن مشخص"
+GROUP_BUY = "خرید"
+GROUP_ACCOUNT = "حساب"
+GROUP_CLUB = "باشگاه"
+GROUP_HELP = "راهنما"
+GROUP_OTHER = "دیگر"
+# key -> (screen callback, default label, group). Every callback is in notice_links.NOTICE_SCREENS, opens
+# under the message in a panel of its own, and its handler checks the customer and the shop again.
+SCREENS: dict[str, tuple[str, str, str]] = {
+    "shop": ("shop:list", "🛒 خرید سرویس", GROUP_BUY),
+    "trial": ("shop:kind:trial", "🎁 سرویس تست", GROUP_BUY),
+    "custom": ("shop:kind:custom", "🧩 سرویس دلخواه", GROUP_BUY),
+    "services": ("svc:list", "📦 سرویس‌های من", GROUP_ACCOUNT),
+    "wallet": ("nv:w:home", "👛 کیف پول", GROUP_ACCOUNT),
+    "topup": ("nv:w:topup", "➕ شارژ کیف پول", GROUP_ACCOUNT),
+    "support": ("nv:s:home", "✉️ پشتیبانی", GROUP_ACCOUNT),
+    "club": ("nv:loy:home", "⭐ باشگاه مشتریان", GROUP_CLUB),
+    "invite": ("nv:loy:ref", "🤝 دعوت دوستان", GROUP_CLUB),
+    "wheel": ("nv:loy:wheel", "🎡 گردونهٔ شانس", GROUP_CLUB),
+    "guide": ("help:guide", "📘 راهنما", GROUP_HELP),
+    "faq": ("help:faq", "❓ سؤالات متداول", GROUP_HELP),
 }
+PLAN_CALLBACK_PREFIX = "shop:plan:"
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -62,6 +80,7 @@ class ButtonInput:
     label: str = ""
     url: str = ""
     style: str = ""
+    plan: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,10 +93,12 @@ class ButtonSpec:
 
 @dataclass(frozen=True, slots=True)
 class ButtonRules:
-    """What a sender may use: links (owner, or a shop with permission) and renewal of this one service."""
+    """What a sender may use: links (owner, or a shop with permission), renewal of this one service, and the
+    sender's own sellable plans (a plan button may open only one of these)."""
 
     allow_links: bool = False
     renew_service_id: int | None = None
+    plan_ids: frozenset[int] = frozenset()
 
 
 def _clean_label(raw: str, default: str) -> str:
@@ -106,6 +127,11 @@ def make_button(item: ButtonInput, rules: ButtonRules) -> ButtonSpec:
     style = normalize_style(item.style)
     if target in SCREENS:
         return ButtonSpec(KIND_SCREEN, _clean_label(item.label, SCREENS[target][1]), target, style)
+    if target == TARGET_PLAN:
+        plan_id = int(item.plan) if str(item.plan or "").isdigit() else 0
+        if plan_id not in rules.plan_ids:
+            raise ValueError("پلن دکمه را از پلن‌های فعال همین فروشگاه انتخاب کنید")
+        return ButtonSpec(KIND_PLAN, _clean_label(item.label, PLAN_LABEL), str(plan_id), style)
     if target == TARGET_RENEW:
         if rules.renew_service_id is None:
             raise ValueError("دکمهٔ تمدید فقط در پیام شخصی به مشتریِ دارای سرویس مجاز است")
@@ -140,6 +166,8 @@ def _stored_input(item: Mapping) -> ButtonInput:
         return ButtonInput(TARGET_LINK, str(item["l"]), target, str(item.get("s") or ""))
     if kind == KIND_RENEW:
         return ButtonInput(TARGET_RENEW, str(item["l"]), "", str(item.get("s") or ""))
+    if kind == KIND_PLAN:
+        return ButtonInput(TARGET_PLAN, str(item["l"]), "", str(item.get("s") or ""), target)
     return ButtonInput(target, str(item["l"]), "", str(item.get("s") or ""))
 
 
@@ -175,14 +203,27 @@ def load_buttons(stored: str | None, rules: ButtonRules) -> list[ButtonSpec]:
     return out[:BUTTONS_MAX]
 
 
+def _callback_data(spec: ButtonSpec) -> str:
+    """A screen opens in a panel under the message; a plan starts checkout like a tap in the shop, so it is not
+    a replayable panel (its handler creates the order and checks the plan against the bot's catalog)."""
+    if spec.kind == KIND_PLAN:
+        return f"{PLAN_CALLBACK_PREFIX}{int(spec.target)}"
+    return notice_open_data(_screen_data(spec))
+
+
+def _screen_data(spec: ButtonSpec) -> str:
+    if spec.kind == KIND_SCREEN:
+        return SCREENS[spec.target][0]
+    return f"svc:renew:{int(spec.target)}"
+
+
 def build_keyboard(buttons: list[ButtonSpec]) -> list[list[InlineKeyboardButton]]:
     """Telegram buttons, two to a row."""
     def button(spec: ButtonSpec) -> InlineKeyboardButton:
         extra = {"style": spec.style} if spec.style else {}
         if spec.kind == KIND_URL:
             return InlineKeyboardButton(text=spec.label, url=spec.target, **extra)
-        data = SCREENS[spec.target][0] if spec.kind == KIND_SCREEN else f"svc:renew:{int(spec.target)}"
-        return InlineKeyboardButton(text=spec.label, callback_data=notice_open_data(data), **extra)
+        return InlineKeyboardButton(text=spec.label, callback_data=_callback_data(spec), **extra)
 
     keyboard = [button(spec) for spec in buttons]
     return [keyboard[i:i + PER_ROW] for i in range(0, len(keyboard), PER_ROW)]
@@ -196,11 +237,26 @@ async def shop_may_link(session: AsyncSession, shop_id: int | None) -> bool:
     return bool(profile is not None and profile.is_active and has_bot_perm(profile, LINKS_PERMISSION))
 
 
+async def sellable_plan_ids(session: AsyncSession, shop_id: int | None) -> frozenset[int]:
+    """Ids of the sender's own active, paid plans: the only plans a button may open."""
+    owner = Plan.owner_reseller_id.is_(None) if shop_id is None else Plan.owner_reseller_id == int(shop_id)
+    rows = await session.scalars(
+        select(Plan.id).where(owner, Plan.is_active.is_(True), Plan.is_trial.is_(False)).limit(PLAN_OPTIONS_LIMIT)
+    )
+    return frozenset(int(plan_id) for plan_id in rows)
+
+
+async def sender_rules(session: AsyncSession, shop_id: int | None) -> ButtonRules:
+    """What this sender may put under a group message now."""
+    return ButtonRules(allow_links=await shop_may_link(session, shop_id), plan_ids=await sellable_plan_ids(session, shop_id))
+
+
 async def stored_keyboard(session: AsyncSession, stored: str | None, *, shop_id: int | None) -> list[list[InlineKeyboardButton]]:
-    """Buttons of a queued broadcast, checked against what the shop may send now (a revoked link is dropped)."""
+    """Buttons of a queued broadcast, checked against what the shop may send now (a revoked link or a plan
+    that is no longer sold is dropped)."""
     if not stored:
         return []
-    return build_keyboard(load_buttons(stored, ButtonRules(allow_links=await shop_may_link(session, shop_id))))
+    return build_keyboard(load_buttons(stored, await sender_rules(session, shop_id)))
 
 
 def preview_keyboard(stored: str | None) -> list[list[InlineKeyboardButton]]:
@@ -211,8 +267,7 @@ def preview_keyboard(stored: str | None) -> list[list[InlineKeyboardButton]]:
 
 async def broadcast_buttons(session: AsyncSession, items: list[ButtonInput], *, shop_id: int | None) -> str | None:
     """Stored buttons for a broadcast of ``shop_id`` (no renewal: a broadcast has no single service)."""
-    rules = ButtonRules(allow_links=await shop_may_link(session, shop_id))
-    return dump_buttons(make_buttons(items, rules))
+    return dump_buttons(make_buttons(items, await sender_rules(session, shop_id)))
 
 
 def form_inputs(form: Mapping) -> list[ButtonInput]:
@@ -221,19 +276,36 @@ def form_inputs(form: Mapping) -> list[ButtonInput]:
         getter = getattr(form, "getlist", None)
         return [str(v) for v in getter(name)] if getter else []
 
-    targets, labels, urls, styles = (values(n) for n in ("btn_target", "btn_label", "btn_url", "btn_style"))
+    names = ("btn_target", "btn_label", "btn_url", "btn_style", "btn_plan")
+    targets, labels, urls, styles, plans = (values(n) for n in names)
     pick = lambda seq, i: seq[i] if i < len(seq) else ""  # noqa: E731 - index with a default
-    return [ButtonInput(t, pick(labels, i), pick(urls, i), pick(styles, i)) for i, t in enumerate(targets)]
+    return [
+        ButtonInput(t, pick(labels, i), pick(urls, i), pick(styles, i), pick(plans, i)) for i, t in enumerate(targets)
+    ]
 
 
 def target_options(*, renew: bool, links: bool) -> list[tuple[str, str]]:
-    """(value, label) of the targets a form or checklist offers."""
-    options = [(key, label) for key, (_cb, label) in SCREENS.items()]
+    """(value, label) of the targets the bot checklist offers (no plan: it needs a second choice)."""
+    options = [(key, label) for key, (_cb, label, _group) in SCREENS.items()]
     if renew:
         options.append((TARGET_RENEW, RENEW_LABEL))
     if links:
         options.append((TARGET_LINK, LINK_LABEL))
     return options
+
+
+def target_groups(*, links: bool, plans: bool, renew: bool = False) -> list[tuple[str, list[tuple[str, str]]]]:
+    """The web editor's targets in groups: (group label, [(value, label)])."""
+    groups: dict[str, list[tuple[str, str]]] = {}
+    for key, (_cb, label, group) in SCREENS.items():
+        groups.setdefault(group, []).append((key, label))
+    if plans:
+        groups[GROUP_BUY].insert(1, (TARGET_PLAN, PLAN_LABEL))
+    if renew:
+        groups[GROUP_ACCOUNT].insert(1, (TARGET_RENEW, RENEW_LABEL))
+    if links:
+        groups.setdefault(GROUP_OTHER, []).append((TARGET_LINK, LINK_LABEL))
+    return list(groups.items())
 
 
 def shop_key(shop_id: int | None) -> int:
@@ -273,7 +345,7 @@ async def save_preset(
 ) -> MessageButtonPreset:
     """Create or replace one shop's preset; presets never hold a per-customer renewal."""
     clean_name = _clean_preset_name(name)
-    buttons = make_buttons(items, ButtonRules(allow_links=rules.allow_links))
+    buttons = make_buttons(items, ButtonRules(allow_links=rules.allow_links, plan_ids=rules.plan_ids))
     if not buttons:
         raise ValueError("قالب بدون دکمه ذخیره نمی‌شود")
     key = shop_key(shop_id)
@@ -305,19 +377,30 @@ async def delete_preset(session: AsyncSession, shop_id: int | None, preset_id: i
     return bool(result.rowcount)
 
 
+async def _plan_options(session: AsyncSession, plan_ids: frozenset[int]) -> list[tuple[int, str]]:
+    if not plan_ids:
+        return []
+    rows = await session.execute(select(Plan.id, Plan.name).where(Plan.id.in_(plan_ids)).order_by(Plan.sort_order, Plan.id))
+    return [(int(plan_id), str(name)) for plan_id, name in rows.all()]
+
+
 async def buttons_form_context(session: AsyncSession, shop_id: int | None) -> dict[str, object]:
-    """What a web page with a button list needs: targets, colours and this shop's presets."""
-    links = await shop_may_link(session, shop_id)
+    """What a web page with a button list needs: targets, plans, colours and this shop's presets."""
+    rules = await sender_rules(session, shop_id)
     presets = await list_presets(session, shop_id)
     return {
-        "button_targets": target_options(renew=False, links=links),
+        "button_target_groups": target_groups(links=rules.allow_links, plans=bool(rules.plan_ids)),
+        "button_plans": await _plan_options(session, rules.plan_ids),
         "button_styles": STYLE_OPTIONS,
         "button_max": BUTTONS_MAX,
         "button_presets": [
             {
                 "id": p.id,
                 "name": p.name,
-                "buttons": [{"target": i.target, "label": i.label, "url": i.url, "style": i.style} for i in stored_inputs(p.buttons)],
+                "buttons": [
+                    {"target": i.target, "label": i.label, "url": i.url, "style": i.style, "plan": i.plan}
+                    for i in stored_inputs(p.buttons)
+                ],
             }
             for p in presets
         ],
