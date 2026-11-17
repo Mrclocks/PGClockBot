@@ -35,7 +35,7 @@ if [[ "$_PGCLOCK_SOURCED" -eq 0 && ! -t 0 ]]; then
       if [[ "$PGCLOCK_HAS_TTY" -eq 1 ]]; then
         exec </dev/tty
       else
-        echo "  x No interactive terminal (TTY). Run: bash pgclock.sh install" >&2
+        echo "  x No interactive terminal (TTY) for this option. Open an SSH terminal, or use: pgclock install|update|status|doctor" >&2
         exit 1
       fi
       ;;
