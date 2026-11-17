@@ -1,0 +1,55 @@
+{# Buttons under a staff message (message_buttons): the form field and the saved-sets card. #}
+
+{% macro buttons_field(help_lines=[], presets=[]) -%}
+<label class="form-field">دکمه‌های زیر پیام (اختیاری)
+  <textarea name="buttons" rows="3" maxlength="2000" dir="auto" placeholder="🛒 خرید سرویس - @shop | پشتیبانی - @support"></textarea>
+  {% for line in help_lines %}<small class="muted text-block">{{ line }}</small>{% endfor %}
+  {% if presets %}<small class="muted text-block">قالب‌های شما: {% for p in presets %}<code dir="auto">@preset:{{ p.name }}</code>{% if not loop.last %}، {% endif %}{% endfor %}</small>{% endif %}
+</label>
+{%- endmacro %}
+
+{% macro presets_card(presets=[], help_lines=[], limit=30) -%}
+<div class="card">
+  <h2>قالب‌های دکمه</h2>
+  <p class="muted">مجموعه‌ای از دکمه‌ها را یک بار بسازید و زیر هر پیام با یک خط <code dir="ltr">@preset:نام</code> بگذارید؛ حداکثر {{ limit }} قالب.</p>
+  {% if presets %}
+  <div class="table-wrap">
+  <table class="table-compact table-list-sm">
+    <thead><tr><th>نام</th><th class="col-text">دکمه‌ها</th><th class="col-actions"></th></tr></thead>
+    <tbody>
+    {% for p in presets %}
+      <tr>
+        <td class="li-title"><span dir="auto">{{ p.name }}</span></td>
+        <td class="li-sub"><code dir="auto" class="text-block">{{ p.text }}</code></td>
+        <td class="col-actions">
+          <form method="post" action="/message-buttons/presets/{{ p.id }}/delete"
+                data-confirm="قالب «{{ p.name }}» حذف شود؟ پیام‌های فرستاده‌شده تغییری نمی‌کنند."
+                data-confirm-title="حذف قالب"
+                data-confirm-danger="1"
+                data-confirm-label="حذف">
+            <button class="btn btn-danger btn-sm" type="submit" aria-label="حذف قالب {{ p.name }}">حذف</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">هنوز قالبی ساخته نشده.</p>
+  {% endif %}
+  <form method="post" action="/message-buttons/presets" class="form-stack">
+    <label class="form-field">نام قالب
+      <input type="text" name="name" required maxlength="40" dir="auto" />
+      <small class="muted">با همین نام، قالب قبلی جایگزین می‌شود.</small>
+    </label>
+    <label class="form-field">دکمه‌ها
+      <textarea name="buttons" rows="3" required maxlength="2000" dir="auto" placeholder="🛒 خرید سرویس - @shop | پشتیبانی - @support"></textarea>
+      {% for line in help_lines %}<small class="muted text-block">{{ line }}</small>{% endfor %}
+    </label>
+    <div class="actions">
+      <button class="btn btn-ghost" type="submit">ذخیرهٔ قالب</button>
+    </div>
+  </form>
+</div>
+{%- endmacro %}

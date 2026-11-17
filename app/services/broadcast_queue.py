@@ -8,6 +8,7 @@ the outcome as unknown and moves past the user, so nobody is messaged twice. Pla
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import html
 import logging
 import re
@@ -17,12 +18,14 @@ from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
+from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, BroadcastLog, Role
 from app.services.broadcast import AUDIENCE_LABELS, shop_scope_filter
+from app.services.message_buttons import stored_keyboard
 from app.services.shop_membership import shop_member_clause
 from app.services.telegram_html import normalize_telegram_html
 
@@ -50,6 +53,14 @@ OUTCOME_OK, OUTCOME_FAILED, OUTCOME_UNKNOWN = "ok", "failed", "unknown"
 PLATFORM_REQUEST_KEY_PREFIX = "platform-"
 REQUEST_TOKEN_BYTES = 16
 _REQUEST_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
+
+
+@dataclass(frozen=True, slots=True)
+class BroadcastRequest:
+    """What a submit adds to a broadcast: its request token (repeat-safe) and its validated button rows."""
+
+    token: object = None
+    buttons: str | None = None
 
 
 def new_request_token() -> str:
@@ -93,13 +104,15 @@ async def queue_broadcast(
     text: str,
     audience: str,
     created_by: str | None,
-    request_token: object = None,
+    request: BroadcastRequest | None = None,
 ) -> BroadcastLog:
     """Record a platform broadcast and its audience size; the worker sends it.
 
     The text is normalized to HTML Telegram accepts, so one stray ``<`` cannot fail the broadcast
-    for every recipient. A repeated ``request_token`` returns the broadcast it already queued.
+    for every recipient. A repeated request token returns the broadcast it already queued; the
+    request's buttons are rows already validated by ``message_buttons`` (``dump_rows``).
     """
+    request = request or BroadcastRequest()
     body = normalize_telegram_html((text or "").strip())
     if not body:
         raise ValueError("متن پیام خالی است")
@@ -107,7 +120,7 @@ async def queue_broadcast(
         raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
     if audience not in AUDIENCE_LABELS:
         raise ValueError("گروه مخاطبان نامعتبر است")
-    key = platform_request_key(request_token)
+    key = platform_request_key(request.token)
     if key is not None:
         existing = await session.scalar(select(BroadcastLog).where(BroadcastLog.request_key == key))
         if existing is not None:
@@ -123,6 +136,7 @@ async def queue_broadcast(
         status=STATUS_QUEUED,
         shop_id=None,
         request_key=key,
+        buttons=request.buttons,
     )
     session.add(log)
     try:
@@ -268,10 +282,13 @@ async def _record(session: AsyncSession, log_id: int, token: str, user_id: int, 
     await session.commit()
 
 
-async def _send(bot: Bot, telegram_id: int, text: str, *, escape_html: bool = False) -> str:
+async def _send(
+    bot: Bot, telegram_id: int, text: str, *, escape_html: bool = False, markup: InlineKeyboardMarkup | None = None
+) -> str:
     body = html.escape(text, quote=False) if escape_html else text
     try:
-        await bot.send_message(telegram_id, body, parse_mode="HTML")
+        extra = {"reply_markup": markup} if markup is not None else {}
+        await bot.send_message(telegram_id, body, parse_mode="HTML", **extra)
     except (TelegramForbiddenError, TelegramBadRequest):
         return OUTCOME_FAILED
     return OUTCOME_OK
@@ -325,10 +342,11 @@ async def process_broadcast_batch(
                     BroadcastLog.ok_count,
                     BroadcastLog.fail_count,
                     BroadcastLog.review_count,
+                    BroadcastLog.buttons,
                 ).where(BroadcastLog.id == log_id)
             )
         ).one()
-        audience, text, cursor, shop_id, total, ok_count, fail_count, review_count = row
+        audience, text, cursor, shop_id, total, ok_count, fail_count, review_count, buttons = row
         progress = int(ok_count) + int(fail_count) + int(review_count)
         if progress >= int(total):
             await _finish(session, log_id, token)
@@ -346,11 +364,13 @@ async def process_broadcast_batch(
             )
         ).all()
         escape_html = shop_id is not None
+        keyboard = await stored_keyboard(session, buttons, shop_id=int(shop_id) if shop_id is not None else None)
+        markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
         for user_id, telegram_id in recipients:
             if not await _mark_inflight(session, log_id, token, int(user_id)):
                 return False
             try:
-                outcome = await _send(bot, telegram_id, text, escape_html=escape_html)
+                outcome = await _send(bot, telegram_id, text, escape_html=escape_html, markup=markup)
             except TelegramRetryAfter as exc:
                 await _back_off(session, log_id, token, exc.retry_after)
                 return True

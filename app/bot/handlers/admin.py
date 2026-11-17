@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.handlers.admin_broadcast_confirm import preview_broadcast
+from app.services.message_buttons import BUTTONS_HINT, split_message
 from app.bot.auth import (
     platform_can_manage_representatives,
     require_bot_owner_handler,
@@ -2577,7 +2578,8 @@ async def _ask_staff_message(
         callback,
         state,
         prompt=(
-            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b> را بفرستید:"
+            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b> را بفرستید.\n"
+            f"{BUTTONS_HINT} برای تمدید یک سرویس همین کاربر: @renew:شمارهٔ سرویس"
         ),
         cancel_code="adm_usr",
         return_to=f"adm:{card}:view:{user.id}",
@@ -2662,13 +2664,15 @@ async def adm_users_message_send(
     from app.services.users_quick import send_staff_dm
 
     try:
+        text, buttons = split_message(message.text or "")
         await send_staff_dm(
             session,
             user,
-            message.text or "",
+            text,
             shop_id=None,
             actor=bot_user_panel_label(db_user),
             sender_tg=int(db_user.telegram_id or 0),
+            buttons=buttons,
         )
         await session.commit()
         status = feedback.MESSAGE_SENT
@@ -4932,6 +4936,7 @@ async def adm_broadcast_audience(callback: CallbackQuery, db_user: BotUser, stat
     if callback.message:
         await callback.message.edit_text(
             f"📢 مخاطب: <b>{audience_fa}</b>\nمتن پیام را بفرستید؛ بولد، لینک و قالب‌بندی تلگرام حفظ می‌شود.\n"
+            f"{BUTTONS_HINT}\n"
             "پیش از ارسال، پیش‌نمایش را می‌بینید و تأیید می‌کنید.\nبرای لغو: انصراف"
         )
         from app.bot.nav_input import ask_text

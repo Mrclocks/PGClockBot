@@ -1629,9 +1629,11 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_automation_review_pages(app, require_staff=require_staff, get_db=get_db)
     register_payment_void_pages(app, require_staff=require_staff, get_db=get_db)
     register_broadcast_queue_pages(app, require_admin=require_admin, get_db=get_db)
+    from app.api.message_button_pages import register_message_button_pages
     from app.api.shop_broadcast_pages import register_shop_broadcast_pages
 
     register_shop_broadcast_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_message_button_pages(app, require_staff=require_staff, get_db=get_db)
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
     register_random_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
@@ -5318,12 +5320,14 @@ def create_api_app(lifespan=None) -> FastAPI:
     ):
         from app.services.broadcast import AUDIENCE_LABELS, list_broadcast_history
         from app.services.broadcast_queue import STATUS_LABELS, new_request_token
+        from app.services.message_buttons import buttons_form_context
 
         history = await list_broadcast_history(session, limit=40)
         return render(
             request,
             "broadcast.html",
             {
+                **(await buttons_form_context(session, None)),
                 "staff": staff,
                 "history": history,
                 "audience_labels": AUDIENCE_LABELS,
@@ -5342,8 +5346,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         text: str = Form(...),
         audience: str = Form("all"),
         request_token: str = Form(""),
+        buttons: str = Form(""),
     ):
-        from app.services.broadcast_queue import queue_broadcast
+        from app.services.broadcast_queue import BroadcastRequest, queue_broadcast
+        from app.services.message_buttons import broadcast_buttons
 
         audience = (audience or "all").strip()
         if audience not in {"all", "users", "resellers", "admins"}:
@@ -5354,7 +5360,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 text=text,
                 audience=audience,
                 created_by=str(staff.get("username") or "admin"),
-                request_token=request_token,
+                request=BroadcastRequest(request_token, await broadcast_buttons(session, buttons, shop_id=None)),
             )
         except ValueError as e:
             return _redirect_msg("/broadcast", err=str(e))

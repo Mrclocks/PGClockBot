@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.authz import authz_from_staff, can_shop
 from app.services.broadcast import clear_broadcast_history, delete_broadcast_log, list_broadcast_history
 from app.services.broadcast_queue import STATUS_LABELS, cancel_broadcast
+from app.services.message_buttons import broadcast_buttons, buttons_form_context
 from app.services.shop_broadcast import (
     SHOP_AUDIENCE_LABELS,
     new_shop_request_key,
@@ -70,6 +71,7 @@ def register_shop_broadcast_pages(
             request,
             "shop_broadcast.html",
             {
+                **(await buttons_form_context(session, scope)),
                 "staff": staff,
                 "history": history,
                 "audience_labels": SHOP_AUDIENCE_LABELS,
@@ -95,6 +97,7 @@ def register_shop_broadcast_pages(
                 text=form.get("text"),
                 created_by=_actor(staff),
                 request_key=form.get("request_key"),
+                buttons=await broadcast_buttons(session, str(form.get("buttons") or ""), shop_id=scope),
             )
         except ValueError as exc:
             await session.rollback()

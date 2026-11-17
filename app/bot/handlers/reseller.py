@@ -23,6 +23,7 @@ from app.db.models import (
 from app.services.chat_records import keep_sent
 from app.services.automation_review import count_review_queue
 from app.services.color_tags import tag_mark
+from app.services.message_buttons import BUTTONS_HINT, split_message
 from app.services.customer_marks import marks_for, marks_of
 from app.bot.handlers.reseller_customer_tools import customer_tool_rows
 from app.services.customer_service_lines import service_lines
@@ -569,7 +570,8 @@ async def res_user_message_start(
         callback,
         state,
         prompt=(
-            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b>:"
+            f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b>:\n"
+            f"{BUTTONS_HINT} برای تمدید یک سرویس همین مشتری: @renew:شمارهٔ سرویس"
         ),
         cancel_code="rs_msg",
         return_to=f"res:user:{uid}",
@@ -622,10 +624,12 @@ async def res_user_message_send(
     from app.services.users_quick import send_staff_dm
 
     try:
+        text, buttons = split_message(message.text or "")
         await send_staff_dm(
             session,
             user,
-            message.text or "",
+            text,
+            buttons=buttons,
             shop_id=int(owner_id),
             actor=bot_user_panel_label(db_user),
             sender_tg=int(db_user.telegram_id or 0),

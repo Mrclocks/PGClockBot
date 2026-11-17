@@ -902,6 +902,19 @@ class DiscountCode(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class MessageButtonPreset(Base):
+    """A saved set of buttons staff put under broadcasts and direct messages; one shop's own (0 = platform)."""
+
+    __tablename__ = "message_button_presets"
+    __table_args__ = (UniqueConstraint("shop_key", "name", name="uq_message_button_presets_shop_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_key: Mapped[int] = mapped_column(Integer, default=0, server_default="0", index=True)
+    name: Mapped[str] = mapped_column(String(40))
+    buttons: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class BroadcastLog(Base):
     __tablename__ = "broadcast_logs"
     __table_args__ = (
@@ -920,6 +933,8 @@ class BroadcastLog(Base):
     shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
     audience: Mapped[str] = mapped_column(String(32), default="all")
     text: Mapped[str] = mapped_column(Text)
+    # Buttons under the message, as message_buttons.dump_rows wrote them; validated again before sending.
+    buttons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     total: Mapped[int] = mapped_column(Integer, default=0)
     ok_count: Mapped[int] = mapped_column(Integer, default=0)
     fail_count: Mapped[int] = mapped_column(Integer, default=0)

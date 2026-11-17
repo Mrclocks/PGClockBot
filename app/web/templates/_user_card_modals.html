@@ -69,6 +69,10 @@
         <label class="form-field"><span>متن پیام <span class="ds-req" aria-hidden="true">*</span></span>
           <textarea name="body" rows="6" required maxlength="2000" placeholder="پیام کوتاه پشتیبانی…"></textarea>
         </label>
+        <label class="form-field"><span>دکمه‌های زیر پیام (اختیاری)</span>
+          <textarea name="buttons" rows="2" maxlength="2000" dir="auto" placeholder="تمدید - @renew:شمارهٔ سرویس | پشتیبانی - @support"></textarea>
+          <small class="muted">هر خط یک ردیف، دکمه‌ها با | جدا؛ هر دکمه «متن - مقصد». مقصدها: @shop، @services، @wallet، @support، @club، @renew:شمارهٔ سرویسِ همین کاربر، ‎@preset:نام‌قالب، یا لینک https:// اگر مجاز باشید.</small>
+        </label>
       {% endcall %}
       {{ ds_foot('ارسال') }}
     </form>

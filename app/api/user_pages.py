@@ -617,6 +617,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 shop_id=resolve_shop_scope_id(staff),
                 actor=actor_label_from_staff(staff),
                 sender_tg=int(staff.get("telegram_id") or 0),
+                buttons=str(form.get("buttons") or ""),
             )
             await session.commit()
         except ValueError as e:

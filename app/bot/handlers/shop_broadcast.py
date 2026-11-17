@@ -15,6 +15,7 @@ from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
 from app.services.broadcast import clear_broadcast_history, delete_broadcast_log, list_broadcast_history
 from app.services.broadcast_queue import STATUS_LABELS, cancel_broadcast
+from app.services.message_buttons import BUTTONS_HINT, broadcast_buttons, split_message, stored_markup_rows
 from app.services.redact import user_safe_error
 from app.services.shop_broadcast import (
     SHOP_AUDIENCE_LABELS,
@@ -237,7 +238,7 @@ async def cb_audience(
     label = SHOP_AUDIENCE_LABELS["all"]
     if callback.message:
         await callback.message.edit_text(
-            f"📢 مخاطب: <b>{label}</b>\nمتن پیام را بفرستید.\nبرای لغو: انصراف"
+            f"📢 مخاطب: <b>{label}</b>\nمتن پیام را بفرستید.\n{BUTTONS_HINT}\nبرای لغو: انصراف"
         )
     await ask_text(
         callback,
@@ -281,17 +282,23 @@ async def on_text(
             reseller_owner_id=reseller_owner_id,
         )
         return
+    text, buttons_raw = split_message(message.text or "")
     try:
-        body = clean_shop_broadcast_text(message.text)
+        body = clean_shop_broadcast_text(text)
+        buttons = await broadcast_buttons(session, buttons_raw, shop_id=shop_id)
     except ValueError as exc:
         await message.answer(f"⚠️ {user_safe_error(exc)}")
         return
-    await state.update_data(shop_broadcast_text=body)
+    await state.update_data(shop_broadcast_text=body, shop_broadcast_buttons=buttons)
     await state.set_state(ShopBroadcastStates.confirm)
     ui = await get_all_settings(session)
     preview = shop_broadcast_html_snippet(body, limit=500)
     if len(body) > 500:
         preview += "…"
+    rows = stored_markup_rows(buttons)
+    if rows:
+        # The buttons exactly as customers will get them, under the message preview.
+        await message.answer(preview, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
     await message.answer(
         f"تأیید ارسال به <b>{SHOP_AUDIENCE_LABELS['all']}</b>؟\n\n{preview}",
         reply_markup=_confirm_keyboard(ui),
@@ -325,6 +332,7 @@ async def cb_confirm(
             text=text,
             created_by=str(db_user.telegram_id),
             request_key=request_key,
+            buttons=data.get("shop_broadcast_buttons"),
         )
     except ValueError as exc:
         await session.rollback()

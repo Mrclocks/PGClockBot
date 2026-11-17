@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.bot.handlers import admin_broadcast_confirm as confirm
 from app.db import Base
 from app.db.models import BotUser, BroadcastLog
-from app.services.broadcast_queue import new_request_token, queue_broadcast
+from app.services.broadcast_queue import BroadcastRequest, new_request_token, queue_broadcast
 from app.services.telegram_html import normalize_telegram_html
 
 
@@ -67,15 +67,15 @@ class QueueTests(DbCase):
     async def test_the_same_token_queues_one_broadcast(self) -> None:
         token = new_request_token()
         async with self.Session() as session:
-            first = await queue_broadcast(session, text="سلام", audience="all", created_by="o", request_token=token)
-            second = await queue_broadcast(session, text="سلام", audience="all", created_by="o", request_token=token)
+            first = await queue_broadcast(session, text="سلام", audience="all", created_by="o", request=BroadcastRequest(token))
+            second = await queue_broadcast(session, text="سلام", audience="all", created_by="o", request=BroadcastRequest(token))
             self.assertEqual(first.id, second.id)
             self.assertEqual(await self.broadcasts(session), 1)
 
     async def test_a_malformed_token_never_matches_another_broadcast(self) -> None:
         async with self.Session() as session:
-            await queue_broadcast(session, text="a", audience="all", created_by="o", request_token="x' OR 1=1")
-            await queue_broadcast(session, text="b", audience="all", created_by="o", request_token="x' OR 1=1")
+            await queue_broadcast(session, text="a", audience="all", created_by="o", request=BroadcastRequest("x' OR 1=1"))
+            await queue_broadcast(session, text="b", audience="all", created_by="o", request=BroadcastRequest("x' OR 1=1"))
             self.assertEqual(await self.broadcasts(session), 2)
 
     async def test_unbalanced_html_is_refused_before_queueing(self) -> None:

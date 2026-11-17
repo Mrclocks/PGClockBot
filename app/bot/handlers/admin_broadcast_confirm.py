@@ -24,7 +24,8 @@ from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
 from app.services.broadcast import AUDIENCE_LABELS
-from app.services.broadcast_queue import count_platform_targets, new_request_token, queue_broadcast
+from app.services.broadcast_queue import BroadcastRequest, count_platform_targets, new_request_token, queue_broadcast
+from app.services.message_buttons import broadcast_buttons, split_message, stored_markup_rows
 from app.services.redact import user_safe_error
 from app.services.telegram_html import normalize_telegram_html
 from app.services.users import get_all_settings
@@ -45,7 +46,10 @@ class BroadcastConfirmStates(StatesGroup):
 
 
 def broadcast_source_html(message: Message) -> str:
-    """The owner's message as HTML: Telegram formatting when used, else the typed text (simple tags allowed)."""
+    """The owner's message as HTML: Telegram formatting when used, else the typed text (simple tags allowed).
+
+    Buttons may follow a line ``---``; see ``message_buttons``.
+    """
     if message.entities:
         return message.html_text or ""
     return message.text or ""
@@ -70,21 +74,25 @@ async def preview_broadcast(message: Message, state: FSMContext, session: AsyncS
         await state.clear()
         return
     try:
-        body = normalize_telegram_html(broadcast_source_html(message).strip())
+        text, buttons_raw = split_message(broadcast_source_html(message))
+        body = normalize_telegram_html(text)
+        buttons = await broadcast_buttons(session, buttons_raw, shop_id=None)
         total = await count_platform_targets(session, audience)
     except ValueError as exc:
         await finish_text_step(message, state, text=f"⚠️ {html.escape(user_safe_error(exc))}", inline=back)
         await state.clear()
         return
     try:
-        await message.answer(body, parse_mode="HTML")
+        rows = stored_markup_rows(buttons)
+        extra = {"reply_markup": InlineKeyboardMarkup(inline_keyboard=rows)} if rows else {}
+        await message.answer(body, parse_mode="HTML", **extra)
     except TelegramBadRequest:
         logger.info("broadcast preview rejected by Telegram", exc_info=True)
         await finish_text_step(message, state, text=REJECTED_BY_TELEGRAM, inline=back)
         await state.clear()
         return
     await state.set_state(BroadcastConfirmStates.confirm)
-    await state.update_data(bc_text=body, bc_audience=audience, bc_token=new_request_token())
+    await state.update_data(bc_text=body, bc_buttons=buttons, bc_audience=audience, bc_token=new_request_token())
     label = html.escape(AUDIENCE_LABELS.get(audience, audience))
     await finish_text_step(
         message, state, text=f"👆 پیش‌نمایش پیام بالا.\nبرای «{label}» ({total} نفر) فرستاده شود؟", inline=confirm_markup(total)
@@ -102,7 +110,7 @@ async def send_confirmed(callback: CallbackQuery, session: AsyncSession, db_user
             text=str(data.get("bc_text") or ""),
             audience=str(data.get("bc_audience") or ""),
             created_by=str(db_user.telegram_id),
-            request_token=data.get("bc_token"),
+            request=BroadcastRequest(data.get("bc_token"), data.get("bc_buttons")),
         )
     except ValueError as exc:
         await callback.answer(user_safe_error(exc), show_alert=True)
