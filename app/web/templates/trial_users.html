@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label, empty_state, stat_strip, search_submit %}
+{% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
 {% block title %}کاربران تست{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
@@ -44,6 +45,7 @@
     {'key': 'message', 'label': 'پیام', 'confirm': 'پیام برای {n} کاربر ارسال شود؟ کاربرانی که پیام بازاریابی را قطع کرده‌اند حذف می‌شوند.', 'confirm_title': 'پیام به کاربران تست', 'confirm_label': 'ارسال', 'reason': true, 'reason_label': 'متن پیام'},
   ]) }}
   {% endif %}
+  {{ user_card_hint() }}
   <div class="table-wrap">
   <table class="table-compact table-list-sm" data-sortable{% if selectable %} data-bulk-select{% endif %}>
     <thead>
@@ -74,7 +76,7 @@
         {% if selectable %}{{ table_select_cell(row.user_id) }}{% endif %}
         <td class="mono col-hide-sm" data-sort-value="{{ row.trial_order_id }}"><bdi dir="ltr">{{ row.trial_order_id }}</bdi></td>
         <td class="li-title" data-sort-value="{{ row.name }}">
-          <a class="cell-user-link" href="/users?uid={{ row.user_id }}" dir="auto">{{ row.name }}</a>
+          {{ user_card_link(row.user_id, row.name, 'trials', context='کاربر تست') }}
           <span class="li-only li-id" dir="ltr">({{ row.telegram_id }})</span>
         </td>
         <td class="mono col-tg col-hide-sm" data-sort-value="{{ row.telegram_id }}"><bdi dir="ltr">{{ row.telegram_id }}</bdi></td>
@@ -157,4 +159,5 @@
   {% endif %}
 </div>
 </div>
+{{ user_card_modals(return_page='trials') }}
 {% endblock %}

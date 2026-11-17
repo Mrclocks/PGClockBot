@@ -239,8 +239,9 @@ class ManageRoutesTests(CleanupCase):
         await self.add_service(3, 20, SHOP, cleanup_exempt=True)
         response = await self.call("GET", ROUTE)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("/users?uid=20&amp;edit=20", response.text)
-        self.assertNotIn("uid=21", response.text)  # another shop's customer is never linked
+        self.assertIn('data-modal-load="/users/20/card?from=cleanup"', response.text)
+        self.assertNotIn("/users/21/", response.text)  # another shop's customer is never linked
+        self.assertNotIn("/users?uid=", response.text)  # the card opens in place, not the users list
         self.assertGreaterEqual(response.text.count("مشاهده کاربر"), 2)  # a menu item in each table
 
     async def test_the_page_lists_exempt_services_and_escapes_their_names(self) -> None:
