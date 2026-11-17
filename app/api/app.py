@@ -92,6 +92,7 @@ from app.services.psp_gateways import psp_gateways_form_json
 from app.services.panel_assets import asset_version, get_panel_asset_cache_key
 from app.services.redact import operator_error
 from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.staff_audit import actor_from_staff
 from app.services.mobile_bar import load_bar_form, load_bar_order
 from app.services.panel_brand import (
     BRAND_PRESET_CSS,
@@ -3539,7 +3540,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "/finance?tab=orders",
                             err="تأیید رسید نیاز به دسترسی «پرداخت‌ها» دارد",
                         )
-                delivered = await approve_payment(session, payment, reviewer_tg=0)
+                delivered = await approve_payment(session, payment, reviewer_tg=0, actor=actor_from_staff(staff, shop_id=None))
                 await _notify_order_user(session, payment, delivered or order)
             elif order.status == OrderStatus.PAID.value:
                 had_service = bool(order.service_id)
@@ -3607,7 +3608,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 )
         try:
             if pending_pay:
-                await reject_payment(session, pending_pay, reviewer_tg=0, note="web order reject")
+                await reject_payment(
+                    session, pending_pay, reviewer_tg=0, note="web order reject", actor=actor_from_staff(staff, shop_id=None)
+                )
             else:
                 await reject_order(session, order, note="web order reject")
         except Exception as e:
@@ -3698,7 +3701,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if payment.status != PaymentStatus.PENDING.value:
             return _redirect_msg("/finance?tab=payments", err="این پرداخت قابل تأیید نیست")
         try:
-            order = await approve_payment(session, payment, reviewer_tg=0)
+            order = await approve_payment(session, payment, reviewer_tg=0, actor=actor_from_staff(staff, shop_id=None))
         except Exception as e:
             return _redirect_msg("/finance?tab=payments", err=operator_error(e))
         user = await session.get(BotUser, payment.user_id)
@@ -3777,7 +3780,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     ),
                 )
         try:
-            await reject_payment(session, payment, reviewer_tg=0, note="web reject")
+            await reject_payment(session, payment, reviewer_tg=0, note="web reject", actor=actor_from_staff(staff, shop_id=None))
         except Exception as e:
             return _redirect_msg("/finance?tab=payments", err=operator_error(e))
         reject_order = await session.get(Order, payment.order_id) if payment.order_id else None
