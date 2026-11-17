@@ -23,6 +23,8 @@
                 data-modal-load-target="user-edit-body"
                 data-edit-url="/users/{{ u.id }}/edit?fragment=1"
                 data-edit-title="ویرایش کاربر #{{ u.id }}">ویرایش</button>
+        {% elif edit_target == 'user_link' %}
+        <a class="btn" href="/users?uid={{ u.id }}&amp;edit={{ u.id }}">ویرایش</a>
         {% endif %}
         {% if can_message %}
         <button type="button" class="btn btn-ghost"

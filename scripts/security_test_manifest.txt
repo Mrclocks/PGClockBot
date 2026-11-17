@@ -300,6 +300,7 @@ tests/test_shop_notify_isolation.py
 tests/test_user_search.py
 tests/test_psp_gateways.py
 tests/test_user_card.py
+tests/test_user_card_links.py
 tests/test_user_photo.py
 tests/test_custom_plan_shop_limits.py
 tests/test_custom_plan_cleanup.py

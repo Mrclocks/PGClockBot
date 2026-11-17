@@ -89,7 +89,8 @@ class SharedCardModalTests(unittest.TestCase):
     def render_modals(self, **kwargs) -> str:
         from app.api.app import templates
 
-        module = templates.env.get_template("_user_card_modals.html").make_module({"csrf_token": "t"})
+        staff = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
+        module = templates.env.get_template("_user_card_modals.html").make_module({"csrf_token": "t", "staff": staff})
         return str(module.user_card_modals(**kwargs))
 
     def test_the_resellers_list_gets_the_card_and_a_message_form_that_returns_there(self) -> None:

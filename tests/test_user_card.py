@@ -202,6 +202,48 @@ class UserCardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 303)
         self.assertTrue(response.headers["location"].startswith("/resellers?err="))
 
+    async def test_a_card_opened_from_another_table_links_to_the_users_edit(self) -> None:
+        for page in ("finance", "tickets", "trials", "cleanup", "applications", "loyalty"):
+            response = await self.client.get(f"/users/11/card?from={page}")
+            self.assertIn('<a class="btn" href="/users?uid=11&amp;edit=11">ویرایش</a>', response.text, page)
+            self.assertNotIn('data-modal-open="modal-user-edit"', response.text, page)
+
+    async def test_an_unknown_card_page_behaves_like_the_users_list(self) -> None:
+        response = await self.client.get("/users/11/card?from=https://evil.example")
+        self.assertIn('data-modal-open="modal-user-edit"', response.text)
+        self.assertNotIn("evil.example", response.text)
+
+    async def test_a_message_sent_from_another_table_returns_to_that_page(self) -> None:
+        for page, path in (("finance", "/finance"), ("tickets", "/tickets"), ("trials", "/trial-users"),
+                           ("cleanup", "/service-cleanup"), ("loyalty", "/loyalty")):
+            response = await self.client.post("/users/11/message", data={"body": "", "return_page": page})
+            self.assertEqual(response.status_code, 303)
+            self.assertTrue(response.headers["location"].startswith(f"{path}?err="), page)
+
+    async def test_staff_without_the_users_right_cannot_open_the_card(self) -> None:
+        self.staff = {"role": "reseller", "bot_user_id": SHOP_A, "permissions": ["finance"]}
+        app = FastAPI()
+        # The real permission dependency, so the right is checked as in production.
+        from app.services.authz import authz_from_staff, can_shop
+
+        def require_perm(perm: str):
+            async def _dep() -> dict[str, Any]:
+                if not can_shop(authz_from_staff(self.staff), perm):
+                    from fastapi import HTTPException
+
+                    raise HTTPException(status_code=403)
+                return self.staff
+            return _dep
+
+        async def get_db() -> AsyncIterator[AsyncSession]:
+            yield self.session
+
+        register_user_pages(app, render=lambda *a, **k: HTMLResponse(""), require_admin=require_perm("x"),
+                            get_db=get_db, require_perm=require_perm)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/users/11/card?from=finance")
+        self.assertEqual(response.status_code, 403)
+
     async def test_an_unknown_return_page_falls_back_to_the_users_list(self) -> None:
         self.staff = OWNER.copy()
         response = await self.client.post(

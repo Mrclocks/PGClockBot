@@ -137,6 +137,7 @@ async def _wheel_panel_context(
         spins = [
             {
                 "id": s.id,
+                "user_id": int(s.user_id),
                 "user_label": bot_user_panel_label(
                     users.get(int(s.user_id)), fallback_id=int(s.user_id)
                 ),
