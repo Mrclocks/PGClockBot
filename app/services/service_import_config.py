@@ -25,7 +25,10 @@ MODE_APPROVAL = "approval"
 MODES = (MODE_INSTANT, MODE_APPROVAL)
 
 DEFAULT_MAX_PER_USER = 5
-MAX_PER_USER_LIMIT = 20
+# A stored cap of 0 means a customer may add any number of earlier services.
+UNLIMITED_PER_USER = 0
+# Upper bound only to reject absurd input; any real shop wanting more uses UNLIMITED_PER_USER.
+MAX_PER_USER_LIMIT = 100_000
 MAX_LIST_ITEMS = 10
 _ADMIN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _LIST_SEPARATORS = re.compile(r"[\s,;،]+")
@@ -42,6 +45,10 @@ class ImportSettings:
     @property
     def needs_approval(self) -> bool:
         return self.mode == MODE_APPROVAL
+
+    @property
+    def is_unlimited(self) -> bool:
+        return self.max_per_user == UNLIMITED_PER_USER
 
 
 def split_list(raw: str | None) -> list[str]:
@@ -71,11 +78,17 @@ def normalize_admins(raw: str | None) -> list[str]:
 
 
 def normalize_max_per_user(raw: object) -> int:
+    """Per-customer cap in ``[0, MAX_PER_USER_LIMIT]``; 0 means unlimited, junk means the default."""
+    if raw is None or isinstance(raw, bool):
+        return DEFAULT_MAX_PER_USER
     try:
         value = int(str(raw).strip())
     except (TypeError, ValueError):
         return DEFAULT_MAX_PER_USER
-    return min(max(value, 1), MAX_PER_USER_LIMIT)
+    if value < UNLIMITED_PER_USER:
+        # A typo such as "-5" must not silently lift the cap.
+        return DEFAULT_MAX_PER_USER
+    return min(value, MAX_PER_USER_LIMIT)
 
 
 def normalize_setting_value(key: str, value: str) -> str:

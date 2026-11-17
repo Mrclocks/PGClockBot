@@ -121,7 +121,7 @@ class SavePlumbingTests(TabHarness):
         self.assertEqual(response.status_code, 303)
         values = await self.stored(None)
         self.assertEqual(values["service_import_enabled"], "1")
-        self.assertEqual(values["service_import_max_per_user"], "20")
+        self.assertEqual(values["service_import_max_per_user"], "99")
         self.assertEqual(values["service_import_paths"], "/sub\n/hamid")
         self.assertEqual(values["service_import_admins"], "admin1\nbad")
 

@@ -45,6 +45,7 @@ from app.services.service_import_config import (
     KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
     KEY_MODE as IMPORT_KEY_MODE,
     MAX_PER_USER_LIMIT as IMPORT_MAX_PER_USER_LIMIT,
+    UNLIMITED_PER_USER as IMPORT_UNLIMITED_PER_USER,
 )
 from app.services.user_errors import domain_error_text
 from app.services.settings_button_labels import (
@@ -487,7 +488,7 @@ NUMBER_INT_RANGES: dict[str, tuple[int, int]] = {
     "auto_approve_after_minutes": (0, APPROVAL_MAX_MINUTES),
     "auto_approve_after_max_amount": (0, MAX_PRICE),
     "admin_daily_report_hour": (0, 23),
-    IMPORT_KEY_MAX_PER_USER: (1, IMPORT_MAX_PER_USER_LIMIT),
+    IMPORT_KEY_MAX_PER_USER: (IMPORT_UNLIMITED_PER_USER, IMPORT_MAX_PER_USER_LIMIT),
     **ENTRY_APPROVAL_NUMBER_BOUNDS,
 }
 

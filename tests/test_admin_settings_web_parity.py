@@ -83,8 +83,8 @@ class SaveTests(unittest.IsolatedAsyncioTestCase):
             ("admin_daily_report_hour", "-1"),
             ("auto_approve_after_minutes", "1441"),
             ("auto_approve_after_max_amount", "2000000001"),
-            ("service_import_max_per_user", "0"),
-            ("service_import_max_per_user", "21"),
+            ("service_import_max_per_user", "-1"),
+            ("service_import_max_per_user", "100001"),
             ("service_import_max_per_user", "NaN"),
             ("auto_approve_after_minutes", "1.5"),
         ):
@@ -94,7 +94,12 @@ class SaveTests(unittest.IsolatedAsyncioTestCase):
                 message.answer.assert_awaited_once()
 
     async def test_numbers_inside_the_bounds_are_saved(self) -> None:
-        for key, good in (("admin_daily_report_hour", "23"), ("service_import_max_per_user", "20"), ("auto_approve_after_minutes", "۳۰")):
+        for key, good in (
+            ("admin_daily_report_hour", "23"),
+            ("service_import_max_per_user", "0"),
+            ("service_import_max_per_user", "500"),
+            ("auto_approve_after_minutes", "۳۰"),
+        ):
             with self.subTest(key=key):
                 saved, _ = await self.save(key, good)
                 self.assertEqual(saved.await_args.args[1], key)
