@@ -16,6 +16,7 @@
   "backup_last_verify_ok": "",
   "backup_schedule_enabled": "1",
   "backup_schedule_hour": "3",
+  "backup_telegram_allow_env": "0",
   "backup_telegram_bot_token": "",
   "backup_telegram_chat_ids": "",
   "backup_telegram_custom_bot": "0",
