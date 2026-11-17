@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Ticket
 from app.services.shop_scope import platform_may_review_payment
+from app.services.staff_audit import actor_from_staff
 from app.services.ticket_scope import staff_ticket_in_scope
 
 logger = logging.getLogger(__name__)
@@ -340,7 +341,7 @@ async def bulk_order_action(
                         if "payments" not in perms:
                             fail += 1
                             continue
-                    await approve_payment(session, payment, reviewer_tg=0)
+                    await approve_payment(session, payment, reviewer_tg=0, actor=actor_from_staff(staff, shop_id=None))
                 elif order.status == OrderStatus.PAID.value:
                     # Must route renew/addon/reseller_app — deliver_order alone
                     # would seal mutation orders (service_id set) without applying.
@@ -400,9 +401,9 @@ async def bulk_payment_action(
             continue
         try:
             if action == "approve":
-                await approve_payment(session, payment, reviewer_tg=0)
+                await approve_payment(session, payment, reviewer_tg=0, actor=actor_from_staff(staff, shop_id=None))
             elif action == "reject":
-                await reject_payment(session, payment, reviewer_tg=0)
+                await reject_payment(session, payment, reviewer_tg=0, actor=actor_from_staff(staff, shop_id=None))
             else:
                 fail += 1
                 continue

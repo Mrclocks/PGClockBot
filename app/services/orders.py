@@ -36,6 +36,7 @@ from app.db.models import (
     ResellerCharge,
 )
 from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
+from app.services.payment_decision_audit import ACTION_APPROVE, ACTION_REJECT, record_payment_decision
 from app.services.pasarguard import (
     PasarGuardError,
     extract_sub_token,
@@ -75,6 +76,7 @@ from app.services.volume_allocation import (
     is_hard_panel_rejection,
     release_volume_hold,
 )
+from app.services.staff_audit import StaffActor
 from app.services.wallet import credit_wallet, debit_wallet
 
 logger = logging.getLogger(__name__)
@@ -1982,7 +1984,9 @@ async def approve_payment(
     *,
     bot=None,
     attempt: DeliveryAttempt | None = None,
+    actor: StaffActor | None = None,
 ) -> Order | None:
+    """Approve a pending payment; ``actor`` (web) or ``reviewer_tg`` (bot) is written to the staff log."""
     payment_id = int(payment.id)
     # DB-only claim: disable autoflush so a dirty in-memory status cannot
     # rewrite the row to pending before the conditional UPDATE runs.
@@ -2048,6 +2052,7 @@ async def approve_payment(
             )
             await session.commit()
             raise
+        await record_payment_decision(session, payment, None, action=ACTION_APPROVE, reviewer_tg=reviewer_tg, actor=actor)
         await session.commit()
         await _sync_payment_review_messages(session, payment_id, bot=bot)
         return None
@@ -2117,6 +2122,7 @@ async def approve_payment(
             raise ValueError("این سفارش قبلاً پرداخت شده")
         await session.commit()
         raise ValueError("این سفارش قابل تأیید نیست")
+    await record_payment_decision(session, payment, order, action=ACTION_APPROVE, reviewer_tg=reviewer_tg, actor=actor)
     await session.commit()
     await session.refresh(order)
     await _sync_payment_review_messages(session, payment_id, bot=bot)
@@ -2124,8 +2130,15 @@ async def approve_payment(
 
 
 async def reject_payment(
-    session: AsyncSession, payment: Payment, reviewer_tg: int, note: str = "", *, bot=None
+    session: AsyncSession,
+    payment: Payment,
+    reviewer_tg: int,
+    note: str = "",
+    *,
+    bot=None,
+    actor: StaffActor | None = None,
 ) -> None:
+    """Reject a pending payment; ``actor`` (web) or ``reviewer_tg`` (bot) is written to the staff log."""
     payment_id = int(payment.id)
     with session.no_autoflush:
         claim = await session.execute(
@@ -2165,6 +2178,8 @@ async def reject_payment(
             await _release_order_discount(session, rejected_order)
             await _release_trial_claim_for_order(session, rejected_order)
             await discard_unsold_custom_plan(session, rejected_order)
+    order = await session.get(Order, int(payment.order_id)) if payment.order_id else None
+    await record_payment_decision(session, payment, order, action=ACTION_REJECT, reviewer_tg=reviewer_tg, actor=actor)
     await session.commit()
     await _sync_payment_review_messages(session, payment_id, bot=bot)
 
