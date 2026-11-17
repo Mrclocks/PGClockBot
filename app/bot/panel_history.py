@@ -44,6 +44,7 @@ VIEW_SCREENS: frozenset[str] = frozenset({
     "adm:dash", "adm:orders", "adm:cancellations", "adm:resapp:list", "adm:tickets",
     "autorv:list", "payvoid:list",
     "res:dash", "res:orders", "res:tickets", "res:cancellations",
+    "qlk:v",
     "shop:list",
 })
 # Read-only screen families: the part before the id or page.

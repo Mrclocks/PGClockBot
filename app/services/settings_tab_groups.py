@@ -25,7 +25,7 @@ _TAB_PAGES = {MESSAGE_VARIABLES_TAB_KEY: "/message-variables"}
 # (group key, label, tab keys in display order). Related tabs sit together:
 # what the bot looks like, what it says, what a sale delivers, what it reports.
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("look", "ظاهر ربات", ("welcome", "appearance", "brand", "menu", "miniapp", "links")),
+    ("look", "ظاهر ربات", ("links", "welcome", "appearance", "brand", "menu", "miniapp")),
     ("texts", "متن‌ها", ("messages", "buttons", "colors", "screens", MESSAGE_VARIABLES_TAB_KEY)),
     ("service", "فروش و سرویس", ("naming", "qr", "guides", "limits", "service_import")),
     ("alerts", "هشدار و گزارش", ("notifications", "daily_report")),

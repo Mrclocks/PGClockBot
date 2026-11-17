@@ -18,6 +18,7 @@ from app.services.home_overview import build_home_overview, reseller_shop_summar
 from app.services import pg_link_health
 from app.services.pg_read_cache import NODE_LIST_MAX_AGE_SEC
 from app.services.pg_read_resilience import circuit_status
+from app.services.quick_links import quick_links_page
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 from app.services.usage_alert_messages import alerts_off_settings_page
 from app.services.secret_box import reveal_bot_token
@@ -116,6 +117,13 @@ async def _safe_trend(*, reseller_id: int | None):
     except Exception:
         logger.exception("sales trend failed reseller_id=%s", reseller_id)
         return empty_trend(7)
+
+
+def _header_links(ctx: dict, staff: dict | None) -> dict:
+    """Links the dashboard header offers this staff member: KPI cards and the quick links page."""
+    ctx["kpi_links"] = kpi_links(staff)
+    ctx["quick_links_page"] = quick_links_page(staff)
+    return ctx
 
 
 def kpi_links(staff: dict | None) -> dict[str, bool]:
@@ -641,7 +649,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             return result
         template, ctx = result
         ctx = dict(ctx)
-        ctx["kpi_links"] = kpi_links(ctx.get("staff"))
+        _header_links(ctx, ctx.get("staff"))
         # Body fragment must never re-trigger defer (no nested fetch loop).
         ctx["widgets_deferred"] = False
         if as_body_fragment:
@@ -686,7 +694,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 return result
             template, ctx = result
             ctx = dict(ctx)
-            ctx["kpi_links"] = kpi_links(staff)
+            _header_links(ctx, staff)
             ctx["widgets_deferred"] = True
             ctx["widgets_body_url"] = "/home/body"
             # Intentionally not dashboard_degraded — shell is planned, not failed.
@@ -706,7 +714,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             return result
         template, ctx = result
         ctx = dict(ctx)
-        ctx["kpi_links"] = kpi_links(staff)
+        _header_links(ctx, staff)
         ctx["widgets_deferred"] = False
         return render(request, template, _flash_from_query(request, ctx))
 
