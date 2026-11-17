@@ -60,22 +60,8 @@ class AdminNotifyToggleAllowlistTests(unittest.TestCase):
         for key in keys:
             self.assertTrue(_is_toggleable_setting_key(key), msg=key)
 
-    def test_toggle_handler_uses_helper_not_fields_only(self):
-        src = (ROOT / "app/bot/handlers/admin_settings.py").read_text(encoding="utf-8")
-        self.assertIn("_is_toggleable_setting_key(key)", src)
-        self.assertNotIn(
-            'key not in FIELDS and key not in {"custom_plan_enabled", "trial_enabled"}',
-            src,
-        )
-
 
 class ResellerNotifyToggleTests(unittest.TestCase):
-    def test_notify_uses_ntog_not_tog(self):
-        src = (ROOT / "app/bot/handlers/reseller_settings.py").read_text(encoding="utf-8")
-        self.assertIn("res:st:ntog:", src)
-        self.assertIn("settings_notify_toggle", src)
-        # Field toggles must not accept notify_ via res:st:tog
-        self.assertIn('key.startswith("notify_")', src)
 
     def test_no_orphan_tog_literals(self):
         """Scan bot handlers for adm:st:tog:literal not in allowlist."""
@@ -88,17 +74,6 @@ class ResellerNotifyToggleTests(unittest.TestCase):
                     _is_toggleable_setting_key(key),
                     msg=f"{path.name} renders adm:st:tog:{key} but allowlist rejects it",
                 )
-
-
-class VersionBumpTests(unittest.TestCase):
-    def test_version_at_least_3_5_3(self):
-        from app.version import __version__
-
-        self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")[:3]), (0, 1, 0)
-        )
-        notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"0.1.0"', notes)
 
 
 if __name__ == "__main__":

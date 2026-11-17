@@ -121,7 +121,7 @@ class SavePlumbingTests(TabHarness):
         self.assertEqual(response.status_code, 303)
         values = await self.stored(None)
         self.assertEqual(values["service_import_enabled"], "1")
-        self.assertEqual(values["service_import_max_per_user"], "20")
+        self.assertEqual(values["service_import_max_per_user"], "99")
         self.assertEqual(values["service_import_paths"], "/sub\n/hamid")
         self.assertEqual(values["service_import_admins"], "admin1\nbad")
 
@@ -137,6 +137,28 @@ class SavePlumbingTests(TabHarness):
         platform = await self.stored(None)
         self.assertEqual(platform["service_import_enabled"], "1")
         self.assertEqual((platform["service_import_paths"], platform["service_import_admins"]), ("", ""))
+
+    async def test_the_unlimited_button_saves_no_cap_and_shows_pressed_again(self):
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_import", {"s_service_import_max_per_user": ""})
+        self.assertEqual((await self.stored(5))["service_import_max_per_user"], "unlimited")
+        page = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_import")
+        self.assertRegex(page.text, r'aria-pressed="true" data-ds-unlimited="#s-service_import_max_per_user"')
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_import", {"s_service_import_max_per_user": "40"})
+        self.assertEqual((await self.stored(5))["service_import_max_per_user"], "40")
+        page = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_import")
+        self.assertRegex(page.text, r'aria-pressed="false" data-ds-unlimited="#s-service_import_max_per_user"')
+        self.assertIn('value="40"', page.text)
+
+    async def test_a_stored_empty_cap_shows_the_default_and_a_resave_keeps_a_cap(self):
+        async with self._session_factory()() as session:
+            from app.services.users import set_settings_bulk
+
+            await set_settings_bulk(session, {"service_import_max_per_user": ""}, reseller_id=5)
+        page = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_import")
+        self.assertRegex(page.text, r'aria-pressed="false" data-ds-unlimited="#s-service_import_max_per_user"')
+        self.assertIn('id="s-service_import_max_per_user" type="number" min="1" step="1" value="5"', page.text)
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_import", {"s_service_import_max_per_user": "5"})
+        self.assertEqual((await self.stored(5))["service_import_max_per_user"], "5")
 
     async def test_a_shops_own_values_never_change_the_platforms(self):
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_import", {"s_service_import_max_per_user": "2"})

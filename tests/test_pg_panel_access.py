@@ -236,6 +236,23 @@ class RotationTests(DbCase):
             row = await self.profile(session)
         self.assertEqual(decrypt_secret(row.pg_admin_password_enc), panel.passwords[0])
 
+    async def test_a_close_that_lost_the_race_sends_no_second_password(self) -> None:
+        panel = FakeOwnerPanel()
+        with patch("app.services.pg_panel_access.get_pg", return_value=panel):
+            async with self.Session() as late_session:
+                # Loaded while access was still open, then another request closes it first.
+                stale = await self.profile(late_session)
+                async with self.Session() as first_session:
+                    first = await set_pg_panel_access(first_session, await self.profile(first_session), False)
+                late = await set_pg_panel_access(late_session, stale, False)
+        self.assertEqual(first.rotation, RotationOutcome.DONE)
+        self.assertEqual(late.rotation, RotationOutcome.NOT_NEEDED)
+        self.assertEqual(len(panel.passwords), 1)
+        async with self.Session() as session:
+            row = await self.profile(session)
+        self.assertFalse(row.allow_pg_panel_access)
+        self.assertEqual(decrypt_secret(row.pg_admin_password_enc), panel.passwords[0])
+
     async def test_reopening_does_not_touch_the_panel(self) -> None:
         panel = FakeOwnerPanel()
         async with self.Session() as session:

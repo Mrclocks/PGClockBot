@@ -115,6 +115,7 @@ from app.services.settings_hub import (
     system_settings_groups,
 )
 from app.services.users import (
+    SETTING_RISK_NOTES,
     SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
     SETTING_GROUPS,
@@ -193,6 +194,7 @@ templates.env.globals["app_version"] = local_version()
 templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
 templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
+templates.env.globals["setting_risk_notes"] = SETTING_RISK_NOTES
 templates.env.globals["brand_presets"] = BRAND_PRESETS
 templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
 # Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).

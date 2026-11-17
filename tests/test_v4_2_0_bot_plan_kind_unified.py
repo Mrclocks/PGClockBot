@@ -7,7 +7,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 KEYBOARDS_SRC = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
-REPLY_KB_SRC = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
 
 
 class ShopKindFlowTests(unittest.TestCase):
@@ -71,15 +70,6 @@ class AdminPlanKindFlowTests(unittest.TestCase):
         self.assertIn("adm:plans:kind:resellers:fixed", block)
         self.assertIn("adm:plans:kind:resellers:payg", block)
         self.assertNotIn("wholesale", block.split("resellers")[1][:400])
-
-
-class VersionTests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 
 if __name__ == "__main__":

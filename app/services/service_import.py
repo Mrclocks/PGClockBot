@@ -484,7 +484,12 @@ async def attach_verified(
             return await _commit(session, mine, verified.record, ImportOutcome.UPGRADED)
         return ImportResult(ImportOutcome.ALREADY_YOURS, mine, verified.record)
 
-    if enforce_cap and renewable and await _imported_count(session, user.id) >= config.max_per_user:
+    if (
+        enforce_cap
+        and renewable
+        and not config.is_unlimited
+        and await _imported_count(session, user.id) >= config.max_per_user
+    ):
         raise ServiceImportError(LIMIT_REACHED, Reason.LIMIT_REACHED)
     if ask_approval and renewable and config.needs_approval:
         return await _queue_request(session, user, verified, shop_id)
