@@ -512,6 +512,7 @@ tests/test_settings_modal_list.py
 tests/test_empty_state.py
 tests/test_dashboard_layout.py
 tests/test_pg_capability_probe_credentials.py
+tests/test_pg_capability_outage_hold.py
 tests/test_platform_pg_access_end_to_end.py
 tests/test_plan_template_only_role.py
 tests/test_plan_category_board.py
