@@ -460,7 +460,7 @@ def _roll_back_git(git: str, root: Path, point: RollbackPoint, python: str) -> N
         switch_code(git, root, commit=point.commit, branch=point.branch, runner=_run)
     except UpdateStepError as exc:
         raise UpdateStepError(
-            f"برگرداندن نسخهٔ قبلی ناموفق بود ({exc}). روی سرور: bash pgclock.sh و گزینهٔ Update"
+            f"برگرداندن نسخهٔ قبلی ناموفق بود ({exc}). روی سرور از هر پوشه: pgclock update"
         ) from exc
     _reinstall_current_requirements(root, python)
     _append_log(f"نسخهٔ قبلی برگردانده شد ({point.commit[:12]})")

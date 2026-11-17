@@ -17,10 +17,10 @@ class SetupGateStatusPageTests(unittest.TestCase):
         self.assertIn("render_panel_status", src)
         self.assertIn("راه‌اندازی اولیه", src)
         self.assertIn("چطور توکن", src)
-        self.assertIn("bash pgclock.sh status", src)
-        self.assertIn('cd "$(cat /usr/local/lib/pgclockbot/install_root)"', src)
-        self.assertIn("وارد پوشهٔ نصب", src)
-        self.assertIn("pgclock status", src)
+        # The global command works from any directory: no `cd` into the install first.
+        self.assertIn('code_block="pgclock status"', src)
+        self.assertNotIn('cd "$(cat /usr/local/lib/pgclockbot/install_root)"', src)
+        self.assertIn("pgclock.sh status", src)
         self.assertIn("?gate=", src)
         # Old plain English wall removed
         self.assertNotIn("Setup link required", src)

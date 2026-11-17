@@ -132,7 +132,7 @@ def run(root: Path, *, schema_reader: Callable[[Path], str | None] = read_schema
         _report(root, SCHEMA_MOVED.format(backup=pending.get("backup_id") or "قبل از آپدیت"))
         return "schema-moved"
     if not restore_previous(root, previous):
-        _report(root, "نسخهٔ جدید بالا نیامد و برگرداندن نسخهٔ قبلی ناموفق بود. روی سرور: bash pgclock.sh")
+        _report(root, "نسخهٔ جدید بالا نیامد و برگرداندن نسخهٔ قبلی ناموفق بود. روی سرور از هر پوشه: pgclock update")
         return "restore-failed"
     _report(root, ROLLED_BACK)
     return "rolled-back"

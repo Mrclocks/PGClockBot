@@ -93,7 +93,7 @@
             </a>
             
             <a class="guide-nav-link" href="../settings-panel/index.html">
-              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/></svg></span>
+              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v16H7.5A2.5 2.5 0 0 0 5 21.5z"/><path d="M5 5.5V21.5"/></svg></span>
               <span class="guide-nav-text">تنظیمات سیستم</span>
             </a>
             
@@ -303,10 +303,10 @@
 <ol><li>نصب را تمام کنید.</li><li>بروید به <code>http://203.0.113.10:9000/</code></li><li>در ویزارد: یوزر/رمز وب، توکن ربات تلگرام، و اتصال پاسارگارد را پر کنید.</li><li><strong>Finish</strong> بزنید و با همان یوزر وارد پنل شوید.</li><li>پاورقی منو را ببینید: برای حساب ریشه معمولاً برچسب <strong>مالک</strong> است (نقش نشست همچنان <code>admin</code>).</li></ol>
 <div class="guide-callout guide-callout--info"><strong class="guide-callout-label">راهنما</strong><p>پورت پیش‌فرض وب‌پنل <strong>۹۰۰۰</strong> است. اگر پشت فایروال یا کلود هستید، این پورت باید باز باشد (یا از ریورس‌پراکسی با دامنه استفاده کنید).</p></div>
 <h2 id="اگر-پروژه-از-قبل-روی-سرور-هست">اگر پروژه از قبل روی سرور هست</h2>
-<pre><code class="language-bash">cd PGClockBot
-bash get.sh
-# یا
-bash pgclock.sh</code></pre>
+<p>از هر پوشه‌ای (مثلاً همان <code>/root</code>):</p>
+<pre><code class="language-bash">pgclock            # منو
+pgclock update     # آپدیت امن</code></pre>
+<p>اگر <code>pgclock</code> هنوز نصب نشده: <code>bash ~/PGClockBot/pgclock.sh</code> (اولین Install یا Update دستور سراسری را نصب می‌کند).</p>
 <p>آپدیت: منو → <strong><code>3) Update main</code></strong> (یا <strong><code>4) Update dev</code></strong> اگر روی کانال توسعه هستید). فایل <code>.env</code> و دیتابیس حفظ می‌شوند؛ آپدیت دستی با کپی‌پیست پوشه توصیه نمی‌شود.</p>
 <h2 id="ویزارد-اولیه-چه-چیزهایی-میپرسد؟">ویزارد اولیه چه چیزهایی می‌پرسد؟</h2>
 <p>معمولاً این‌ها را یک‌بار تنظیم می‌کنید:</p>
@@ -327,10 +327,9 @@ curl http://127.0.0.1:9000/health
 sudo ufw allow 9000/tcp</code></pre></div>
 <div class="guide-callout guide-callout--error"><strong class="guide-callout-label">خطای رایج</strong><p><strong>مشکل:</strong> ویزارد می‌گوید فقط با لینک یک‌بارمصرف.</p>
 <p><strong>علت رایج:</strong> از اینترنت بدون توکن gate باز کرده‌اید.</p>
-<p><strong>راه حل:</strong> روی سرور اول وارد پوشهٔ نصب شوید، بعد وضعیت را بگیرید:</p>
-<pre><code class="language-bash">cd &quot;$(cat /usr/local/lib/pgclockbot/install_root)&quot;
-bash pgclock.sh status</code></pre>
-<p>یا از هر جا: <code>pgclock status</code>. لینک کامل را کپی کنید، یا از خود سرور با <code>127.0.0.1</code> باز کنید.</p></div>
+<p><strong>راه حل:</strong> روی سرور، از هر پوشه‌ای وضعیت را بگیرید (لازم نیست وارد پوشهٔ نصب شوید):</p>
+<pre><code class="language-bash">pgclock status</code></pre>
+<p>اگر <code>pgclock</code> پیدا نشد: <code>bash ~/PGClockBot/pgclock.sh status</code>. لینک کامل را کپی کنید، یا از خود سرور با <code>127.0.0.1</code> باز کنید.</p></div>
 <div class="guide-callout guide-callout--tip"><strong class="guide-callout-label">نکته</strong><p>قبل از هر آپدیت بزرگ، از <a href="../settings-panel/index.html">تنظیمات سیستم</a> بکاپ بگیرید. بکاپ/آپدیت/SSL فقط برای مالک در تب‌های <code>/settings</code> است؛ نقش‌های دیگر برای رمز حساب از <code>/security</code> استفاده می‌کنند.</p></div>
           </div>
 

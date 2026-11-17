@@ -1573,11 +1573,19 @@ EOF
     sudo_wrap rm -f "$sudoers_path" || true
   fi
   rm -f "$tmp_ctl" "$tmp_sudoers"
-  # Global CLI (best-effort)
-  if [[ -f "${SCRIPT_DIR}/scripts/install_global_cli.sh" ]]; then
-    sudo_wrap bash "${SCRIPT_DIR}/scripts/install_global_cli.sh" "${SCRIPT_DIR}" \
-      && ok "Global pgclock CLI installed → /usr/local/bin/pgclock" \
-      || warn "Global CLI install skipped/failed"
+}
+
+# `pgclock` from any directory (menu, update, status, logs ...). Best-effort:
+# the panel works without it. Refreshed on every install and update so the
+# wrapper and the install-root marker always match this folder.
+install_global_cli() {
+  if [[ ! -f "${SCRIPT_DIR}/scripts/install_global_cli.sh" ]]; then
+    return 0
+  fi
+  if sudo_wrap bash "${SCRIPT_DIR}/scripts/install_global_cli.sh" "${SCRIPT_DIR}" >/dev/null; then
+    ok "Global command installed: pgclock (works from any directory)"
+  else
+    warn "Global pgclock command not installed — run: sudo bash ${SCRIPT_DIR}/scripts/install_global_cli.sh"
   fi
 }
 
@@ -1624,10 +1632,6 @@ WantedBy=multi-user.target
       || sudo_wrap systemctl start "$SERVICE_NAME"
   fi
   install_restart_helper "$service_user" || true
-  # Ensure global CLI points at this install
-  if [[ -f "${SCRIPT_DIR}/scripts/install_global_cli.sh" ]]; then
-    sudo_wrap bash "${SCRIPT_DIR}/scripts/install_global_cli.sh" "${SCRIPT_DIR}" || true
-  fi
   ok "systemd service enabled: ${SERVICE_NAME}"
 }
 
@@ -1760,6 +1764,7 @@ cmd_install() {
   step "Python packages"
   ensure_venv || return 1
   mkdir -p data
+  install_global_cli
 
   if [[ "$fresh" -eq 1 ]]; then
     step "Scaffold configuration"
@@ -2114,6 +2119,7 @@ cmd_update() {
     return 1
   fi
   persist_channel_env "$INSTALL_CHANNEL"
+  install_global_cli
 
   # Rewrite unit (PATH / TimeoutStopSec) without starting yet — one clean start below.
   if service_installed; then
@@ -2548,10 +2554,13 @@ cmd_help() {
     bash pgclock.sh update-dev
     PGCLOCK_BRANCH=dev bash get.sh
 
-  Global CLI (after install):
+  Global command (installed with Install/Update, works from any directory):
+    pgclock                      Menu
+    pgclock update|install|env|web|service|xray|uninstall
     pgclock status|start|stop|restart|logs|health
     pgclock backup|restore|migrate|doctor [--json]
-    sudo bash scripts/install_global_cli.sh
+    pgclock help
+    Reinstall it: sudo bash scripts/install_global_cli.sh
 
   One-liner (clone OR update existing folder, then menu):
     bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)

@@ -123,16 +123,19 @@ bash pgclock.sh help
 
 ## 🛠️ CLI سراسری (`pgclock`)
 
-بعد از نصب (یک‌بار با sudo):
+Install و Update این دستور را خودکار نصب می‌کنند. از هر مسیری (مثلاً `/root`) کار می‌کند و لازم نیست وارد پوشهٔ نصب شوید:
 
 ```bash
-sudo bash scripts/install_global_cli.sh
-```
-
-از هر مسیری:
-
-```bash
-pgclock status
+pgclock                   # منوی کامل (همان bash pgclock.sh)
+pgclock update            # آپدیت امن (یا: pgclock update dev)
+pgclock install
+pgclock env               # ویرایش .env
+pgclock web               # آدرس پنل و ریست رمز وب
+pgclock service
+pgclock xray
+pgclock uninstall
+pgclock help
+pgclock status            # وضعیت کامل + لینک راه‌اندازی
 pgclock start
 pgclock stop
 pgclock restart
@@ -145,6 +148,8 @@ pgclock restore <backup_id> -y
 pgclock migrate
 pgclock doctor
 ```
+
+اگر دستور `pgclock` پیدا نشد: `sudo bash ~/PGClockBot/scripts/install_global_cli.sh`
 
 بدون نصب سراسری، از ریشهٔ پروژه:
 

@@ -1,38 +1,123 @@
 #!/usr/bin/env bash
-# Global pgclock wrapper — works from any directory.
-# Installed to /usr/local/bin/pgclock by scripts/install_global_cli.sh
+# Global pgclock command — works from any directory (/root, /tmp, ...).
+# Installed to /usr/local/bin/pgclock by scripts/install_global_cli.sh.
+#
+#   pgclock                      open the manager menu (same as bash pgclock.sh)
+#   pgclock update|install|env|web|service|xray|uninstall ...   manager commands
+#   pgclock status|logs|backup|restore|migrate|doctor ...       operations CLI
 set -euo pipefail
 
-MARKER="/usr/local/lib/pgclockbot/install_root"
-ROOT="${PGCLOCK_HOME:-${PGCLOCK_ROOT:-}}"
+MARKER="${PGCLOCK_MARKER:-/usr/local/lib/pgclockbot/install_root}"
 
-if [[ -z "${ROOT}" && -f "${MARKER}" ]]; then
-  ROOT="$(tr -d '\r' < "${MARKER}" | head -n1 | sed 's/[[:space:]]*$//')"
-fi
+looks_like_install() {
+  [[ -n "${1:-}" && -d "$1" && ( -f "$1/pgclock.sh" || -f "$1/run.py" ) ]]
+}
 
-# Dev fallback: repo containing this script (scripts/pgclock → ..)
-if [[ -z "${ROOT}" ]]; then
-  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  if [[ -f "${HERE}/../run.py" && -d "${HERE}/../app" ]]; then
-    ROOT="$(cd "${HERE}/.." && pwd)"
+resolve_root() {
+  local candidate
+  for candidate in "${PGCLOCK_HOME:-}" "${PGCLOCK_ROOT:-}"; do
+    if looks_like_install "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  if [[ -f "$MARKER" ]]; then
+    candidate="$(tr -d '\r' <"$MARKER" | head -n1 | sed 's/[[:space:]]*$//')"
+    if looks_like_install "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
   fi
-fi
+  # Run from a checkout: scripts/pgclock → repo root.
+  candidate="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || true)"
+  if looks_like_install "$candidate"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  for candidate in "${HOME:-/root}/PGClockBot" /root/PGClockBot /opt/PGClockBot /srv/PGClockBot; do
+    if looks_like_install "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
 
-if [[ -z "${ROOT}" || ! -d "${ROOT}" ]]; then
-  echo "pgclock: install root not found." >&2
-  echo "Set PGCLOCK_HOME or run: sudo bash scripts/install_global_cli.sh" >&2
+if ! ROOT="$(resolve_root)"; then
+  echo "pgclock: PGClockBot install folder not found." >&2
+  echo "  Install:  bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)" >&2
+  echo "  Or point at it:  PGCLOCK_HOME=/path/to/PGClockBot pgclock ..." >&2
   exit 1
 fi
+ROOT="$(cd "$ROOT" && pwd)"
+export PGCLOCK_HOME="$ROOT"
 
-PY="${ROOT}/.venv/bin/python"
-if [[ ! -x "${PY}" ]]; then
-  PY="$(command -v python3 || true)"
-fi
-if [[ -z "${PY}" ]]; then
-  echo "pgclock: python not found in ${ROOT}/.venv or PATH" >&2
-  exit 1
-fi
+run_manager() {
+  if [[ ! -f "${ROOT}/pgclock.sh" ]]; then
+    echo "pgclock: ${ROOT}/pgclock.sh is missing — re-run the get.sh one-liner." >&2
+    exit 1
+  fi
+  exec bash "${ROOT}/pgclock.sh" "$@"
+}
 
-export PGCLOCK_HOME="${ROOT}"
-cd "${ROOT}"
-exec "${PY}" -m app.cli "$@"
+run_ops() {
+  local py="${ROOT}/.venv/bin/python"
+  if [[ ! -x "$py" ]]; then
+    echo "pgclock: ${ROOT}/.venv is missing — run: pgclock install" >&2
+    exit 1
+  fi
+  cd "$ROOT"
+  exec "$py" -m app.cli "$@"
+}
+
+print_help() {
+  cat <<EOF
+pgclock — PGClockBot manager (install: ${ROOT})
+
+Manager (same as bash pgclock.sh, from any directory):
+  pgclock                       Menu
+  pgclock install [main|dev]    Install / re-install
+  pgclock update [main|dev]     Safe update (backup, rollback on failure)
+  pgclock env                   Edit .env
+  pgclock web                   Web panel tools (URL, password reset)
+  pgclock service               systemd controls
+  pgclock xray                  Install/repair the connection-test core
+  pgclock uninstall             Remove everything
+
+Operations:
+  pgclock status [--json]       Install, service, health and the setup link
+  pgclock start|stop|restart    Service control
+  pgclock logs [-f] [-n N]      Service logs
+  pgclock health                Probe local /health
+  pgclock backup [--list]       Create or list backups
+  pgclock restore <id>          Restore a backup
+  pgclock migrate               Apply database migrations
+  pgclock doctor [--json]       Read-only diagnostics
+EOF
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  ""|menu)
+    [[ $# -gt 0 ]] && shift
+    run_manager "$@"
+    ;;
+  install|i|install-main|install_main|install-dev|install_dev \
+  |update|u|update-main|update_main|update-dev|update_dev \
+  |env|edit|edit-env|dotenv|web|panel|web-panel|service|svc|xray|uninstall|remove)
+    run_manager "$@"
+    ;;
+  status|s)
+    # The manager's status also prints the one-time setup link; --json stays machine-readable.
+    if [[ $# -le 1 ]]; then
+      run_manager status
+    fi
+    run_ops "$@"
+    ;;
+  help|-h|--help)
+    print_help
+    ;;
+  *)
+    run_ops "$@"
+    ;;
+esac

@@ -99,7 +99,7 @@ def backup_database(*, log: Callable[[str], None]) -> str:
         logger.exception("pre-update backup failed")
         raise UpdateStepError(
             f"پشتیبان‌گیری قبل از آپدیت ناموفق بود ({_tail(str(exc), 200)})؛ چیزی تغییر نکرد. "
-            "اگر pg_dump نصب نیست، روی سرور bash pgclock.sh و گزینهٔ Update را بزنید "
+            "اگر pg_dump نصب نیست، روی سرور از هر پوشه pgclock update را بزنید "
             "(ابزار پشتیبان را نصب می‌کند و همان آپدیت امن را انجام می‌دهد)."
         ) from exc
     backup_id = str(meta.get("id") or meta.get("backup_id") or "")

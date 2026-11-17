@@ -47,12 +47,23 @@ ok()   { echo "  + $*"; }
 warn() { echo "  ! $*"; }
 err()  { echo "  x $*" >&2; }
 
-# Resolve project root
+# Resolve project root: the current folder, then an existing install (from the
+# global command's marker), then ./PGClockBot. Running the one-liner from another
+# directory must reuse the installed panel, not clone a second copy next to it.
+INSTALL_MARKER="${PGCLOCK_MARKER:-/usr/local/lib/pgclockbot/install_root}"
+_marked_root=""
+if [[ -z "${PGCLOCK_DIR:-}" && -f "$INSTALL_MARKER" ]]; then
+  _marked_root="$(tr -d '\r' <"$INSTALL_MARKER" | head -n1 | sed 's/[[:space:]]*$//')"
+  [[ -f "${_marked_root}/pgclock.sh" ]] || _marked_root=""
+fi
 if [[ -f "./pgclock.sh" || -f "./install.sh" || -f "./run.py" ]]; then
   ROOT="$(pwd)"
+elif [[ -n "$_marked_root" ]]; then
+  ROOT="$_marked_root"
 else
   ROOT="$(pwd)/${DIR_NAME}"
 fi
+unset _marked_root
 
 backup_runtime() {
   # Preserve config + DB outside of git reset

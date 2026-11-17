@@ -39,12 +39,14 @@ PGCLOCK_CHANNEL=dev bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks
 
 ## اگر پروژه از قبل روی سرور هست
 
+از هر پوشه‌ای (مثلاً همان `/root`):
+
 ```bash
-cd PGClockBot
-bash get.sh
-# یا
-bash pgclock.sh
+pgclock            # منو
+pgclock update     # آپدیت امن
 ```
+
+اگر `pgclock` هنوز نصب نشده: `bash ~/PGClockBot/pgclock.sh` (اولین Install یا Update دستور سراسری را نصب می‌کند).
 
 آپدیت: منو → **`3) Update main`** (یا **`4) Update dev`** اگر روی کانال توسعه هستید). فایل `.env` و دیتابیس حفظ می‌شوند؛ آپدیت دستی با کپی‌پیست پوشه توصیه نمی‌شود.
 
@@ -99,14 +101,13 @@ sudo ufw allow 9000/tcp
 
 **علت رایج:** از اینترنت بدون توکن gate باز کرده‌اید.
 
-**راه حل:** روی سرور اول وارد پوشهٔ نصب شوید، بعد وضعیت را بگیرید:
+**راه حل:** روی سرور، از هر پوشه‌ای وضعیت را بگیرید (لازم نیست وارد پوشهٔ نصب شوید):
 
 ```bash
-cd "$(cat /usr/local/lib/pgclockbot/install_root)"
-bash pgclock.sh status
+pgclock status
 ```
 
-یا از هر جا: `pgclock status`. لینک کامل را کپی کنید، یا از خود سرور با `127.0.0.1` باز کنید.
+اگر `pgclock` پیدا نشد: `bash ~/PGClockBot/pgclock.sh status`. لینک کامل را کپی کنید، یا از خود سرور با `127.0.0.1` باز کنید.
 :::
 
 :::tip

@@ -405,6 +405,7 @@ class _GetShFixture(_RepoFixture):
                 PGCLOCK_REPO=str(self.origin),
                 PATH=f"{self.bin}:{os.environ['PATH']}",
                 TMPDIR=str(self.tmpdir),
+                PGCLOCK_MARKER=str(self.tmp / "no-marker"),
                 **env,
             ),
             capture_output=True,
@@ -523,6 +524,7 @@ class GetShFailureTests(_GetShFixture):
                 PGCLOCK_CHANNEL="main",
                 PATH=f"{self.bin}:{os.environ['PATH']}",
                 TMPDIR=str(self.tmpdir),
+                PGCLOCK_MARKER=str(self.tmp / "no-marker"),
             ),
             capture_output=True,
             text=True,
@@ -548,6 +550,7 @@ class GetShFailureTests(_GetShFixture):
                 PGCLOCK_REPO=str(self.tmp / "missing.git"),
                 PATH=f"{self.bin}:{os.environ['PATH']}",
                 TMPDIR=str(self.tmpdir),
+                PGCLOCK_MARKER=str(self.tmp / "no-marker"),
             ),
             capture_output=True,
             text=True,
@@ -568,6 +571,122 @@ class GetShFailureTests(_GetShFixture):
         self.run_get()
         self.assertEqual(_git(folder, "rev-parse", "HEAD"), tip)
         self.assertEqual((folder / ".env").read_text(encoding="utf-8"), 'BOT_TOKEN="secret"\n')
+
+
+
+    def test_one_liner_from_another_directory_reuses_marked_install(self) -> None:
+        old = self.publish("one")
+        install = self.clone_install("installed-elsewhere")
+        marker = self.tmp / "install_root"
+        marker.write_text(f"{install}\n", encoding="utf-8")
+        elsewhere = self.tmp / "home"
+        elsewhere.mkdir()
+        res = subprocess.run(
+            ["bash", str(GET_SH)],
+            cwd=elsewhere,
+            env=_env(
+                PGCLOCK_REPO=str(self.origin),
+                PATH=f"{self.bin}:{os.environ['PATH']}",
+                TMPDIR=str(self.tmpdir),
+                PGCLOCK_MARKER=str(marker),
+                FAKE_ACTIVE="1",
+            ),
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            timeout=120,
+        )
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn(f"MANAGER head={old}", res.stdout)
+        self.assertFalse((elsewhere / "PGClockBot").exists())
+
+
+# Stand-ins that report which side of the wrapper ran and from which directory.
+FAKE_MANAGER = '#!/usr/bin/env bash\necho "MANAGER cwd=$(pwd) args=$*"\n'
+FAKE_OPS_PY = '#!/usr/bin/env bash\necho "OPS cwd=$(pwd) args=$*"\n'
+
+
+class GlobalCommandTests(unittest.TestCase):
+    """`pgclock` must work from any directory, for menu and operations commands."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="pgclock-cli-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.install = self.tmp / "PGClockBot"
+        (self.install / "app").mkdir(parents=True)
+        (self.install / "scripts").mkdir()
+        (self.install / "run.py").write_text("", encoding="utf-8")
+        (self.install / "pgclock.sh").write_text(FAKE_MANAGER, encoding="utf-8")
+        shutil.copy(ROOT / "scripts" / "pgclock", self.install / "scripts" / "pgclock")
+        venv_py = self.install / ".venv" / "bin" / "python"
+        venv_py.parent.mkdir(parents=True)
+        venv_py.write_text(FAKE_OPS_PY, encoding="utf-8")
+        venv_py.chmod(0o755)
+        self.lib = self.tmp / "lib"
+        self.bin = self.tmp / "bin" / "pgclock"
+        res = subprocess.run(
+            ["bash", str(ROOT / "scripts" / "install_global_cli.sh"), str(self.install)],
+            env=_env(PGCLOCK_CLI_LIB=str(self.lib), PGCLOCK_CLI_BIN=str(self.bin)),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.elsewhere = self.tmp / "root-home"
+        self.elsewhere.mkdir()
+
+    def pgclock(self, *args: str, marker: Path | None = None) -> subprocess.CompletedProcess[str]:
+        env = _env(PGCLOCK_MARKER=str(marker or self.lib / "install_root"), HOME=str(self.elsewhere))
+        return subprocess.run(
+            [str(self.bin), *args],
+            cwd=self.elsewhere,
+            env=env,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=60,
+        )
+
+    def test_installer_writes_marker_and_the_repo_wrapper(self) -> None:
+        self.assertEqual((self.lib / "install_root").read_text(encoding="utf-8").strip(), str(self.install))
+        self.assertEqual(self.bin.read_bytes(), (ROOT / "scripts" / "pgclock").read_bytes())
+
+    def test_menu_and_manager_commands_run_pgclock_sh_from_any_directory(self) -> None:
+        cases = {
+            (): "args=",
+            ("update",): "args=update",
+            ("update", "dev"): "args=update dev",
+            ("install", "main"): "args=install main",
+            ("env",): "args=env",
+            ("uninstall",): "args=uninstall",
+            ("status",): "args=status",
+        }
+        for args, expected in cases.items():
+            with self.subTest(args=args):
+                res = self.pgclock(*args)
+                self.assertEqual(res.returncode, 0, res.stderr)
+                self.assertIn("MANAGER", res.stdout)
+                self.assertTrue(res.stdout.strip().endswith(expected), res.stdout)
+
+    def test_operations_run_in_the_install_folder(self) -> None:
+        for args in (("logs", "-n", "5"), ("backup", "--list"), ("status", "--json"), ("doctor",)):
+            with self.subTest(args=args):
+                res = self.pgclock(*args)
+                self.assertEqual(res.returncode, 0, res.stderr)
+                self.assertEqual(res.stdout.strip(), f"OPS cwd={self.install} args=-m app.cli {' '.join(args)}")
+
+    def test_help_lists_manager_commands(self) -> None:
+        res = self.pgclock("help")
+        self.assertEqual(res.returncode, 0)
+        self.assertIn("pgclock update", res.stdout)
+        self.assertIn(str(self.install), res.stdout)
+
+    def test_missing_install_explains_how_to_fix(self) -> None:
+        res = self.pgclock("status", marker=self.tmp / "missing-marker")
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("install folder not found", res.stderr)
+        self.assertIn("PGCLOCK_HOME", res.stderr)
 
 
 if __name__ == "__main__":
