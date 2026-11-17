@@ -1603,6 +1603,8 @@ Environment=PGCLOCKBOT_SERVICE_USER=${service_user}
 TimeoutStartSec=180
 # A hung Python stop must not block Update for minutes.
 TimeoutStopSec=45
+# Puts the previous code back when an in-panel update keeps failing to start.
+ExecStartPre=-${SCRIPT_DIR}/.venv/bin/python ${SCRIPT_DIR}/scripts/update_boot_guard.py
 ExecStart=${SCRIPT_DIR}/.venv/bin/python run.py
 Restart=always
 RestartSec=5

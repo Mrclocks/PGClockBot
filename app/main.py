@@ -18,6 +18,7 @@ from app.db.session import SessionLocal, init_db
 from app.services.bot_updates import get_update_scheduler
 from app.jobs.scheduler import start_background_scheduler, start_scheduler, stop_scheduler
 from app.services.home_overview import close_bot_probe_client
+from app.services.panel_update_guard import confirm_boot as confirm_update_boot
 from app.services.pasarguard import get_pg
 from app.services.users import ensure_default_settings
 from app.services.web_auth import load_web_admin
@@ -293,6 +294,8 @@ def main() -> None:
                 except Exception:
                     logger.exception("Reseller bots failed to start")
 
+        # Startup finished: a pending in-panel update is now confirmed.
+        confirm_update_boot()
         try:
             yield
         finally:

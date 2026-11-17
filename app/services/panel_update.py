@@ -17,11 +17,35 @@ from typing import Any
 
 from app.config import DATA_DIR, ROOT_DIR
 from app.services.connection_monitor_install_update import setup_updated_monitor_core
+from app.services.panel_update_archive import (
+    archive_url,
+    download_archive,
+    extract_archive,
+    new_staging_dir,
+    overlay,
+)
+from app.services.panel_update_guard import (
+    RollbackPoint,
+    UpdateStepError,
+    backup_database,
+    capture_rollback_point,
+    install_requirements,
+    migrate_schema,
+    python_for,
+    read_schema_revision,
+    requirements_at,
+    switch_code,
+    verify_new_code,
+    write_boot_marker,
+)
 from app.services.updates import check_github_update, clear_update_cache, is_newer, local_version
 
 logger = logging.getLogger(__name__)
 
 STATUS_FILE = DATA_DIR / "panel_update.json"
+ROLLED_BACK_MESSAGE = (
+    "آپدیت انجام نشد: نسخهٔ جدید بررسی‌ها را رد کرد. نسخهٔ قبلی برگردانده شد و پنل بدون وقفه کار می‌کند."
+)
 _LOCK = threading.RLock()
 _THREAD: threading.Thread | None = None
 
@@ -57,9 +81,10 @@ def _env_with_path() -> dict[str, str]:
 STEPS = [
     ("prepare", "آماده‌سازی", 5),
     ("backup", "پشتیبان‌گیری", 15),
-    ("fetch", "ارتباط با گیت‌هاب", 35),
-    ("pull", "اعمال کد", 55),
-    ("deps", "نصب وابستگی‌ها", 80),
+    ("fetch", "ارتباط با گیت‌هاب", 30),
+    ("deps", "نصب وابستگی‌ها", 50),
+    ("pull", "اعمال کد", 65),
+    ("check", "بررسی نسخهٔ جدید", 80),
     ("restart", "راه‌اندازی مجدد سرویس", 95),
     ("done", "تمام شد", 100),
 ]
@@ -178,54 +203,6 @@ def _run(cmd: list[str], *, cwd: Path | None = None, timeout: int = 300) -> tupl
         return 1, str(e)
 
 
-def _python_bin() -> str:
-    root = _repo_root()
-    venv_py = root / ".venv" / "bin" / "python"
-    if venv_py.exists():
-        return str(venv_py)
-    return sys.executable
-
-
-def _pip_install() -> tuple[int, str]:
-    py = _python_bin()
-    root = _repo_root()
-    req = root / "requirements.txt"
-    if not req.exists():
-        return 0, "no requirements.txt"
-    # Skip pip when requirements.txt hash is unchanged (big win on weak VPS)
-    hash_file = root / ".venv" / ".requirements.sha256"
-    try:
-        import hashlib
-
-        digest = hashlib.sha256(req.read_bytes()).hexdigest()
-        if hash_file.exists() and hash_file.read_text(encoding="utf-8").strip() == digest:
-            return 0, "requirements unchanged — skipped pip"
-    except Exception:
-        digest = None
-    code, out = _run(
-        [
-            py,
-            "-m",
-            "pip",
-            "install",
-            "-q",
-            "--disable-pip-version-check",
-            "--no-input",
-            "-r",
-            str(req),
-        ],
-        timeout=600,
-    )
-    if code == 0 and digest:
-        try:
-            hash_file.parent.mkdir(parents=True, exist_ok=True)
-            hash_file.write_text(digest + "\n", encoding="utf-8")
-        except Exception:
-            logger.debug("_pip_install: ignored failure", exc_info=True)
-    return code, out
-
-
-
 def _restart_service() -> tuple[bool, str]:
     """Schedule an automatic restart using the freshest on-disk code possible."""
     note = ""
@@ -334,74 +311,6 @@ def _ensure_git() -> str | None:
     return git
 
 
-def _update_via_archive(root: Path, *, ref: str | None = None) -> None:
-    """Download a branch/tag zip from GitHub and overlay onto install dir.
-
-    ``ref`` is a branch name (default ``main``) or a release tag like ``v3.0.3``.
-    """
-    import tempfile
-    import zipfile
-    from urllib.error import URLError, HTTPError
-    from urllib.request import Request, urlopen
-
-    from app.version import GITHUB_REPO
-
-    ref_name = (ref or "main").strip() or "main"
-    if ref_name.startswith(("v", "V")) or _looks_like_version(ref_name):
-        tag = ref_name if ref_name.startswith(("v", "V")) else f"v{ref_name.lstrip('vV')}"
-        url = f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.zip"
-        label = tag
-    else:
-        url = f"https://github.com/{GITHUB_REPO}/archive/refs/heads/{ref_name}.zip"
-        label = ref_name
-    _append_log(f"دانلود آرشیو گیت‌هاب ({label})…")
-    req = Request(url, headers={"User-Agent": "PGClockBot-Panel-Update"})
-    try:
-        with urlopen(req, timeout=120) as resp:
-            data = resp.read()
-    except (URLError, HTTPError, TimeoutError, OSError) as e:
-        raise RuntimeError(f"دانلود آرشیو ناموفق: {e}") from e
-    if not data or len(data) < 1000:
-        raise RuntimeError("آرشیو دانلودشده خالی یا ناقص است")
-    if len(data) > 200 * 1024 * 1024:
-        raise RuntimeError("آرشیو آپدیت بیش از حد بزرگ است")
-
-    preserve_top = {".env", "data", ".venv", ".git"}
-    with tempfile.TemporaryDirectory(prefix="pgclock-upd-") as tmp:
-        zpath = Path(tmp) / "src.zip"
-        zpath.write_bytes(data)
-        with zipfile.ZipFile(zpath, "r") as zf:
-            # Reject zip-slip / oversized archives before extraction
-            max_uncompressed = 512 * 1024 * 1024
-            total = 0
-            for info in zf.infolist():
-                name = info.filename.replace("\\", "/")
-                if name.startswith("/") or ".." in name.split("/"):
-                    raise RuntimeError("آرشیو آپدیت مسیر ناامن دارد")
-                total += max(0, int(info.file_size or 0))
-                if total > max_uncompressed:
-                    raise RuntimeError("حجم آرشیو آپدیت بیش از حد مجاز است")
-            zf.extractall(tmp)
-        extracted = [p for p in Path(tmp).iterdir() if p.is_dir() and p.name != "__MACOSX"]
-        if not extracted:
-            raise RuntimeError("محتوای آرشیو پیدا نشد")
-        src = extracted[0]
-        copied = 0
-        for path in src.rglob("*"):
-            if not path.is_file():
-                continue
-            rel = path.relative_to(src)
-            if rel.parts and rel.parts[0] in preserve_top:
-                continue
-            if rel.parts and str(rel.parts[0]).startswith(".env.bak"):
-                continue
-            dest = root / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, dest)
-            copied += 1
-        _append_log(f"تعداد فایل به‌روز شده: {copied}")
-
-
 def _looks_like_version(value: str | None) -> bool:
     from app.services.updates import normalize_version_tag
 
@@ -463,144 +372,209 @@ def _finish_error(err: Exception | str) -> None:
     _append_log(f"خطا: {msg}")
 
 
+def _start_running_status(target_version: str | None) -> None:
+    write_status(
+        {
+            "state": "running",
+            "percent": 0,
+            "error": None,
+            "finished_at": None,
+            "started_at": _now(),
+            "from_version": local_version(),
+            "to_version": target_version,
+            "log": [],
+            "awaiting_restart": False,
+            "restart_required": False,
+            "pre_boot_id": None,
+            "step": "",
+            "step_key": "",
+            "message": "شروع آپدیت…",
+        }
+    )
+
+
+def _backup_before_update(root: Path) -> str:
+    """Copy .env and take a full backup; nothing has changed yet if this fails."""
+    _set_step("backup", "پشتیبان‌گیری کامل (دیتابیس و تنظیمات)…")
+    env_path = root / ".env"
+    if env_path.exists():
+        bak = root / f".env.bak.{datetime.now().astimezone().strftime('%Y%m%d%H%M%S')}"
+        shutil.copy2(env_path, bak)
+        _append_log(f"پشتیبان env: {bak.name}")
+    return backup_database(log=_append_log)
+
+
+def _reinstall_current_requirements(root: Path, python: str) -> None:
+    req = root / "requirements.txt"
+    if not req.is_file():
+        return
+    try:
+        install_requirements(root, req.read_bytes(), python=python, runner=_run, log=_append_log)
+    except UpdateStepError as exc:
+        # The previous code usually runs on the newer packages; say so, do not fail the rollback.
+        _append_log(f"بازگرداندن پکیج‌های نسخهٔ قبلی کامل نشد: {exc}")
+
+
+def _migrate_or_explain(root: Path, python: str, schema_before: str | None, backup_id: str) -> bool:
+    """Run migrations; ``False`` means the schema is unchanged and rollback is safe."""
+    try:
+        migrate_schema(root, python=python, runner=_run)
+        return True
+    except UpdateStepError as exc:
+        if schema_before is not None and read_schema_revision() == schema_before:
+            _append_log(str(exc))
+            return False
+        raise UpdateStepError(
+            f"{exc} — ساختار دیتابیس تغییر کرده و نسخهٔ قبلی برگردانده نشد. "
+            f"برای برگشت، پشتیبان {backup_id or 'قبل از آپدیت'} را از تنظیمات › پشتیبان بازگردانید."
+        ) from exc
+
+
+def _check_new_code(root: Path, python: str, schema_before: str | None, backup_id: str) -> bool:
+    """Import check, then migrations, all before the restart. ``False`` = roll back."""
+    _set_step("check", "بررسی نسخهٔ جدید و به‌روزرسانی دیتابیس…")
+    try:
+        verify_new_code(root, python=python, runner=_run)
+    except UpdateStepError as exc:
+        _append_log(str(exc))
+        return False
+    return _migrate_or_explain(root, python, schema_before, backup_id)
+
+
+def _fetch_channel_tip(git: str, root: Path, branch: str) -> str | None:
+    _set_step("fetch", f"git fetch origin {branch}…")
+    refspec = f"+refs/heads/{branch}:refs/remotes/origin/{branch}"
+    code, out = _run([git, "fetch", "--no-tags", "origin", refspec], cwd=root, timeout=120)
+    if code != 0:
+        _append_log(f"git fetch ناموفق — سوییچ به zip: {(out or '')[:160]}")
+        return None
+    code, out = _run([git, "rev-parse", "--verify", f"origin/{branch}^{{commit}}"], cwd=root, timeout=30)
+    if code != 0 or not out.strip():
+        _append_log(f"origin/{branch} پیدا نشد — سوییچ به zip")
+        return None
+    return out.strip().splitlines()[-1]
+
+
+def _roll_back_git(git: str, root: Path, point: RollbackPoint, python: str) -> None:
+    try:
+        switch_code(git, root, commit=point.commit, branch=point.branch, runner=_run)
+    except UpdateStepError as exc:
+        raise UpdateStepError(
+            f"برگرداندن نسخهٔ قبلی ناموفق بود ({exc}). روی سرور: bash pgclock.sh و گزینهٔ Update"
+        ) from exc
+    _reinstall_current_requirements(root, python)
+    _append_log(f"نسخهٔ قبلی برگردانده شد ({point.commit[:12]})")
+
+
+def _apply_with_git(git: str, root: Path, branch: str, backup_id: str) -> bool:
+    """Update through git. ``False`` when GitHub is unreachable over git (try zip)."""
+    python = python_for(root)
+    point = capture_rollback_point(git, root, runner=_run)
+    target = _fetch_channel_tip(git, root, branch)
+    if target is None:
+        return False
+    _set_step("deps", "نصب پکیج‌های نسخهٔ جدید (قبل از تعویض کد)…")
+    requirements = requirements_at(git, root, target, runner=_run)
+    if requirements:
+        install_requirements(root, requirements, python=python, runner=_run, log=_append_log)
+    _set_step("pull", f"اعمال کد (origin/{branch})…")
+    try:
+        switch_code(git, root, commit=target, branch=branch, start=f"origin/{branch}", runner=_run)
+    except UpdateStepError:
+        _roll_back_git(git, root, point, python)
+        raise
+    _append_log(f"کد با origin/{branch} همگام شد ({target[:12]})")
+    if not _check_new_code(root, python, point.schema, backup_id):
+        _roll_back_git(git, root, point, python)
+        raise UpdateStepError(ROLLED_BACK_MESSAGE)
+    write_boot_marker(point, new_commit=target, backup_id=backup_id)
+    return True
+
+
+def _apply_with_archive(root: Path, branch: str, backup_id: str) -> None:
+    """Update from the GitHub zip; replaced files are restored if a check fails."""
+    from app.version import GITHUB_REPO
+
+    python = python_for(root)
+    schema_before = read_schema_revision()
+    _set_step("fetch", "دانلود نسخه جدید…")
+    url, label = archive_url(GITHUB_REPO, branch, is_version=_looks_like_version(branch))
+    _append_log(f"دانلود آرشیو گیت‌هاب ({label})…")
+    data = download_archive(url)
+    with new_staging_dir() as tmp:
+        staging = Path(tmp)
+        src = extract_archive(data, staging)
+        requirements = src / "requirements.txt"
+        if requirements.is_file():
+            _set_step("deps", "نصب پکیج‌های نسخهٔ جدید (قبل از تعویض کد)…")
+            install_requirements(root, requirements.read_bytes(), python=python, runner=_run, log=_append_log)
+        _set_step("pull", "اعمال فایل‌ها…")
+        snapshot = overlay(src, root, staging / "previous", log=_append_log)
+        if not _check_new_code(root, python, schema_before, backup_id):
+            snapshot.restore()
+            _reinstall_current_requirements(root, python)
+            raise UpdateStepError(ROLLED_BACK_MESSAGE)
+    _append_log("کد از آرشیو گیت‌هاب اعمال شد")
+
+
+def _restart_after_update(root: Path, target_version: str | None) -> None:
+    write_status({"to_version": _read_local_version_file(root) or target_version})
+    _set_step("restart", "راه‌اندازی مجدد…")
+    ok, note = _restart_service()
+    _append_log(note)
+    if not ok:
+        _finish_ok(
+            "کد آپدیت شد؛ ریستارت خودکار ممکن نشد. "
+            "یک‌بار روی سرور: sudo systemctl restart pgclockbot",
+            restart_required=True,
+        )
+        return
+    time.sleep(0.4)
+    _finish_ok(
+        "آپدیت انجام شد — سرویس در حال راه‌اندازی مجدد است. "
+        "ممکن است چند دقیقه طول بکشد؛ از صفحه خارج نشوید و رفرش نکنید. صفحه به‌صورت خودکار تازه می‌شود.",
+        awaiting_restart=True,
+    )
+
+
 def _do_update(target_version: str | None) -> None:
+    """Update order: backup → packages → code → import/migration check → restart.
+
+    Every step before the restart runs while the current panel keeps serving; a
+    failure there puts the previous code back, so the panel never goes down.
+    """
+    from app.services.update_channel import (
+        channel_branch,
+        channel_label_fa,
+        get_update_channel,
+        set_deployed_channel,
+    )
+
     try:
         root = _repo_root()
-        write_status(
-            {
-                "state": "running",
-                "percent": 0,
-                "error": None,
-                "finished_at": None,
-                "started_at": _now(),
-                "from_version": local_version(),
-                "to_version": target_version,
-                "log": [],
-                "awaiting_restart": False,
-                "restart_required": False,
-                "pre_boot_id": None,
-                "step": "",
-                "step_key": "",
-                "message": "شروع آپدیت…",
-            }
-        )
+        _start_running_status(target_version)
         _set_step("prepare", "شروع آپدیت…")
         _append_log(f"root={root}")
-
         git = _ensure_git()
-        if git:
-            _append_log(f"git={git}")
-        else:
-            _append_log("git در دسترس نیست — از آرشیو zip استفاده می‌شود")
-
-        _set_step("backup", "پشتیبان .env")
-        env_path = root / ".env"
-        if env_path.exists():
-            bak = root / f".env.bak.{datetime.now().astimezone().strftime('%Y%m%d%H%M%S')}"
-            shutil.copy2(env_path, bak)
-            _append_log(f"پشتیبان env: {bak.name}")
-
-        from app.services.update_channel import channel_branch, channel_label_fa, get_update_channel
-
+        _append_log(f"git={git}" if git else "git در دسترس نیست — از آرشیو zip استفاده می‌شود")
         channel = get_update_channel()
         branch = channel_branch(channel)
         _append_log(f"کانال آپدیت: {channel_label_fa(channel)} ({branch})")
 
-        use_git = bool(git and (root / ".git").exists())
-        if use_git:
-            _set_step("fetch", f"git fetch origin {branch}…")
-            code, out = _run(
-                [git, "fetch", "--no-tags", "--prune", "origin", branch],
-                cwd=root,
-                timeout=120,
-            )
-            if out:
-                _append_log(out.splitlines()[-1][:200])
-            if code != 0:
-                _append_log(f"git fetch ناموفق — سوییچ به zip: {(out or '')[:160]}")
-                use_git = False
-            else:
-                remote_ref = f"origin/{branch}"
-                _set_step("pull", f"دریافت کد ({remote_ref})…")
-                # Deploy the configured update channel (main=stable / dev).
-                code, out = _run(
-                    [git, "checkout", "-f", "-B", branch, remote_ref],
-                    cwd=root,
-                    timeout=120,
-                )
-                if code != 0:
-                    _append_log(
-                        f"checkout {branch} ناموفق — سوییچ به zip: {(out or '')[:160]}"
-                    )
-                    use_git = False
-                else:
-                    code2, out2 = _run(
-                        [git, "reset", "--hard", remote_ref], cwd=root, timeout=120
-                    )
-                    if code2 != 0:
-                        _append_log(f"reset ناموفق — سوییچ به zip: {(out2 or '')[:160]}")
-                        use_git = False
-                    else:
-                        _run(
-                            [
-                                git,
-                                "clean",
-                                "-fd",
-                                "--exclude=.env",
-                                "--exclude=data",
-                                "--exclude=.venv",
-                                "--exclude=.env.bak.*",
-                            ],
-                            cwd=root,
-                            timeout=60,
-                        )
-                        _append_log(f"کد با {remote_ref} همگام شد")
-                        if out2:
-                            _append_log(out2.splitlines()[-1][:200])
-
-        if not use_git:
-            _set_step("fetch", "دانلود نسخه جدید…")
-            _update_via_archive(root, ref=branch)
-            _set_step("pull", "اعمال فایل‌ها…")
-            _append_log("کد از آرشیو گیت‌هاب اعمال شد")
-
-        from app.services.update_channel import set_deployed_channel
+        backup_id = _backup_before_update(root)
+        applied = bool(git and (root / ".git").exists()) and _apply_with_git(git, root, branch, backup_id)
+        if not applied:
+            _apply_with_archive(root, branch, backup_id)
 
         # Code tip is now this channel — badge follows DEPLOYED_CHANNEL after restart.
         set_deployed_channel(channel)
         _append_log(f"کانال نصب‌شده: {channel_label_fa(channel)}")
-
-        _set_step("deps", "نصب پکیج‌های پایتون…")
-        code, out = _pip_install()
-        if code != 0:
-            raise RuntimeError(f"pip install ناموفق: {out[:400]}")
-        _append_log("وابستگی‌ها نصب شد")
         setup_updated_monitor_core(root, runner=_run, log=_append_log)
-
-        ver_file_ver = _read_local_version_file(root)
-        new_ver = ver_file_ver or target_version
-        write_status({"to_version": new_ver or target_version})
-
-        _set_step("restart", "راه‌اندازی مجدد…")
-        ok, note = _restart_service()
-        _append_log(note)
-        if not ok:
-            _finish_ok(
-                "کد آپدیت شد؛ ریستارت خودکار ممکن نشد. "
-                "یک‌بار روی سرور: sudo systemctl restart pgclockbot",
-                restart_required=True,
-            )
-            return
-
-        time.sleep(0.4)
-        _finish_ok(
-            "آپدیت انجام شد — سرویس در حال راه‌اندازی مجدد است. "
-            "ممکن است چند دقیقه طول بکشد؛ از صفحه خارج نشوید و رفرش نکنید. صفحه به‌صورت خودکار تازه می‌شود.",
-            awaiting_restart=True,
-        )
+        _restart_after_update(root, target_version)
+    except UpdateStepError as e:
+        _finish_error(str(e))
     except Exception as e:
         _finish_error(e)
-
 
 def _parse_iso(value: str | None) -> float | None:
     if not value:
