@@ -106,9 +106,10 @@
 
 /* —— Phone header: a floating capsule that mirrors the bottom bar (same height, glass, shadow and side
    margins). A round logo flush with its inner edge, the brand name and version beside it at field height, and
-   at the other end the search (panel-ds.css §14) with the action center beside it, two round buttons 8 apart. —— */
+   at the other end the search (panel-ds.css §14) with the action center beside it, two round buttons 8 apart.
+   The action center shows only with the brand; a page whose title takes the capsule leaves it out. —— */
 @media (max-width: 900px) {
-  /* Room the two round buttons take at the capsule's right end, gap after them included. */
+  /* Room the brand leaves for the search and action-center circles at the capsule's right end, gap included. */
   :root { --hdr-end-room: calc(2 * var(--dock-inner) + 2 * var(--space-1)); }
   .shell { padding-top: calc(var(--hdr-top) + var(--dock-h)); }
   .topbar {
@@ -215,7 +216,8 @@
    and on phones turned sideways the title row simply stays in the page and the brand stays in the capsule. —— */
 @supports selector(:has(*)) {
   @media (max-width: 900px) and (min-height: 501px) {
-    .shell:has(.page-head[data-page-head="capsule"]) .topbar-brand { display: none; }
+    /* The action center goes with the brand: a page title gets the room beside search instead. */
+    .shell:has(.page-head[data-page-head="capsule"]) :is(.topbar-brand, .topbar-inbox) { display: none; }
     .page-head[data-page-head="flow"] { display: none; }
     .page-head[data-page-head="capsule"] {
       position: fixed;
@@ -227,7 +229,7 @@
       height: var(--dock-h);
       margin: 0;
       padding: var(--dock-pad);
-      padding-right: calc(var(--dock-pad) + var(--hdr-end-room));
+      padding-right: calc(var(--dock-pad) + var(--dock-inner) + var(--space-1));
       display: flex;
       flex-wrap: nowrap;
       align-items: center;
