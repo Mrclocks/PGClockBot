@@ -54,6 +54,7 @@ BTN_MAIN_MENU: list[Field] = [
     ("btn_loyalty", "باشگاه مشتریان", "text"),
     ("btn_reseller_apply", "درخواست نمایندگی", "text"),
     ("btn_wholesale", "فروش عمده", "text"),
+    ("btn_trial", "دریافت تست", "text"),
 ]
 
 BTN_WALLET_SUB: list[Field] = [

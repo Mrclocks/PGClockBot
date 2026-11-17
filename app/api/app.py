@@ -42,6 +42,8 @@ from app.services.orders import (
 from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
 from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
 from app.services.chat_cleanup_config import chat_cleanup_payload
+from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
+from app.services.trial_offer import parse_trial_placement, save_trial_placement
 from app.services.panel_nav import DOT_LABELS as NAV_DOT_LABELS
 from app.services.panel_nav import build_dock, sidebar_for_template
 from app.services.resellers import feature_perm_groups
@@ -2762,6 +2764,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "pg_limit_cards": limit_snapshot_cards(limit_snapshot),
                 "plan_limit_issues": plan_limit_issues,
                 "trial_limit_issue": trial_limit_issue,
+                "trial_placement_labels": TRIAL_PLACEMENT_LABELS,
                 "custom_limit_issue": custom_limit_msg,
                 "open_categories": request.query_params.get("categories")
                 in {"1", "true", "yes"},
@@ -2965,8 +2968,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             owner_id = require_catalog_owner_id(staff)
         except ShopScopeError as e:
             return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
+        try:
+            placement = parse_trial_placement(form.get("trial_button_placement"))
+        except ValueError as e:
+            return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
         enabled = str(form.get("trial_enabled") or "") in {"1", "on", "true", "yes"}
         await set_setting(session, "trial_enabled", "1" if enabled else "0", reseller_id=owner_id)
+        if placement is not None:
+            await save_trial_placement(session, placement, reseller_id=owner_id)
         name = str(form.get("name") or "تست رایگان").strip() or "تست رایگان"
         try:
             days = max(1, int(str(form.get("duration_days") or "1")))
@@ -4403,6 +4412,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         catalog_meta = {
             "connection_status": {"label": "وضعیت اتصال", "required": False},
             "shop": {"label": "خرید سرویس", "required": True},
+            "trial": {"label": "دریافت تست", "required": False},
             "services": {"label": "سرویس‌های من", "required": False},
             "wallet": {"label": "کیف پول", "required": False},
             "support": {"label": "پشتیبانی", "required": False},

@@ -21,7 +21,7 @@ from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
 from app.services.referral_scope import is_referral_of_shop
 from app.services.service_import_offer import is_offer_dismissed
-from app.services.trial_offer import offerable_trial_plans
+from app.services.trial_offer import offerable_trial_plans, shows_trial_in_offer
 from app.services.service_scope import customer_may_use_service, list_customer_services, shop_services_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
@@ -135,7 +135,11 @@ async def render_home(
             ui=ui,
         )
         has_services = await _has_services(session, int(db_user.id))
-        offer_trial = not has_services and bool(await offerable_trial_plans(session, ui, int(db_user.id)))
+        offer_trial = (
+            not has_services
+            and shows_trial_in_offer(ui)
+            and bool(await offerable_trial_plans(session, ui, int(db_user.id)))
+        )
         offer_import = should_offer_import(
             ui,
             has_services=has_services,

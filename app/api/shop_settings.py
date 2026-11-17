@@ -114,6 +114,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         catalog_meta = {
             "connection_status": {"label": "وضعیت اتصال", "required": False},
             "shop": {"label": "خرید سرویس", "required": True},
+            "trial": {"label": "دریافت تست", "required": False},
             "services": {"label": "سرویس‌های من", "required": False},
             "wallet": {"label": "کیف پول", "required": False},
             "support": {"label": "پشتیبانی", "required": False},

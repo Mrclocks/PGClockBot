@@ -15,6 +15,7 @@ from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.user_errors import domain_error_text
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
+from app.services.trial_offer import TRIAL_MENU_KEY
 from app.bot.entry_gate import ENTRY_APPROVAL_BOT_FIELDS, ENTRY_APPROVAL_SUB, ENTRY_APPROVAL_SUB_TITLE
 from app.services.entry_approval_config import PERMISSION as ENTRY_APPROVAL_PERMISSION
 from app.services.resellers import get_reseller_profile, has_bot_perm
@@ -282,6 +283,7 @@ def _preview(value: str | None, *, limit: int = 120) -> str:
 
 MENU_ORDER_LABELS = {
     "shop": "خرید",
+    TRIAL_MENU_KEY: "دریافت تست",
     "services": "سرویس‌ها",
     CONNECTION_STATUS_MENU_KEY: "وضعیت اتصال",
     "wallet": "کیف پول",

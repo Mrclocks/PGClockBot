@@ -13,6 +13,7 @@ from app.db.models import Role
 from app.services.chat_cleanup_config import is_menu_keyboard_persistent
 from app.services.users import on
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
+from app.services.trial_offer import TRIAL_LABEL_KEY, TRIAL_MENU_KEY
 
 # Bind helpers/constants from keyboards after that module has defined them
 # (keyboards imports this module mid-file, once primitives exist).
@@ -166,6 +167,13 @@ def _connection_status_entries(key: str, ui: dict | None, role: str) -> list[tup
     return [(CONNECTION_STATUS_MENU_KEY, _t(ui, "btn_connection_status"))]
 
 
+def _trial_entries(key: str, ui: dict | None, *, show_trial: bool) -> list[tuple[str, str]]:
+    # The caller decides availability (placement, trial on, customer without a service or a claim).
+    if key != TRIAL_MENU_KEY or not show_trial:
+        return []
+    return [(TRIAL_MENU_KEY, _t(ui, TRIAL_LABEL_KEY))]
+
+
 def _reply_user_entries(
     role: str,
     *,
@@ -174,16 +182,19 @@ def _reply_user_entries(
     show_reseller_creds: bool = False,
     profile=None,
     show_reseller_apply: bool = False,
+    show_trial: bool = False,
 ) -> list[tuple[str, str]]:
     """Ordered (action_key, button_text) for the customer/reseller reply keyboard.
 
     ``reseller_apply`` appears on the main KB when enabled (platform bot only;
     callers pass ``show_reseller_apply=False`` on shop bots). Also still on
     support inline. Mini App is welcome-inline only (not on ReplyKeyboard).
+    ``show_trial`` shows «دریافت تست» where the menu order puts it.
     """
     entries: list[tuple[str, str]] = []
     for key in _menu_order(ui):
         entries.extend(_connection_status_entries(key, ui, role))
+        entries.extend(_trial_entries(key, ui, show_trial=show_trial))
         if key == "shop":
             entries.append((REPLY_ACTION_SHOP, _t(ui, "btn_shop")))
         elif key == "services" and has_services:
@@ -760,6 +771,7 @@ def main_reply_keyboard(
     pg_features: frozenset[str] | set[str] | None = None,
     can_manage_representatives: bool = True,
     preview_exit_action: str | None = None,
+    show_trial: bool = False,
 ) -> ReplyKeyboardMarkup:
     """Primary navigation reply keyboard (level 0, Option B).
 
@@ -788,6 +800,7 @@ def main_reply_keyboard(
         show_reseller_creds=False if as_user else show_reseller_creds,
         show_reseller_apply=bool(show_reseller_apply),
         profile=None if as_user else profile,
+        show_trial=show_trial,
     )
     if as_user and preview_exit_action:
         exit_label = (
