@@ -18,6 +18,7 @@ from app.bot.keyboards import back_button
 from app.bot.handlers.connection_status_admin_input import CANCEL_CODE, MonitorInput
 from app.bot.nav_input import ask_text
 from app.bot.tg_utils import safe_edit_text
+from app.bot.verbatim_input import NotVerbatimTextInput
 from app.db.models import BotUser
 from app.services.connection_monitor_access import MonitorAccess
 from app.services.connection_monitor_actions import edit_monitor_target, select_monitor_config
@@ -32,7 +33,7 @@ router = Router(name="connection_status_admin")
 
 
 @router.message(Command("connection_admin"))
-@router.message(MonitorAdminLabel())
+@router.message(MonitorAdminLabel(), NotVerbatimTextInput())
 async def monitor_admin_entry(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext,
                                 is_reseller_bot: bool = False) -> None:
     try:
