@@ -120,8 +120,9 @@ class AdminSettingsListsTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(len(row) == 2 for row in markup.inline_keyboard))
         marks = {b.callback_data: b.text for row in markup.inline_keyboard for b in row}
         self.assertTrue(marks[f"adm:st:tog:{first_key}"].startswith("✅"))
-        # Every switch, the «گزارش روزانه» screen and «بازگشت».
-        self.assertEqual(len(marks), len(admin_settings.PLATFORM_NOTIFY_PREFS) + 2)
+        # Every switch, one button per sub-screen (daily report, alerts, …) and «بازگشت».
+        subs = admin_settings.SECTIONS["notify"]["subs"]
+        self.assertEqual(len(marks), len(admin_settings.PLATFORM_NOTIFY_PREFS) + len(subs) + 1)
 
 
 class ResellerSettingsListsTests(unittest.IsolatedAsyncioTestCase):
@@ -158,7 +159,9 @@ class ResellerSettingsListsTests(unittest.IsolatedAsyncioTestCase):
         ):
             await reseller_settings._render_notify(callback, None, 5)
         markup = edit.await_args.kwargs["reply_markup"]
-        self.assertEqual(_shape(markup.inline_keyboard), [2, 2, 2, 2, 1])
+        # Four rows of switches, then one row per sub-screen and «بازگشت».
+        subs = len(reseller_settings.SECTIONS["notify"]["subs"])
+        self.assertEqual(_shape(markup.inline_keyboard), [2, 2, 2, 2] + [1] * (subs + 1))
         self.assertTrue(markup.inline_keyboard[0][0].text.startswith("✅"))
 
     async def test_an_empty_notification_catalog_still_shows_the_explanation_row(self):
@@ -172,7 +175,10 @@ class ResellerSettingsListsTests(unittest.IsolatedAsyncioTestCase):
         ):
             await reseller_settings._render_notify(callback, None, 5)
         markup = edit.await_args.kwargs["reply_markup"]
-        self.assertEqual(_shape(markup.inline_keyboard), [1, 1])
+        # The explanation row, one row per sub-screen and «بازگشت».
+        subs = len(reseller_settings.SECTIONS["notify"]["subs"])
+        self.assertEqual(_shape(markup.inline_keyboard), [1] * (subs + 2))
+        self.assertIn("اعلانی", markup.inline_keyboard[0][0].text)
 
 
 class ResellerPlanPermissionRowsTests(unittest.TestCase):
