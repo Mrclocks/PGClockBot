@@ -44,7 +44,12 @@ from app.api.guide_media_pages import guides_media_view, register_guide_media_pa
 from app.services.renewal_carry import set_plan_carry_from_form
 from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
-from app.services.trial_offer import TRIAL_SERVICE_OWNERS_KEY, parse_trial_placement, save_trial_placement
+from app.services.trial_offer import (
+    TRIAL_SERVICE_OWNERS_KEY,
+    TRIAL_SHOW_CLAIMED_KEY,
+    parse_trial_placement,
+    save_trial_placement,
+)
 from app.services.panel_nav import DOT_LABELS as NAV_DOT_LABELS
 from app.services.panel_nav import build_dock, sidebar_for_template
 from app.services.resellers import feature_perm_groups
@@ -2993,6 +2998,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             await set_setting(
                 session, TRIAL_SERVICE_OWNERS_KEY, "1" if for_service_owners else "0", reseller_id=owner_id
             )
+            show_claimed = str(form.get(TRIAL_SHOW_CLAIMED_KEY) or "") in {"1", "on", "true", "yes"}
+            await set_setting(session, TRIAL_SHOW_CLAIMED_KEY, "1" if show_claimed else "0", reseller_id=owner_id)
             await save_trial_placement(session, placement, reseller_id=owner_id)
         name = str(form.get("name") or "تست رایگان").strip() or "تست رایگان"
         try:

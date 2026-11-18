@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import secrets
 import time
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 
 import httpx
 
@@ -21,6 +22,8 @@ from app.services import pg_link_health
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 
 logger = logging.getLogger(__name__)
+P = ParamSpec("P")
+R = TypeVar("R")
 
 # First pause after an outage is confirmed; repeated failed recovery probes
 # double it up to the ceiling so a dead panel is not hammered.
@@ -130,6 +133,25 @@ def reset_read_circuits() -> None:
 def finish_web_read_budget() -> None:
     """Keep mutation work and its spawned jobs on their existing timeouts."""
     _BUDGET.set(None)
+
+
+def outside_web_read_budget(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+    """Run ``func`` with the panel client's own timeouts instead of a web page's read deadline.
+
+    Paying, delivering and renewing must not fail because the request that started them
+    (a gateway return, a payment webhook, a Telegram update) carries a page budget of a few
+    seconds, or because an unrelated page paused reads. The budget is restored afterwards.
+    """
+
+    @functools.wraps(func)
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        token = _BUDGET.set(None)
+        try:
+            return await func(*args, **kwargs)
+        finally:
+            _BUDGET.reset(token)
+
+    return wrapper
 
 
 def _panel_state(base_url: str) -> _PanelState:
