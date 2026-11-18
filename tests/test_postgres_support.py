@@ -8,16 +8,18 @@ import unittest
 from unittest.mock import patch
 
 from sqlalchemy import func, make_url, select, text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.db.models import Setting
+from app.db.models import BotUser, ChargeCode, Setting
 from tests import postgres_support
 from tests.postgres_support import (
+    GENERATED_ID_START,
     TEST_DATABASE_URL_ENV,
     MissingTestDatabaseError,
     PostgresTestCase,
     _quoted,
+    add_shop_users,
     isolated_database,
     postgres_test_url,
     scoped_async_engine,
@@ -114,6 +116,37 @@ class ScopedDatabaseTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await first.dispose()
             await second.dispose()
+
+    async def test_a_different_key_gives_a_separate_database(self) -> None:
+        self.assertNotEqual(scoped_database_url(), scoped_database_url(key="second"))
+        self.assertEqual(scoped_database_url(key="second"), scoped_database_url(key="second"))
+
+    async def test_generated_ids_do_not_collide_with_seeded_ones(self) -> None:
+        engine = scoped_async_engine()
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with sessions() as session:
+                session.add(Setting(id=1, key="seeded", value="1"))
+                await session.commit()
+                generated = Setting(key="generated", value="1")
+                session.add(generated)
+                await session.commit()
+            self.assertEqual(generated.id, GENERATED_ID_START)
+        finally:
+            await engine.dispose()
+
+    async def test_shop_users_satisfy_shop_foreign_keys(self) -> None:
+        engine = scoped_async_engine()
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            await add_shop_users(sessions, 41, 42)
+            async with sessions() as session:
+                session.add(ChargeCode(code="SHOP41", amount=1, reseller_id=41))
+                await session.commit()
+                roles = (await session.scalars(select(BotUser.role).where(BotUser.id.in_([41, 42])))).all()
+            self.assertEqual(roles, ["reseller", "reseller"])
+        finally:
+            await engine.dispose()
 
     def test_sync_engine_starts_empty_for_migration_tests(self) -> None:
         engine = scoped_sync_engine()

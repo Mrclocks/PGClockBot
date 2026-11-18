@@ -25,6 +25,7 @@ import hashlib
 import logging
 import os
 import secrets
+import time
 import unittest
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -41,8 +42,7 @@ from sqlalchemy.schema import CreateIndex, CreateTable
 
 from app.db import Base
 
-# Importing the models registers every table on Base.metadata.
-import app.db.models  # noqa: F401
+from app.db.models import BotUser
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +51,23 @@ DATABASE_PREFIX = "pgct_db_"
 TEMPLATE_PREFIX = "pgct_tmpl_"
 _NAME_TOKEN_BYTES = 8
 _TEMPLATE_HASH_CHARS = 16
+# Bump when _build_template changes what goes into the template besides the models.
+_TEMPLATE_REVISION = 2
+# Keeps add_shop_users' Telegram ids clear of the ones tests choose.
+SHOP_TELEGRAM_ID_BASE = 9_000_000_000
+# First value of every id sequence in a cloned database.
+GENERATED_ID_START = 1_000_001
+_DROP_ATTEMPTS = 20
+_SESSION_DROP_ATTEMPTS = 100
+_DROP_RETRY_SECONDS = 0.1
 # Serializes template creation across xdist workers sharing one server.
 _TEMPLATE_LOCK_KEY = 0x50474354
 
 MISSING_URL_MESSAGE = (
     f"{TEST_DATABASE_URL_ENV} is not set. Tests need a PostgreSQL server, for example:\n"
     f"  export {TEST_DATABASE_URL_ENV}=postgresql+asyncpg://user:password@127.0.0.1:5432/pgclock_test\n"
-    "The role needs CREATEDB: every test runs in its own database."
+    "Use a dedicated server and a superuser role, as CI does: every test creates its own\n"
+    "database, and a few migration tests edit system catalogs."
 )
 
 
@@ -78,7 +88,7 @@ class IsolatedDatabase:
 class DatabaseScope:
     """Databases created for one test (or for the session, outside any test)."""
 
-    databases: dict[bool, str] = field(default_factory=dict)
+    databases: dict[tuple[str, bool], str] = field(default_factory=dict)
 
 
 def postgres_test_url() -> str:
@@ -124,6 +134,7 @@ def _schema_fingerprint() -> str:
         for table in tables
         for index in sorted(table.indexes, key=lambda item: item.name or "")
     ]
+    statements.append(f"template-revision {_TEMPLATE_REVISION}")
     return hashlib.sha256("\n".join(statements).encode()).hexdigest()[:_TEMPLATE_HASH_CHARS]
 
 
@@ -159,6 +170,7 @@ def _build_template(admin_conn: Any, name: str) -> None:
     try:
         with engine.begin() as conn:
             Base.metadata.create_all(conn)
+            _start_sequences_high(conn)
     finally:
         engine.dispose()
     # Renamed only once complete, so a crash never leaves a half-built template behind.
@@ -179,6 +191,18 @@ def _drop_stale_templates(admin_conn: Any, *, keep: str) -> None:
             logger.warning("could not drop stale test template %s", old, exc_info=True)
 
 
+def _start_sequences_high(conn: Any) -> None:
+    """Keep generated ids clear of the small explicit ids tests seed (id=1, id=2, ...)."""
+    sequences = conn.scalars(
+        text("SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public'")
+    ).all()
+    for sequence in sequences:
+        conn.execute(
+            text("SELECT setval(CAST(:sequence AS regclass), :start, false)"),
+            {"sequence": f'"{sequence}"', "start": GENERATED_ID_START},
+        )
+
+
 def create_database(*, tables: bool) -> str:
     """Create a fresh database (with or without the app tables) and return its asyncpg URL."""
     name = DATABASE_PREFIX + secrets.token_hex(_NAME_TOKEN_BYTES)
@@ -192,21 +216,37 @@ def create_database(*, tables: bool) -> str:
     return _url_for(name)
 
 
-def drop_database(url: str) -> None:
-    """Drop a database made by create_database, closing any connection a test left open."""
+def drop_database(url: str, *, attempts: int = _DROP_ATTEMPTS) -> bool:
+    """Drop a database made by create_database, closing any connection a test left open.
+
+    FORCE cannot end an autovacuum worker, which runs as a superuser, when the
+    test role is not one; such a worker finishes quickly, so retry for a while.
+    Returns False if the database is still there.
+    """
     name = make_url(url).database or ""
     admin = _admin_engine()
     try:
         with admin.connect() as conn:
-            conn.execute(text(f"DROP DATABASE IF EXISTS {_quoted(name)} WITH (FORCE)"))
+            for attempt in range(attempts):
+                try:
+                    conn.execute(text(f"DROP DATABASE IF EXISTS {_quoted(name)} WITH (FORCE)"))
+                    return True
+                except DBAPIError:
+                    if attempt == attempts - 1:
+                        logger.warning("could not drop test database %s", name, exc_info=True)
+                        return False
+                    time.sleep(_DROP_RETRY_SECONDS)
     finally:
         admin.dispose()
+    return False
 
 
 # --- per-test scope, driven by tests/conftest.py ---------------------------
 
 _session_scope = DatabaseScope()
 _active_scope: DatabaseScope | None = None
+# Databases an autovacuum worker kept busy at test end; retried once more at session end.
+_undropped: list[str] = []
 
 
 def begin_scope() -> DatabaseScope:
@@ -224,30 +264,58 @@ def end_scope(scope: DatabaseScope) -> None:
 
 def end_session() -> None:
     _drop_scope(_session_scope)
+    for url in list(_undropped):
+        if drop_database(url, attempts=_SESSION_DROP_ATTEMPTS):
+            _undropped.remove(url)
 
 
 def _drop_scope(scope: DatabaseScope) -> None:
     for url in scope.databases.values():
-        drop_database(url)
+        if not drop_database(url):
+            _undropped.append(url)
     scope.databases.clear()
 
 
-def scoped_database_url(*, tables: bool = True) -> str:
-    """Return the current test's database URL, creating the database on first use."""
+def scoped_database_url(*, tables: bool = True, key: str = "") -> str:
+    """Return the current test's database URL, creating the database on first use.
+
+    Calls with the same ``tables`` and ``key`` share one database; pass a
+    different ``key`` when a test needs a second, separate database.
+    """
     scope = _active_scope or _session_scope
-    if tables not in scope.databases:
-        scope.databases[tables] = create_database(tables=tables)
-    return scope.databases[tables]
+    slot = (key, tables)
+    if slot not in scope.databases:
+        scope.databases[slot] = create_database(tables=tables)
+    return scope.databases[slot]
 
 
-def scoped_async_engine(*, tables: bool = True, **kwargs: Any) -> AsyncEngine:
+def scoped_async_engine(*, tables: bool = True, key: str = "", **kwargs: Any) -> AsyncEngine:
     """An async engine on the current test's database (app tables included by default)."""
-    return create_async_engine(scoped_database_url(tables=tables), **kwargs)
+    return create_async_engine(scoped_database_url(tables=tables, key=key), **kwargs)
 
 
-def scoped_sync_engine(*, tables: bool = False, **kwargs: Any) -> Engine:
+def scoped_sync_engine(*, tables: bool = False, key: str = "", **kwargs: Any) -> Engine:
     """A sync engine on the current test's database; empty by default, for migration tests."""
-    return create_engine(_sync_url(scoped_database_url(tables=tables)), **kwargs)
+    return create_engine(_sync_url(scoped_database_url(tables=tables, key=key)), **kwargs)
+
+
+async def add_shop_users(sessions: async_sessionmaker[AsyncSession], *shop_ids: int) -> None:
+    """Insert the reseller users that shop-scoped test rows point at.
+
+    PostgreSQL enforces foreign keys, so a row with ``reseller_id=41`` needs user 41.
+    Telegram ids and referral codes are kept far from the small values tests use.
+    """
+    async with sessions() as session:
+        session.add_all(
+            BotUser(
+                id=shop_id,
+                telegram_id=SHOP_TELEGRAM_ID_BASE + shop_id,
+                referral_code=f"test-shop-{shop_id}",
+                role="reseller",
+            )
+            for shop_id in shop_ids
+        )
+        await session.commit()
 
 
 @asynccontextmanager
@@ -259,7 +327,8 @@ async def isolated_database(*, create_tables: bool = False) -> AsyncIterator[Iso
         yield IsolatedDatabase(url=url, engine=engine, Session=async_sessionmaker(engine, expire_on_commit=False))
     finally:
         await engine.dispose()
-        await asyncio.to_thread(drop_database, url)
+        if not await asyncio.to_thread(drop_database, url):
+            _undropped.append(url)
 
 
 class PostgresTestCase(unittest.IsolatedAsyncioTestCase):
