@@ -24,9 +24,12 @@ from app.services.support_contacts import (
     get_support_contacts,
     upsert_support_contact,
 )
+from app.services.receipt_fingerprints import normalize_dup_policy
+from app.services.rich_text import pack_setting_from_message
 from app.services.users import (
     get_all_settings,
     get_setting,
+    normalize_force_join_channel_value,
     on,
     reset_shop_reseller_id,
     set_setting,
@@ -57,6 +60,7 @@ from app.bot.handlers.settings_labels import (
 from app.bot.handlers.guide_editor import entry_button as guides_entry_button
 from app.bot.handlers.screen_editor import entry_button as editor_entry_button
 from app.services.screen_editor import is_editor_enabled
+import html
 import logging
 
 logger = logging.getLogger(__name__)
@@ -968,12 +972,21 @@ async def settings_edit_ask(
         prompt=(
             secret_prompt(meta[1], cur)
             if is_secret(meta[2])
-            else f"<b>{meta[1]}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}"
+            else f"<b>{meta[1]}</b>\nفعلی:\n<code>{html.escape(_preview(cur))}</code>\n\n{hint}"
         ),
         cancel_code="rs_set",
         fsm_state=ResellerSettingsStates.edit_value,
         edit=True,
     )
+
+
+def _shop_setting_value(key: str, message: Message) -> str:
+    """The stored form of a typed shop setting: the same normalisation the owner bot and the web apply."""
+    if key == "force_join_channel":
+        return normalize_force_join_channel_value(message.text or "")
+    if key == "receipt_dup_policy":
+        return normalize_dup_policy(message.text or "")
+    return pack_setting_from_message(key, message)
 
 
 @router.message(ResellerSettingsStates.edit_value)
@@ -995,14 +1008,8 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
     meta = FIELDS.get(key)
     if meta and is_secret(meta[2]):
         await delete_user_message(message)
-    elif key == "force_join_channel":
-        from app.services.users import normalize_force_join_channel_value
-
-        text = normalize_force_join_channel_value(text)
-    if not (meta and is_secret(meta[2])):
-        from app.services.rich_text import pack_setting_from_message
-
-        text = pack_setting_from_message(key, message)
+    else:
+        text = _shop_setting_value(key, message)
     await set_setting(session, key, text, reseller_id=profile.user_id)
     await _close_input_to_location(message, state, session, profile, note=feedback.SAVED_WITH_ICON)
 
