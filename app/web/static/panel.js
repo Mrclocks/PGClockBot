@@ -408,6 +408,8 @@
       function isRealInternalNavAnchor(a) {
         if (!a || a.target && a.target !== '' && a.target !== '_self') return false;
         if (a.hasAttribute('download') || a.getAttribute('aria-disabled') === 'true') return false;
+        /* A link that opens a modal (its href is only the fallback without scripts) is not a page change. */
+        if (a.hasAttribute('data-modal-open')) return false;
         const raw = a.getAttribute('href');
         if (!raw || raw.charAt(0) === '#' || raw.indexOf('javascript:') === 0) return false;
         let url;
@@ -3007,6 +3009,11 @@
         if (!btn) return;
         e.preventDefault();
         openDismiss(btn.getAttribute('data-inbox-dismiss'), btn.getAttribute('data-inbox-entity') || '');
+        /* From the header's action-center modal the dismiss dialog takes its place, like any modal opened
+           from a fragment modal. */
+        const host = btn.closest('.ui-modal');
+        const hostClose = host && host !== modal ? host.querySelector('[data-modal-close]') : null;
+        if (hostClose) setTimeout(() => { hostClose.click(); }, 0);
       });
 
       const resetForm = document.getElementById('form-inbox-dismiss-reset');

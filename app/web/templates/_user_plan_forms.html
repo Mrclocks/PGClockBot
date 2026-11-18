@@ -74,7 +74,10 @@
           {% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %}<small class="muted">سقف زنده: {{ pg_limit_snapshot.per_user_data_max | bytes }}</small>{% endif %}
         </div>
       </div>
-      <div class="ds-rows">{{ ds_switch('carry_remaining_quota', 'انتقال مانده حجم و زمان در تمدید', 'مانده سرویس به تمدید، ارتقا یا تنزل اضافه می‌شود؛ خاموش: فقط حجم و مدت همین پلن', true) }}</div>
+      <div class="ds-rows">
+        {{ ds_switch('carry_remaining_volume', 'انتقال حجم مانده در تمدید', 'حجم مانده سرویس به حجم پلن اضافه می‌شود؛ خاموش: فقط حجم همین پلن', true) }}
+        {{ ds_switch('carry_remaining_time', 'انتقال زمان مانده در تمدید', 'روزهای مانده سرویس به مدت پلن اضافه می‌شود؛ خاموش: دوره از همین الان با مدت همین پلن شروع می‌شود', true) }}
+      </div>
     {% endcall %}
 
     {% call ds_sec('اتصال پاسارگارد', sid='up-sec-pg') %}

@@ -29,7 +29,9 @@ from app.services.pg_admin_subscription import (
     get_subscription,
     is_subscription_plan,
     plan_has_time,
-    plan_keeps_extras_on_renew,
+    EXTRA_GB,
+    EXTRA_USERS,
+    plan_keeps_extra,
     plan_kind_of,
     renew_subscription,
 )
@@ -64,6 +66,21 @@ WALLET_PAY_HINT = "با پرداخت از کیف پول، مبلغ همین حا
 EXTRAS_CLEARED_WARN = (
     "توجه: حجم/کاربر اضافهٔ خریداری‌شده با این تمدید پاک می‌شود و در مبلغ تمدید حساب نمی‌شود."
 )
+EXTRA_GB_CLEARED_WARN = (
+    "توجه: حجم اضافهٔ خریداری‌شده با این تمدید پاک می‌شود و در مبلغ تمدید حساب نمی‌شود؛ کاربر اضافه می‌ماند."
+)
+EXTRA_USERS_CLEARED_WARN = (
+    "توجه: کاربر اضافهٔ خریداری‌شده با این تمدید پاک می‌شود و در مبلغ تمدید حساب نمی‌شود؛ حجم اضافه می‌ماند."
+)
+
+
+def _extras_cleared_warning(invoice: dict) -> str | None:
+    gb, users = int(invoice.get("cleared_extra_gb") or 0), int(invoice.get("cleared_extra_users") or 0)
+    if gb and users:
+        return EXTRAS_CLEARED_WARN
+    if gb:
+        return EXTRA_GB_CLEARED_WARN
+    return EXTRA_USERS_CLEARED_WARN if users else None
 
 
 @dataclass(slots=True)
@@ -104,21 +121,23 @@ class PackageOverview:
 def _limits(plan: ResellerPlan, sub: PgAdminSubscription | None) -> tuple[int, int]:
     """(users, gb) after renewing onto ``plan``; 0 = unlimited.
 
-    Bought extras count only when the target plan keeps them on renew.
+    Bought extras count only when the target plan keeps that kind on renew.
     """
     users = max(0, int(plan.included_users or 0))
     gb = max(0, int(plan.included_gb or 0))
-    if sub is not None and plan_keeps_extras_on_renew(plan):
-        users = users + int(sub.extra_users_purchased or 0) if users else 0
-        gb = gb + int(sub.extra_gb_purchased or 0) if gb else 0
+    if sub is not None and users and plan_keeps_extra(plan, EXTRA_USERS):
+        users += int(sub.extra_users_purchased or 0)
+    if sub is not None and gb and plan_keeps_extra(plan, EXTRA_GB):
+        gb += int(sub.extra_gb_purchased or 0)
     return users, gb
 
 
 def renew_confirm_warnings_from_invoice(plan: ResellerPlan, invoice: dict) -> list[str]:
     """Warnings shown before the owner pays, from a server-side renew invoice."""
     warnings: list[str] = []
-    if int(invoice.get("cleared_extra_gb") or 0) or int(invoice.get("cleared_extra_users") or 0):
-        warnings.append(EXTRAS_CLEARED_WARN)
+    cleared = _extras_cleared_warning(invoice)
+    if cleared:
+        warnings.append(cleared)
     if plan_has_time(plan) and not bool(invoice.get("carry_remaining_period", True)):
         warnings.append("زمان باقی‌مانده منتقل نمی‌شود؛ دوره از همین الان شروع می‌شود.")
     return warnings
@@ -267,9 +286,9 @@ async def _assert_target_allowed(
         blocked = switch_blocker(current, target)
         if blocked:
             raise ValueError(blocked)
-    clears_extras = not plan_keeps_extras_on_renew(target) and (
-        int(sub.extra_gb_purchased or 0) > 0 or int(sub.extra_users_purchased or 0) > 0
-    )
+    clears_extras = (
+        not plan_keeps_extra(target, EXTRA_GB) and int(sub.extra_gb_purchased or 0) > 0
+    ) or (not plan_keeps_extra(target, EXTRA_USERS) and int(sub.extra_users_purchased or 0) > 0)
     may_shrink = clears_extras or relation in (RELATION_DOWNGRADE, RELATION_OTHER)
     if not may_shrink and relation == RELATION_UPGRADE:
         return
