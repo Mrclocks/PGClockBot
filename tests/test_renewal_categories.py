@@ -12,6 +12,7 @@ from app.bot.panel_history import panel_history
 from app.db.models import BotUser, Plan, PlanCategory, UserService
 from app.services.service_renewals import renewal_choices
 from tests.chat_sim import ChatSim
+from tests.postgres_support import add_rows
 
 BACK = "بازگشت"
 
@@ -50,7 +51,7 @@ class _RenewalFlow(unittest.IsolatedAsyncioTestCase):
         await self.sim.type("/start")
         async with self.sim.Session() as session:
             me = await session.scalar(select(BotUser).where(BotUser.telegram_id == 5901))
-            session.add_all([
+            await add_rows(session, [
                 BotUser(id=950, telegram_id=9500, referral_code="shop950", role="reseller"),
                 BotUser(id=951, telegram_id=9510, referral_code="other951"),
                 PlanCategory(id=10, name="اقتصادی", owner_reseller_id=None, audience="users"),

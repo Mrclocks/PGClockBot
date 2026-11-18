@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 
 import pytest
-from tests.postgres_support import scoped_sync_engine
 
 # Force SQLite for these tests before app settings cache
 os.environ.setdefault(
@@ -54,12 +53,12 @@ def seeded_sqlite(tmp_path, monkeypatch):
     monkeypatch.setattr(baseline, "BASELINE_DIR", data_dir / "baselines")
 
     # Build schema + seed row via Alembic/create_all on this URL
-    from sqlalchemy import text
+    from sqlalchemy import create_engine, text
 
     from app.db import Base
     import app.db.models  # noqa: F401
 
-    eng = scoped_sync_engine()
+    eng = create_engine(f"sqlite:///{db_path}")
     Base.metadata.create_all(eng)
     with eng.begin() as conn:
         conn.execute(

@@ -26,7 +26,9 @@ class ShopTopupWebReviewTests(RoutesHarness):
         notify.start()
         self.addCleanup(notify.stop)
         async with AsyncSession(bind=self.engine, expire_on_commit=False) as session:
+            session.add(BotUser(id=OTHER_SHOP_ID, telegram_id=106, referral_code="shop6", role="reseller"))
             session.add(BotUser(id=7, telegram_id=107, referral_code="cust7", role="user", reseller_id=SHOP_ID))
+            await session.flush()
             for payment_id, shop in ((41, SHOP_ID), (42, OTHER_SHOP_ID), (43, None)):
                 session.add(Payment(
                     id=payment_id, user_id=7, amount=TOPUP_AMOUNT, is_wallet_topup=True, wallet_shop_id=shop,

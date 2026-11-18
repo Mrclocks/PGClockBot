@@ -61,7 +61,9 @@ def signed(token: str, telegram_id: int, *, age: int = 0) -> str:
 class ShopScopeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
-        self.engine = scoped_async_engine()
+        # asyncSetUp_reset runs this again and expects a fresh database each round.
+        self.setup_round = getattr(self, "setup_round", 0) + 1
+        self.engine = scoped_async_engine(key=f"round-{self.setup_round}")
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
