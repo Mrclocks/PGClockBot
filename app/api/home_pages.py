@@ -15,6 +15,8 @@ from app.services.authz import authz_from_staff, can_shop
 from app.services.dashboard_trend import empty_trend, own_account_summary, sales_trend
 from app.services.host_gauges import gauges_json, local_host_gauges
 from app.services.home_overview import build_home_overview, reseller_shop_summary
+from app.services.inbox_entries import inbox_entries
+from app.services.panel_inbox import build_inbox_context
 from app.services import pg_link_health
 from app.services.pg_read_cache import NODE_LIST_MAX_AGE_SEC
 from app.services.pg_read_resilience import circuit_status
@@ -586,6 +588,26 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         ctx = await build_inbox_context(session, request, staff)
         mark(request, "page_data")
         return render(request, "inbox.html", _flash_from_query(request, ctx))
+
+    @app.get("/inbox/panel", response_class=HTMLResponse)
+    async def inbox_panel(
+        request: Request,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Body of the header's action-center modal: the same items as /inbox, as rows."""
+        ctx = await build_inbox_context(session, request, staff)
+        response = render(
+            request,
+            "_inbox_modal_body.html",
+            {
+                "staff": staff,
+                "entries": inbox_entries(ctx),
+                "hidden_count": int(ctx.get("inbox_hidden_by_dismiss") or 0),
+            },
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.post("/inbox/dismiss")
     async def inbox_dismiss(
