@@ -15,6 +15,7 @@ from app.services.formatting import format_message, format_toman, info_block, kv
 from app.bot import keyboards as kb
 from app.config import get_settings
 from app.services.pasarguard import absolutize_subscription_url, get_pg
+from app.services.service_period import period_view
 from app.services.qrcode_gen import make_subscription_qr
 from app.services.support_button import support_markup
 from app.services.message_variables import DOMAIN_ORDER, DOMAIN_WALLET, render_message_template
@@ -301,7 +302,8 @@ async def build_delivery_content(
         if svc:
             from app.services.service_live_info import fetch_live_service_info
 
-            info = await fetch_live_service_info(svc, client_factory=get_pg)
+            # Display only: this period's volume (the card, the QR caption).
+            info = period_view(await fetch_live_service_info(svc, client_factory=get_pg), svc)
             info.setdefault("username", svc.pg_username)
             sub_info = info if not info.get("error") else None
             if include_details:

@@ -79,6 +79,7 @@ from app.services.volume_allocation import (
     release_volume_hold,
 )
 from app.services.staff_audit import StaffActor
+from app.services.service_period import clear_period_start, record_period_start
 from app.services.wallet import credit_wallet, debit_wallet
 
 logger = logging.getLogger(__name__)
@@ -2876,7 +2877,10 @@ async def _renewal_targets(pg, service: UserService, plan: Plan, snapshot: dict 
     if payload is None:
         from app.services.service_renewals import calculate_renewal
 
-        payload = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), snapshot)["payload"]
+        result = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), snapshot)
+        payload = result["payload"]
+        # Saved with the target before the panel write, so a retry keeps the same period start.
+        snapshot["period_start"] = result["period_start"]
     gate_expire = payload["expire"]
     if payload.get("on_hold_expire_duration"):
         gate_expire = int(time.time()) + payload["on_hold_expire_duration"]
@@ -2981,6 +2985,18 @@ def _record_renewed_service(
         sync_service_quota_cache(
             service, expire_ts=expire, data_limit_bytes=data_limit, fallback_duration_days=plan_days,
         )
+    _record_period_start(service, run.snapshot, data_limit=data_limit)
+
+
+def _record_period_start(service: UserService, snapshot: dict | None, *, data_limit: int | None) -> None:
+    """Open the new period on the service (legacy orders without a snapshot keep raw numbers)."""
+    start = (snapshot or {}).get("period_start")
+    if not isinstance(start, dict):
+        clear_period_start(service)
+        return
+    record_period_start(
+        service, used=start.get("used"), lifetime=start.get("lifetime"), finite_limit=bool(data_limit),
+    )
 
 
 async def _notify_renewal_delivered(session: AsyncSession, order: Order) -> None:

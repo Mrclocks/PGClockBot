@@ -30,6 +30,7 @@ from app.services.alert_thresholds import (
     traffic_threshold,
 )
 from app.services.daily_report_delivery import deliver_daily_reports
+from app.services.service_period import period_usage
 from app.services.formatting import parse_expire
 from app.services.pasarguard import get_pg
 from app.services.usage_alert_messages import (
@@ -261,6 +262,8 @@ async def check_expiring_services(bot: Bot) -> None:
                             limit_f = float(limit)
                         except (TypeError, ValueError):
                             limit_f = 0
+                        # This period's share: a renewal adds fresh volume on top of lifetime usage.
+                        used, limit_f = period_usage(svc, used, limit_f, info.get("lifetime_used_traffic"))
                         if traffic_is_low(used, limit_f, traffic_limit):
                             try:
                                 alert = await send_alert_with_default_fallback(

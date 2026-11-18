@@ -39,6 +39,7 @@ from app.services.formatting import (
     time_remaining_label,
 )
 from app.services.numbers import normalize_number_text
+from app.services.service_period import clear_period_start
 from app.services.pasarguard import (
     PasarGuardError,
     absolutize_subscription_url,
@@ -1055,6 +1056,18 @@ async def _charge_quota_edit(
         raise ValueError(e.message) from e
 
 
+async def _reset_usage(
+    session: AsyncSession, pg: Any, service: UserService, charges: list[ResellerCharge]
+) -> tuple[list[ResellerCharge], bool]:
+    """Reset the panel usage; a failure keeps the quota edit going and settles the reset charge."""
+    try:
+        await pg.reset_user_by_id(int(service.pg_user_id))
+    except Exception as exc:
+        logger.debug("reset traffic failed uid=%s", service.pg_user_id, exc_info=True)
+        return await _settle_failed_reset(session, charges, exc), False
+    return charges, True
+
+
 async def _settle_failed_reset(
     session: AsyncSession, charges: list[ResellerCharge], exc: BaseException
 ) -> list[ResellerCharge]:
@@ -1124,12 +1137,7 @@ async def admin_set_service_quota(
         session, pg, service, hold, renew=renew, data_limit_bytes=data_limit_bytes, expire_ts=expire_ts,
         reset=do_reset,
     )
-    if do_reset:
-        try:
-            await pg.reset_user_by_id(int(service.pg_user_id))
-        except Exception as exc:
-            logger.debug("reset traffic failed uid=%s", service.pg_user_id, exc_info=True)
-            charges = await _settle_failed_reset(session, charges, exc)
+    charges, reset_done = await _reset_usage(session, pg, service, charges) if do_reset else (charges, False)
     payload = build_user_modify_payload(
         data_limit=data_limit_bytes,
         expire_ts=expire_ts,
@@ -1169,6 +1177,9 @@ async def admin_set_service_quota(
                 sync_service_quota_cache(service, live_info)
         except Exception:
             logger.debug("quota cache refresh failed uid=%s", service.pg_user_id, exc_info=True)
+    if renew or reset_done:
+        # A staff renewal writes absolute numbers and a reset zeroes usage: raw is the period now.
+        clear_period_start(service)
     service.notified_expire = False
     service.notified_traffic = False
     await release_volume_hold(session, hold)

@@ -533,6 +533,10 @@ class UserService(Base):
         DateTime(timezone=True), nullable=True
     )
     quota_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Panel usage (and lifetime usage) when the last renewal opened the current period;
+    # display and alerts subtract it (service_period). NULL = the raw numbers are the period.
+    period_used_baseline_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    period_lifetime_baseline_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import UserService
 from app.services.formatting import parse_expire
 from app.services.alert_thresholds import AlertThreshold, should_rearm_time, should_rearm_traffic
+from app.services.service_period import period_usage
 from app.services.usage_alerts import period_seconds, plan_durations
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ def _rearm_one(
             used, limit = float(info.get("used_traffic") or 0), float(info["data_limit"])
         except (TypeError, ValueError):
             return changed
+        used, limit = period_usage(service, used, limit, info.get("lifetime_used_traffic"))
         if should_rearm_traffic(used, limit, traffic_limit):
             service.notified_traffic = False
             changed = True
