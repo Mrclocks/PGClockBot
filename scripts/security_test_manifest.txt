@@ -551,3 +551,4 @@ tests/test_bot_backup_settings.py
 tests/test_bot_profile_texts.py
 tests/test_bot_crypto_rate_settings.py
 tests/test_bot_topup_presets.py
+tests/test_bot_payment_destinations.py

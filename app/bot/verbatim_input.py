@@ -39,6 +39,9 @@ VERBATIM_TEXT_INPUT_STATES: frozenset[str] = frozenset(
         "ShopGuideInput:new_body",
         "ShopGuideInput:link_url",
         "ShopGuideInput:link_label",
+        # Payment destination lists: card holder names, gateway names and links, wallets.
+        "OwnerDestinationInput:value",
+        "ShopDestinationInput:value",
         # Loyalty and plan catalog texts.
         "LoyaltyManageStates:edit_referral_text",
         "PlanCatalogStates:cat_name",

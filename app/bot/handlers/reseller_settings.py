@@ -86,6 +86,7 @@ from app.services.screen_titles import screen_caption, screen_heading, with_capt
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
 from app.bot.handlers.guide_editor import GUIDES_SECTION
+from app.bot.handlers.payment_destinations_editor import destination_list_rows
 from app.bot.handlers.settings_labels import (
     LABELS_SECTION,
     labels_audience_panel,
@@ -707,6 +708,7 @@ async def _sub_panel(session: AsyncSession, sec_id: str, sub_id: str, reseller_i
                 rows.append(
                     [InlineKeyboardButton(text=f"✏️ {label}: {shown}", callback_data=f"res:st:edit:{key}")]
                 )
+    rows.extend(destination_list_rows(sec_id, sub_id, for_reseller=True))
     rows.append([kb.back_button(None, sub_back("res", sec_id, sub_id))])
     if sub_id == "bbc":
         from app.services.payment_providers.bezanbecard import SETUP_HELP_HTML
