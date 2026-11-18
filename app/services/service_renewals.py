@@ -16,6 +16,7 @@ from app.services.catalog_pricing import quote_product
 from app.db.models import Order
 from app.services.orders import list_active_plans
 from app.services.plan_categories import shop_categories_for_menu
+from app.services.renewal_carry import CARRY_TIME, CARRY_VOLUME, plan_carries
 from app.services.formatting import (
     format_bytes, format_expire_short, hold_duration_from_info, is_on_hold_status,
     parse_expire,
@@ -113,11 +114,6 @@ class RenewalPendingReview(ValueError):
         super().__init__("نتیجه تمدید نیاز به بررسی پشتیبانی دارد؛ پرداخت شما ثبت شده است. دوباره خرید نکنید.")
 
 
-def plan_carries_remaining_quota(plan) -> bool:
-    """Whether renewing onto ``plan`` keeps leftover volume and time (default yes)."""
-    return bool(getattr(plan, "carry_remaining_quota", True))
-
-
 def renewal_terms(plan) -> dict:
     volume = plan.data_limit_gb
     days = plan.duration_days
@@ -135,8 +131,63 @@ def renewal_terms(plan) -> dict:
         "volume_bytes": volume_bytes,
         "duration_seconds": int(days) * 86400,
         # Frozen on the order so a later plan edit cannot change a paid renewal.
-        "carry_remaining": plan_carries_remaining_quota(plan),
+        "carry_volume": plan_carries(plan, CARRY_VOLUME),
+        "carry_time": plan_carries(plan, CARRY_TIME),
+        # Read by code before the split (a rollback): true only when both parts carry.
+        "carry_remaining": plan_carries(plan, CARRY_VOLUME) and plan_carries(plan, CARRY_TIME),
     }
+
+
+def terms_carry(terms: dict) -> tuple[bool, bool]:
+    """``(volume, time)`` carry of frozen terms; orders paid before the split hold one flag."""
+    both = bool(terms.get("carry_remaining", True))
+    return bool(terms.get("carry_volume", both)), bool(terms.get("carry_time", both))
+
+
+def carry_loss_warning(
+    *, lost_bytes: int | None, lost_seconds: int | None, volume_after: str, time_after: str
+) -> str | None:
+    """The buyer-facing warning for a renewal that drops part of the quota: what is lost, what remains.
+
+    None when nothing is left to lose (an unlimited or used-up quota is not "lost").
+    """
+    labels: list[str] = []
+    lost: list[str] = []
+    if lost_bytes:
+        labels.append("حجم")
+        lost.append(f"{format_bytes(lost_bytes)} حجم")
+    if lost_seconds and lost_seconds >= 60:
+        days = f"{lost_seconds / 86400:.1f}".rstrip("0").rstrip(".")
+        labels.append("زمان")
+        lost.append(f"{days} روز زمان")
+    if not lost:
+        return None
+    return (
+        f"⚠️ توجه: مانده {' و '.join(labels)} به دوره جدید منتقل نمی‌شود؛ "
+        f"با این تمدید، {' و '.join(lost)} باقی‌ماندهٔ فعلی شما از بین می‌رود. "
+        f"بعد از تمدید فقط {volume_after} حجم و {time_after} زمان خواهید داشت."
+    )
+
+
+def _renewal_warnings(
+    *, carry_volume: bool, carry_time: bool, on_hold: bool, remaining, added, old_seconds, seconds, new_seconds,
+    volume_after: str, time_after: str,
+) -> list[str]:
+    warnings = []
+    loss = carry_loss_warning(
+        lost_bytes=None if carry_volume else remaining,
+        lost_seconds=None if carry_time else old_seconds,
+        volume_after=volume_after, time_after=time_after,
+    )
+    if loss:
+        warnings.append(loss)
+    if on_hold and new_seconds is None:
+        warnings.append("پلن زمان نامحدود، سرویس را بدون انتظار برای اتصال فعال می‌کند.")
+    if remaining is None and added is not None:
+        warnings.append("با این پلن، حجم نامحدود به حجم محدود پلن تبدیل می‌شود.")
+    if old_seconds is None and seconds:
+        warnings.append("با این پلن، زمان نامحدود به مدت محدود پلن تبدیل می‌شود.")
+    return warnings
 
 
 def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dict:
@@ -144,12 +195,12 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
     if info.get("error"):
         raise ValueError("اطلاعات زمان یا حجم سرویس کامل نیست؛ دوباره به‌روزرسانی کنید")
     now = int(time.time()) if now is None else int(now)
-    carry = bool(terms.get("carry_remaining", True))
+    carry_volume, carry_time = terms_carry(terms)
     used = info["used_traffic"]
     old_limit = info["data_limit"]
     remaining = max(0, old_limit - used) if old_limit else None
     added = terms["volume_bytes"]
-    transferred = (remaining or 0) if carry and added is not None else 0
+    transferred = (remaining or 0) if carry_volume and added is not None else 0
     new_remaining = None if added is None else transferred + added
     limit = None if new_remaining is None else used + new_remaining
     old_expire = parse_expire(info.get("expire", info.get("expire_date")))
@@ -161,7 +212,7 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
     old_seconds = hold_duration_from_info(info) if on_hold else (
         max(0, expire_ts - now) if expire_ts is not None else None
     )
-    carried_seconds = (old_seconds or 0) if carry and seconds else 0
+    carried_seconds = (old_seconds or 0) if carry_time and seconds else 0
     new_seconds = None if seconds == 0 else carried_seconds + seconds
     target_expire = None if new_seconds is None or on_hold else now + new_seconds
     pending_start = on_hold and new_seconds is not None
@@ -170,30 +221,29 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
         payload["on_hold_expire_duration"] = new_seconds
     volume_label = lambda value: "نامحدود" if value is None else format_bytes(value)
     time_label = lambda value: "نامحدود" if value is None else f"{value / 86400:.2f}".rstrip("0").rstrip(".") + " روز"
-    carry_note = " (منتقل می‌شود)" if carry else " (منتقل نمی‌شود)"
+    carry_note = {True: " (منتقل می‌شود)", False: " (از بین می‌رود)"}
     lines = [
-        f"حجم مانده: {volume_label(remaining)}{carry_note}",
+        f"حجم مانده: {volume_label(remaining)}{carry_note[carry_volume]}",
         f"حجم پلن: {volume_label(added)}",
         f"حجم پس از تمدید: {volume_label(new_remaining)}",
-        f"زمان مانده: {time_label(old_seconds)}{carry_note}",
+        f"زمان مانده: {time_label(old_seconds)}{carry_note[carry_time]}",
         f"زمان پلن: {time_label(seconds or None)}",
         f"زمان پس از تمدید: {time_label(new_seconds)}" + (" پس از اتصال" if pending_start else ""),
     ]
     if target_expire:
         lines.append(f"انقضای جدید: {format_expire_short(target_expire)}")
-    warnings = []
-    if not carry:
-        warnings.append("مانده حجم و زمان به دوره جدید منتقل نمی‌شود؛ فقط سهمیه همین پلن اعمال می‌شود.")
-    if on_hold and new_seconds is None:
-        warnings.append("پلن زمان نامحدود، سرویس را بدون انتظار برای اتصال فعال می‌کند.")
-    if remaining is None and added is not None:
-        warnings.append("با این پلن، حجم نامحدود به حجم محدود پلن تبدیل می‌شود.")
-    if old_seconds is None and seconds:
-        warnings.append("با این پلن، زمان نامحدود به مدت محدود پلن تبدیل می‌شود.")
+    warnings = _renewal_warnings(
+        carry_volume=carry_volume, carry_time=carry_time, on_hold=on_hold, remaining=remaining,
+        added=added, old_seconds=old_seconds, seconds=seconds, new_seconds=new_seconds,
+        volume_after=volume_label(new_remaining), time_after=time_label(new_seconds),
+    )
     return {
         "payload": payload, "remaining_bytes": remaining,
         "result_remaining_bytes": new_remaining, "result_seconds": new_seconds,
-        "carry_remaining": carry,
+        "carry_remaining": carry_volume and carry_time,
+        "carry_volume": carry_volume, "carry_time": carry_time,
+        # Where the new period starts, for display (service_period); not part of the panel write.
+        "period_start": {"used": used, "lifetime": info.get("lifetime_used_traffic")},
         "lines": lines, "warnings": warnings, "notice": PREVIEW_NOTICE,
     }
 
@@ -235,5 +285,6 @@ async def preview_renewal(session, *, user_id, service, plan) -> dict:
     pg = await get_pg_for_reseller(session, shop_id) if shop_id else get_pg()
     result = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), terms)
     result.pop("payload")
+    result.pop("period_start")
     quote = await quote_product(session, plan, shop_id=shop_id)
     return {**result, **quote.payload(), "terms": terms, "plan_name": plan.name, "request_key": secrets.token_hex(16)}

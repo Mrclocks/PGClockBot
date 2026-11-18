@@ -28,7 +28,7 @@ from app.services.service_import_config import (
     UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
     UNLIMITED_WORDS as IMPORT_UNLIMITED_WORDS,
 )
-from app.services.settings_operation_fields import OPERATION_NUMBER_BOUNDS
+from app.services.settings_operation_fields import ALERT_UNIT_OPTIONS, OPERATION_NUMBER_BOUNDS
 
 TOPUP_PRESETS_KEY = "wallet_topup_presets"
 CUSTOM_PLAN_MAX_GB = 100_000
@@ -72,6 +72,7 @@ UNLIMITED_LABEL = "نامحدود"
 SELECT_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
     IMPORT_KEY_MODE: (("instant", "فوری"), ("approval", "با تأیید ادمین")),
+    **ALERT_UNIT_OPTIONS,
     crypto_rates.MODE_KEY: (
         (crypto_rates.MODE_OFF, "خاموش"),
         (crypto_rates.MODE_MANUAL, "نرخ دستی"),
