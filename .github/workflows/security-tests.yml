@@ -49,7 +49,7 @@ jobs:
       - name: Run curated security regression suite
         run: bash scripts/run_security_tests.sh
 
-  # PostgreSQL is the only supported database: no tracked file may mention SQLite.
+  # PostgreSQL is the only supported database: see scripts/postgres_only_check.py.
   postgres-only:
     runs-on: ubuntu-latest
     steps:

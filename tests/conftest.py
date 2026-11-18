@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Iterator
 
 import pytest
@@ -33,7 +34,20 @@ def _postgres_database_scope() -> Iterator[None]:
     try:
         yield
     finally:
+        _forget_app_engine_connections()
         postgres_support.end_scope(scope)
+
+
+def _forget_app_engine_connections() -> None:
+    """Drop the app engine's pooled connections; each test runs its own event loop.
+
+    asyncpg connections belong to the loop that opened them, so a connection a
+    test left in the pool would fail in the next test. close=False drops them
+    without touching their (already closed) loop.
+    """
+    session_module = sys.modules.get("app.db.session")
+    if session_module is not None:
+        session_module.engine.sync_engine.dispose(close=False)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
