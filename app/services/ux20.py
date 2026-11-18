@@ -31,6 +31,8 @@ from app.db.models import (
 )
 from app.services.connection_guides import serialize_submitted_guides
 from app.services.delivery_recovery_policy import (
+    DELIVERING_STALE_AFTER,
+    DELIVERY_IN_PROGRESS,
     FIRST_AUTO_RETRY_DELAY,
     is_auto_recoverable_kind,
     is_delivered,
@@ -534,10 +536,8 @@ def _assert_retryable(order: Order) -> None:
         raise DeliveryNotRetryable("این سفارش برای تلاش مجدد آماده نیست؛ در صورت نیاز از «حذف از لیست» استفاده کنید")
 
 
-RETRY_IN_PROGRESS = "تحویل این سفارش همین حالا در جریان است؛ چند دقیقه بعد دوباره امتحان کنید"
+RETRY_IN_PROGRESS = DELIVERY_IN_PROGRESS
 NOT_PAID_FOR_RETRY = "برای این سفارش پرداخت تأییدشده‌ای نیست؛ اول پرداخت را تأیید کنید"
-# A delivery attempt still running after this long has crashed and may be reopened.
-DELIVERING_STALE_AFTER = timedelta(minutes=10)
 
 
 async def _reopen_for_retry(session: AsyncSession, order: Order) -> None:

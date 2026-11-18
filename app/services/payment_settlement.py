@@ -27,6 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.services.pg_read_resilience import outside_web_read_budget
 from app.services.db_safe import rollback_quiet
 from app.db.models import (
     BotUser,
@@ -893,6 +894,7 @@ async def _report_undelivered(
         await bot.session.close()
 
 
+@outside_web_read_budget
 async def settle_and_approve(
     session: AsyncSession,
     settlement: PaymentSettlement,
