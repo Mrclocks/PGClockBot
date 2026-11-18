@@ -1,14 +1,18 @@
 """Isolated PostgreSQL databases for tests.
 
 Tests run against a real PostgreSQL server named by ``TEST_DATABASE_URL``.
-Each test gets its own throwaway namespace so tests stay independent, can
-commit, can open concurrent sessions, and can run in parallel under xdist:
+Every test gets its own throwaway database, so tests stay independent, can
+commit, can open concurrent sessions and can run in parallel under xdist.
+A database with the app tables is cloned from a template built once per
+schema version (``CREATE DATABASE ... TEMPLATE``), which is several times
+faster than creating the tables for every test.
 
-* ``isolated_schema`` / ``PostgresTestCase``: a fresh schema reached through
-  ``search_path``. Cheap; the default for service and handler tests.
-* ``isolated_database``: a fresh database. Use it when the code under test
-  only receives a URL (Alembic migrations, CLI commands, the app engine),
-  because asyncpg cannot carry ``search_path`` inside a URL.
+* ``PostgresTestCase``: base class with ``self.engine`` and ``self.Session``.
+* ``isolated_database``: async context manager for one database.
+* ``scoped_database_url`` / ``scoped_async_engine`` / ``scoped_sync_engine``:
+  plain functions for tests that build their own engine. Repeated calls in
+  one test return the same database (the way one database file used to be
+  shared); ``tests/conftest.py`` drops it when the test ends.
 
 A missing ``TEST_DATABASE_URL`` is an error, not a skip, so a test can never
 pass silently without a database behind it.
@@ -16,32 +20,44 @@ pass silently without a database behind it.
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import logging
 import os
 import secrets
 import unittest
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
-from typing import ClassVar
+from dataclasses import dataclass, field
+from typing import Any, ClassVar
 
-from sqlalchemy import make_url, text
+from sqlalchemy import Engine, create_engine, make_url, text
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import URL
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
+from sqlalchemy.schema import CreateIndex, CreateTable
 
 from app.db import Base
 
 # Importing the models registers every table on Base.metadata.
 import app.db.models  # noqa: F401
 
+logger = logging.getLogger(__name__)
+
 TEST_DATABASE_URL_ENV = "TEST_DATABASE_URL"
-SCHEMA_PREFIX = "pgct_"
 DATABASE_PREFIX = "pgct_db_"
+TEMPLATE_PREFIX = "pgct_tmpl_"
 _NAME_TOKEN_BYTES = 8
+_TEMPLATE_HASH_CHARS = 16
+# Serializes template creation across xdist workers sharing one server.
+_TEMPLATE_LOCK_KEY = 0x50474354
 
 MISSING_URL_MESSAGE = (
     f"{TEST_DATABASE_URL_ENV} is not set. Tests need a PostgreSQL server, for example:\n"
     f"  export {TEST_DATABASE_URL_ENV}=postgresql+asyncpg://user:password@127.0.0.1:5432/pgclock_test\n"
-    "The role needs CREATE on that database (schemas) and CREATEDB (migration tests)."
+    "The role needs CREATEDB: every test runs in its own database."
 )
 
 
@@ -51,12 +67,18 @@ class MissingTestDatabaseError(RuntimeError):
 
 @dataclass(slots=True)
 class IsolatedDatabase:
-    """A throwaway schema or database and the handles a test needs."""
+    """A throwaway database and the handles a test needs."""
 
     url: str
     engine: AsyncEngine
     Session: async_sessionmaker[AsyncSession]
-    schema: str | None = None
+
+
+@dataclass(slots=True)
+class DatabaseScope:
+    """Databases created for one test (or for the session, outside any test)."""
+
+    databases: dict[bool, str] = field(default_factory=dict)
 
 
 def postgres_test_url() -> str:
@@ -67,77 +89,181 @@ def postgres_test_url() -> str:
     url = make_url(raw)
     if url.get_backend_name() != "postgresql":
         raise MissingTestDatabaseError(f"{TEST_DATABASE_URL_ENV} must point at PostgreSQL")
-    return url.set(drivername="postgresql+asyncpg").render_as_string(hide_password=False)
+    return _render(url.set(drivername="postgresql+asyncpg"))
 
 
-def _unique_name(prefix: str) -> str:
-    return prefix + secrets.token_hex(_NAME_TOKEN_BYTES)
+def _render(url: URL) -> str:
+    return url.render_as_string(hide_password=False)
+
+
+def _sync_url(async_url: str) -> str:
+    return _render(make_url(async_url).set(drivername="postgresql+psycopg"))
+
+
+def _url_for(database: str) -> str:
+    return _render(make_url(postgres_test_url()).set(database=database))
 
 
 def _quoted(identifier: str) -> str:
-    # Names come only from _unique_name (prefix + hex), never from test input.
-    if not identifier.startswith((SCHEMA_PREFIX, DATABASE_PREFIX)) or not identifier.replace("_", "").isalnum():
+    # Names come only from this module (prefix + hex), never from test input.
+    if not identifier.startswith((DATABASE_PREFIX, TEMPLATE_PREFIX)) or not identifier.replace("_", "").isalnum():
         raise ValueError("refusing to quote an identifier that was not generated here")
     return f'"{identifier}"'
 
 
-async def _create_tables(engine: AsyncEngine) -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+def _admin_engine() -> Engine:
+    return create_engine(_sync_url(postgres_test_url()), poolclass=NullPool, isolation_level="AUTOCOMMIT")
 
 
-@asynccontextmanager
-async def isolated_schema(*, create_tables: bool = True) -> AsyncIterator[IsolatedDatabase]:
-    """Yield an engine whose connections live in a fresh schema; drop it afterwards."""
-    url = postgres_test_url()
-    schema = _unique_name(SCHEMA_PREFIX)
-    admin = create_async_engine(url, poolclass=NullPool)
-    engine: AsyncEngine | None = None
+def _schema_fingerprint() -> str:
+    dialect = postgresql.dialect()
+    tables = sorted(Base.metadata.tables.values(), key=lambda table: table.name)
+    statements = [str(CreateTable(table).compile(dialect=dialect)) for table in tables]
+    statements += [
+        str(CreateIndex(index).compile(dialect=dialect))
+        for table in tables
+        for index in sorted(table.indexes, key=lambda item: item.name or "")
+    ]
+    return hashlib.sha256("\n".join(statements).encode()).hexdigest()[:_TEMPLATE_HASH_CHARS]
+
+
+_template_name: str | None = None
+
+
+def _ensure_template() -> str:
+    """Return the template database holding the current tables, building it once."""
+    global _template_name
+    if _template_name is not None:
+        return _template_name
+    name = TEMPLATE_PREFIX + _schema_fingerprint()
+    admin = _admin_engine()
     try:
-        async with admin.begin() as conn:
-            await conn.execute(text(f"CREATE SCHEMA {_quoted(schema)}"))
-        engine = create_async_engine(url, connect_args={"server_settings": {"search_path": schema}})
-        if create_tables:
-            await _create_tables(engine)
-        yield IsolatedDatabase(
-            url=url,
-            engine=engine,
-            Session=async_sessionmaker(engine, expire_on_commit=False),
-            schema=schema,
-        )
+        with admin.connect() as conn:
+            conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": _TEMPLATE_LOCK_KEY})
+            try:
+                exists = conn.scalar(text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": name})
+                if not exists:
+                    _build_template(conn, name)
+            finally:
+                conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": _TEMPLATE_LOCK_KEY})
     finally:
-        if engine is not None:
-            await engine.dispose()
-        async with admin.begin() as conn:
-            await conn.execute(text(f"DROP SCHEMA IF EXISTS {_quoted(schema)} CASCADE"))
-        await admin.dispose()
+        admin.dispose()
+    _template_name = name
+    return name
+
+
+def _build_template(admin_conn: Any, name: str) -> None:
+    building = name + "_" + secrets.token_hex(4)
+    admin_conn.execute(text(f"CREATE DATABASE {_quoted(building)}"))
+    engine = create_engine(_sync_url(_url_for(building)), poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            Base.metadata.create_all(conn)
+    finally:
+        engine.dispose()
+    # Renamed only once complete, so a crash never leaves a half-built template behind.
+    admin_conn.execute(text(f"ALTER DATABASE {_quoted(building)} RENAME TO {_quoted(name)}"))
+    _drop_stale_templates(admin_conn, keep=name)
+
+
+def _drop_stale_templates(admin_conn: Any, *, keep: str) -> None:
+    """Remove templates built for older models; one still being cloned is left alone."""
+    stale = admin_conn.scalars(
+        text("SELECT datname FROM pg_database WHERE datname LIKE :prefix AND datname <> :keep"),
+        {"prefix": TEMPLATE_PREFIX + "%", "keep": keep},
+    ).all()
+    for old in stale:
+        try:
+            admin_conn.execute(text(f"DROP DATABASE IF EXISTS {_quoted(old)}"))
+        except DBAPIError:
+            logger.warning("could not drop stale test template %s", old, exc_info=True)
+
+
+def create_database(*, tables: bool) -> str:
+    """Create a fresh database (with or without the app tables) and return its asyncpg URL."""
+    name = DATABASE_PREFIX + secrets.token_hex(_NAME_TOKEN_BYTES)
+    template = f" TEMPLATE {_quoted(_ensure_template())}" if tables else ""
+    admin = _admin_engine()
+    try:
+        with admin.connect() as conn:
+            conn.execute(text(f"CREATE DATABASE {_quoted(name)}{template}"))
+    finally:
+        admin.dispose()
+    return _url_for(name)
+
+
+def drop_database(url: str) -> None:
+    """Drop a database made by create_database, closing any connection a test left open."""
+    name = make_url(url).database or ""
+    admin = _admin_engine()
+    try:
+        with admin.connect() as conn:
+            conn.execute(text(f"DROP DATABASE IF EXISTS {_quoted(name)} WITH (FORCE)"))
+    finally:
+        admin.dispose()
+
+
+# --- per-test scope, driven by tests/conftest.py ---------------------------
+
+_session_scope = DatabaseScope()
+_active_scope: DatabaseScope | None = None
+
+
+def begin_scope() -> DatabaseScope:
+    global _active_scope
+    _active_scope = DatabaseScope()
+    return _active_scope
+
+
+def end_scope(scope: DatabaseScope) -> None:
+    global _active_scope
+    if _active_scope is scope:
+        _active_scope = None
+    _drop_scope(scope)
+
+
+def end_session() -> None:
+    _drop_scope(_session_scope)
+
+
+def _drop_scope(scope: DatabaseScope) -> None:
+    for url in scope.databases.values():
+        drop_database(url)
+    scope.databases.clear()
+
+
+def scoped_database_url(*, tables: bool = True) -> str:
+    """Return the current test's database URL, creating the database on first use."""
+    scope = _active_scope or _session_scope
+    if tables not in scope.databases:
+        scope.databases[tables] = create_database(tables=tables)
+    return scope.databases[tables]
+
+
+def scoped_async_engine(*, tables: bool = True, **kwargs: Any) -> AsyncEngine:
+    """An async engine on the current test's database (app tables included by default)."""
+    return create_async_engine(scoped_database_url(tables=tables), **kwargs)
+
+
+def scoped_sync_engine(*, tables: bool = False, **kwargs: Any) -> Engine:
+    """A sync engine on the current test's database; empty by default, for migration tests."""
+    return create_engine(_sync_url(scoped_database_url(tables=tables)), **kwargs)
 
 
 @asynccontextmanager
 async def isolated_database(*, create_tables: bool = False) -> AsyncIterator[IsolatedDatabase]:
-    """Yield a fresh, empty database (tables only on request); drop it afterwards."""
-    server_url = make_url(postgres_test_url())
-    name = _unique_name(DATABASE_PREFIX)
-    admin = create_async_engine(server_url, poolclass=NullPool, isolation_level="AUTOCOMMIT")
-    url = server_url.set(database=name).render_as_string(hide_password=False)
-    engine: AsyncEngine | None = None
+    """Yield a fresh database (tables only on request); drop it afterwards."""
+    url = await asyncio.to_thread(create_database, tables=create_tables)
+    engine = create_async_engine(url)
     try:
-        async with admin.connect() as conn:
-            await conn.execute(text(f"CREATE DATABASE {_quoted(name)}"))
-        engine = create_async_engine(url)
-        if create_tables:
-            await _create_tables(engine)
         yield IsolatedDatabase(url=url, engine=engine, Session=async_sessionmaker(engine, expire_on_commit=False))
     finally:
-        if engine is not None:
-            await engine.dispose()
-        async with admin.connect() as conn:
-            await conn.execute(text(f"DROP DATABASE IF EXISTS {_quoted(name)} WITH (FORCE)"))
-        await admin.dispose()
+        await engine.dispose()
+        await asyncio.to_thread(drop_database, url)
 
 
 class PostgresTestCase(unittest.IsolatedAsyncioTestCase):
-    """Base class giving every test ``self.engine`` and ``self.Session`` in its own schema."""
+    """Base class giving every test ``self.engine`` and ``self.Session`` in its own database."""
 
     create_tables: ClassVar[bool] = True
 
@@ -147,7 +273,7 @@ class PostgresTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
-        context = isolated_schema(create_tables=self.create_tables)
+        context = isolated_database(create_tables=self.create_tables)
         self.database = await context.__aenter__()
         self.addAsyncCleanup(context.__aexit__, None, None, None)
         self.engine = self.database.engine

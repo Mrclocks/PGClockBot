@@ -14,7 +14,7 @@ from alembic.operations import Operations
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget
-from tests.postgres_support import isolated_schema
+from tests.postgres_support import isolated_database
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,7 +42,7 @@ class MonitorMigrationTests(unittest.IsolatedAsyncioTestCase):
             spec.loader.exec_module(module)
             modules.append(module)
         migration = MonitorMigrations(tuple(modules))
-        async with isolated_schema(create_tables=False) as database:
+        async with isolated_database() as database:
             async with database.engine.begin() as conn:
                 await conn.run_sync(lambda sync: self.check_migration(sync, migration))
 

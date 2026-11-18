@@ -12,7 +12,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy.exc import IntegrityError
 
-from tests.postgres_support import isolated_schema
+from tests.postgres_support import isolated_database
 
 
 def load_migration(name: str) -> ModuleType:
@@ -25,7 +25,7 @@ def load_migration(name: str) -> ModuleType:
 
 class SubscriptionMigrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_repeat_upgrade_and_downgrade_keep_legacy_and_new_rows_with_foreign_keys(self) -> None:
-        async with isolated_schema(create_tables=False) as database:
+        async with isolated_database() as database:
             async with database.engine.begin() as connection:
                 await connection.run_sync(self.check_migration)
 
