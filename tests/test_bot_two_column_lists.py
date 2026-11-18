@@ -159,7 +159,9 @@ class ResellerSettingsListsTests(unittest.IsolatedAsyncioTestCase):
         ):
             await reseller_settings._render_notify(callback, None, 5)
         markup = edit.await_args.kwargs["reply_markup"]
-        self.assertEqual(_shape(markup.inline_keyboard), [2, 2, 2, 2, 1])
+        # Four rows of switches, then one row per sub-screen and «بازگشت».
+        subs = len(reseller_settings.SECTIONS["notify"]["subs"])
+        self.assertEqual(_shape(markup.inline_keyboard), [2, 2, 2, 2] + [1] * (subs + 1))
         self.assertTrue(markup.inline_keyboard[0][0].text.startswith("✅"))
 
     async def test_an_empty_notification_catalog_still_shows_the_explanation_row(self):
@@ -173,7 +175,10 @@ class ResellerSettingsListsTests(unittest.IsolatedAsyncioTestCase):
         ):
             await reseller_settings._render_notify(callback, None, 5)
         markup = edit.await_args.kwargs["reply_markup"]
-        self.assertEqual(_shape(markup.inline_keyboard), [1, 1])
+        # The explanation row, one row per sub-screen and «بازگشت».
+        subs = len(reseller_settings.SECTIONS["notify"]["subs"])
+        self.assertEqual(_shape(markup.inline_keyboard), [1] * (subs + 2))
+        self.assertIn("اعلانی", markup.inline_keyboard[0][0].text)
 
 
 class ResellerPlanPermissionRowsTests(unittest.TestCase):
