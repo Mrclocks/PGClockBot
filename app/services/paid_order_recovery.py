@@ -16,7 +16,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from enum import StrEnum
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
@@ -25,6 +24,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import DeliveryFailure, Order, OrderStatus, Payment, PaymentStatus, Plan
+from app.py_compat import StrEnum
 from app.services.db_safe import rollback_quiet
 from app.services.delivery_recovery_policy import (
     AUTO_RETRY_WINDOW_HOURS,
