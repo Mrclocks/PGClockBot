@@ -555,3 +555,4 @@ tests/test_bot_payment_destinations.py
 tests/test_command_center.py
 tests/test_quick_switches.py
 tests/test_command_data_search.py
+tests/test_switch_schedule.py

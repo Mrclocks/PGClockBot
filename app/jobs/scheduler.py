@@ -19,6 +19,7 @@ from app.jobs.panel_alert_notifications import run_panel_alert_notifications
 from app.jobs.paid_order_recovery import run_paid_order_recovery
 from app.jobs.pg_link_watchdog import run_pg_link_watchdog
 from app.jobs.service_cleanup import run_service_cleanup
+from app.jobs.switch_reverts import run_switch_reverts
 from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
 from app.services.alert_rearm import Thresholds, rearm_flagged_alerts
@@ -627,6 +628,8 @@ def start_background_scheduler() -> None:
         ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
         ("chat_message_purge", run_chat_message_purge, {"hours": 1}, 3600),
         ("service_cleanup", run_service_cleanup, {"minutes": 30}, 1800),
+        # Timed quick switches; one indexed query when nothing is due.
+        ("switch_reverts", run_switch_reverts, {"minutes": 1}, 120),
     )
     for job_id, func, interval, grace in jobs:
         if scheduler.get_job(job_id) is None:

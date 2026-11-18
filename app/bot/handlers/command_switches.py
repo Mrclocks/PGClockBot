@@ -22,6 +22,7 @@ from app.bot.auth import is_bot_owner_principal
 from app.bot.command_catalog import ADMIN_HOME_CALLBACK, SHOP_SETTINGS_PERMISSION
 from app.bot.command_panel import (
     CONFIRM_SUFFIX,
+    PendingRevertView,
     TOGGLE_PREFIX,
     UNDO_PREFIX,
     PanelData,
@@ -50,6 +51,7 @@ from app.services.quick_switches import (
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
 from app.services.staff_audit import StaffActor, actor_from_staff
+from app.services.switch_schedule import pending_reverts, scenario_by_code
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -122,12 +124,30 @@ async def _queue(session: AsyncSession, shop_id: int | None) -> PendingCounts:
         return PendingCounts()
 
 
+async def load_revert_views(session: AsyncSession, viewer: SwitchViewer) -> list[PendingRevertView]:
+    by_key = {switch.key: switch for switch in viewer.switches}
+    views = []
+    for row in await pending_reverts(session, shop_id=viewer.shop_id):
+        switch = by_key.get(row.setting_key)
+        if switch is None:
+            continue
+        scenario = scenario_by_code(row.scenario) if row.scenario else None
+        revert_at = row.revert_at
+        if revert_at is not None and revert_at.tzinfo is None:
+            revert_at = revert_at.replace(tzinfo=timezone.utc)  # SQLite returns stored UTC without a zone
+        views.append(
+            PendingRevertView(int(row.id), switch, row.revert_value, revert_at, scenario.title if scenario else None)
+        )
+    return views
+
+
 async def load_panel_data(session: AsyncSession, viewer: SwitchViewer) -> PanelData:
     return PanelData(
         ui=await get_all_settings(session, reseller_id=viewer.shop_id),
         queue=await _queue(session, viewer.shop_id),
         changes=await recent_switch_changes(session, shop_id=viewer.shop_id),
         now=datetime.now(timezone.utc),
+        reverts=await load_revert_views(session, viewer),
     )
 
 
