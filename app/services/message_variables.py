@@ -18,6 +18,7 @@ import html
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from app.services.customer_notice_texts import NOTICE_TEXT_KEYS, notice_variables
 from app.services.safe_format import safe_format
 
 # Domains = where a variable is allowed to resolve.
@@ -32,6 +33,7 @@ DOMAIN_NAMING = "naming"
 DOMAIN_QR = "qr"
 DOMAIN_DAILY_REPORT = "daily_report"
 DOMAIN_USAGE_ALERT = "usage_alert"
+DOMAIN_SERVICE_NOTICE = "service_notice"
 
 DOMAIN_LABELS_FA: dict[str, str] = {
     DOMAIN_SHOP: "فروشگاه (سراسری)",
@@ -45,6 +47,7 @@ DOMAIN_LABELS_FA: dict[str, str] = {
     DOMAIN_QR: "کپشن QR",
     DOMAIN_DAILY_REPORT: "گزارش روزانه",
     DOMAIN_USAGE_ALERT: "هشدار کمبود سرویس",
+    DOMAIN_SERVICE_NOTICE: "اعلان سرویس به مشتری",
 }
 
 # Relative to bot settings base, or absolute panel path for modal-hosted texts.
@@ -60,6 +63,7 @@ DOMAIN_SETTINGS_PATH: dict[str, str] = {
     DOMAIN_QR: "?tab=qr",
     DOMAIN_DAILY_REPORT: "?tab=daily_report",
     DOMAIN_USAGE_ALERT: "?tab=notifications",
+    DOMAIN_SERVICE_NOTICE: "?tab=notifications",
 }
 
 
@@ -91,6 +95,7 @@ SETTING_DOMAIN: dict[str, str] = {
     "admin_daily_report_template": DOMAIN_DAILY_REPORT,
     "user_alert_time_text": DOMAIN_USAGE_ALERT,
     "user_alert_traffic_text": DOMAIN_USAGE_ALERT,
+    **{key: DOMAIN_SERVICE_NOTICE for key in sorted(NOTICE_TEXT_KEYS)},
 }
 
 # Values actually supplied by each field's renderer, not the entire domain.
@@ -112,6 +117,7 @@ _SETTING_CONTEXT_KEYS: dict[str, frozenset[str]] = {
         {"amount", "unique_amount", "order_id", "payment_id", "shop_title"}
     ),
     "force_join_msg": frozenset({"channels"}),
+    **{key: notice_variables(key) for key in sorted(NOTICE_TEXT_KEYS)},
 }
 
 
@@ -134,15 +140,38 @@ _VARS: tuple[MessageVar, ...] = (
         description_fa="عنوان فروشگاه از تنظیمات (همان مقداری که در هدر خوش‌آمد می‌آید).",
         example="کلاک بات",
         domains=frozenset(
-            {DOMAIN_SHOP, DOMAIN_USER, DOMAIN_ORDER, DOMAIN_PAYMENT, DOMAIN_WALLET, DOMAIN_REFERRAL, DOMAIN_USAGE_ALERT}
+            {
+                DOMAIN_SHOP,
+                DOMAIN_USER,
+                DOMAIN_ORDER,
+                DOMAIN_PAYMENT,
+                DOMAIN_WALLET,
+                DOMAIN_REFERRAL,
+                DOMAIN_USAGE_ALERT,
+                DOMAIN_SERVICE_NOTICE,
+            }
         ),
     ),
     MessageVar(
         key="service_name",
         title_fa="نام سرویس",
-        description_fa="نام سرویسی که هشدار دربارهٔ آن است.",
+        description_fa="نام سرویسی که هشدار یا اعلان دربارهٔ آن است.",
         example="ali_30d",
-        domains=frozenset({DOMAIN_USAGE_ALERT}),
+        domains=frozenset({DOMAIN_USAGE_ALERT, DOMAIN_SERVICE_NOTICE}),
+    ),
+    MessageVar(
+        key="reason",
+        title_fa="علت",
+        description_fa="علتی که کارمند برای این کار روی سرویس نوشته است.",
+        example="درخواست مشتری",
+        domains=frozenset({DOMAIN_SERVICE_NOTICE}),
+    ),
+    MessageVar(
+        key="delete_date",
+        title_fa="تاریخ حذف",
+        description_fa="تاریخی که سرویس در صورت تمدید نشدن حذف می‌شود.",
+        example="۱۴۰۵/۹/۲",
+        domains=frozenset({DOMAIN_SERVICE_NOTICE}),
     ),
     MessageVar(
         key="days_left",

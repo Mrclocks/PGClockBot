@@ -546,3 +546,4 @@ tests/test_owner_bot_operation_settings.py
 tests/test_bot_setting_values.py
 tests/test_shop_bot_settings_parity.py
 tests/test_bot_bbc_enable_check.py
+tests/test_editable_service_notices.py

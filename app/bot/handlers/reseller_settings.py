@@ -54,12 +54,15 @@ from app.services.bot_setting_values import (
     number_range_hint,
     parse_number_setting,
     select_label,
+    text_template_hint,
+    wants_default_text,
 )
 from app.services.service_import_config import (
     KEY_ENABLED as IMPORT_KEY_ENABLED,
     KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
     KEY_MODE as IMPORT_KEY_MODE,
 )
+from app.services.customer_notice_texts import CLEANUP_BOT_FIELDS, STAFF_ACTION_BOT_FIELDS
 from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
 from app.services.settings_operation_fields import (
     AUTO_APPROVE_AFTER_FIELDS,
@@ -291,6 +294,8 @@ SECTIONS: dict[str, dict] = {
                 ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، به وقت تهران)", "number"),
             ]),
             ("usage_alerts", "هشدار سرویس کاربر", USAGE_ALERT_FIELDS),
+            ("staff_notices", "متن اعلان کار روی سرویس", STAFF_ACTION_BOT_FIELDS),
+            ("cleanup_notices", "متن اعلان پاکسازی سرویس", CLEANUP_BOT_FIELDS),
         ],
     },
     # Own shop bot token only — never platform BOT_TOKEN.
@@ -1064,6 +1069,9 @@ async def settings_edit_ask(
             )
         elif is_message_rich_key(key):
             hint += "\n<i>ایموجی پریمیوم در متن پیام حفظ می‌شود.</i>"
+    template_hint = text_template_hint(key, actor="shop")
+    if template_hint:
+        hint += "\n" + template_hint
     from app.bot.nav_input import ask_text
 
     await ask_text(
@@ -1086,6 +1094,8 @@ def _shop_setting_value(key: str, message: Message) -> str:
         return normalize_force_join_channel_value(message.text or "")
     if key == "receipt_dup_policy":
         return normalize_dup_policy(message.text or "")
+    if wants_default_text(key, message.text):
+        return ""
     return pack_setting_from_message(key, message)
 
 

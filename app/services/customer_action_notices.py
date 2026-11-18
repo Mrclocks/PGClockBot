@@ -37,8 +37,11 @@ from app.services.customer_notice_buttons import (
     support_button,
     volume_pack_button,
 )
+from app.services.customer_notice_texts import CLEANUP_ACTION_LABELS, notice_text_key
+from app.services.message_variables import DOMAIN_SERVICE_NOTICE, render_message_template
 from app.services.shop_scope import resolve_shop_scope_id
 from app.services.staff_audit import StaffActor
+from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +127,30 @@ def notice_text(action: str, *, service_name: str, reason: str) -> str:
     if hint:
         lines.append(hint)
     return "\n".join(lines)
+
+
+def custom_notice_text(ui: dict, action: str, *, service_name: str, reason: str) -> str | None:
+    """The shop's own text for this notice, or None to keep the built-in one.
+
+    Values are escaped by ``render_message_template``; the template itself is the shop's own HTML.
+    """
+    template = (ui.get(notice_text_key(action)) or "").strip()
+    if not template:
+        return None
+    is_cleanup = action in CLEANUP_ACTION_LABELS
+    return render_message_template(
+        template,
+        domain=DOMAIN_SERVICE_NOTICE,
+        service_name=service_name or "—",
+        reason="" if is_cleanup else (reason or ""),
+        delete_date=(reason or "—") if is_cleanup else "",
+        shop_title=ui.get("shop_title") or "",
+    )
+
+
+async def _notice_settings(session: AsyncSession, shop_id: int | None) -> dict:
+    """The owning shop's settings; 0 pins the platform's when the notice belongs to no shop."""
+    return await get_all_settings(session, reseller_id=int(shop_id) if shop_id else 0)
 
 
 async def pg_user_targets_for_shop(session: AsyncSession, shop_id: int | None, *, pg_user_id: int) -> list[NoticeTarget]:
@@ -240,11 +267,19 @@ async def deliver_notice(
     if bot is None:
         logger.warning("customer notice skipped: no bot for shop=%s", notice.shop_id)
         return NoticeOutcome(OUTCOME_SKIPPED)
-    text = notice_text(notice.action, service_name=notice.service_name, reason=notice.reason)
+    default_text = notice_text(notice.action, service_name=notice.service_name, reason=notice.reason)
+    custom_text = custom_notice_text(
+        await _notice_settings(session, notice.shop_id),
+        notice.action,
+        service_name=notice.service_name,
+        reason=notice.reason,
+    )
     sells_packs = bool(packs_for and notice.action in VOLUME_PACK_ACTIONS and await packs_for(notice.shop_id))
     markup = notice_markup_for(notice, sells_volume_packs=sells_packs)
     try:
-        await bot.send_message(int(notice.telegram_id), text, parse_mode="HTML", reply_markup=markup)
+        await _send_with_default_fallback(
+            bot, int(notice.telegram_id), custom_text, default_text, markup=markup, notice_id=notice.id
+        )
     except TelegramRetryAfter as exc:
         return NoticeOutcome(OUTCOME_RETRY, timedelta(seconds=int(exc.retry_after) + 1))
     except TelegramForbiddenError:
@@ -256,6 +291,29 @@ async def deliver_notice(
         logger.warning("customer notice failed id=%s", notice.id, exc_info=True)
         return NoticeOutcome(OUTCOME_RETRY)
     return NoticeOutcome(OUTCOME_SENT)
+
+
+async def _send_with_default_fallback(
+    bot: Bot,
+    chat_id: int,
+    custom_text: str | None,
+    default_text: str,
+    *,
+    markup: InlineKeyboardMarkup,
+    notice_id: int | None,
+) -> None:
+    """Send the shop's text; when Telegram refuses it (stray ``<``, open tag), send the built-in text.
+
+    Without this a shop whose edited text is not valid HTML would lose every notice of that kind.
+    """
+    if custom_text is None:
+        await bot.send_message(chat_id, default_text, parse_mode="HTML", reply_markup=markup)
+        return
+    try:
+        await bot.send_message(chat_id, custom_text, parse_mode="HTML", reply_markup=markup)
+    except TelegramBadRequest:
+        logger.warning("custom notice text refused by Telegram id=%s; sending the default", notice_id, exc_info=True)
+        await bot.send_message(chat_id, default_text, parse_mode="HTML", reply_markup=markup)
 
 
 async def log_and_notify(

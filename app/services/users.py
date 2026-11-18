@@ -23,6 +23,12 @@ from app.services.service_import_config import (
     DEFAULT_MAX_PER_USER as IMPORT_DEFAULT_MAX_PER_USER,
     UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
 )
+from app.services.customer_notice_texts import (
+    CLEANUP_GROUP as NOTICE_CLEANUP_GROUP,
+    STAFF_ACTION_GROUP as NOTICE_STAFF_ACTION_GROUP,
+    notice_text_defaults,
+    web_setting_groups as notice_web_setting_groups,
+)
 from app.services.entry_approval_config import (
     ENTRY_APPROVAL_DEFAULTS,
     GROUP_TITLE as ENTRY_APPROVAL_GROUP,
@@ -1260,6 +1266,7 @@ DEFAULT_SETTINGS.update(button_style_defaults())
 DEFAULT_SETTINGS.update(screen_text_defaults())
 DEFAULT_SETTINGS.update(MONITOR_TEXT_DEFAULTS)
 DEFAULT_SETTINGS.update(ENTRY_APPROVAL_DEFAULTS)
+DEFAULT_SETTINGS.update(notice_text_defaults())
 
 # field kinds: text | textarea | toggle | select | number | image
 # (key, label, kind, help?, options?)
@@ -2112,6 +2119,7 @@ SETTING_GROUPS = {
 }
 SETTING_GROUPS.update(screen_text_setting_groups())
 SETTING_GROUPS[ENTRY_APPROVAL_GROUP] = entry_approval_setting_fields()
+SETTING_GROUPS.update(notice_web_setting_groups())
 
 
 def _remaining_button_label_groups(groups: dict[str, list]) -> dict[str, list[tuple[str, str, str, str]]]:
@@ -2174,7 +2182,13 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],
     "billing": ["مدیریت PAYG"],
-    "notifications": ["هشدار سرویس کاربر", OPERATIONS_GROUP, PG_LINK_HEALTH_GROUP],
+    "notifications": [
+        "هشدار سرویس کاربر",
+        NOTICE_STAFF_ACTION_GROUP,
+        NOTICE_CLEANUP_GROUP,
+        OPERATIONS_GROUP,
+        PG_LINK_HEALTH_GROUP,
+    ],
     "daily_report": ["گزارش روزانه"],
     "backup": ["بکاپ زمان‌بندی", "ارسال بکاپ به تلگرام"],
     "pwa": [],
