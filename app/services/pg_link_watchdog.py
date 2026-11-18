@@ -108,6 +108,14 @@ async def _probe() -> tuple[bool, str | None]:
     return False, last_kind
 
 
+async def panel_answers() -> bool:
+    """One authenticated probe of the panel, for jobs that only act while it is reachable."""
+    if is_reconnect_locked():
+        return False
+    ok, _kind = await _probe()
+    return ok
+
+
 async def run_watchdog_tick(session: AsyncSession) -> WatchdogTickResult:
     """One watchdog cycle. Never raises."""
     global _consecutive_failures, _backoff_ticks

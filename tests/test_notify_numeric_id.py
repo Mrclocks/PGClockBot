@@ -33,13 +33,13 @@ class NumericIdInReportsTests(unittest.IsolatedAsyncioTestCase):
             BotUser(id=2, telegram_id=-5, referral_code="b2", role="user", username="synthetic"),
             BotUser(id=3, telegram_id=987654321, referral_code="b3", role="user", username="farid_g",
                     full_name="Farid <b>Ghaderi</b>"),
-            Order(id=1, user_id=1, amount=5_000),
+            Order(id=1, user_id=1, amount=5_000, status="delivered"),
             Payment(id=1, user_id=1, amount=1_700_000, method="card", status=PaymentStatus.APPROVED.value,
                     is_wallet_topup=True),
             Payment(id=2, user_id=1, amount=5_000, method="card", status=PaymentStatus.PENDING.value, order_id=1),
             Payment(id=3, user_id=2, amount=1_000, method="card", status=PaymentStatus.APPROVED.value,
                     is_wallet_topup=True),
-            Order(id=2, user_id=3, amount=210_000),
+            Order(id=2, user_id=3, amount=210_000, status="delivered"),
         ])
         await self.session.commit()
         self.dispatch = AsyncMock(return_value=1)

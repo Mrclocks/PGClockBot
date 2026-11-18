@@ -309,6 +309,21 @@ class RenderedBottomBarTests(unittest.TestCase):
         button = self.header_inbox(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, inbox_badge_count=150))
         self.assertIn(">۹۹+</span>", button)
 
+    def test_header_action_center_opens_the_modal(self) -> None:
+        html = _render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True)
+        button = self.header_inbox(html)
+        self.assertIn('data-modal-open="modal-inbox"', button)
+        self.assertIn('data-modal-load="/inbox/panel"', button)
+        self.assertIn('data-modal-load-target="inbox-modal-body"', button)
+        modal = html.split('id="modal-inbox"')[1].split('id="modal-inbox-dismiss"')[0]
+        self.assertIn('id="inbox-modal-body" class="edit-modal-body" data-load-fragment', modal)
+        self.assertIn('aria-labelledby="modal-inbox-title"', modal)
+
+    def test_header_action_center_is_a_plain_link_on_the_inbox(self) -> None:
+        staff = {"role": "reseller", "permissions": ["dashboard"]}
+        button = self.header_inbox(_render_page(staff, {"kind": "l1"}, is_owner=False, path="/inbox"))
+        self.assertNotIn("data-modal-open", button)
+
     def test_header_action_center_is_lit_on_the_inbox(self) -> None:
         staff = {"role": "reseller", "permissions": ["dashboard"]}
         button = self.header_inbox(_render_page(staff, {"kind": "l1"}, is_owner=False, path="/inbox"))

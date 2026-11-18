@@ -15,13 +15,13 @@ from app.api.app import templates
 from app.services.resellers import FEATURE_PERMS
 
 PLAN_EDIT_FIELDS = {
-    "name", "price", "description", "duration_days", "data_limit_gb", "carry_remaining_quota", "mode", "group_1",
+    "name", "price", "description", "duration_days", "data_limit_gb", "carry_remaining_volume", "carry_remaining_time", "mode", "group_1",
     "pg_template_id", "pg_username_prefix", "pg_username_suffix", "pg_username_pattern", "allow_buy_extra",
     "extra_gb_price", "extra_month_price", "plan_vol_amount", "plan_dur_amount", "category_id", "sort_order", "button_style",
 }
 RESELLER_PLAN_EDIT_FIELDS = {
     "plan_kind", "name", "price", "billing_mode", "price_per_gb", "duration_days", "included_gb", "included_users",
-    "addon_gb", "addon_users", "renew_price", "renew_pricing_mode", "carry_remaining_period", "keep_extras_on_renew",
+    "addon_gb", "addon_users", "renew_price", "renew_pricing_mode", "carry_remaining_period", "keep_extra_gb_on_renew", "keep_extra_users_on_renew",
     "allow_buy_extra", "extra_gb_price", "extra_user_price", "extra_gb_amount", "extra_user_amount", "group_1",
     "pg_role_id", "create_pg_admin", "share_pg_panel_url", "category_id", "description", "sort_order", "button_style",
     "is_active",
@@ -33,10 +33,10 @@ def plan(**over: object) -> SimpleNamespace:
     base = dict(
         id=7, name="P", price=1000, duration_days=0, data_limit_gb=None, description="", category_id=None, sort_order=1,
         pg_template_id=None, pg_group_ids="1", pg_username_prefix="", pg_username_suffix="", pg_username_pattern="",
-        allow_buy_extra=False, extra_gb_price=0, extra_month_price=0, button_style=None, carry_remaining_quota=True,
+        allow_buy_extra=False, extra_gb_price=0, extra_month_price=0, button_style=None, carry_remaining_quota=True, carry_remaining_volume=True, carry_remaining_time=True,
         plan_kind="subscription", is_system=False, billing_mode="fixed", price_per_gb=0, included_gb=0, included_users=50,
         addon_gb=0, addon_users=0, renew_price=0, renew_pricing_mode="fixed", carry_remaining_period=True,
-        keep_extras_on_renew=False, extra_user_price=0, create_pg_admin=True, share_pg_panel_url=False, pg_role_id=1,
+        keep_extras_on_renew=False, keep_extra_gb_on_renew=False, keep_extra_users_on_renew=False, extra_user_price=0, create_pg_admin=True, share_pg_panel_url=False, pg_role_id=1,
         is_active=True,
     )
     base.update(over)
