@@ -205,16 +205,16 @@ class HandlerAccessTests(unittest.IsolatedAsyncioTestCase):
         return callback
 
     async def test_platform_bot_refuses_anyone_but_the_owner(self) -> None:
-        callback, state = self._callback("cmd:h"), _state()
+        callback, state = self._callback("cmd:hs"), _state()
         with patch.object(command_center, "is_bot_owner_principal", AsyncMock(return_value=False)):
-            await command_center.open_command_center(callback, MagicMock(), SimpleNamespace(id=5), state)
+            await command_center.open_settings_search(callback, MagicMock(), SimpleNamespace(id=5), state)
         callback.answer.assert_awaited_once_with(feedback.NO_ACCESS, show_alert=True)
         self.assertIsNone(await state.get_state())
 
     async def test_shop_bot_refuses_a_person_without_shop_access(self) -> None:
-        callback, state = self._callback("cmd:h"), _state()
+        callback, state = self._callback("cmd:hs"), _state()
         with patch.object(command_center, "load_reseller_hub", AsyncMock(return_value=None)):
-            await command_center.open_command_center(
+            await command_center.open_settings_search(
                 callback, MagicMock(), SimpleNamespace(id=5), state, is_reseller_bot=True, reseller_owner_id=21
             )
         callback.answer.assert_awaited_once_with(feedback.NO_ACCESS, show_alert=True)
@@ -224,7 +224,7 @@ class HandlerAccessTests(unittest.IsolatedAsyncioTestCase):
         callback, state = self._callback("cmd:hs"), _state()
         viewer = command_center.CommandViewer([], "nv:adm:home")
         with patch.object(command_center, "load_command_viewer", AsyncMock(return_value=viewer)):
-            await command_center.open_command_center(callback, MagicMock(), SimpleNamespace(id=5), state)
+            await command_center.open_settings_search(callback, MagicMock(), SimpleNamespace(id=5), state)
         self.assertEqual(await state.get_state(), command_center.CommandCenterStates.query.state)
         self.assertEqual((await state.get_data())[command_center.KIND_KEY], "s")
         self.assertEqual((await state.get_data())[command_center.BACK_KEY], "nv:adm:settings")
