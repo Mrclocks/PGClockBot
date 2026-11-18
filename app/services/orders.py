@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -127,7 +128,9 @@ async def fulfill_paid_order(
         plan = await session.get(Plan, order.plan_id)
         if not service or not plan:
             raise ValueError("سرویس یا پلن تمدید یافت نشد")
-        return await apply_renewal(session, order, service, plan, reset_traffic=note.endswith(":auto"))
+        return await _apply_renewal_noting_outcome(
+            session, order, service, plan, attempt=attempt, reset_traffic=note.endswith(":auto")
+        )
     if is_addon_order_note(note):
         from app.services.service_addons import apply_service_addon
 
@@ -141,6 +144,21 @@ async def fulfill_paid_order(
 
         return await apply_package_order(session, order)
     return await deliver_order(session, order, attempt=attempt)
+
+
+async def _apply_renewal_noting_outcome(
+    session: AsyncSession, order: Order, service: UserService, plan: Plan,
+    *, attempt: DeliveryAttempt | None, reset_traffic: bool,
+) -> Order:
+    """Apply a renewal; an unknown panel outcome marks ``attempt`` so no caller refunds it."""
+    from app.services.service_renewals import RenewalPendingReview
+
+    try:
+        return await apply_renewal(session, order, service, plan, reset_traffic=reset_traffic)
+    except RenewalPendingReview:
+        if attempt is not None:
+            attempt.panel_may_hold_account = True
+        raise
 
 
 async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None:
@@ -1364,7 +1382,14 @@ async def _resume_unfinished_wallet_order(session: AsyncSession, order: Order, u
     if existing.review_note == UNKNOWN_DELIVERY_NOTE:
         # The panel may already hold this buyer's account; staff decide, not a re-tap.
         raise DeliveryOutcomeUnknown()
-    return await _resume_paid_wallet_order(session, order, user)
+    resumed = await _resume_paid_wallet_order(session, order, user)
+    if resumed.status == OrderStatus.DELIVERED.value:
+        # Local import: ux20 imports this module.
+        from app.services.ux20 import resolve_delivery_failure
+
+        await resolve_delivery_failure(session, int(resumed.id))
+        await session.commit()
+    return resumed
 
 
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
@@ -1426,7 +1451,9 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         from app.services.service_renewals import RenewalPendingReview
 
         if isinstance(exc, RenewalPendingReview):
-            # A lost panel response is not evidence that the paid renewal failed.
+            # A lost panel response is not evidence that the paid renewal failed: keep the
+            # money, list the order for the retry job (it re-sends the saved target) and staff.
+            await hold_unknown_delivery_for_review(session, order, error=str(exc))
             raise
         if attempt.panel_may_hold_account:
             # The panel may have created the account: refunding now would sell it for free.
@@ -1478,6 +1505,11 @@ async def mark_order_free_paid(session: AsyncSession, order: Order, user_id: int
     return order
 
 
+def is_unsent_panel_request(exc: BaseException) -> bool:
+    """True when the panel never received the request (no connection), so nothing was created."""
+    return isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout))
+
+
 @dataclass(slots=True)
 class DeliveryAttempt:
     """What a failed ``deliver_order`` may have left on the panel."""
@@ -1512,7 +1544,9 @@ async def hold_unknown_delivery_for_review(
         .order_by(Payment.id.desc())
         .limit(1)
     )
-    if payment is not None:
+    # The stamp stops a second account. A renewal re-sends its saved absolute target instead,
+    # so a retry (a buyer's re-tap or the retry job) stays allowed.
+    if payment is not None and not _order_note(order).startswith("renew:"):
         payment.review_note = UNKNOWN_DELIVERY_NOTE
         await session.commit()
     # Local import: ux20 imports this module.
@@ -2402,7 +2436,7 @@ async def deliver_order(
         )
         await session.commit()
 
-    panel = {"touched": False}
+    panel = {"touched": False, "orphan": False}
     try:
         # Shop deliveries authenticate as the reseller's PG admin (role limits apply).
         # Platform orders use the owner client.
@@ -2562,7 +2596,9 @@ async def deliver_order(
                 try:
                     await pg.delete_user_by_id(int(pg_uid))
                 except Exception:
-                    logger.debug("deliver_order: ignored failure", exc_info=True)
+                    # The created user stays on the panel: a retry must not create another.
+                    panel["orphan"] = True
+                    logger.warning("deliver_order: rollback delete failed order=%s", order_id, exc_info=True)
             # Drop flushed UserService rows so _release_delivery_claim() commit
             # cannot leave orphans pointing at deleted PG users.
             for svc in list(services):
@@ -2601,7 +2637,9 @@ async def deliver_order(
     except Exception as exc:
         if attempt is not None:
             # Fail closed: only a definite refusal proves the panel created nothing.
-            attempt.panel_may_hold_account = panel["touched"] and not is_hard_panel_rejection(exc)
+            attempt.panel_may_hold_account = bool(panel.get("orphan")) or (
+                panel["touched"] and not is_hard_panel_rejection(exc) and not is_unsent_panel_request(exc)
+            )
         try:
             await _release_delivery_claim()
         except Exception:
