@@ -26,6 +26,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.catalog_pricing import displayed_quote, quote_product, sale_price
+from app.services.service_period import period_view
 from app.config import get_settings
 from app.db.models import BotUser, Order, ResellerProfile, UserService
 from app.api.miniapp_buy_extras import (
@@ -251,7 +252,7 @@ def _iso_time(value: object) -> str | None:
 
 
 def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
-    info = validate_service_info(info)
+    info = period_view(validate_service_info(info), svc)
     # Only our sentinel may appear as ``error`` — never raw upstream strings.
     upstream_err = not info or info.get("error") == "upstream_unavailable"
     used = info.get("used_traffic")

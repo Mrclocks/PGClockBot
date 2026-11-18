@@ -205,7 +205,7 @@ def test_delivery_card_receives_pending_info(service, pending_info):
     import asyncio
     from app.services.delivery import build_delivery_content
 
-    order = SimpleNamespace(id=11, service_id=7, plan_id=2, plan=service.plan,
+    order = SimpleNamespace(id=11, status="delivered", service_id=7, plan_id=2, plan=service.plan,
                             reseller_id=None, quantity=1, note=None, subscription_url=None)
     pg = SimpleNamespace(subscription_info=AsyncMock(return_value=pending_info))
     session = AsyncMock()

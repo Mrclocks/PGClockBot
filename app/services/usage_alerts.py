@@ -26,9 +26,6 @@ from app.services.wallet import wallet_balances_for_scope
 
 ALERT_TIME = "time"
 ALERT_TRAFFIC = "traffic"
-# An alert that already went out is armed again only when the remaining share climbs this far above
-# its threshold, so a service hovering around the threshold is not alerted over and over.
-REARM_MARGIN_PCT = 5.0
 SECONDS_PER_DAY = 86400
 # (bot that sent it, replace key, the alert message)
 SentAlert = tuple[Bot, str, Message]
@@ -151,26 +148,11 @@ def period_seconds(*, plan_days: int | None, created_at: datetime | None, expire
     return None
 
 
-def time_remaining_pct(expire: datetime, *, now: datetime, period: float | None) -> float | None:
-    """Share of the period still left (0 to 100), or ``None`` when it cannot be told or already ended."""
-    if not period or period <= 0:
-        return None
-    remaining = (expire - now).total_seconds()
-    if remaining < 0:
-        return None
-    return min(100.0, remaining / period * 100.0)
-
-
 def traffic_remaining_pct(used: float, limit: float) -> float | None:
     """Share of the volume still left (0 to 100), or ``None`` for an unlimited service."""
     if limit <= 0:
         return None
     return max(0.0, (1.0 - used / limit) * 100.0)
-
-
-def should_rearm(remaining_pct: float | None, threshold_pct: float) -> bool:
-    """True when an alert that was already sent must be allowed to fire again."""
-    return remaining_pct is not None and remaining_pct > threshold_pct + REARM_MARGIN_PCT
 
 
 async def plan_durations(session: AsyncSession, services: list[UserService]) -> dict[int, int]:

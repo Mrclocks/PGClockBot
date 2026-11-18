@@ -641,14 +641,12 @@ def admin_groups_hub_keyboard(
     )
     if shortcuts:
         rows.append(shortcuts)
-    # Group messages get a full-width row under the groups, so the most used tool is one tap away.
+    # Group messages and quick links share one row under the groups: the most used tools, one tap away.
     broadcast = [b for b in buttons if b.callback_data == "nv:adm:broadcast"]
     groups = [b for b in buttons if b.callback_data != "nv:adm:broadcast"]
     for i in range(0, len(groups), 2):
         rows.append(groups[i : i + 2])
-    if broadcast:
-        rows.append(broadcast)
-    rows.append([_hub_entry_button(ui, ADMIN_QUICK_LINKS)])
+    rows.append([*broadcast, _hub_entry_button(ui, ADMIN_QUICK_LINKS)])
     rows.append(
         [
             _ikb(
@@ -1043,8 +1041,8 @@ def reseller_manage_hub_keyboard(
         rows.append(shortcuts)
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i : i + 2])
-    rows.extend([button] for button in _reseller_entry_buttons(home_entries(entries), ui, {}))
-    rows.append([_hub_entry_button(ui, SHOP_QUICK_LINKS)])
+    # Like the admin panel: group messages beside quick links in one row.
+    rows.append([*_reseller_entry_buttons(home_entries(entries), ui, {}), _hub_entry_button(ui, SHOP_QUICK_LINKS)])
     rows.append(_hub_back_row(ui, callback_data="menu:home"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
