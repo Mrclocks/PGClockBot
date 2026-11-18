@@ -484,27 +484,22 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
             signature = (request.headers.get("x-tonpays-signature") or "").strip()
             body = await request.body()
             tp_ui = await _tp_get_all_settings(session, reseller_id=reseller_id)
-            adapter = get_psp_adapter(
-                "tonpays",
-                ui=_verify_gateway(tp_ui, pre).adapter_settings(
-                    tonpays_webhook_secret=str(tp_ui.get("tonpays_webhook_secret") or "")
-                ),
-                public_base_url=_public_base() or "http://127.0.0.1:8000",
+            wh = await verify_tonpays_webhook(
+                api_key=str(tp_ui.get("psp_merchant_id") or ""),
+                webhook_secret=str(tp_ui.get("tonpays_webhook_secret") or ""),
+                body=body,
+                signature=signature,
             )
-            from app.services.payment_providers.tonpays import TonPaysAdapter
-
-            if isinstance(adapter, TonPaysAdapter):
-                wh = await adapter.verify_webhook(body=body, signature=signature)
-                if wh is not None and not wh.ok:
-                    return await _status(
-                        request,
-                        session,
-                        shop_owner_id=reseller_id,
-                        kind="error",
-                        title="تأیید وب‌هوک ناموفق",
-                        message="امضای وب‌هوک تون پی نامعتبر است.",
-                        http_status=400,
-                    )
+            if wh is not None and not wh.ok:
+                return await _status(
+                    request,
+                    session,
+                    shop_owner_id=reseller_id,
+                    kind="error",
+                    title="تأیید وب‌هوک ناموفق",
+                    message="امضای وب‌هوک تون پی ناماقعرست است.",
+                    http_status=400,
+                )
 
         try:
             settlement = await complete_psp_return(
