@@ -84,10 +84,10 @@ _MSG_NOT_PAID = "پرداختی برای این تراکنش در درگاه ث�
 _MSG_FAILED = "پرداخت تکمیل نشد یا رد شده"
 _MSG_UNKNOWN_STATUS = "وضعیت پرداخت قابل تشخیص نیست"
 _MSG_NO_INVOICE = "شناسه فاکتور موجود نیست"
-_MSG_API_KEY_MISSING = "کلید API تون پیز تنظیم نشده"
-_MSG_MIN_AMOUNT = "حداقل مبلغ تون پیز {minimum} تومان است"
+_MSG_API_KEY_MISSING = "کلید API TonPays تنظیم نشده"
+_MSG_MIN_AMOUNT = "حداقل مبلغ TonPays {minimum} تومان است"
 _MSG_INVALID_FIELD_FA = "{field} نامعتبر است"
-_MSG_CHECKOUT_FAILED = "درخواست تون پیز نامعتبر بود"
+_MSG_CHECKOUT_FAILED = "درخواست TonPays نامعتبر بود"
 _MSG_INVALID_CHECKOUT_URL = "آدرس پرداخت نامعتبر است"
 
 
@@ -118,8 +118,10 @@ def _validate_callback_url(value: str) -> str:
 
 
 def _is_trusted_host(netloc: str, trusted: str) -> bool:
-    """Exact host match or subdomain of the trusted host."""
-    return netloc == trusted or netloc.endswith("." + trusted)
+    """Exact host match (no subdomains)."""
+    # Strip port if present
+    host = netloc.split(":")[0]
+    return host == trusted
 
 
 def _verify_signature(secret: str, body: bytes, signature: str) -> bool:
@@ -183,11 +185,9 @@ class TonPaysAdapter:
         self,
         *,
         api_key: str,
-        sandbox: bool = False,
         webhook_secret: str = "",
     ):
         self.api_key = (api_key or "").strip()
-        self.sandbox = bool(sandbox)
         self.webhook_secret = (webhook_secret or "").strip()
 
     # ── Protocol: PspAdapter ──────────────────────────────────────────────
@@ -236,7 +236,7 @@ class TonPaysAdapter:
                 resp = await client.post(_CREATE_URL, json=payload, headers=self._headers())
         except httpx.HTTPError as exc:
             logger.warning("tonpays create network error: %s", type(exc).__name__)
-            raise TonPaysError(_MSG_NETWORK_ERROR, admin_detail=str(exc))
+            raise TonPaysError(_MSG_NETWORK_ERROR, admin_detail=str(exc)) from exc
 
         try:
             data = resp.json() if resp.content else {}
@@ -255,7 +255,7 @@ class TonPaysAdapter:
 
         if not isinstance(data, dict):
             raise TonPaysError(
-                "پاسخ نامعتبر درگاه تون پیز", admin_detail="non-dict response"
+                "پاسخ نامعتبر درگاه TonPays", admin_detail="non-dict response"
             )
 
         invoice_id = str(data.get("invoice_id") or "").strip()

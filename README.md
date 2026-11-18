@@ -1,10 +1,10 @@
-# 🕐 گذرگاه (Gozargah)
+# 🕐 PGClockBot
 
-![گذرگاه preview](preview.png)
+![PGClockBot preview](preview.png)
 
 فروش اشتراک، نمایندگی، کیف پول و عملیات پاسارگارد؛ رابط ربات فارسی، پنل وب روی پورت `9000`.
 
-**نسخه پایدار `1.0.0`** روی شاخهٔ `main` — نصب پیش‌فرض همین کانال است. شاخهٔ `dev` برای پیش‌نسخه‌های آزمایشی است.
+**نسخه پایدار `0.5.0`** روی شاخهٔ `main` — نصب پیش‌فرض همین کانال است. شاخهٔ `dev` برای پیش‌نسخه‌های آزمایشی است.
 
 ---
 
@@ -12,7 +12,7 @@
 
 ### 💳 فروش و پرداخت
 - پلن‌های کاربر و خرید مهمان؛ کیف پول، کارت‌به‌کارت، درگاه لینک، رمزارز، استارز
-- درگاه آنلاین **TonPays (tonpays.online)**، SunPay و چند API به‌ازای هر فروشگاه
+- درگاه آنلاین (مثل SunPay) و چند API به‌ازای هر فروشگاه
 - تمدید، سرویس‌های من، هشدار انقضا/حجم و پیشنهاد شارژ
 - تمدید خودکار و افزایش خودکار زمان/حجم از کیف پول (per-service)
 - ابطال پرداخت تأییدشده و پیگیری سفارش توسط خود مشتری
@@ -45,18 +45,18 @@
 
 ### قبل از نصب این‌ها را آماده کنید
 1. **دامنه** متصل به آی‌پی سرور
-2. **توكن ربات**، **یوزرنیم ربات** و **آیدی ادمین** تلگرام
+2. **توکن ربات**، **یوزرنیم ربات** و **آیدی ادمین** تلگرام
 3. **اطلاعات ورود پنل پاسارگارد** (آدرس، یوزر، رمز)
 
 ### یک‌خطی (کانال پایدار / `main`)
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/bluedock/Gozargah/main/get.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
 ```
 
-نصب پیش‌فرض از **`main` (پایدار 1.0)** است. برای کانال توسعه:
+نصب پیش‌فرض از **`main` (پایدار 0.5)** است. برای کانال توسعه:
 
 ```bash
-GOZARGAH_CHANNEL=dev bash <(curl -fsSL https://raw.githubusercontent.com/bluedock/Gozargah/dev/get.sh)
+PGCLOCK_CHANNEL=dev bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/dev/get.sh)
 ```
 
 بعد از نصب، راه‌اندازی در مرورگر کامل می‌شود: `http://SERVER_IP:9000/` (یا دامنهٔ شما).
@@ -70,17 +70,17 @@ GOZARGAH_CHANNEL=dev bash <(curl -fsSL https://raw.githubusercontent.com/bluedoc
 `postgresql://`، `postgresql+asyncpg://` یا `postgres://` شروع شود و از سرور قابل دسترس باشد:
 
 ```bash
-GOZARGAH_DATABASE_URL='postgresql+asyncpg://USER:PASS@HOST:5432/DBNAME' bash gozargah.sh install main
+PGCLOCK_DATABASE_URL='postgresql+asyncpg://USER:PASS@HOST:5432/DBNAME' bash pgclock.sh install main
 ```
 
 اگر `.env` قبلی هنوز به SQLite اشاره می‌کند، نصب متوقف می‌شود و از شما می‌خواهد `DATABASE_URL`
 را به PostgreSQL تغییر دهید.
 
-### منوی اسکریپت (`gozargah.sh`)
+### منوی اسکریپت (`pgclock.sh`)
 دستور بالا منو را باز می‌کند. داخل پوشهٔ پروژه هم:
 
 ```bash
-bash gozargah.sh
+bash pgclock.sh
 ```
 
 | گزینه | کار |
@@ -101,16 +101,16 @@ bash gozargah.sh
 میانبر بدون منو:
 
 ```bash
-bash gozargah.sh install main
-bash gozargah.sh update main
-bash gozargah.sh status
-bash gozargah.sh doctor
-bash gozargah.sh help
+bash pgclock.sh install main
+bash pgclock.sh update main
+bash pgclock.sh status
+bash pgclock.sh doctor
+bash pgclock.sh help
 ```
 
 ---
 
-## 🛠️ CLI سراسری (`gozargah`)
+## 🛠️ CLI سراسری (`pgclock`)
 
 بعد از نصب (یک‌بار با sudo):
 
@@ -121,57 +121,26 @@ sudo bash scripts/install_global_cli.sh
 از هر مسیری:
 
 ```bash
-gozargah status
-gozargah start
-gozargah stop
-gozargah restart
-gozargah logs              # ۱۰۰ خط آخر
-gozargah logs -f           # دنبال کردن لاگ
-gozargah health
-gozargah backup --note "pre-update"
-gozargah backup --list
-gozargah restore <backup_id> -y
-gozargah migrate
-gozargah doctor
+pgclock status
+pgclock start
+pgclock stop
+pgclock restart
+pgclock logs              # ۱۰۰ خط آخر
+pgclock logs -f           # دنبال کردن لاگ
+pgclock health
+pgclock backup --note "pre-update"
+pgclock backup --list
+pgclock restore <backup_id> -y
+pgclock migrate
+pgclock doctor
 ```
 
 بدون نصب سراسری، از ریشهٔ پروژه:
 
 ```bash
-export GOZARGAH_HOME=/path/to/Gozargah
-./scripts/gozargah status
+export PGCLOCK_HOME=/path/to/PGClockBot
+./scripts/pgclock status
 ```
-
----
-
-## 📋 درگاه‌های پرداخت پشتیبانی‌شده
-
-| درگاه | نوع | توضیحات |
-|--------|-----|---------|
-| **TonPays** | فیات (تومان) | `tonpays.online` - پرداخت کارت‌به‌کارت و آنلاین |
-| **ZarinPal** | فیات (تومان) | درگاه بانک ملت و سایر بانک‌ها |
-| **SunPay** | فیات (تومان) | درگاه آنلاین با API |
-| **BezanBeCard** | کارت‌به‌کارت | `bezanbecard.ir` |
-| **Card Auto** | تأیید خودکار | تأیید خودکار واریز کارت |
-| **رمزارز** | کریپتو | USDT، BTC، TRX و... |
-| **استارز تلگرام** | استارز | خرید با Telegram Stars |
-
-### تنظیم درگاه TonPays
-1. در پنل مدیریت → پرداخت → درگاه API بروید
-2. ارائه‌دهنده را روی `tonpays` بگذارید
-3. مرچنت/کلید API: کلید API از پنل `tonpays.online` را وارد کنید
-4. سندباکس: غیرفعال (0)
-5. رمز وب‌هوک (اختیاری): برای امنیت بیشتر وب‌هوک
-
----
-
-## 🔒 امنیت و بهترین شیوه‌ها
-- تمام رمزها و توکن‌ها در `.env` ذخیره می‌شوند (عدم commit در Git)
-- احراز هویت دو مرحله‌ای برای پنل ادمین
-- CSRF Protection برای تمام فرم‌های POST
-- احراز هویت بر اساس نقش (Admin، Reseller، PG Staff، Principal)
-- جداسازی داده‌ها بر اساس فروشگاه (Tenant Isolation)
-- لاگ‌گذاری تمام عملیات حساس
 
 ---
 
@@ -179,4 +148,4 @@ export GOZARGAH_HOME=/path/to/Gozargah
 
 هر گونه کپی‌برداری بدون ذکر نام و فروش غیرمجاز است.
 
-[MIT](LICENSE) © Gozargah Team
+[MIT](LICENSE) © Mrclocks

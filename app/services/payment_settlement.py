@@ -421,7 +421,7 @@ def _checkout_gateway(ui: dict, gateway_id: str | None) -> PspGateway:
     gateway = choose_psp_gateway(ui, gateway_id)
     if gateway.provider == "mock" and not settlement_mock_allowed():
         raise ValueError(
-            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را tonpays یا sunpay بگذارید"
+            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را zarinpal یا sunpay بگذارید"
         )
     return gateway
 

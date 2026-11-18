@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Global pgclock wrapper — works from any directory.
+# Installed to /usr/local/bin/pgclock by scripts/install_global_cli.sh
+set -euo pipefail
+
+MARKER="/usr/local/lib/pgclockbot/install_root"
+ROOT="${PGCLOCK_HOME:-${PGCLOCK_ROOT:-}}"
+
+if [[ -z "${ROOT}" && -f "${MARKER}" ]]; then
+  ROOT="$(tr -d '\r' < "${MARKER}" | head -n1 | sed 's/[[:space:]]*$//')"
+fi
+
+# Dev fallback: repo containing this script (scripts/pgclock → ..)
+if [[ -z "${ROOT}" ]]; then
+  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "${HERE}/../run.py" && -d "${HERE}/../app" ]]; then
+    ROOT="$(cd "${HERE}/.." && pwd)"
+  fi
+fi
+
+if [[ -z "${ROOT}" || ! -d "${ROOT}" ]]; then
+  echo "pgclock: install root not found." >&2
+  echo "Set PGCLOCK_HOME or run: sudo bash scripts/install_global_cli.sh" >&2
+  exit 1
+fi
+
+PY="${ROOT}/.venv/bin/python"
+if [[ ! -x "${PY}" ]]; then
+  PY="$(command -v python3 || true)"
+fi
+if [[ -z "${PY}" ]]; then
+  echo "pgclock: python not found in ${ROOT}/.venv or PATH" >&2
+  exit 1
+fi
+
+export PGCLOCK_HOME="${ROOT}"
+cd "${ROOT}"
+exec "${PY}" -m app.cli "$@"
