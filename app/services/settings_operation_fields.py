@@ -77,6 +77,10 @@ CRYPTO_RATE_FIELDS: list[Field] = [
     ("crypto_quote_minutes", "اعتبار نرخ (دقیقه)", "number"),
 ]
 
+WALLET_TOPUP_FIELDS: list[Field] = [
+    ("wallet_topup_presets", "مبالغ آمادهٔ شارژ (تومان، با کاما)", "text"),
+]
+
 TRIAL_MIN_AGE_FIELD: Field = ("trial_min_account_minutes", "حداقل سن حساب (دقیقه، ۰ = خاموش)", "number")
 
 # Whole-number bounds of the fields above.

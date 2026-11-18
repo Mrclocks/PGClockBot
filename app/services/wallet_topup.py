@@ -121,6 +121,36 @@ def parse_topup_presets(ui: dict | None = None) -> list[int]:
     return out or list(DEFAULT_TOPUP_PRESETS)
 
 
+MAX_TOPUP_PRESETS = 8  # one keyboard of preset buttons (wallet_topup_presets_keyboard)
+_PRESET_SEPARATORS = re.compile(r"[,،\s]+")
+
+
+def normalize_topup_presets(raw: str | None) -> str:
+    """The stored CSV of preset top-up amounts typed in a bot; ``ValueError`` carries a Persian message.
+
+    Amounts are whole tomans inside the top-up limits, without repeats, at most one keyboard of them.
+    An empty value keeps the built-in amounts.
+    """
+    text = str(raw or "").translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
+    text = text.replace("٬", "").strip()
+    if text in {"", "-", "پیش‌فرض", "پیشفرض"}:
+        return ""
+    amounts: list[int] = []
+    for part in _PRESET_SEPARATORS.split(text):
+        if not part:
+            continue
+        if not part.isascii() or not part.isdigit() or len(part) > 12:
+            raise ValueError("مبلغ‌ها را با رقم و جدا با کاما بفرستید؛ مثلاً 50000, 100000")
+        amount = int(part)
+        if not MIN_TOPUP_AMOUNT <= amount <= MAX_TOPUP_AMOUNT:
+            raise ValueError(f"هر مبلغ باید بین {MIN_TOPUP_AMOUNT:,} و {MAX_TOPUP_AMOUNT:,} تومان باشد")
+        if amount not in amounts:
+            amounts.append(amount)
+    if len(amounts) > MAX_TOPUP_PRESETS:
+        raise ValueError(f"حداکثر {MAX_TOPUP_PRESETS} مبلغ آماده")
+    return ",".join(str(amount) for amount in amounts)
+
+
 def _destination_label(method: str, item: dict[str, Any]) -> str:
     if method == "card":
         label = f"…{str(item.get('number') or '')[-4:]}"
