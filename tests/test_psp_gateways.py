@@ -91,7 +91,7 @@ class ParseAndFormTests(unittest.TestCase):
     def test_hostile_rows_are_normalised(self) -> None:
         rows = [gateway("a", provider="evil"), gateway("a"), gateway("bad id!"), "x", *[gateway(f"g{i}") for i in range(20)]]
         parsed = parse_psp_gateways(json.dumps(rows))
-        self.assertEqual(parsed[0].provider, "tonpays")
+        self.assertEqual(parsed[0].provider, "zarinpal")
         self.assertEqual(len({g.id for g in parsed}), len(parsed))
         self.assertNotIn("bad id!", {g.id for g in parsed})
         self.assertEqual(len(parsed), MAX_PSP_GATEWAYS)

@@ -1313,7 +1313,11 @@ def _psp_poll_callback_params(settlement: PaymentSettlement) -> dict[str, Any] |
             "token": token,
             "invoice_id": str(int(settlement.id)),
         }
-    # zarinpal / tonpays: both echo the authority/invoice id as the token.
+    if provider == "tonpays":
+        # TonPays verify ignores callback_params and uses external_ref (invoice_id).
+        # Return minimal params to satisfy the poller; verify() will call the check API.
+        return {"Status": "OK", "Authority": token}
+    # zarinpal
     return {"Status": "OK", "Authority": token}
 
 

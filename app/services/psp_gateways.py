@@ -61,7 +61,7 @@ def _on(raw: object, default: bool) -> bool:
 
 def _provider(raw: object) -> str:
     name = str(raw or "").strip().lower()
-    return name if name in PROVIDERS else "tonpays"
+    return name if name in PROVIDERS else "zarinpal"
 
 
 def _request_method(raw: object) -> str:
