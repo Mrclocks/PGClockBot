@@ -1960,6 +1960,14 @@ class DeliveryFailure(Base):
     """Orders that failed Telegram/PG delivery and need retry."""
 
     __tablename__ = "delivery_failures"
+    __table_args__ = (
+        # What the retry job scans: open rows still under automatic handling.
+        Index(
+            "ix_delivery_failures_auto_retry", "next_auto_retry_at",
+            sqlite_where=text("resolved_at IS NULL AND auto_retry_stopped_at IS NULL"),
+            postgresql_where=text("resolved_at IS NULL AND auto_retry_stopped_at IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
@@ -1974,6 +1982,11 @@ class DeliveryFailure(Base):
     )
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Automatic retry: attempts made while the panel answered, when the next one is due, and
+    # when automatic handling ended (refunded, or handed to staff). NULL due time = not scheduled.
+    auto_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    next_auto_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    auto_retry_stopped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ChargeCode(Base):

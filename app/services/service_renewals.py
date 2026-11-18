@@ -139,6 +139,28 @@ def renewal_terms(plan) -> dict:
     }
 
 
+def carry_loss_warning(
+    *, lost_bytes: int | None, lost_seconds: int | None, volume_after: str, time_after: str
+) -> str | None:
+    """The buyer-facing warning for a plan that does not carry over: what is lost, what remains.
+
+    None when nothing is left to lose (an unlimited or used-up quota is not "lost").
+    """
+    lost: list[str] = []
+    if lost_bytes:
+        lost.append(f"{format_bytes(lost_bytes)} حجم")
+    if lost_seconds and lost_seconds >= 60:
+        days = f"{lost_seconds / 86400:.1f}".rstrip("0").rstrip(".")
+        lost.append(f"{days} روز زمان")
+    if not lost:
+        return None
+    return (
+        f"⚠️ توجه: با این تمدید، {' و '.join(lost)} باقی‌ماندهٔ فعلی شما از بین می‌رود و "
+        "به دورهٔ جدید منتقل نمی‌شود. "
+        f"بعد از تمدید فقط {volume_after} حجم و {time_after} زمانِ همین پلن را خواهید داشت."
+    )
+
+
 def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dict:
     info = validate_service_info(info)
     if info.get("error"):
@@ -170,7 +192,7 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
         payload["on_hold_expire_duration"] = new_seconds
     volume_label = lambda value: "نامحدود" if value is None else format_bytes(value)
     time_label = lambda value: "نامحدود" if value is None else f"{value / 86400:.2f}".rstrip("0").rstrip(".") + " روز"
-    carry_note = " (منتقل می‌شود)" if carry else " (منتقل نمی‌شود)"
+    carry_note = " (منتقل می‌شود)" if carry else " (از بین می‌رود)"
     lines = [
         f"حجم مانده: {volume_label(remaining)}{carry_note}",
         f"حجم پلن: {volume_label(added)}",
@@ -183,7 +205,12 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
         lines.append(f"انقضای جدید: {format_expire_short(target_expire)}")
     warnings = []
     if not carry:
-        warnings.append("مانده حجم و زمان به دوره جدید منتقل نمی‌شود؛ فقط سهمیه همین پلن اعمال می‌شود.")
+        loss = carry_loss_warning(
+            lost_bytes=remaining, lost_seconds=old_seconds,
+            volume_after=volume_label(new_remaining), time_after=time_label(new_seconds),
+        )
+        if loss:
+            warnings.append(loss)
     if on_hold and new_seconds is None:
         warnings.append("پلن زمان نامحدود، سرویس را بدون انتظار برای اتصال فعال می‌کند.")
     if remaining is None and added is not None:

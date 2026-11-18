@@ -648,6 +648,65 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 }
 .side .side-theme-btn { min-height: var(--btn-h); padding: 0 var(--space-2); font-size: var(--fs-3); }
 
+/* ===================================================================== 14-1. Action-center modal
+   The header bell opens the action center as a modal (_inbox_modal_body.html): each item is a settings-list row
+   (§6-2) tinted by its tone, and the items that can be hidden end in a round «×» that opens the dismiss dialog.
+   A line under the list leads to the page while some items are hidden. */
+.ds .inbox-panel { display: flex; flex-direction: column; gap: var(--sec-gap); min-width: 0; }
+.ds .inbox-row { position: relative; display: flex; align-items: center; min-width: 0; --tile-tone: var(--foreground); }
+.ds .inbox-row.tone-warn { --tile-tone: var(--warn-fg); }
+.ds .inbox-row.tone-err { --tile-tone: var(--destructive-fg); }
+.ds .inbox-row-link { flex: 1 1 auto; min-width: 0; }
+/* Rows are wrapped with their «×», so the list's divider rule is drawn per wrapper, from beside the text. */
+.ds .inbox-row + .inbox-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  inset-inline: calc(var(--g3) + var(--cmp-h) + var(--g3)) var(--g3);
+  border-top: 1px solid var(--border);
+}
+.ds .inbox-row:has(.inbox-row-link:is(:hover, :focus-visible, :active))::before,
+.ds .inbox-row:has(.inbox-row-link:is(:hover, :focus-visible, :active)) + .inbox-row::before { opacity: 0; }
+.ds .inbox-row-dismiss {
+  display: grid;
+  place-items: center;
+  flex: 0 0 var(--cmp-h);
+  width: var(--cmp-h);
+  height: var(--cmp-h);
+  margin-inline: var(--g1) var(--g3);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--dock-tint);
+  color: var(--muted-fg);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.ds .inbox-row-dismiss svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ds .inbox-row-dismiss:hover { color: var(--foreground); }
+.ds .inbox-row-dismiss:active { transform: scale(0.96); }
+.ds .inbox-row-dismiss:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ds .inbox-hidden-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g2);
+  min-height: var(--ctl-h);
+  padding-inline: var(--g4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-fg);
+  font-size: var(--fs-2);
+  text-decoration: none;
+}
+.ds .inbox-hidden-go { display: inline-flex; align-items: center; gap: var(--g1); color: var(--foreground); font-weight: 600; }
+.ds .inbox-hidden-go svg { width: var(--ico-sm); height: var(--ico-sm); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .inbox-hidden-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .ds .inbox-row-dismiss { transition: none; }
+}
+
 /* ===================================================================== 15. Optical spacing
    Titles and field labels use a tight line box (1.25), so the space above their letters matches the space
    below the last control of a box. */

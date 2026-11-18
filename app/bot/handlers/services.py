@@ -723,7 +723,9 @@ async def svc_renew_preview(
     await state.update_data(renewal_preview={
         "service_id": svc.id, "plan_id": plan.id, "price": preview["price"], "terms": preview["terms"], "request_key": preview["request_key"],
     })
-    lines = [f"پلن: {plan.name}", *preview["lines"], *preview["warnings"], "", preview["notice"]]
+    # Warnings first: a plan that drops the remaining quota must be read before the numbers.
+    warnings = [*preview["warnings"], ""] if preview["warnings"] else []
+    lines = [f"پلن: {plan.name}", *warnings, *preview["lines"], "", preview["notice"]]
     if callback.message:
         await safe_edit_text(
             callback.message, format_message("🔄 پیش‌نمایش تمدید", html.escape("\n".join(lines)) + "\nمبلغ: " + price_html(displayed_quote(plan), get_settings().currency)),

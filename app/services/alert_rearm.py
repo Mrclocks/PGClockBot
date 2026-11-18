@@ -20,16 +20,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import UserService
 from app.services.formatting import parse_expire
+from app.services.alert_thresholds import AlertThreshold, should_rearm_time, should_rearm_traffic
 from app.services.service_period import period_usage
-from app.services.usage_alert_messages import days_left, should_rearm_time
-from app.services.usage_alerts import (
-    REARM_MARGIN_PCT,
-    period_seconds,
-    plan_durations,
-    should_rearm,
-    time_remaining_pct,
-    traffic_remaining_pct,
-)
+from app.services.usage_alerts import period_seconds, plan_durations
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +32,7 @@ RECENT_CHANGE_WINDOW = timedelta(hours=12)
 FETCH_TIMEOUT_SECONDS = 12
 FETCH_CONCURRENCY = 8
 
-# (alerts on, traffic %, time %) and optionally the days threshold (0 or missing = off).
-Thresholds = tuple[int, ...]
+Thresholds = tuple[bool, AlertThreshold, AlertThreshold]  # (alerts on, volume, time)
 ThresholdsFor = Callable[[int | None], Awaitable[Thresholds]]
 
 
@@ -54,20 +46,16 @@ async def _fetch(pg: Any, gate: asyncio.Semaphore, token: str) -> dict | None:
     return info if isinstance(info, dict) else None
 
 
-def _days(thresholds: Thresholds) -> int:
-    return int(thresholds[3]) if len(thresholds) > 3 else 0
-
-
 def _rearm_one(
-    service: UserService, info: dict, *, now: datetime, plan_days: int | None, time_pct: int, traffic_pct: int, days: int = 0
+    service: UserService, info: dict, *, now: datetime, plan_days: int | None,
+    time_limit: AlertThreshold, traffic_limit: AlertThreshold,
 ) -> bool:
     """Clear the flags of ``service`` that no longer apply; True when something changed."""
     changed = False
     expire = parse_expire(info.get("expire"))
     if service.notified_expire and expire is not None:
         period = period_seconds(plan_days=plan_days, created_at=service.created_at, expire=expire)
-        remaining = time_remaining_pct(expire, now=now, period=period)
-        if should_rearm_time(remaining, days_left(expire, now), time_pct=time_pct, days=days, margin_pct=REARM_MARGIN_PCT):
+        if should_rearm_time((expire - now).total_seconds(), period, time_limit):
             service.notified_expire = False
             changed = True
     if service.notified_traffic and info.get("data_limit"):
@@ -76,7 +64,7 @@ def _rearm_one(
         except (TypeError, ValueError):
             return changed
         used, limit = period_usage(service, used, limit, info.get("lifetime_used_traffic"))
-        if should_rearm(traffic_remaining_pct(used, limit), traffic_pct):
+        if should_rearm_traffic(used, limit, traffic_limit):
             service.notified_traffic = False
             changed = True
     return changed
@@ -167,8 +155,7 @@ async def rearm_flagged_alerts(
     infos = await asyncio.gather(*(_fetch(pg, gate, s.subscription_token) for s in services))
     rearmed = 0
     for service, info in zip(services, infos, strict=True):
-        thresholds = settings[service.shop_id]
-        traffic_pct, time_pct = int(thresholds[1]), int(thresholds[2])
+        _enabled, traffic_limit, time_limit = settings[service.shop_id]
         if info is None:
             continue
         checked = validate_service_info(info)
@@ -176,7 +163,7 @@ async def rearm_flagged_alerts(
             sync_service_quota_cache(service, info=checked)
         if _rearm_one(
             service, info, now=now, plan_days=plans.get(int(service.plan_id)) if service.plan_id else None,
-            time_pct=time_pct, traffic_pct=traffic_pct, days=_days(thresholds),
+            time_limit=time_limit, traffic_limit=traffic_limit,
         ):
             rearmed += 1
     await session.commit()

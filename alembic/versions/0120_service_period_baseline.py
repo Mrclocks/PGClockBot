@@ -1,7 +1,7 @@
 """Usage at the start of a service's current period.
 
-Revision ID: 0119_service_period_baseline
-Revises: 0118_shop_targeted_message_days
+Revision ID: 0120_service_period_baseline
+Revises: 0119_delivery_failure_auto_retry
 
 Adds nullable ``period_used_baseline_bytes`` and ``period_lifetime_baseline_bytes`` to
 ``user_services``. A renewal stores the panel usage at the moment it opened the period, so
@@ -19,8 +19,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0119_service_period_baseline"
-down_revision: Union[str, None] = "0118_shop_targeted_message_days"
+revision: str = "0120_service_period_baseline"
+down_revision: Union[str, None] = "0119_delivery_failure_auto_retry"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

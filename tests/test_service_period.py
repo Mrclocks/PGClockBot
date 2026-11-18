@@ -136,7 +136,7 @@ class PeriodMigrationTests(unittest.TestCase):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
-        path = ROOT / "alembic/versions/0119_service_period_baseline.py"
+        path = ROOT / "alembic/versions/0120_service_period_baseline.py"
         spec = importlib.util.spec_from_file_location("period_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
