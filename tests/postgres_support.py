@@ -27,7 +27,7 @@ import os
 import secrets
 import time
 import unittest
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
@@ -297,6 +297,55 @@ def scoped_async_engine(*, tables: bool = True, key: str = "", **kwargs: Any) ->
 def scoped_sync_engine(*, tables: bool = False, key: str = "", **kwargs: Any) -> Engine:
     """A sync engine on the current test's database; empty by default, for migration tests."""
     return create_engine(_sync_url(scoped_database_url(tables=tables, key=key)), **kwargs)
+
+
+def _row_key(row: Any) -> tuple[str, Any]:
+    table = row.__table__
+    primary = [column.name for column in table.primary_key.columns]
+    return table.name, tuple(getattr(row, name, None) for name in primary) if len(primary) > 1 else getattr(row, primary[0], None)
+
+
+def _row_parents(row: Any, present: set[tuple[str, Any]]) -> set[tuple[str, Any]]:
+    parents = set()
+    for column in row.__table__.columns:
+        value = getattr(row, column.key, None) if hasattr(row, column.key) else None
+        if value is None:
+            continue
+        for foreign_key in column.foreign_keys:
+            parent = (foreign_key.column.table.name, value)
+            if parent in present and parent != _row_key(row):
+                parents.add(parent)
+    return parents
+
+
+def dependency_levels(rows: list[Any]) -> list[list[Any]]:
+    """Group ORM rows so every row comes after the rows its foreign keys point at.
+
+    Without ``relationship()`` the unit of work does not order inserts across
+    tables (or within one table) by foreign keys, so a seed list with explicit
+    ids must be flushed level by level. Rows in a reference cycle end up last.
+    """
+    present = {_row_key(row) for row in rows}
+    pending = {id(row): (row, _row_parents(row, present)) for row in rows}
+    placed: set[tuple[str, Any]] = set()
+    levels: list[list[Any]] = []
+    while pending:
+        ready = [row for row, parents in pending.values() if parents <= placed]
+        if not ready:
+            levels.append([row for row, _ in pending.values()])
+            break
+        levels.append(ready)
+        placed |= {_row_key(row) for row in ready}
+        for row in ready:
+            del pending[id(row)]
+    return levels
+
+
+async def add_rows(session: AsyncSession, rows: Iterable[Any]) -> None:
+    """``session.add_all`` for seed data, flushed in foreign-key order."""
+    for level in dependency_levels(list(rows)):
+        session.add_all(level)
+        await session.flush()
 
 
 async def add_shop_users(sessions: async_sessionmaker[AsyncSession], *shop_ids: int) -> None:

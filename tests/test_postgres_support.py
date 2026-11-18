@@ -11,7 +11,7 @@ from sqlalchemy import func, make_url, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.db.models import BotUser, ChargeCode, Setting
+from app.db.models import BotUser, ChargeCode, Plan, PlanCategory, Setting
 from tests import postgres_support
 from tests.postgres_support import (
     GENERATED_ID_START,
@@ -19,6 +19,7 @@ from tests.postgres_support import (
     MissingTestDatabaseError,
     PostgresTestCase,
     _quoted,
+    add_rows,
     add_shop_users,
     isolated_database,
     postgres_test_url,
@@ -145,6 +146,23 @@ class ScopedDatabaseTests(unittest.IsolatedAsyncioTestCase):
                 await session.commit()
                 roles = (await session.scalars(select(BotUser.role).where(BotUser.id.in_([41, 42])))).all()
             self.assertEqual(roles, ["reseller", "reseller"])
+        finally:
+            await engine.dispose()
+
+    async def test_add_rows_orders_seed_rows_by_their_foreign_keys(self) -> None:
+        engine = scoped_async_engine()
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with sessions() as session:
+                # Children listed before their parents, across tables and within bot_users.
+                await add_rows(session, [
+                    Plan(id=7, name="plan", price=1, category_id=3, owner_reseller_id=5),
+                    BotUser(id=6, telegram_id=106, referral_code="customer", reseller_id=5),
+                    PlanCategory(id=3, name="category", audience="users", owner_reseller_id=5),
+                    BotUser(id=5, telegram_id=105, referral_code="shop", role="reseller"),
+                ])
+                await session.commit()
+                self.assertEqual(await session.scalar(select(Plan.category_id).where(Plan.id == 7)), 3)
         finally:
             await engine.dispose()
 
