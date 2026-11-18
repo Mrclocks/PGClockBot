@@ -497,7 +497,7 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
                     shop_owner_id=reseller_id,
                     kind="error",
                     title="تأیید وب‌هوک ناموفق",
-                    message="امضای وب‌هوک تون پی ناماقعرست است.",
+                    message="امضای وب‌هوک تون پی نامعتبر است.",
                     http_status=400,
                 )
 
