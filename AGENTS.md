@@ -31,7 +31,7 @@ tests/         pytest + unittest tests, Node tests for browser code
 - **MUST** keep dependencies flowing downward: `api`/`bot`/`jobs` -> `services` -> `db`. A service never imports from `app.api` or `app.bot`.
 - **MUST NOT** add routes to `app/api/app.py` or handlers to `reply_nav.py`. These files are already far too large. Add a new module with its own `register_*` function or `APIRouter`/`Router` and register it in one line.
 - **SHOULD** create a new focused module when a new feature needs more than about 150 lines. Name it after the domain noun (`service_cancellations.py`, `campaigns.py`), not after a version or ticket.
-- The project runs on PostgreSQL only. **MUST NOT** add SQLite code, SQLite-only branches or SQLite tests; `scripts/postgres_only_check.py` fails a pull request that adds a reference. The remaining SQLite code and tests are being removed in stages (see the SQLite removal track in [docs/ENGINEERING_REMEDIATION_PLAN.md](docs/ENGINEERING_REMEDIATION_PLAN.md)).
+- The project runs on PostgreSQL only and the app refuses to start without it. **MUST NOT** add SQLite code, branches, tests, settings or dependencies; `scripts/postgres_only_check.py` fails CI when any tracked file outside merged migrations and Markdown mentions SQLite.
 
 ## 3. Hard invariants for commerce, tenancy and security
 
@@ -127,7 +127,7 @@ PGClockBot serves many shops and customers from one process and one PasarGuard p
 ## 10. Testing
 
 - **MUST** add or update a test for every behavior change and every bug fix, and write the test so it fails without the change. A fix without a regression test is incomplete.
-- Prefer the smallest test that proves the behavior: service-level tests on PostgreSQL through `tests/postgres_support.py` (`PostgresTestCase`, or `isolated_schema` / `isolated_database`) and a fake panel client, not tests that need Telegram or a real panel. Set `TEST_DATABASE_URL` to a local PostgreSQL server; without it database tests fail instead of skipping. No test may use any other network service or real credentials.
+- Prefer the smallest test that proves the behavior: service-level tests on PostgreSQL through `tests/postgres_support.py` (`PostgresTestCase`, `isolated_database`, or `scoped_async_engine` / `scoped_sync_engine` / `scoped_database_url` with `add_rows` and `add_shop_users` for seed data) and a fake panel client, not tests that need Telegram or a real panel. Set `TEST_DATABASE_URL` to a local PostgreSQL server; without it database tests fail instead of skipping. No test may use any other network service or real credentials.
 - Cover the failure paths that matter: duplicate and concurrent calls, panel timeout or unknown outcome, wrong shop, wrong customer, missing permission, out-of-range numbers, and hostile text (escaping).
 - Tests assert behavior, not source text. **MUST NOT** add tests that read a source file and assert on its strings or line layout; they break on harmless refactors (many existing ones do).
 - Name tests after the behavior (`test_repeated_approval_does_not_credit_twice`).
@@ -142,7 +142,7 @@ python -m pytest tests/test_<area>.py -q          # focused tests first
 node tests/<name>.test.cjs                        # browser logic, if touched
 bash scripts/run_security_tests.sh               # what CI runs
 scripts/lint_changed.sh                          # lint ratchet, see section 11
-python scripts/postgres_only_check.py                 # no new SQLite references, see section 2
+python scripts/postgres_only_check.py            # no SQLite anywhere, see section 2
 python scripts/design_check.py --details         # design ratchet for templates and CSS, see section 9
 python -m pytest tests -q -p no:cacheprovider    # full suite before opening the PR
 ```

@@ -123,7 +123,7 @@ Exit: `F401`, `F8xx`, `UP` are zero; the mypy allow-list covers all of `app/serv
 2. Make the full suite a required CI check once it is green.
 3. Add coverage reporting for `app/services` and require tests for new commerce code through the pull request template (not a global percentage gate).
 4. Add concurrency and failure-injection tests for each state machine: payment review, delivery, renewal, add-on, cancellation, campaign. They must exercise duplicate calls, crash between claim and finalize, and unknown panel outcome.
-5. Add a PostgreSQL job to CI (service container) for the migration tests and the partial-index behavior; SQLite alone cannot prove the PostgreSQL path.
+5. Done: every test runs on PostgreSQL (see the SQLite removal track).
 6. Speed: the full suite takes about five minutes. Run it in parallel (`pytest-xdist`) once tests are isolated; keep the curated security suite as a fast first job.
 
 Exit: full suite green and required; PostgreSQL migration job present.
@@ -158,28 +158,25 @@ Baseline (`dev` at `d8fde6c`): 49 pages, 218 modals in 30 templates; `design_che
 
 After D1–D9 (counted with the D2 rules): inline style 0, cancel in form modal 0, modal outside `.ds` 0 (all three strict now); raw font size 69 (mini app 54, the rest em, clamp() or font shorthands); raw radius 22 (hairlines, nested calc() corners, compound shapes); raw colour 327; inline `<svg>` 141; `!important` 328. Still open in this track, each its own pull request: literal colours to tokens, the remaining hand-written icons to `icon()`, `!important` and button variants, motion on width/height to transforms, and an owner-only components page. The mini app follows as a separate track.
 
-## SQLite removal track
+## SQLite removal track (done)
 
-PGClockBot supports PostgreSQL only; no installation runs on SQLite. The SQLite code and the SQLite-based tests are removed in this order, one pull request per step, so nothing is deleted before PostgreSQL tests cover it:
+PGClockBot supports PostgreSQL only; no installation ran on SQLite. The SQLite code and tests were removed in this order, so nothing was deleted before PostgreSQL tests covered it:
 
-1. **Baseline.** Record the full-suite counts on `dev` (see the table below) to compare every later step against.
-2. **PostgreSQL test infrastructure.** `tests/postgres_support.py` gives each test its own schema (`PostgresTestCase`, `isolated_schema`) or database (`isolated_database`, for code that only receives a URL) on the server named by `TEST_DATABASE_URL`. A missing URL fails the test instead of skipping it. CI runs a `postgres:16` service, and `scripts/postgres_only_check.py` fails a pull request that adds a SQLite reference to a changed file.
-3. **Move the tests.** Convert the SQLite tests to the helpers in batches by area, money and security paths first. Rewrite concurrency tests that relied on SQLite's database-wide lock so they exercise PostgreSQL row locks, claims and unique indexes. Real bugs found on the way are fixed in their own pull requests with a regression test.
-4. **Remove SQLite from the product,** from the edges in: the SQLite-to-PostgreSQL ETL and its CLI flag; the SQLite backup and baseline paths; then the core (`_migrate_sqlite_legacy`, SQLite branches in `engine_url.py`, services and `alembic/env.py`, `sqlite_where` on models, a required `DATABASE_URL`) and finally the `aiosqlite` dependency. Merged migrations are not edited.
-5. **Lock it.** Update the remaining documentation and turn the check into a zero rule.
+1. **Baseline.** Full-suite counts on `dev` before any change: 8778 passed, 20 failed, 2 errors, 17 minutes.
+2. **PostgreSQL test infrastructure.** `tests/postgres_support.py` gives each test its own database, cloned from a template that already holds the tables (`PostgresTestCase`, `isolated_database`, `scoped_async_engine` / `scoped_sync_engine` / `scoped_database_url`), on the server named by `TEST_DATABASE_URL`; `tests/conftest.py` drops them when the test ends. A missing URL fails a database test instead of skipping it. CI runs a `postgres:16` service.
+3. **Move the tests.** All SQLite tests moved to the helpers, money and security paths first. Seed data that relied on SQLite ignoring foreign keys, concurrency tests that relied on its database-wide lock, and SQLite-only checks were fixed or rewritten.
+4. **Remove SQLite from the product,** from the edges in: the SQLite-to-PostgreSQL import tool and its CLI options; the SQLite backup, baseline and restore paths; the pre-Alembic SQLite migrator, SQLite URL handling and the default SQLite `DATABASE_URL`; SQLite branches in the services; `sqlite_where` on the models and SQLite batch mode in `alembic/env.py`; and the `aiosqlite` dependency. Merged migrations were not edited.
+5. **Lock it.** `scripts/postgres_only_check.py` fails CI when any tracked file outside merged migrations and Markdown mentions SQLite.
 
-Progress:
+Result: no tracked code, test, setting or dependency mentions SQLite. The full suite runs on PostgreSQL in about 9 minutes with 4 workers and has no failure that `dev` did not already have. `app/db/session.py` went from 799 to about 140 lines.
 
-| Step | Status | Test modules using SQLite |
-|---|---|---|
-| 1 Baseline | done | 428 of 866 |
-| 2 Test infrastructure | done | 426 of 869 (the check's own test not counted) |
-| 3 Move the tests | done | 15 of 870 |
-| 4 Remove SQLite from the product | next | |
+Bugs found on the way, each fixed in its own commit with a regression test:
 
-After step 3 the full suite runs on PostgreSQL in about 9 minutes with 4 workers (17 minutes on SQLite before). The 15 modules still on SQLite test SQLite-only product code, or name SQLite only in text, and go away in step 4: the pre-Alembic legacy migrator (`test_phase6a_production_readiness`, `test_v4_0_6_plans_billing_mode_fix`, `test_bot_users_reseller_id_index`), the SQLite backup and baseline (`test_backup_archive_safety`, `test_backup_env_restore`, `test_phase0_baseline`, `test_full_audit_3_8_3`), the ETL (`test_phase_a_database`, `test_arch_cleanup_footprints`), the CLI and WAL settings (`test_phase_b_cli`, `test_bot_perf_footer`), and text-only mentions (`test_pg_operator_errors`, `test_v4_0_4_admin_reseller_unify`, `test_delete_bot_user_fk_cleanup`, `test_postgres_only_install`).
-
-Moving the tests found two product bugs, fixed in their own commits: a wallet gift code could be redeemed several times by concurrent requests, and the resellers page never saved a child representative it had created on the panel.
+- A wallet gift code could be redeemed several times by concurrent requests (the once-per-customer check ran before the row lock).
+- The resellers page never saved a child representative it had created on the panel (no commit).
+- `pgclock status` printed `DATABASE_URL`, password included, when it was not PostgreSQL.
+- The backup settings page showed a SQLite file path as the database on every install.
+- The PostgreSQL backup and restore tests had their own opt-in variable and never ran in CI; they run now.
 
 ## Phase 7. Dependencies and operations
 
