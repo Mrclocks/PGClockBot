@@ -45,6 +45,7 @@ from app.services.settings_button_labels import (
     BTN_PAY_WALLET_DISCOUNT,
     button_label_subs,
 )
+from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
@@ -89,6 +90,8 @@ SECTIONS: dict[str, dict] = {
                 ("purchase_success_text", "موفقیت خرید", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
             ]),
+            *MESSAGE_TEXT_SUBS,
+            ("status_texts", "متن‌های وضعیت اتصال", CONNECTION_STATUS_CUSTOMER_TEXTS),
         ],
     },
     "menu": {

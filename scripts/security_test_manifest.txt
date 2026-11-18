@@ -541,3 +541,4 @@ tests/test_inbox_modal.py
 tests/test_paid_order_recovery.py
 tests/test_shop_settings_platform_only_groups.py
 tests/test_bot_settings_edit_path.py
+tests/test_bot_message_text_settings.py

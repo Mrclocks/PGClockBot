@@ -62,6 +62,7 @@ from app.services.settings_button_labels import (
     BTN_PAY_WALLET_DISCOUNT,
     button_label_subs,
 )
+from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
@@ -215,6 +216,14 @@ SECTIONS: dict[str, dict] = {
             ("invite", "دعوت دوستان", [
                 ("referral_text", "متن دعوت", "textarea"),
                 ("referral_bonus", "پاداش دعوت", "number"),
+            ]),
+            *MESSAGE_TEXT_SUBS,
+            ("status_texts", "متن‌های وضعیت اتصال", [
+                *CONNECTION_STATUS_CUSTOMER_TEXTS,
+                ("connection_status_admin_title", "عنوان مدیریت وضعیت اتصال", "text"),
+                ("connection_status_account_prompt", "تنظیم کاربر تست", "textarea"),
+                ("connection_status_name_prompt", "دریافت نام عمومی هاست", "text"),
+                ("connection_status_order_prompt", "دریافت ترتیب هاست", "text"),
             ]),
         ],
     },
