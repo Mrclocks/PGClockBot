@@ -49,6 +49,24 @@ jobs:
       - name: Run curated security regression suite
         run: bash scripts/run_security_tests.sh
 
+  # PostgreSQL is the only supported database: see scripts/postgres_only_check.py.
+  postgres-only:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Block new references to other database engines
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: python scripts/postgres_only_check.py "origin/$BASE_REF"
+
   # The installer runs the panel on Python 3.10–3.12: newer-only code must not ship.
   oldest-python:
     runs-on: ubuntu-latest

@@ -31,7 +31,7 @@ tests/         pytest + unittest tests, Node tests for browser code
 - **MUST** keep dependencies flowing downward: `api`/`bot`/`jobs` -> `services` -> `db`. A service never imports from `app.api` or `app.bot`.
 - **MUST NOT** add routes to `app/api/app.py` or handlers to `reply_nav.py`. These files are already far too large. Add a new module with its own `register_*` function or `APIRouter`/`Router` and register it in one line.
 - **SHOULD** create a new focused module when a new feature needs more than about 150 lines. Name it after the domain noun (`service_cancellations.py`, `campaigns.py`), not after a version or ticket.
-- The project runs on SQLite (default) and PostgreSQL. Code and migrations **MUST** work on both.
+- The project runs on PostgreSQL only. **MUST NOT** add SQLite code, SQLite-only branches or SQLite tests; `scripts/postgres_only_check.py` fails a pull request that adds a reference. The remaining SQLite code and tests are being removed in stages (see the SQLite removal track in [docs/ENGINEERING_REMEDIATION_PLAN.md](docs/ENGINEERING_REMEDIATION_PLAN.md)).
 
 ## 3. Hard invariants for commerce, tenancy and security
 
@@ -67,7 +67,7 @@ Money, quota and access paths are the most expensive place to be wrong.
 
 - Python 3.12. Dependencies are pinned in `requirements.txt` with upper bounds; adding one needs a written reason and a license check. **SHOULD** prefer the standard library or a library already in the project.
 - **SQLAlchemy 2.0 style only**: `select()`, `session.scalars()`, `session.execute()`, `Mapped[...]`/`mapped_column`. No legacy `Query` API, no `session.query`.
-- **Async everywhere in request/bot paths.** Use `httpx.AsyncClient`, `aiosqlite`/`asyncpg` through SQLAlchemy async, `asyncio.sleep`. **MUST NOT** call `time.sleep`, `requests`, `urllib.request`, blocking file I/O, `subprocess.run`, bcrypt/hash work or heavy image work directly in an `async def`. Wrap unavoidable blocking calls in `asyncio.to_thread(...)`.
+- **Async everywhere in request/bot paths.** Use `httpx.AsyncClient`, `asyncpg` through SQLAlchemy async, `asyncio.sleep`. **MUST NOT** call `time.sleep`, `requests`, `urllib.request`, blocking file I/O, `subprocess.run`, bcrypt/hash work or heavy image work directly in an `async def`. Wrap unavoidable blocking calls in `asyncio.to_thread(...)`.
 - **Time.** Store and compare timezone-aware UTC (`datetime.now(timezone.utc)`). **MUST NOT** use `datetime.utcnow()` or naive `datetime.now()`. Use `time.monotonic()` for durations, and `zoneinfo` for display time zones.
 - **HTTP clients.** Reuse a client, set explicit timeouts, and handle `httpx.HTTPError`. Do not create a client per call in a loop.
 - **FastAPI.** Use `Depends` for auth and the DB session, pydantic v2 models for JSON bodies, and return `HTTPException` with a safe message. `raise ... from None` or `from exc` when converting exceptions.
@@ -106,7 +106,7 @@ PGClockBot serves many shops and customers from one process and one PasarGuard p
 
 - Every model change ships with an Alembic migration in the same pull request. Revision ids follow `NNNN_short_name`; `down_revision` is the current head. Check `alembic/versions/` on the target branch right before you open the pull request, because another merge may have taken your number.
 - Migrations **MUST** be idempotent (inspect columns, indexes and tables first) and **MUST** have a working `downgrade` that keeps existing rows. Give new `NOT NULL` columns a `server_default`.
-- **MUST** work on SQLite and PostgreSQL: no dialect-specific SQL without a guard, partial indexes declared with both `sqlite_where` and `postgresql_where`, and batch mode for SQLite `ALTER`.
+- **MUST** work on PostgreSQL. Until the SQLite removal track is finished, older tests still build the schema on SQLite, so keep declaring partial indexes with both `sqlite_where` and `postgresql_where` and wrap `ALTER` in `op.batch_alter_table` (plain `ALTER` on PostgreSQL); do not add any other SQLite-specific code.
 - Do not drop or rename a column in the same release that stops using it; remove it in a later release.
 - Never edit a migration that has been merged to `dev` or `main`; add a new one.
 - Add a test that upgrades an existing database, runs the upgrade twice, and downgrades (see `tests/test_customer_features.py::CustomerFeatureMigrationTests`).
@@ -127,7 +127,7 @@ PGClockBot serves many shops and customers from one process and one PasarGuard p
 ## 10. Testing
 
 - **MUST** add or update a test for every behavior change and every bug fix, and write the test so it fails without the change. A fix without a regression test is incomplete.
-- Prefer the smallest test that proves the behavior: service-level tests with an in-memory SQLite database and a fake panel client, not tests that need Telegram or a real panel. No test may use the network or real credentials.
+- Prefer the smallest test that proves the behavior: service-level tests on PostgreSQL through `tests/postgres_support.py` (`PostgresTestCase`, or `isolated_schema` / `isolated_database`) and a fake panel client, not tests that need Telegram or a real panel. Set `TEST_DATABASE_URL` to a local PostgreSQL server; without it database tests fail instead of skipping. No test may use any other network service or real credentials.
 - Cover the failure paths that matter: duplicate and concurrent calls, panel timeout or unknown outcome, wrong shop, wrong customer, missing permission, out-of-range numbers, and hostile text (escaping).
 - Tests assert behavior, not source text. **MUST NOT** add tests that read a source file and assert on its strings or line layout; they break on harmless refactors (many existing ones do).
 - Name tests after the behavior (`test_repeated_approval_does_not_credit_twice`).
@@ -137,10 +137,12 @@ PGClockBot serves many shops and customers from one process and one PasarGuard p
 How to verify a change:
 
 ```bash
+export TEST_DATABASE_URL=postgresql+asyncpg://user:password@127.0.0.1:5432/pgclock_test
 python -m pytest tests/test_<area>.py -q          # focused tests first
 node tests/<name>.test.cjs                        # browser logic, if touched
 bash scripts/run_security_tests.sh               # what CI runs
 scripts/lint_changed.sh                          # lint ratchet, see section 11
+python scripts/postgres_only_check.py                 # no new SQLite references, see section 2
 python scripts/design_check.py --details         # design ratchet for templates and CSS, see section 9
 python -m pytest tests -q -p no:cacheprovider    # full suite before opening the PR
 ```
@@ -179,7 +181,7 @@ scripts/lint_changed.sh --details  # also prints the findings of the failing fil
 - [ ] No query in a loop, no unbounded query, no blocking call in async code, no naive datetime.
 - [ ] No swallowed exceptions; failures are logged and the user sees a safe message.
 - [ ] New code is typed, has no dead code, and respects the complexity and size limits.
-- [ ] Migration added, idempotent, works on SQLite and PostgreSQL, has a downgrade, and the revision number is current.
+- [ ] Migration added, idempotent, works on PostgreSQL, has a downgrade, and the revision number is current.
 - [ ] Focused tests, the security manifest, and the full suite were run; no new failures.
 - [ ] `scripts/lint_changed.sh` passes.
 - [ ] UI changes follow docs/DESIGN_SYSTEM.md and `python scripts/design_check.py` passes; new patterns are documented there.

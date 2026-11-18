@@ -158,6 +158,23 @@ Baseline (`dev` at `d8fde6c`): 49 pages, 218 modals in 30 templates; `design_che
 
 After D1–D9 (counted with the D2 rules): inline style 0, cancel in form modal 0, modal outside `.ds` 0 (all three strict now); raw font size 69 (mini app 54, the rest em, clamp() or font shorthands); raw radius 22 (hairlines, nested calc() corners, compound shapes); raw colour 327; inline `<svg>` 141; `!important` 328. Still open in this track, each its own pull request: literal colours to tokens, the remaining hand-written icons to `icon()`, `!important` and button variants, motion on width/height to transforms, and an owner-only components page. The mini app follows as a separate track.
 
+## SQLite removal track
+
+PGClockBot supports PostgreSQL only; no installation runs on SQLite. The SQLite code and the SQLite-based tests are removed in this order, one pull request per step, so nothing is deleted before PostgreSQL tests cover it:
+
+1. **Baseline.** Record the full-suite counts on `dev` (see the table below) to compare every later step against.
+2. **PostgreSQL test infrastructure.** `tests/postgres_support.py` gives each test its own schema (`PostgresTestCase`, `isolated_schema`) or database (`isolated_database`, for code that only receives a URL) on the server named by `TEST_DATABASE_URL`. A missing URL fails the test instead of skipping it. CI runs a `postgres:16` service, and `scripts/postgres_only_check.py` fails a pull request that adds a SQLite reference to a changed file.
+3. **Move the tests.** Convert the SQLite tests to the helpers in batches by area, money and security paths first. Rewrite concurrency tests that relied on SQLite's database-wide lock so they exercise PostgreSQL row locks, claims and unique indexes. Real bugs found on the way are fixed in their own pull requests with a regression test.
+4. **Remove SQLite from the product,** from the edges in: the SQLite-to-PostgreSQL ETL and its CLI flag; the SQLite backup and baseline paths; then the core (`_migrate_sqlite_legacy`, SQLite branches in `engine_url.py`, services and `alembic/env.py`, `sqlite_where` on models, a required `DATABASE_URL`) and finally the `aiosqlite` dependency. Merged migrations are not edited.
+5. **Lock it.** Update the remaining documentation and turn the check into a zero rule.
+
+Progress:
+
+| Step | Status | Test modules using SQLite |
+|---|---|---|
+| 1 Baseline | done | 428 of 866 |
+| 2 Test infrastructure | done | 426 of 869 (the check's own test not counted) |
+
 ## Phase 7. Dependencies and operations
 
 1. Pin and document why each dependency has its bounds; add `pip-audit` (or equivalent) to CI.

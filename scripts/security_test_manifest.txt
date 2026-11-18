@@ -552,3 +552,6 @@ tests/test_bot_profile_texts.py
 tests/test_bot_crypto_rate_settings.py
 tests/test_bot_topup_presets.py
 tests/test_bot_payment_destinations.py
+# PostgreSQL test isolation (one schema or database per test) and the PostgreSQL-only check.
+tests/test_postgres_support.py
+tests/test_postgres_only_check.py
