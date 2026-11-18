@@ -27,10 +27,6 @@ NEW_SHOP_KEYS = (
     "user_alert_time_text",
     "user_alert_traffic_text",
     "first_use_nudge_enabled",
-    "action_center_expire_days",
-    "one_tap_renew_enabled",
-    "capacity_warn_pct",
-    "funnel_tracking_enabled",
     "trial_min_account_minutes",
     "service_import_enabled",
     "service_import_mode",
@@ -55,6 +51,10 @@ NEW_SHOP_KEYS = (
     "referral_bonus",
 )
 OWNER_ONLY_KEYS = (
+    "action_center_expire_days",
+    "one_tap_renew_enabled",
+    "capacity_warn_pct",
+    "funnel_tracking_enabled",
     "pg_link_watchdog_enabled",
     "pg_link_alerts_enabled",
     "service_import_paths",
@@ -197,7 +197,7 @@ class ScreenTests(ShopEditHarness):
             await reseller_settings._render_notify(callback, MagicMock(), SHOP_ID)
         markup = edited.await_args.kwargs["reply_markup"]
         callbacks = {b.callback_data for row in markup.inline_keyboard for b in row}
-        for sub_id in ("daily", "usage_alerts", "operations"):
+        for sub_id in ("daily", "usage_alerts"):
             self.assertIn(f"res:st:sub:notify:{sub_id}", callbacks)
 
     async def test_import_screen_shows_the_current_choice(self) -> None:
@@ -208,7 +208,7 @@ class ScreenTests(ShopEditHarness):
         self.assertIn("با تأیید ادمین", buttons["res:st:sel:service_import_mode"])
 
     async def test_number_prompt_shows_the_range(self) -> None:
-        callback = MagicMock(data="res:st:edit:capacity_warn_pct", answer=AsyncMock(), message=MagicMock())
+        callback = MagicMock(data="res:st:edit:user_alert_low_time_pct", answer=AsyncMock(), message=MagicMock())
         with (
             self.gate(),
             patch.object(reseller_settings, "get_setting", AsyncMock(return_value="80")),
@@ -217,7 +217,7 @@ class ScreenTests(ShopEditHarness):
             await reseller_settings.settings_edit_ask(callback, AsyncMock(), MagicMock(), SimpleNamespace(id=1))
         prompt = asked.await_args.kwargs["prompt"]
         self.assertIn("1", prompt)
-        self.assertIn("100", prompt)
+        self.assertIn("99", prompt)
 
 
 if __name__ == "__main__":

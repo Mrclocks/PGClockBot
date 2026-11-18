@@ -63,7 +63,6 @@ from app.services.service_import_config import (
 from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
 from app.services.settings_operation_fields import (
     AUTO_APPROVE_AFTER_FIELDS,
-    OPERATIONS_FIELDS,
     RECEIPT_MATCH_FIELDS,
     SALES_STATE_FIELDS,
     STARS_FIELDS,
@@ -292,7 +291,6 @@ SECTIONS: dict[str, dict] = {
                 ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، به وقت تهران)", "number"),
             ]),
             ("usage_alerts", "هشدار سرویس کاربر", USAGE_ALERT_FIELDS),
-            ("operations", "گزارش و عملیات", OPERATIONS_FIELDS),
         ],
     },
     # Own shop bot token only — never platform BOT_TOKEN.

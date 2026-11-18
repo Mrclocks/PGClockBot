@@ -1343,8 +1343,10 @@ CUSTOM_SERVICE_NAME_GROUP = "نام دلخواه سرویس"
 MONITOR_ADMIN_TEXTS_GROUP = "متن‌های مدیریت وضعیت اتصال"
 # The one panel link is watched and reported platform-wide; a shop value would change nothing.
 PG_LINK_HEALTH_GROUP = "سلامت ارتباط پاسارگارد"
+# Action center, one-tap renew, capacity warning and funnel tracking are the Owner's operations settings.
+OPERATIONS_GROUP = "گزارش و عملیات"
 PLATFORM_ONLY_SETTING_GROUPS: frozenset[str] = frozenset(
-    {CUSTOM_SERVICE_NAME_GROUP, MONITOR_ADMIN_TEXTS_GROUP, PG_LINK_HEALTH_GROUP}
+    {CUSTOM_SERVICE_NAME_GROUP, MONITOR_ADMIN_TEXTS_GROUP, PG_LINK_HEALTH_GROUP, OPERATIONS_GROUP}
 )
 
 SETTING_GROUPS = {
@@ -1676,7 +1678,7 @@ SETTING_GROUPS = {
             "به مالک تلگرام اطلاع می‌دهد وقتی لینک حدود یک دقیقه قطع بماند و بعد از بازیابی پایدار دوباره برقرار شود. قطع لحظه‌ای پیام نمی‌دهد؛ حداکثر یک پیام قطع در ۳۰ دقیقه. پیش‌فرض روشن است.",
         ),
     ],
-    "گزارش و عملیات": [
+    OPERATIONS_GROUP: [
         (
             "action_center_expire_days",
             "پنجره سرویس‌های نزدیک انقضا (روز)",
@@ -2172,7 +2174,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],
     "billing": ["مدیریت PAYG"],
-    "notifications": ["هشدار سرویس کاربر", "گزارش و عملیات", PG_LINK_HEALTH_GROUP],
+    "notifications": ["هشدار سرویس کاربر", OPERATIONS_GROUP, PG_LINK_HEALTH_GROUP],
     "daily_report": ["گزارش روزانه"],
     "backup": ["بکاپ زمان‌بندی", "ارسال بکاپ به تلگرام"],
     "pwa": [],

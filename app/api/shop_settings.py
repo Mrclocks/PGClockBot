@@ -342,14 +342,6 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             )
             ctx["notify_items"] = shop_notify_catalog(perms)
             ctx["notify_prefs"] = await get_shop_notify_prefs(session, rid)
-            # Ops/capacity keys are Owner-only — keep shop notifications = user alerts.
-            groups = {
-                name: fields
-                for name, fields in groups.items()
-                if name == "هشدار سرویس کاربر"
-            }
-            ctx["groups"] = groups
-            ctx["tab_groups"] = list(groups.keys())
         elif tab == "daily_report":
             from app.services.daily_report import (
                 ACTOR_SHOP,
