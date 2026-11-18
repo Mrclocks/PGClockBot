@@ -104,6 +104,9 @@ BOT_SETTINGS_OUTSIDE_WEB_TABS: dict[str, str] = {
 # Web settings the bots edit outside the settings field lists, and where.
 BOT_OTHER_EDITORS: dict[str, str] = {
     "menu_layout": "تنظیمات › ظاهر منو › چیدمان کیبورد",
+    **{key: "پرداخت › کارت، درگاه لینک یا رمزارز › فهرست (ویرایشگر pde:*)" for key in (
+        "payment_cards", "payment_gateways", "payment_crypto_wallets",
+    )},
     "connection_guides": "تنظیمات › آموزش اتصال (ویرایشگر آموزش‌ها، gde:*)",
 }
 
@@ -113,6 +116,7 @@ WEB_ONLY_SETTINGS: dict[str, str] = {
     "admin_daily_report_template": "انتخاب‌گر متغیر و پیش‌نمایش گزارش",
     "service_import_paths": "مسیرهای پنل واحد؛ فقط مالک در وب",
     "service_import_admins": "ادمین‌های پنل واحد؛ فقط مالک در وب",
+    "psp_gateways": "امنیت: کلید مرچنت هر درگاه API فقط در فرم وب",
     # From a chat, these would let one stolen Telegram account send every backup and secret away.
     **{key: "امنیت: گیرنده، توکن و .env بکاپ فقط در وب" for key in (
         "backup_include_env_scheduled", "backup_telegram_allow_env", "backup_telegram_custom_bot",
@@ -121,18 +125,10 @@ WEB_ONLY_SETTINGS: dict[str, str] = {
 }
 
 # Web settings the owner bot cannot edit yet: open work, shrinking as the bot catches up.
-OWNER_BOT_GAPS: dict[str, str] = {
-    **{key: "فهرست چندتایی مقصدهای پرداخت" for key in (
-        "payment_cards", "payment_gateways", "psp_gateways", "payment_crypto_wallets",
-    )},
-}
+OWNER_BOT_GAPS: dict[str, str] = {}
 
 # Web settings of «/shop-settings» the shop bot cannot edit yet.
-SHOP_BOT_GAPS: dict[str, str] = {
-    **{key: OWNER_BOT_GAPS[key] for key in (
-        "payment_cards", "payment_gateways", "psp_gateways", "payment_crypto_wallets",
-    )},
-}
+SHOP_BOT_GAPS: dict[str, str] = {}
 
 
 def _marketing_keys() -> set[str]:

@@ -104,6 +104,7 @@ from app.services.screen_titles import screen_caption, screen_heading, with_capt
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
 from app.bot.handlers.guide_editor import GUIDES_SECTION
+from app.bot.handlers.payment_destinations_editor import destination_list_rows
 from app.bot.handlers.settings_labels import (
     LABELS_SECTION,
     labels_audience_panel,
@@ -798,6 +799,7 @@ async def _render_sub(callback: CallbackQuery, session: AsyncSession, sec_id: st
             title=title,
             fields=payload,
             back_cb=back,
+            extra_rows=destination_list_rows(sec_id, sub_id, for_reseller=False),
             intro=intro,
         )
         return
@@ -1065,7 +1067,12 @@ async def _settings_location_panel(
     if isinstance(payload, list):
         intro = _bbc_fields_intro(title) if sub_id == "bbc" else None
         return await _fields_panel(
-            session, title=title, fields=payload, back_cb=back, intro=intro
+            session,
+            title=title,
+            fields=payload,
+            back_cb=back,
+            extra_rows=destination_list_rows(sec_id, sub_id, for_reseller=False),
+            intro=intro,
         )
     # menu_layout / menu_order — one Back into that sub (callback still works with nav kept)
     return (

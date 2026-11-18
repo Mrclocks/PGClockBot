@@ -17,6 +17,7 @@ from app.bot.handlers import reply_nav, start
 from app.bot.handlers.admin_settings import SettingsStates
 from app.bot.handlers.guide_editor import OwnerGuideInput, ShopGuideInput
 from app.bot.handlers.loyalty import LoyaltyManageStates
+from app.bot.handlers.payment_destinations_editor import OwnerDestinationInput, ShopDestinationInput
 from app.bot.handlers.plan_catalog_manage import PlanCatalogStates
 from app.bot.handlers.reseller_settings import ResellerSettingsStates
 from app.bot.verbatim_input import VERBATIM_TEXT_INPUT_STATES
@@ -110,6 +111,8 @@ class VerbatimStateNamesTests(unittest.TestCase):
             ShopGuideInput,
             LoyaltyManageStates,
             PlanCatalogStates,
+            OwnerDestinationInput,
+            ShopDestinationInput,
         )
         real = {s.state for group in groups for s in group.__all_states__}
         self.assertEqual(VERBATIM_TEXT_INPUT_STATES - real, set())
