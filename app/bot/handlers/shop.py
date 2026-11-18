@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.trial_offer import may_offer_trial
+from app.services.trial_offer import has_claimed_trial, may_offer_trial, trial_shown_to_claimed
 from app.services.catalog_descriptions import with_descriptions
 from app.services.chat_records import keep_sent
 from app.services.service_scope import list_customer_services
@@ -289,7 +289,8 @@ async def _shop_kind_flags(
     if not trial_setting:
         plans = [p for p in plans if not p.is_trial]
     has_svc = await list_customer_services(session, db_user.id, current_shop_reseller_id(), limit=1)
-    if not may_offer_trial(ui, has_services=bool(has_svc)):
+    hide_for_claimed = not trial_shown_to_claimed(ui) and await has_claimed_trial(session, db_user.id)
+    if hide_for_claimed or not may_offer_trial(ui, has_services=bool(has_svc)):
         plans = [p for p in plans if not p.is_trial]
     fixed_plans = [p for p in plans if not p.is_trial]
     trial_plans = [p for p in plans if p.is_trial]
