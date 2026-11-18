@@ -34,7 +34,7 @@ class PanelLayoutTests(unittest.TestCase):
             _callbacks(markup), ["nv:res:grp:daily", "nv:res:grp:customers", "nv:res:grp:shop", "qlk:v", "menu:home"]
         )
 
-    def test_group_messages_sit_on_the_panel_home_in_their_own_row(self) -> None:
+    def test_group_messages_sit_on_the_panel_home_beside_quick_links(self) -> None:
         from app.bot.handlers.shop_broadcast import CB_HUB
 
         entries = [*ENTRIES, ("res_broadcast", "📢 پیام گروهی")]
@@ -42,7 +42,7 @@ class PanelLayoutTests(unittest.TestCase):
             home = reseller_manage_hub_keyboard(MagicMock(), {})
             shop_group = reseller_group_hub_keyboard("shop", MagicMock(), {})
         rows = [row for row in home.inline_keyboard if any(b.callback_data == CB_HUB for b in row)]
-        self.assertEqual([len(row) for row in rows], [1])
+        self.assertEqual([[b.callback_data for b in row] for row in rows], [[CB_HUB, "qlk:v"]])
         self.assertNotIn(CB_HUB, _callbacks(shop_group))
         self.assertEqual(back_callback_for("res_broadcast"), "nv:res:home")
 

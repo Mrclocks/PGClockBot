@@ -1484,7 +1484,7 @@ def _pack_resplan_detail(
     )
 
 def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
-    from app.services.pg_admin_subscription import is_addon_plan, is_subscription_plan
+    from app.services.pg_admin_subscription import EXTRA_GB, EXTRA_USERS, is_addon_plan, is_subscription_plan, plan_keeps_extra
     from app.services.reseller_capacity import plan_allows_buy_extra
 
     mode = reseller_plan_mode_of(plan)
@@ -1566,15 +1566,15 @@ def _resplan_detail_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
                 )
             ]
         )
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=("✅ " if getattr(plan, "keep_extras_on_renew", True) else "⬜️ ")
-                    + "حفظ اضافه در تمدید",
-                    callback_data=f"adm:resplan:flag:keepextras:{pid}",
-                )
-            ]
-        )
+        for code, kind, label in (("keepgb", EXTRA_GB, "حجم"), ("keepusers", EXTRA_USERS, "کاربر")):
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=("✅ " if plan_keeps_extra(plan, kind) else "⬜️ ") + f"حفظ {label} اضافه در تمدید",
+                        callback_data=f"adm:resplan:flag:{code}:{pid}",
+                    )
+                ]
+            )
         rows.append(
             [
                 InlineKeyboardButton(
@@ -1661,15 +1661,19 @@ async def resplan_toggle(callback: CallbackQuery, session: AsyncSession, db_user
             reply_markup=_resplan_detail_keyboard(plan),
         )
 
+# Toggle code in callback data -> extra kind whose «keep on renew» switch it flips.
+KEEP_EXTRA_FLAGS = {"keepgb": "gb", "keepusers": "users"}
+
+
 @router.callback_query(
-    F.data.regexp(r"^adm:resplan:flag:(pgadmin|sharepg|buyextra|carryperiod|keepextras):\d+$")
+    F.data.regexp(r"^adm:resplan:flag:(pgadmin|sharepg|buyextra|carryperiod|keepgb|keepusers):\d+$")
 )
 @require_bot_owner_handler
 async def resplan_flag_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
-    from app.services.pg_admin_subscription import is_addon_plan, is_subscription_plan
+    from app.services.pg_admin_subscription import is_addon_plan, is_subscription_plan, plan_keeps_extra, set_plan_keeps_extra
 
     parts = callback.data.split(":")
     flag, pid = parts[3], int(parts[4])
@@ -1698,11 +1702,12 @@ async def resplan_flag_toggle(callback: CallbackQuery, session: AsyncSession, db
             await callback.answer("انتقال زمان فقط برای اشتراک ثابت است", show_alert=True)
             return
         plan.carry_remaining_period = not bool(getattr(plan, "carry_remaining_period", True))
-    elif flag == "keepextras":
+    elif flag in KEEP_EXTRA_FLAGS:
         if not is_subscription_plan(plan) or reseller_plan_mode_of(plan) == "payg":
             await callback.answer("حفظ اضافه فقط برای اشتراک ثابت است", show_alert=True)
             return
-        plan.keep_extras_on_renew = not bool(getattr(plan, "keep_extras_on_renew", True))
+        kind = KEEP_EXTRA_FLAGS[flag]
+        set_plan_keeps_extra(plan, kind, not plan_keeps_extra(plan, kind))
     elif flag == "pgadmin":
         plan.create_pg_admin = not bool(plan.create_pg_admin)
         if not plan.create_pg_admin:

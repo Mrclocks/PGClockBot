@@ -25,6 +25,7 @@ from app.services.miniapp_shop import (
     shop_miniapp_state,
 )
 from app.api.payg_plan_form import apply_payg_settings, payg_rate_and_settings
+from app.services.pg_admin_subscription import set_plan_keeps_extras_from_form
 from app.services.shop_credit import credit_overview
 from app.api.pg_panel_access_pages import (
     access_target_from_form,
@@ -1476,7 +1477,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             ),
             renew_price=_parse_nonneg_int(form, "renew_price"),
             carry_remaining_period=bool(form.get("carry_remaining_period")),
-            keep_extras_on_renew=bool(form.get("keep_extras_on_renew")),
             can_approve_receipts="payments" in parse_perms(perms),
             web_permissions=perms,
             bot_permissions=perms,
@@ -1490,6 +1490,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             is_active=bool(form.get("is_active", "1")),
             sort_order=sort_order,
         )
+        set_plan_keeps_extras_from_form(plan, form)
         apply_payg_settings(plan, payg_settings)
         session.add(plan)
         await session.flush()
@@ -1634,7 +1635,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 form, allow_buy_extra=bool(plan.allow_buy_extra)
             )
             plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
-            plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))
+            set_plan_keeps_extras_from_form(plan, form)
             plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
             plan.allow_pg_panel_access = bool(form.get("allow_pg_panel_access"))
             perms = _feature_perms_from_form(form)
@@ -1798,7 +1799,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         plan.allow_pg_panel_access = bool(form.get("allow_pg_panel_access"))
         plan.renew_price = _parse_nonneg_int(form, "renew_price")
         plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
-        plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))
+        set_plan_keeps_extras_from_form(plan, form)
         plan.plan_kind = "subscription"
         plan.duration_days = _parse_nonneg_int(form, "duration_days")
         plan.included_gb = _parse_nonneg_int(form, "included_gb")

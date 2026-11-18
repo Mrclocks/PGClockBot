@@ -259,11 +259,41 @@ def plan_carries_remaining_period(plan: ResellerPlan | None) -> bool:
     return bool(getattr(plan, "carry_remaining_period", True))
 
 
-def plan_keeps_extras_on_renew(plan: ResellerPlan | None) -> bool:
-    """Whether purchased extra GB/user slots survive renew (default yes)."""
+EXTRA_GB = "gb"
+EXTRA_USERS = "users"
+EXTRA_KINDS = (EXTRA_GB, EXTRA_USERS)
+
+
+def plan_keeps_extra(plan: ResellerPlan | None, kind: str) -> bool:
+    """Whether purchased extra GB (``gb``) or user slots (``users``) survive renew (default yes).
+
+    A package that only has the old combined ``keep_extras_on_renew`` uses it for both.
+    """
+    if kind not in EXTRA_KINDS:
+        raise ValueError("نوع ظرفیت اضافه نامعتبر است")
     if plan is None:
         return True
-    return bool(getattr(plan, "keep_extras_on_renew", True))
+    value = getattr(plan, f"keep_extra_{kind}_on_renew", None)
+    if value is None:
+        value = getattr(plan, "keep_extras_on_renew", True)
+    return bool(True if value is None else value)
+
+
+def set_plan_keeps_extra(plan: ResellerPlan, kind: str, keep: bool) -> None:
+    """Set one kind's «keep on renew» switch.
+
+    For one release the combined ``keep_extras_on_renew`` stays true only when both kinds are
+    kept, so a rollback to code that reads it never keeps a kind the admin switched off.
+    """
+    if kind not in EXTRA_KINDS:
+        raise ValueError("نوع ظرفیت اضافه نامعتبر است")
+    setattr(plan, f"keep_extra_{kind}_on_renew", bool(keep))
+    plan.keep_extras_on_renew = all(plan_keeps_extra(plan, k) for k in EXTRA_KINDS)
+
+
+def set_plan_keeps_extras_from_form(plan: ResellerPlan, form: Any) -> None:
+    for kind in EXTRA_KINDS:
+        set_plan_keeps_extra(plan, kind, bool(form.get(f"keep_extra_{kind}_on_renew")))
 
 
 def compute_renew_invoice(
@@ -279,15 +309,16 @@ def compute_renew_invoice(
     If ``allow_buy_extra`` is on, mode is forced to ``from_capacity`` so renew
     cannot undercharge after capacity purchases.
 
-    When ``keep_extras_on_renew`` is off, extras are not billed because renew
-    clears them before the next period starts.
+    Extras the package does not keep (``keep_extra_gb_on_renew`` / ``keep_extra_users_on_renew``
+    off) are not billed, because renew clears them before the next period starts.
     """
     base = renew_base_amount(plan)
-    keep_extras = plan_keeps_extras_on_renew(plan)
+    keep_gb = plan_keeps_extra(plan, EXTRA_GB)
+    keep_users = plan_keeps_extra(plan, EXTRA_USERS)
     raw_extra_gb = int(getattr(sub, "extra_gb_purchased", 0) or 0) if sub else 0
     raw_extra_users = int(getattr(sub, "extra_users_purchased", 0) or 0) if sub else 0
-    extra_gb = raw_extra_gb if keep_extras else 0
-    extra_users = raw_extra_users if keep_extras else 0
+    extra_gb = raw_extra_gb if keep_gb else 0
+    extra_users = raw_extra_users if keep_users else 0
     gb_unit = max(0, int(getattr(plan, "extra_gb_price", 0) or 0)) if plan else 0
     user_unit = max(0, int(getattr(plan, "extra_user_price", 0) or 0)) if plan else 0
     mode = resolve_renew_pricing_mode(plan)
@@ -314,9 +345,10 @@ def compute_renew_invoice(
         "access_status": getattr(sub, "access_status", None) if sub else None,
         "duration_days": max(0, int(getattr(plan, "duration_days", 0) or 0)) if plan else 0,
         "carry_remaining_period": plan_carries_remaining_period(plan),
-        "keep_extras_on_renew": keep_extras,
-        "cleared_extra_gb": 0 if keep_extras else raw_extra_gb,
-        "cleared_extra_users": 0 if keep_extras else raw_extra_users,
+        "keep_extra_gb_on_renew": keep_gb,
+        "keep_extra_users_on_renew": keep_users,
+        "cleared_extra_gb": 0 if keep_gb else raw_extra_gb,
+        "cleared_extra_users": 0 if keep_users else raw_extra_users,
     }
 
 
@@ -897,8 +929,9 @@ def _extend_period(sub: PgAdminSubscription, plan: ResellerPlan, now: datetime) 
     if not is_current_capacity_plan(plan):
         sub.base_gb = max(0, int(getattr(plan, "included_gb", 0) or 0))
         sub.base_users = max(0, int(getattr(plan, "included_users", 0) or 0))
-    if not plan_keeps_extras_on_renew(plan):
+    if not plan_keeps_extra(plan, EXTRA_GB):
         sub.extra_gb_purchased = 0
+    if not plan_keeps_extra(plan, EXTRA_USERS):
         sub.extra_users_purchased = 0
     sub.last_renewed_at = now
     sub.warn_sent_at = None

@@ -41,6 +41,7 @@ from app.services.orders import (
 )
 from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
 from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
+from app.services.renewal_carry import set_plan_carry_from_form
 from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
 from app.services.trial_offer import TRIAL_SERVICE_OWNERS_KEY, parse_trial_placement, save_trial_placement
@@ -97,7 +98,7 @@ from app.services.shop_scope import is_platform_admin, payment_shop_id
 from app.services.button_styles import STYLE_OPTIONS
 from app.services.message_buttons import target_groups as message_button_target_groups
 from app.services.staff_audit import actor_from_staff
-from app.services.usage_alert_messages import ALERT_NUMBER_KEYS, clamp_alert_setting
+from app.services.alert_thresholds import normalize_threshold_form
 from app.services.mobile_bar import load_bar_form, load_bar_order
 from app.services.panel_brand import (
     BRAND_PRESET_CSS,
@@ -2930,9 +2931,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             category_id=category_id,
             owner_reseller_id=owner_id,
             description=description or None,
-            carry_remaining_quota=bool(form.get("carry_remaining_quota")),
             is_active=True,
         )
+        set_plan_carry_from_form(plan, form)
         from app.services.service_addons import (
             apply_plan_extra_rates_from_form,
             replace_plan_scoped_packs_from_form,
@@ -3430,7 +3431,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         plan.sort_order = sort_order
         plan.pg_template_id = tpl
         plan.pg_group_ids = group_csv
-        plan.carry_remaining_quota = bool(form.get("carry_remaining_quota"))
+        set_plan_carry_from_form(plan, form)
         from app.services.orders import parse_naming_form
         from app.services.button_styles import parse_plan_button_style_form
         from app.services.plan_categories import resolve_category_for_plan_write
@@ -5251,8 +5252,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                     from app.services.button_styles import normalize_style
 
                     val = normalize_style(val)
-                if key in ALERT_NUMBER_KEYS:
-                    val = clamp_alert_setting(key, val)
                 if key == "force_join_channel":
                     from app.services.users import normalize_force_join_channel_value
 
@@ -5268,6 +5267,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                     val = normalize_setting_value(key, val)
                 payload[key] = val
+        normalize_threshold_form(payload)
         if tab == "daily_report":
             from app.services.daily_report import (
                 ACTOR_OWNER,
