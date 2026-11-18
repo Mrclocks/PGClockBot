@@ -77,6 +77,11 @@ PGCLOCK_DEFAULT_REPO="https://github.com/Mrclocks/PGClockBot.git"
 UPDATE_PREV_COMMIT=""
 UPDATE_PREV_BRANCH=""
 UPDATE_PREV_SCHEMA=""
+# Guard state for one update run: set between the service stop and a healthy restart.
+UPDATE_STOPPED=0
+UPDATE_SCHEMA_ATTEMPTED=0
+UPDATE_SIGNALLED=""
+UPDATE_LOCK_FD=""
 SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 PY="${SCRIPT_DIR}/.venv/bin/python"
 PIP="${SCRIPT_DIR}/.venv/bin/pip"
@@ -2008,6 +2013,9 @@ restore_previous_code() {
 # $1 = 1 when migrations were attempted.
 update_recover() {
   local schema_attempted="${1:-0}"
+  # Recovery must finish even if the terminal drops while it runs.
+  trap '' HUP INT TERM
+  UPDATE_STOPPED=0
   if [[ "$schema_attempted" -eq 1 ]]; then
     local schema_now
     schema_now="$(db_schema_revision)"
@@ -2035,7 +2043,92 @@ update_recover() {
   return 1
 }
 
+update_lock_path() { echo "${SCRIPT_DIR}/data/.update.lock"; }
+update_marker_path() { echo "${SCRIPT_DIR}/data/.update-in-progress"; }
+
+# One update at a time: two overlapping runs would stop, sync and migrate over each other.
+acquire_update_lock() {
+  mkdir -p "${SCRIPT_DIR}/data"
+  if ! command -v flock >/dev/null 2>&1; then
+    warn "flock not found — cannot guard against two updates at once"
+    return 0
+  fi
+  exec {UPDATE_LOCK_FD}>"$(update_lock_path)"
+  if ! flock -n "$UPDATE_LOCK_FD"; then
+    err "Another update is already running."
+    exec {UPDATE_LOCK_FD}>&-
+    UPDATE_LOCK_FD=""
+    return 1
+  fi
+}
+
+release_update_lock() {
+  if [[ -n "$UPDATE_LOCK_FD" ]]; then
+    exec {UPDATE_LOCK_FD}>&-
+    UPDATE_LOCK_FD=""
+  fi
+}
+
+# none | running | interrupted. The marker survives only when the process was
+# killed without running its exit trap (SIGKILL, power loss).
+update_progress_state() {
+  local marker lock
+  marker="$(update_marker_path)"
+  lock="$(update_lock_path)"
+  [[ -f "$marker" ]] || { echo none; return 0; }
+  if command -v flock >/dev/null 2>&1 && [[ -e "$lock" ]] && flock -n "$lock" true 2>/dev/null; then
+    echo interrupted
+  else
+    echo running
+  fi
+}
+
+# Runs on every exit of an update, including errexit and signals. If the service
+# was stopped and the update never reached a healthy restart, put the old version back.
+update_exit_cleanup() {
+  trap '' HUP INT TERM
+  if [[ "$UPDATE_SIGNALLED" == "HUP" ]]; then
+    # The terminal is gone; keep the outcome readable afterwards.
+    exec >>"${SCRIPT_DIR}/data/update-recover.log" 2>&1
+  fi
+  if [[ "$UPDATE_STOPPED" -eq 1 ]]; then
+    warn "Update did not finish — restoring the previous version"
+    update_recover "$UPDATE_SCHEMA_ATTEMPTED" || true
+  fi
+  rm -f "$(update_marker_path)"
+  release_update_lock
+}
+
+update_guard_begin() {
+  UPDATE_STOPPED=0
+  UPDATE_SCHEMA_ATTEMPTED=0
+  UPDATE_SIGNALLED=""
+  date -u +%Y-%m-%dT%H:%M:%SZ > "$(update_marker_path)"
+  trap 'UPDATE_SIGNALLED=HUP; exit 129' HUP
+  trap 'UPDATE_SIGNALLED=INT; exit 130' INT
+  trap 'UPDATE_SIGNALLED=TERM; exit 143' TERM
+  trap update_exit_cleanup EXIT
+}
+
+update_guard_end() {
+  trap - EXIT HUP INT TERM
+  update_exit_cleanup
+}
+
 cmd_update() {
+  acquire_update_lock || return 1
+  if [[ "$(update_progress_state)" == "interrupted" ]]; then
+    warn "The previous update did not finish — continuing with a fresh update"
+  fi
+  update_guard_begin
+  local rc=0
+  run_update "$@"
+  rc=$?
+  update_guard_end
+  return "$rc"
+}
+
+run_update() {
   # Optional $1 = main|dev (menu passes this; env PGCLOCK_CHANNEL is fallback).
   set_install_channel "${1:-}"
   banner_small "Update (${INSTALL_CHANNEL})"
@@ -2058,6 +2151,7 @@ cmd_update() {
 
   # Stop first: syncing under a live process leaves Python stuck on SIGTERM and
   # makes "Restarting…" hang until TimeoutStopSec.
+  UPDATE_STOPPED=1
   stop_service_if_any
 
   if ! sync_code_to_channel "$INSTALL_CHANNEL" || ! update_prepare_runtime; then
@@ -2067,6 +2161,7 @@ cmd_update() {
   fi
 
   # Migrate while the service is still stopped so the new process does not race init_db.
+  UPDATE_SCHEMA_ATTEMPTED=1
   if ! ensure_db_schema; then
     err "Schema migration failed — not starting the new version."
     update_recover 1
@@ -2088,6 +2183,7 @@ cmd_update() {
     update_recover 1
     return 1
   fi
+  UPDATE_STOPPED=0
 
   # Xray is optional for the panel — run after the port is open so Update is not blocked.
   ensure_monitor_xray || true
@@ -2335,6 +2431,9 @@ cmd_status() {
   banner_small "Status"
   if [[ -f .env ]]; then
     ok ".env present"
+    if [[ "$(update_progress_state)" == "interrupted" ]]; then
+      warn "The last update did not finish (the process was killed). Run: bash pgclock.sh update"
+    fi
     local db_url db_kind web_host
     db_url="$(env_get DATABASE_URL "")"
     case "$db_url" in

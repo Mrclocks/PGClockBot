@@ -192,6 +192,26 @@ panel_service_running() {
     && systemctl is-active --quiet pgclockbot 2>/dev/null
 }
 
+# A running panel keeps its code, but the manager script must be current: an
+# old pgclock.sh has no backup or rollback. Only that one file is replaced; the
+# update itself later syncs the rest. Offline or unreachable: keep the file.
+refresh_manager_script() {
+  local target="${REMOTE_REF:-$REMOTE_BRANCH}" fresh
+  [[ "$target" == -* ]] && return 0
+  if ! timeout 60 git fetch --no-tags -q "$REPO_URL" "$target" 2>/dev/null; then
+    warn "Could not fetch the latest pgclock.sh — using the installed one"
+    return 0
+  fi
+  fresh="$(mktemp "${TMPDIR:-/tmp}/pgclock-manager.XXXXXX")"
+  if git show FETCH_HEAD:pgclock.sh >"$fresh" 2>/dev/null && bash -n "$fresh" 2>/dev/null; then
+    cat "$fresh" >pgclock.sh.new && mv -f pgclock.sh.new pgclock.sh
+    ok "pgclock.sh refreshed (rollback-safe updater)"
+  else
+    warn "Fetched pgclock.sh is not usable — using the installed one"
+  fi
+  rm -f "$fresh" pgclock.sh.new
+}
+
 ensure_repo() {
   if [[ -d "$ROOT" ]]; then
     cd "$ROOT"
@@ -200,6 +220,7 @@ ensure_repo() {
     if [[ -d .git ]]; then
       if panel_service_running; then
         info "Panel service is running — code left as is (Update in the menu applies new code safely)"
+        refresh_manager_script
       else
         git_update
       fi

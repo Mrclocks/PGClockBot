@@ -259,6 +259,63 @@ class SafeUpdateTests(PgclockShellHarness):
         self.assertEqual(self.head(), self.new)
         self.assertEqual([c for c in calls if c.startswith("restart")], [f"restart {self.new[:7]}"])
 
+    def test_hangup_during_update_restores_previous_version(self) -> None:
+        # A dropped SSH session sends SIGHUP; the exit trap must bring the old version back.
+        stubs = UPDATE_STUBS.replace(
+            'ensure_venv() {',
+            'ensure_venv() { [[ "${FAIL_AT:-}" == hangup ]] && kill -HUP $$; ',
+            1,
+        )
+        res = self.run_pgclock(self.install, stubs + "cmd_update main", FAIL_AT="hangup")
+        calls = (self.tmp / "calls.log").read_text(encoding="utf-8").split("\n")[:-1]
+        self.assertEqual(res.returncode, 129, res.stdout + res.stderr)
+        self.assertEqual(self.head(), self.old)
+        self.assertEqual(calls[-1], f"restart {self.old[:7]}")
+        self.assertFalse((self.install / "data" / ".update-in-progress").exists())
+
+    def test_hangup_after_migration_keeps_new_code_and_does_not_restart_old(self) -> None:
+        stubs = UPDATE_STUBS.replace(
+            "ensure_db_schema() {",
+            'ensure_db_schema() { echo 0101 > "$schema_file"; kill -HUP $$; ',
+            1,
+        )
+        res = self.run_pgclock(self.install, stubs + "cmd_update main")
+        calls = (self.tmp / "calls.log").read_text(encoding="utf-8").split("\n")[:-1]
+        self.assertEqual(res.returncode, 129, res.stdout + res.stderr)
+        self.assertEqual(self.head(), self.new)
+        self.assertFalse(any(c.startswith("restart") for c in calls))
+
+    def test_second_update_is_refused_while_one_is_running(self) -> None:
+        if shutil.which("flock") is None:
+            self.skipTest("flock not installed")
+        (self.install / "data").mkdir(exist_ok=True)
+        lock = self.install / "data" / ".update.lock"
+        snippet = (
+            UPDATE_STUBS
+            + f'exec 8>"{lock}"; flock -n 8\n'
+            + '( cmd_update main ) && echo "RC=0" || echo "RC=1"'
+        )
+        res = self.run_pgclock(self.install, snippet)
+        self.assertIn("RC=1", res.stdout)
+        self.assertIn("Another update is already running", res.stdout + res.stderr)
+        self.assertFalse((self.tmp / "calls.log").exists())
+        self.assertEqual(self.head(), self.old)
+
+    def test_leftover_marker_is_reported_as_interrupted_and_cleared_by_update(self) -> None:
+        if shutil.which("flock") is None:
+            self.skipTest("flock not installed")
+        data = self.install / "data"
+        data.mkdir(exist_ok=True)
+        (data / ".update-in-progress").write_text("t\n", encoding="utf-8")
+        (data / ".update.lock").write_text("", encoding="utf-8")
+        before = self.run_pgclock(self.install, "update_progress_state")
+        self.assertEqual(before.stdout.strip().splitlines()[-1], "interrupted")
+        rc, _calls = self.update(MIGRATE_TO="0101")
+        self.assertEqual(rc, 0)
+        self.assertFalse((data / ".update-in-progress").exists())
+        after = self.run_pgclock(self.install, "update_progress_state")
+        self.assertEqual(after.stdout.strip().splitlines()[-1], "none")
+
 
 class BackupBeforeUpdateTests(PgclockShellHarness):
     def setUp(self) -> None:
@@ -362,6 +419,24 @@ class GetShTests(_RepoFixture):
         self.publish("two")
         res = self.run_get(FAKE_ACTIVE="1")
         self.assertEqual(_git(install, "rev-parse", "HEAD"), old)
+        self.assertIn(f"MANAGER head={old}", res.stdout)
+
+    def test_running_panel_gets_fresh_manager_script_but_keeps_other_code(self) -> None:
+        self.publish("one")
+        install = self.clone_install()
+        (self.author / "pgclock.sh").write_text(
+            STUB_MANAGER.replace("MANAGER ", "MANAGER2 "), encoding="utf-8"
+        )
+        self.publish("two")
+        res = self.run_get(FAKE_ACTIVE="1")
+        self.assertIn("MANAGER2 head=", res.stdout)
+        self.assertEqual((install / "VERSION").read_text(encoding="utf-8").strip(), "one")
+
+    def test_running_panel_keeps_installed_manager_when_fetch_fails(self) -> None:
+        old = self.publish("one")
+        self.clone_install()
+        shutil.rmtree(self.origin)
+        res = self.run_get(FAKE_ACTIVE="1")
         self.assertIn(f"MANAGER head={old}", res.stdout)
 
     def test_stopped_panel_is_brought_to_branch_tip(self) -> None:
