@@ -13,12 +13,22 @@ import pytest
 if os.environ.get("TEST_DATABASE_URL", "").strip():
     os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"].strip()
 
-from tests import postgres_support  # noqa: E402  (must follow the DATABASE_URL override)
+try:
+    from tests import postgres_support  # must follow the DATABASE_URL override
+except ModuleNotFoundError:
+    # Lightweight CI jobs (the design-rule checks) install only pytest and run
+    # no database test; everything else installs requirements-dev.txt.
+    postgres_support = None
+else:
+    postgres_support.freeze_template_name()
 
 
 @pytest.fixture(autouse=True)
 def _postgres_database_scope() -> Iterator[None]:
     """Drop the databases a test created through the scoped_* helpers when it ends."""
+    if postgres_support is None:
+        yield
+        return
     scope = postgres_support.begin_scope()
     try:
         yield
@@ -27,4 +37,5 @@ def _postgres_database_scope() -> Iterator[None]:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    postgres_support.end_session()
+    if postgres_support is not None:
+        postgres_support.end_session()

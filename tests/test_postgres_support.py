@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+import secrets
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from sqlalchemy import func, make_url, select, text
@@ -188,6 +190,30 @@ class ScopedDatabaseTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await conn.close()
             await engine.dispose()
+
+
+class StaleTemplateTests(unittest.TestCase):
+    def test_a_fresh_template_of_another_run_is_kept_and_an_old_one_dropped(self) -> None:
+        fresh = postgres_support.TEMPLATE_PREFIX + "fresh" + secrets.token_hex(4)
+        old = postgres_support.TEMPLATE_PREFIX + "old" + secrets.token_hex(4)
+        now = datetime.now(timezone.utc)
+        admin = postgres_support._admin_engine()
+        try:
+            with admin.connect() as conn:
+                for name, built in ((fresh, now), (old, now - postgres_support.STALE_TEMPLATE_AGE * 2)):
+                    conn.execute(text(f'CREATE DATABASE "{name}"'))
+                    comment = postgres_support.TEMPLATE_COMMENT_PREFIX + built.isoformat()
+                    conn.execute(text(f"COMMENT ON DATABASE \"{name}\" IS '{comment}'"))
+                postgres_support._drop_stale_templates(conn, keep=postgres_support.freeze_template_name())
+                left = set(conn.scalars(
+                    text("SELECT datname FROM pg_database WHERE datname IN (:fresh, :old)"),
+                    {"fresh": fresh, "old": old},
+                ))
+                conn.execute(text(f'DROP DATABASE IF EXISTS "{fresh}"'))
+                conn.execute(text(f'DROP DATABASE IF EXISTS "{old}"'))
+        finally:
+            admin.dispose()
+        self.assertEqual(left, {fresh})
 
 
 class PostgresTestCaseTests(PostgresTestCase):

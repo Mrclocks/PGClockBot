@@ -30,6 +30,7 @@ import unittest
 from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar
 
 from sqlalchemy import Engine, create_engine, make_url, text
@@ -51,6 +52,9 @@ DATABASE_PREFIX = "pgct_db_"
 TEMPLATE_PREFIX = "pgct_tmpl_"
 _NAME_TOKEN_BYTES = 8
 _TEMPLATE_HASH_CHARS = 16
+TEMPLATE_COMMENT_PREFIX = "pgclock test template built "
+# Another run may still be cloning a template for other models; leave it this long.
+STALE_TEMPLATE_AGE = timedelta(days=1)
 # Bump when _build_template changes what goes into the template besides the models.
 _TEMPLATE_REVISION = 2
 # Keeps add_shop_users' Telegram ids clear of the ones tests choose.
@@ -138,15 +142,28 @@ def _schema_fingerprint() -> str:
     return hashlib.sha256("\n".join(statements).encode()).hexdigest()[:_TEMPLATE_HASH_CHARS]
 
 
-_template_name: str | None = None
+_frozen_template_name: str | None = None
+_template_ready = False
+
+
+def freeze_template_name() -> str:
+    """Fix the template name for this run from the models as loaded at start-up.
+
+    Called from tests/conftest.py before any test runs, so every xdist worker
+    uses the same template even if a test changes the metadata at runtime.
+    """
+    global _frozen_template_name
+    if _frozen_template_name is None:
+        _frozen_template_name = TEMPLATE_PREFIX + _schema_fingerprint()
+    return _frozen_template_name
 
 
 def _ensure_template() -> str:
     """Return the template database holding the current tables, building it once."""
-    global _template_name
-    if _template_name is not None:
-        return _template_name
-    name = TEMPLATE_PREFIX + _schema_fingerprint()
+    global _template_ready
+    name = freeze_template_name()
+    if _template_ready:
+        return name
     admin = _admin_engine()
     try:
         with admin.connect() as conn:
@@ -159,7 +176,7 @@ def _ensure_template() -> str:
                 conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": _TEMPLATE_LOCK_KEY})
     finally:
         admin.dispose()
-    _template_name = name
+    _template_ready = True
     return name
 
 
@@ -175,20 +192,38 @@ def _build_template(admin_conn: Any, name: str) -> None:
         engine.dispose()
     # Renamed only once complete, so a crash never leaves a half-built template behind.
     admin_conn.execute(text(f"ALTER DATABASE {_quoted(building)} RENAME TO {_quoted(name)}"))
+    built_at = datetime.now(timezone.utc).isoformat()
+    admin_conn.execute(text(f"COMMENT ON DATABASE {_quoted(name)} IS '{TEMPLATE_COMMENT_PREFIX}{built_at}'"))
     _drop_stale_templates(admin_conn, keep=name)
 
 
 def _drop_stale_templates(admin_conn: Any, *, keep: str) -> None:
-    """Remove templates built for older models; one still being cloned is left alone."""
-    stale = admin_conn.scalars(
-        text("SELECT datname FROM pg_database WHERE datname LIKE :prefix AND datname <> :keep"),
+    """Remove templates for other models once they are old enough that no run still clones them."""
+    rows = admin_conn.execute(
+        text(
+            "SELECT datname, shobj_description(oid, 'pg_database') FROM pg_database "
+            "WHERE datname LIKE :prefix AND datname <> :keep"
+        ),
         {"prefix": TEMPLATE_PREFIX + "%", "keep": keep},
     ).all()
-    for old in stale:
+    cutoff = datetime.now(timezone.utc) - STALE_TEMPLATE_AGE
+    for old, comment in rows:
+        built_at = _template_built_at(comment)
+        if built_at is not None and built_at > cutoff:
+            continue
         try:
             admin_conn.execute(text(f"DROP DATABASE IF EXISTS {_quoted(old)}"))
         except DBAPIError:
             logger.warning("could not drop stale test template %s", old, exc_info=True)
+
+
+def _template_built_at(comment: str | None) -> datetime | None:
+    if not comment or not comment.startswith(TEMPLATE_COMMENT_PREFIX):
+        return None
+    try:
+        return datetime.fromisoformat(comment[len(TEMPLATE_COMMENT_PREFIX):])
+    except ValueError:
+        return None
 
 
 def _start_sequences_high(conn: Any) -> None:
