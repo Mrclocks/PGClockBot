@@ -96,6 +96,9 @@ BOT_SETTINGS_OUTSIDE_WEB_TABS: dict[str, str] = {
     "custom_service_name_enabled": "وب: تنظیمات ربات › قالب نام‌گذاری",
     "miniapp_shops_enabled": "وب: تنظیمات ربات › مینی‌اپ (فرم اختصاصی)",
     "miniapp_notice": "وب: تنظیمات ربات › مینی‌اپ (فرم اختصاصی)",
+    **{key: "وب: تنظیمات ربات › هویت ربات (فرم اختصاصی، مستقیم به تلگرام)" for key in (
+        "bot_tg_name", "bot_tg_short_description", "bot_tg_description",
+    )},
 }
 
 # Web settings the bots edit outside the settings field lists, and where.

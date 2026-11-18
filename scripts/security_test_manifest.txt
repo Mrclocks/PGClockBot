@@ -544,3 +544,4 @@ tests/test_shop_bot_settings_parity.py
 tests/test_bot_bbc_enable_check.py
 tests/test_editable_service_notices.py
 tests/test_bot_backup_settings.py
+tests/test_bot_profile_texts.py

@@ -25,6 +25,8 @@ from app.services.support_contacts import (
     upsert_support_contact,
 )
 from app.services.bbc_settlement import ENABLED_KEY as BBC_ENABLED_KEY, bbc_enable_error
+from app.services.bot_appearance import PROFILE_TEXT_FIELDS, update_bot_profile_text
+from app.services.secret_box import reveal_bot_token
 from app.services.receipt_fingerprints import normalize_dup_policy
 from app.services.rich_text import pack_setting_from_message
 from app.services.users import (
@@ -63,7 +65,11 @@ from app.services.service_import_config import (
     KEY_MODE as IMPORT_KEY_MODE,
 )
 from app.services.customer_notice_texts import CLEANUP_BOT_FIELDS, STAFF_ACTION_BOT_FIELDS
-from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
+from app.services.settings_message_texts import (
+    CONNECTION_STATUS_CUSTOMER_TEXTS,
+    MESSAGE_TEXT_SUBS,
+    PROFILE_BOT_FIELDS,
+)
 from app.services.settings_operation_fields import (
     AUTO_APPROVE_AFTER_FIELDS,
     RECEIPT_MATCH_FIELDS,
@@ -119,6 +125,7 @@ SECTIONS: dict[str, dict] = {
                 ("referral_text", "متن دعوت", "textarea"),
                 ("referral_bonus", "پاداش دعوت", "number"),
             ]),
+            ("profile", "پروفایل تلگرام ربات", PROFILE_BOT_FIELDS),
             *MESSAGE_TEXT_SUBS,
             ("status_texts", "متن‌های وضعیت اتصال", CONNECTION_STATUS_CUSTOMER_TEXTS),
         ],
@@ -1088,6 +1095,16 @@ async def settings_edit_ask(
     )
 
 
+async def _store_shop_setting(session: AsyncSession, profile, key: str, value: str) -> None:
+    """Save one setting of the shop; its own bot's Telegram profile texts are pushed to Telegram first."""
+    if key in PROFILE_TEXT_FIELDS:
+        await update_bot_profile_text(
+            session, token=reveal_bot_token(profile.bot_token), key=key, value=value, reseller_id=profile.user_id
+        )
+        return
+    await set_setting(session, key, value, reseller_id=profile.user_id)
+
+
 def _shop_setting_value(key: str, message: Message) -> str:
     """The stored form of a typed shop setting: the same normalisation the owner bot and the web apply."""
     if key == "force_join_channel":
@@ -1130,7 +1147,11 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
             return
     else:
         text = _shop_setting_value(key, message)
-    await set_setting(session, key, text, reseller_id=profile.user_id)
+    try:
+        await _store_shop_setting(session, profile, key, text)
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
     await _close_input_to_location(message, state, session, profile, note=feedback.SAVED_WITH_ICON)
 
 

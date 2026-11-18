@@ -67,7 +67,7 @@ class BotButtonLabelCoverageTests(unittest.TestCase):
             # «نام و متن‌ها» holds message texts only; button labels live in their own section.
             self.assertEqual(
                 {s[0] for s in sections["shop"]["subs"]} - {"invite"},
-                {"identity", "texts", "guide_texts", "result_texts", "status_texts"},
+                {"identity", "texts", "profile", "guide_texts", "result_texts", "status_texts"},
             )
             sub_ids = {s[0] for s in sections["labels"]["subs"]}
             self.assertIn("btn_main", sub_ids)
