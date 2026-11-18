@@ -136,8 +136,9 @@ SECTIONS: dict[str, dict] = {
                 *BTN_PAY_GATEWAY,
             ]),
             ("psp", "درگاه API", [
-                ("psp_provider", "ارائه‌دهنده (zarinpal/sunpay/tonpays/mock)", "text"),
+                ("psp_provider", "ارائه‌دهنده (zarinpal/sunpay/tonpays/gemini/mock)", "text"),
                 ("psp_merchant_id", "مرچنت / کلید API", SECRET),
+                ("gemini_model", "مدل Gemini (gemini-1.5-flash/gemini-1.5-pro)", "text"),
                 ("psp_pay_url", "آدرس پایه سان‌پی (PAY_URL)", "text"),
                 ("psp_sunpay_request_method", "روش /api/request سان‌پی (GET/POST)", "text"),
                 ("psp_checkout_link_mode", "لینک دکمهٔ درگاه (direct/panel)", "text"),

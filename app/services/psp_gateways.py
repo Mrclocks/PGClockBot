@@ -17,7 +17,7 @@ from typing import Any
 KEY_PSP_GATEWAYS = "psp_gateways"
 LEGACY_GATEWAY_ID = "default"
 MAX_PSP_GATEWAYS = 8
-PROVIDERS = ("zarinpal", "sunpay", "tonpays", "mock")
+PROVIDERS = ("zarinpal", "sunpay", "tonpays", "gemini", "mock")
 REQUEST_METHODS = ("GET", "POST")
 DEFAULT_GATEWAY_NAME = "درگاه آنلاین"
 

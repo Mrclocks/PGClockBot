@@ -7,6 +7,7 @@ from app.services.payment_providers.mock_psp import MockPspAdapter
 from app.services.payment_providers.sunpay import SunPayAdapter
 from app.services.payment_providers.tonpays import TonPaysAdapter, verify_tonpays_webhook
 from app.services.payment_providers.zarinpal import ZarinpalAdapter
+from app.services.payment_providers.gemini import GeminiAdapter
 
 
 def get_psp_adapter(provider: str, *, ui: dict, public_base_url: str) -> PspAdapter:
@@ -30,5 +31,10 @@ def get_psp_adapter(provider: str, *, ui: dict, public_base_url: str) -> PspAdap
         return TonPaysAdapter(
             api_key=str(ui.get("psp_merchant_id") or ""),
             webhook_secret=str(ui.get("tonpays_webhook_secret") or ""),
+        )
+    if name == "gemini":
+        return GeminiAdapter(
+            api_key=str(ui.get("psp_merchant_id") or ""),
+            model=str(ui.get("gemini_model") or "gemini-1.5-flash"),
         )
     raise ValueError(f"unknown psp provider: {name}")
