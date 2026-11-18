@@ -29,6 +29,7 @@ PLATFORM_ONLY_BTN_KEYS: frozenset[str] = frozenset(
         "btn_adm_preview",
         "btn_adm_edit_mode",
         "btn_adm_quick_links",
+        "btn_adm_command_center",
         "btn_adm_hub_ops",
         "btn_adm_hub_people",
         "btn_adm_hub_product",
@@ -137,6 +138,7 @@ BTN_ADMIN_HUBS: list[Field] = [
     ("btn_adm_hub_system", "گروه سیستم", "text"),
     ("btn_adm_edit_mode", "حالت ویرایش منوها", "text"),
     ("btn_adm_quick_links", "لینک‌های سریع", "text"),
+    ("btn_adm_command_center", "مرکز فرمان", "text"),
 ]
 
 BTN_ADMIN_HUB_ITEMS: list[Field] = [
@@ -261,6 +263,7 @@ BTN_RESELLER_GROUPS: list[Field] = [
     ("btn_res_grp_shop", "گروه فروشگاه من", "text"),
     ("btn_res_grp_account", "گروه حساب من", "text"),
     ("btn_res_quick_links", "لینک‌های سریع", "text"),
+    ("btn_res_command_center", "مرکز فرمان", "text"),
 ]
 
 BTN_RESELLER_HUB: list[Field] = [

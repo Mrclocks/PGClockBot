@@ -12,6 +12,9 @@ TRIAL_USERS_CALLBACK = "tru:l:all:0"
 STAFF_AUDIT_CALLBACK = "saud:l:0"
 SERVICE_SHOP_REVIEW_CALLBACK = "ssr:l:0"
 QUICK_LINKS_CALLBACK = "qlk:v"
+COMMAND_CENTER_CALLBACK = "cmd:h"
+# The same search, opened from the settings hub: results start on the settings.
+COMMAND_CENTER_SETTINGS_CALLBACK = "cmd:hs"
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,4 +35,6 @@ ADMIN_STAFF_AUDIT = HubEntry("btn_adm_staff_audit", STAFF_AUDIT_CALLBACK, "🧾 
 SHOP_STAFF_AUDIT = HubEntry("btn_res_staff_audit", STAFF_AUDIT_CALLBACK, "🧾 گزارش کارکنان")
 ADMIN_QUICK_LINKS = HubEntry("btn_adm_quick_links", QUICK_LINKS_CALLBACK, "🔗 لینک‌های سریع")
 SHOP_QUICK_LINKS = HubEntry("btn_res_quick_links", QUICK_LINKS_CALLBACK, "🔗 لینک‌های سریع")
+ADMIN_COMMAND_CENTER = HubEntry("btn_adm_command_center", COMMAND_CENTER_CALLBACK, "⚡ مرکز فرمان")
+SHOP_COMMAND_CENTER = HubEntry("btn_res_command_center", COMMAND_CENTER_CALLBACK, "⚡ مرکز فرمان")
 SERVICE_SHOP_REVIEW = HubEntry("btn_adm_service_shop_review", SERVICE_SHOP_REVIEW_CALLBACK, "🏷 تعیین فروشگاه سرویس")
