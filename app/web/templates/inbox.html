@@ -86,6 +86,19 @@
 </div>
 {% endif %}
 
+{% if customer_alerts_off %}
+<div class="flash warn home-update-banner inbox-alert-row">
+  <div class="home-update-copy">
+    <strong>هشدار کمبود سرویس برای مشتریان خاموش است</strong>
+    <span class="muted">مشتری پیش از تمام شدن زمان یا حجم سرویسش پیامی نمی‌گیرد. اگر نمی‌خواهید روشنش کنید، این اعلان را حذف کنید.</span>
+  </div>
+  <div class="inbox-alert-actions">
+    <a class="btn btn-sm btn-ghost" href="{{ customer_alerts_off }}">روشن کردن هشدار</a>
+    {{ inbox_dismiss_btn('customer_alerts_off') }}
+  </div>
+</div>
+{% endif %}
+
 {% if pr.suspended %}
 <div class="flash err home-update-banner inbox-alert-row">
   <div class="home-update-copy">

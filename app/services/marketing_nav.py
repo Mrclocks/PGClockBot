@@ -111,6 +111,20 @@ def _can_open_shop_broadcast(staff: Mapping[str, Any]) -> bool:
         return False
 
 
+def group_message_page(staff: Mapping[str, Any] | None) -> str | None:
+    """The group-message page this staff member may open (the platform or their shop), or None."""
+    if not staff:
+        return None
+    if _can_open_broadcast(staff):
+        return _BROADCAST_SECTION.href
+    return _SHOP_BROADCAST_SECTION.href if _can_open_shop_broadcast(staff) else None
+
+
+def can_open_campaigns(staff: Mapping[str, Any] | None) -> bool:
+    """Same rule as the campaigns page, which now opens from the group-message page."""
+    return bool(staff) and _can_open_feature(staff, "campaigns")
+
+
 def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSection, ...]:
     """Sections the staff member can open, in display order. Empty when unauthenticated."""
     if not staff:
@@ -152,11 +166,12 @@ class MarketingGroup:
         return self.sections[0].href
 
 
-# (group key, label, section keys in display order)
+# (group key, label, section keys in display order). Group messages are not listed: they have their own sidebar entry
+# (panel_nav.BROADCAST_KEY), and campaigns open from the group-message page for staff who may open it.
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("club", "باشگاه مشتریان", (CLUB, CLUB_TRANSACTIONS)),
     ("offers", "تخفیف و کد هدیه", (DISCOUNTS, RANDOM_DISCOUNTS, GIFT_CODES, CASHBACK)),
-    ("messages", "پیام و کمپین", (BROADCAST, SHOP_BROADCAST, CAMPAIGNS)),
+    ("campaigns", "کمپین‌ها", (CAMPAIGNS,)),
     ("trials", "کاربران تست", (TRIAL_USERS,)),
     ("funnel", "رفتار کاربر", (FUNNEL,)),
 )
@@ -165,6 +180,9 @@ _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 def marketing_groups(sections: tuple[MarketingSection, ...]) -> tuple[MarketingGroup, ...]:
     """Group the sections a staff member may open; a group with none of them is left out."""
     by_key = {s.key: s for s in sections}
+    if BROADCAST in by_key or SHOP_BROADCAST in by_key:
+        # Campaigns open from the group-message page instead.
+        by_key.pop(CAMPAIGNS, None)
     groups = []
     for key, label, members in _GROUP_LAYOUT:
         allowed = tuple(by_key[m] for m in members if m in by_key)
@@ -196,8 +214,8 @@ SECTION_ICONS: dict[str, str] = {
     GIFT_CODES: "gift",
     CASHBACK: "wallet",
     CAMPAIGNS: "megaphone",
-    BROADCAST: "megaphone",
-    SHOP_BROADCAST: "megaphone",
+    BROADCAST: "broadcast",
+    SHOP_BROADCAST: "broadcast",
     TRIAL_USERS: "users",
     FUNNEL: "sales",
 }

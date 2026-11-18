@@ -932,6 +932,9 @@ class BroadcastLog(Base):
     # None = platform/owner broadcast; a shop id never shares history or audience with another shop.
     shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
     audience: Mapped[str] = mapped_column(String(32), default="all")
+    # Segment, filters and reference time as broadcast_audience.AudienceSpec JSON; NULL on rows queued before
+    # filters existed, which keep their ``audience`` key.
+    audience_spec: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     text: Mapped[str] = mapped_column(Text)
     # Buttons under the message, as message_buttons.dump_buttons wrote them; validated again before sending.
     buttons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -2491,6 +2494,18 @@ class ShopBroadCampaignDay(Base):
 
     __tablename__ = "shop_broad_campaign_days"
     __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_broad_campaign_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")
+
+
+class ShopTargetedMessageDay(Base):
+    """How many group messages and campaigns to a narrower segment a shop sent on one UTC day (daily cap)."""
+
+    __tablename__ = "shop_targeted_message_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_targeted_message_days_shop_day"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     shop_id: Mapped[int] = mapped_column(Integer)

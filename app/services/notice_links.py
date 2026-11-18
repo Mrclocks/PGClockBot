@@ -48,6 +48,14 @@ NOTICE_SCREENS: frozenset[str] = frozenset({
     "nv:loy:home",
     "svc:list",
     "shop:list",
+    # Customer screens a group message button may open (message_buttons.SCREENS).
+    "shop:kind:trial",
+    "shop:kind:custom",
+    "nv:w:topup",
+    "nv:loy:ref",
+    "nv:loy:wheel",
+    "help:guide",
+    "help:faq",
 })
 
 

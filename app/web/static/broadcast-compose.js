@@ -1,0 +1,128 @@
+/* Group-message composer: keeps the segment tab on the chosen segment's group, shows each segment's default day
+   window, and asks the server how many people the audience reaches (debounced; the latest answer wins). The send
+   button and the confirm dialog say the count. The server validates and counts again on send. */
+(function (root) {
+  "use strict";
+
+  const DEBOUNCE_MS = 300;
+  const AUDIENCE_FIELDS = ["segment", "days", "plan_id", "min_wallet"];
+
+  function faInt(value) {
+    const numbers = root.PanelNumbers;
+    return numbers && numbers.formatInt ? numbers.formatInt(value) : String(Math.round(Number(value) || 0));
+  }
+
+  /** Query string of the audience fields that are set (``notice`` only when switched on). */
+  function audienceQuery(values) {
+    const params = new URLSearchParams();
+    AUDIENCE_FIELDS.forEach((name) => {
+      const value = String((values && values[name]) || "").trim();
+      if (value) params.set(name, value);
+    });
+    if (values && values.notice) params.set("notice", "1");
+    return params.toString();
+  }
+
+  /** Text of the send button for ``count`` recipients (null while unknown). */
+  function sendLabel(count) {
+    if (count == null) return "ارسال پیام";
+    if (count <= 0) return "مخاطبی ندارد";
+    return "ارسال برای " + faInt(count) + " نفر";
+  }
+
+  /** The confirm dialog's question for this audience. */
+  function confirmText(label, count) {
+    const who = label ? "«" + label + "»" : "گروه انتخاب‌شده";
+    const size = count == null ? "" : " (" + faInt(count) + " نفر)";
+    return "پیام برای " + who + size + " در صف ارسال قرار بگیرد؟ پیامِ فرستاده‌شده پس گرفته نمی‌شود.";
+  }
+
+  /** Hint under the day field for a segment whose default window is ``days``. */
+  function daysHint(days) {
+    return days ? "خالی بماند: " + faInt(days) + " روز" : "";
+  }
+
+  function bind(form) {
+    const segment = form.querySelector("#bc-segment");
+    const group = form.querySelector("[data-bc-group]");
+    const days = form.querySelector("[data-bc-days]");
+    const daysHintEl = form.querySelector("[data-bc-days-hint]");
+    const reach = form.querySelector("[data-bc-reach]");
+    const countEl = form.querySelector("[data-bc-count]");
+    const labelEl = form.querySelector("[data-bc-label]");
+    const send = form.querySelector("[data-bc-send]");
+    const notice = form.querySelector("#bc-notice");
+    const url = form.getAttribute("data-audience-url");
+    if (!segment || !reach || !url) return;
+    let timer = null;
+    let seq = 0;
+
+    function values() {
+      const out = { segment: segment.value, notice: Boolean(notice && notice.checked) };
+      // The panel moves a select's name onto a mirror input; the control itself keeps the value.
+      form.querySelectorAll("[data-bc-days], [data-bc-filter]").forEach((el) => {
+        const name = el.getAttribute("name") || el.getAttribute("data-ui-select-name");
+        if (name && !el.closest("[hidden]")) out[name] = el.value;
+      });
+      return out;
+    }
+
+    function show(state, count, label) {
+      reach.classList.toggle("is-loading", state === "loading");
+      reach.classList.toggle("is-error", state === "error");
+      countEl.textContent = state === "ok" ? faInt(count) : "…";
+      labelEl.textContent = label;
+      if (send) {
+        send.textContent = sendLabel(state === "ok" ? count : null);
+        send.disabled = state === "ok" && count <= 0;
+      }
+      form.setAttribute("data-confirm", confirmText(state === "ok" ? label : "", state === "ok" ? count : null));
+    }
+
+    async function refresh() {
+      const mine = ++seq;
+      show("loading", null, "در حال شمارش مخاطبان…");
+      try {
+        const response = await fetch(url + "?" + audienceQuery(values()), { credentials: "same-origin", headers: { Accept: "application/json" } });
+        const data = await response.json();
+        if (mine !== seq) return;
+        if (!response.ok) show("error", null, data.error || "شمارش انجام نشد");
+        else show("ok", data.count, data.label || "");
+      } catch (_err) {
+        if (mine === seq) show("error", null, "شمارش انجام نشد؛ اتصال را بررسی کنید.");
+      }
+    }
+
+    function schedule() {
+      clearTimeout(timer);
+      timer = setTimeout(refresh, DEBOUNCE_MS);
+    }
+
+    function syncSegment() {
+      const option = segment.selectedOptions[0];
+      if (!option) return;
+      if (group && group.value !== option.getAttribute("data-group")) {
+        group.value = option.getAttribute("data-group");
+        group.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      if (days) days.placeholder = faInt(option.getAttribute("data-days") || 0);
+      if (daysHintEl) daysHintEl.textContent = daysHint(Number(option.getAttribute("data-days")));
+    }
+
+    segment.addEventListener("change", () => { syncSegment(); schedule(); });
+    form.addEventListener("input", (event) => { if (event.target.matches("[data-bc-days], [data-bc-filter]")) schedule(); });
+    form.addEventListener("change", (event) => { if (event.target.matches("[data-bc-filter], #bc-notice")) schedule(); });
+    syncSegment();
+    refresh();
+  }
+
+  const api = { audienceQuery, sendLabel, confirmText, daysHint, bind };
+  if (typeof module === "object" && module.exports) {
+    module.exports = api;
+  } else {
+    root.BroadcastCompose = api;
+    const start = () => document.querySelectorAll("[data-bc-form]").forEach(bind);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+    else start();
+  }
+})(typeof window !== "undefined" ? window : globalThis);

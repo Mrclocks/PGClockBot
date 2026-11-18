@@ -73,7 +73,8 @@ class KeyboardMenu357Tests(unittest.TestCase):
         self.assertIn("🛠 سیستم", flat)
         self.assertNotIn("👥 کاربران", flat)
         self.assertNotIn("⚙️ تنظیمات", flat)
-        self.assertNotIn("📢 پیام گروهی", flat)
+        # Group messages sit at the top level of the admin panel, not inside a group.
+        self.assertIn("📢 پیام گروهی", flat)
         self.assertNotIn("📊 داشبورد", flat)
 
 
