@@ -65,6 +65,18 @@ STARS_FIELDS: list[Field] = [
     ("stars_description", "توضیح فاکتور", "text"),
 ]
 
+# Same keys as the web «رمزارز» conversion settings; the shop's own copy in the shop bot.
+CRYPTO_RATE_FIELDS: list[Field] = [
+    ("crypto_rate_mode", "تبدیل تومان به رمزارز", "select"),
+    ("crypto_rate_asset", "ارز مبنای تبدیل", "text"),
+    ("crypto_rate_manual", "نرخ دستی (تومان برای هر واحد)", "text"),
+    ("crypto_rate_api_url", "آدرس API نرخ (HTTPS)", "text"),
+    ("crypto_rate_api_path", "مسیر عدد در JSON", "text"),
+    ("crypto_rate_api_divisor", "تقسیم‌کنندهٔ نرخ API", "number"),
+    ("crypto_rate_margin_percent", "حاشیه روی مبلغ (٪)", "text"),
+    ("crypto_quote_minutes", "اعتبار نرخ (دقیقه)", "number"),
+]
+
 TRIAL_MIN_AGE_FIELD: Field = ("trial_min_account_minutes", "حداقل سن حساب (دقیقه، ۰ = خاموش)", "number")
 
 # Whole-number bounds of the fields above.

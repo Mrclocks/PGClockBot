@@ -25,6 +25,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Payment, PaymentStatus
+from app.services.numbers import normalize_digits
 from app.services.url_safety import UnsafeUrlError, ensure_host_resolves_public, validate_public_https_url
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,46 @@ def config_from_settings(settings: Mapping[str, str]) -> RateConfig | None:
         margin_bps=int(margin * 100) if margin else 0,
         quote_minutes=_bounded_int(settings.get(MINUTES_KEY), default=DEFAULT_MINUTES, low=MIN_MINUTES, high=MAX_MINUTES),
     )
+
+
+# Optional texts a bot admin clears by typing one of these.
+CLEAR_WORDS = frozenset({"-", "پیش‌فرض", "پیشفرض"})
+_PATH = re.compile(r"^[A-Za-z0-9_-]{1,64}(\.[A-Za-z0-9_-]{1,64}){0,%d}$" % (MAX_PATH_PARTS - 1))
+_DECIMAL_HINT = "با رقم و حداکثر ۶ رقم اعشار بفرستید؛ مثلاً 98500 یا 1.5"
+
+
+def normalize_rate_setting(key: str, raw: object) -> str:
+    """The stored form of one typed conversion setting; ``ValueError`` carries a Persian message.
+
+    The same rules ``config_from_settings`` and the rate job apply when they read the value, so a
+    value saved from the bot is never silently ignored later.
+    """
+    text = str(raw or "").strip()
+    if key in (MANUAL_KEY, MARGIN_KEY):
+        # Persian digits and thousand separators, as in every other bot number field.
+        text = normalize_digits(text)
+    if key in (MANUAL_KEY, URL_KEY, PATH_KEY) and text in CLEAR_WORDS:
+        return ""
+    if key == ASSET_KEY:
+        if not _ASSET.match(text):
+            raise ValueError("نماد ارز ۲ تا ۱۶ حرف یا رقم انگلیسی است؛ مثلاً USDT")
+        return text.upper()
+    if key == MANUAL_KEY:
+        if parse_decimal(text) is None:
+            raise ValueError(f"نرخ دستی (تومان) را {_DECIMAL_HINT}")
+        return text
+    if key == MARGIN_KEY:
+        if text != "0" and parse_decimal(text, maximum=Decimal(20)) is None:
+            raise ValueError(f"حاشیه بین ۰ و ۲۰ درصد است؛ {_DECIMAL_HINT}")
+        return text
+    if key == URL_KEY:
+        url, _host = validate_public_https_url(text)
+        return url
+    if key == PATH_KEY:
+        if not _PATH.match(text):
+            raise ValueError("مسیر عدد را با نقطه و حروف انگلیسی بفرستید؛ مثلاً data.0.price")
+        return text
+    raise ValueError("این تنظیم قابل ویرایش نیست")
 
 
 def extract_number(payload: object, path: str) -> Decimal:

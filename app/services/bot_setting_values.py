@@ -7,10 +7,14 @@ clamp or crash on. Choice fields list their values with the web's labels.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from app.services import bot_feedback_texts as feedback
 from app.services.approval_rule import MAX_MINUTES as APPROVAL_MAX_MINUTES
 from app.services.backup_settings import KEEP_CHOICES as BACKUP_KEEP_CHOICES, KEEP_KEY as BACKUP_KEEP_KEY
+from app.services import crypto_rates
 from app.services.catalog_pricing import MAX_PRICE
+from app.services.miniapp_branding import NOTICE_SETTING as MINIAPP_NOTICE, normalize_notice
 from app.services.customer_notice_texts import NOTICE_TEXT_KEYS
 from app.services.entry_approval_config import ENTRY_APPROVAL_NUMBER_BOUNDS
 from app.services.message_variables import template_variable_specs
@@ -42,6 +46,8 @@ NUMBER_BOUNDS: dict[str, tuple[int, int]] = {
     "auto_approve_after_max_amount": (0, MAX_PRICE),
     "admin_daily_report_hour": (0, DAILY_REPORT_LAST_HOUR),
     "backup_schedule_hour": (0, 23),
+    crypto_rates.DIVISOR_KEY: (1, 1_000_000),
+    crypto_rates.MINUTES_KEY: (crypto_rates.MIN_MINUTES, crypto_rates.MAX_MINUTES),
     # Money and catalog numbers: never negative, never above the catalog price cap.
     "referral_bonus": (0, MAX_PRICE),
     "stars_toman_per_star": (1, MAX_PRICE),
@@ -64,6 +70,11 @@ UNLIMITED_LABEL = "نامحدود"
 SELECT_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
     IMPORT_KEY_MODE: (("instant", "فوری"), ("approval", "با تأیید ادمین")),
+    crypto_rates.MODE_KEY: (
+        (crypto_rates.MODE_OFF, "خاموش"),
+        (crypto_rates.MODE_MANUAL, "نرخ دستی"),
+        (crypto_rates.MODE_API, "نرخ از API"),
+    ),
     # Same choices as the web; the new count applies when the next backup prunes the old ones.
     BACKUP_KEEP_KEY: tuple((str(count), f"{to_fa_digits(count)} بکاپ") for count in BACKUP_KEEP_CHOICES),
 }
@@ -145,4 +156,27 @@ def text_template_hint(key: str, *, actor: str = "owner") -> str:
         lines.append(f"متغیرها: {tokens}")
     if key in EMPTY_MEANS_DEFAULT_KEYS:
         lines.append("برای برگشت به متن پیش‌فرض بنویسید: «پیش‌فرض»")
+    elif key in CLEARABLE_KEYS:
+        lines.append("برای خالی کردن بنویسید: «-»")
     return "\n".join(lines)
+
+
+# Typed texts saved through their service rule instead of rich-text packing; ValueError = refuse.
+CRYPTO_TEXT_KEYS = (
+    crypto_rates.ASSET_KEY,
+    crypto_rates.MANUAL_KEY,
+    crypto_rates.MARGIN_KEY,
+    crypto_rates.URL_KEY,
+    crypto_rates.PATH_KEY,
+)
+CLEARABLE_KEYS: frozenset[str] = frozenset({crypto_rates.MANUAL_KEY, crypto_rates.URL_KEY, crypto_rates.PATH_KEY})
+
+
+def _crypto_normalizer(key: str) -> Callable[[str], str]:
+    return lambda text: crypto_rates.normalize_rate_setting(key, text)
+
+
+VALUE_NORMALIZERS: dict[str, Callable[[str], str]] = {
+    MINIAPP_NOTICE: normalize_notice,
+    **{key: _crypto_normalizer(key) for key in CRYPTO_TEXT_KEYS},
+}

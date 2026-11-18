@@ -545,3 +545,4 @@ tests/test_bot_bbc_enable_check.py
 tests/test_editable_service_notices.py
 tests/test_bot_backup_settings.py
 tests/test_bot_profile_texts.py
+tests/test_bot_crypto_rate_settings.py
