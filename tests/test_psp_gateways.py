@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import sqlalchemy as sa
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot.handlers.psp_check import psp_gateway_picker
 from app.bot.handlers.shop import _psp_callback_target
@@ -47,6 +44,7 @@ from app.services.users import (
     set_settings_bulk,
 )
 from app.services.wallet_topup import TopupError, start_topup, topup_options
+from tests.postgres_support import add_shop_users, scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 AMOUNT = 70_000
@@ -140,11 +138,11 @@ class ParseAndFormTests(unittest.TestCase):
 class GatewayCheckoutTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 't.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
+        await add_shop_users(self.Session, SHOP_A, SHOP_B)
         self.calls: list[tuple[str, str]] = []
         async with self.Session() as session:
             await set_setting(session, "pay_psp_enabled", "1")
@@ -170,7 +168,6 @@ class GatewayCheckoutTests(unittest.IsolatedAsyncioTestCase):
         for p in self.patches:
             p.stop()
         await self.engine.dispose()
-        self._tmp.cleanup()
         clear_settings_cache()
 
     def _adapter(self, provider: str, *, ui: dict, public_base_url: str) -> FakeAdapter:
@@ -273,7 +270,7 @@ class SettlementGatewayMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("m0071", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text("CREATE TABLE payment_settlements (id INTEGER PRIMARY KEY, provider VARCHAR(32))"))
             conn.execute(text("INSERT INTO payment_settlements VALUES (1, 'zarinpal'), (2, 'sunpay')"))

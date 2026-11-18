@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from tests.template_source import template_with_includes
+from tests.postgres_support import scoped_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -55,14 +56,14 @@ class PaygPlanUiTests(unittest.TestCase):
 class PaygPlanDeleteTests(unittest.IsolatedAsyncioTestCase):
     async def test_deleting_plan_removes_only_its_billing_rate(self):
         from sqlalchemy import select
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         import app.db.models  # noqa: F401
         from app.db import Base
         from app.db.models import ResellerBillingRate, ResellerPlan
         from app.services.plans_catalog import delete_reseller_plan
 
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         sessionmaker = async_sessionmaker(engine, expire_on_commit=False)

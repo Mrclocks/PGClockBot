@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, ShopStaffAction
@@ -17,6 +15,7 @@ from app.services.daily_report import staff_summary
 from app.services.orders import approve_payment, reject_payment
 from app.services.payment_decision_audit import record_free_checkout
 from app.services.staff_audit import ACTOR_SHOP_OWNER, ACTOR_STAFF, actor_from_staff, list_staff_actions
+from tests.postgres_support import scoped_async_engine
 
 SHOP = 10
 OTHER_SHOP = 20
@@ -28,8 +27,7 @@ STAFF_TG = 4040
 
 class DecisionCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'a.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -47,7 +45,6 @@ class DecisionCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def add_order_payment(self, session, *, amount: int = 5000) -> Payment:
         order = Order(user_id=CUSTOMER, reseller_id=SHOP, amount=amount, status=OrderStatus.AWAITING_APPROVAL.value)

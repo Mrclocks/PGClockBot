@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import tempfile
 import time
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -16,7 +15,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import sqlalchemy as sa
 from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import (
     Base,
@@ -44,6 +43,7 @@ from app.services.service_renewals import RenewalPendingReview
 from app.services.stuck_order_resolution import refund_undelivered_order
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
 from app.services.ux20 import count_stuck_paid_orders, list_stuck_paid_orders, retry_delivery
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 GB = 1024**3
 DAY = 86400
@@ -84,8 +84,7 @@ class FakePanel:
 
 class RecoveryFixture(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'recovery.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -117,7 +116,6 @@ class RecoveryFixture(unittest.IsolatedAsyncioTestCase):
         reset_shop_reseller_id(self.shop_token)
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def gateway_renewal(self) -> SimpleNamespace:
         """A renewal paid through a gateway whose settle ran while the panel refused connections."""
@@ -458,11 +456,11 @@ class MigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("auto_retry_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text(
                 "CREATE TABLE delivery_failures (id INTEGER PRIMARY KEY, order_id INTEGER, error TEXT, "
-                "attempts INTEGER, resolved_at DATETIME)"
+                "attempts INTEGER, resolved_at TIMESTAMPTZ)"
             ))
             conn.execute(text("INSERT INTO delivery_failures VALUES (1, 5, 'old', 1, NULL), (2, 6, 'done', 1, '2026-01-01')"))
             with Operations.context(MigrationContext.configure(conn)):

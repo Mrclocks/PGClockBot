@@ -68,6 +68,3 @@ class SubscriptionMigrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(columns["pg_host_id"]["nullable"])
             migration.upgrade()
             self.assertEqual(connection.execute(sa.text("SELECT count(*) FROM connection_monitor_snapshots")).scalar_one(), 2)
-            if connection.dialect.name == "sqlite":
-                self.assertEqual(connection.execute(sa.text("PRAGMA foreign_keys")).scalar_one(), 1)
-                self.assertEqual(connection.execute(sa.text("PRAGMA foreign_key_check")).all(), [])

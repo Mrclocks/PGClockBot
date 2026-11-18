@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import app.db.models  # noqa: F401
 from app.db import Base
@@ -17,6 +17,7 @@ from app.services.billing import (
     tick_reseller_usage,
 )
 from app.services.resellers import create_application, provision_existing_pg_admin
+from tests.postgres_support import scoped_async_engine
 
 
 class RequirePositiveRateTests(unittest.TestCase):
@@ -47,7 +48,7 @@ class ZeroRateTickTests(unittest.IsolatedAsyncioTestCase):
 
 class ZeroRatePlanPurchaseTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

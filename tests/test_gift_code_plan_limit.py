@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,13 +10,14 @@ import httpx
 import sqlalchemy as sa
 from fastapi import FastAPI
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, ChargeCode, Order, Plan
 from app.services.gift_codes import MAX_CODE_PLANS, describe_code, validate_rules
 from app.services.orders import apply_discount, apply_discount_to_order
 from app.services.ux20 import create_charge_code
 from tests.test_gift_code_page import GiftCodeHarness, _reseller
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 SHOP, OTHER_SHOP = 3, 2
 PLAN_50, PLAN_100, PLAN_OTHER, TRIAL, OTHER_SHOP_PLAN, PLATFORM_PLAN = 10, 11, 12, 13, 20, 30
@@ -25,8 +25,7 @@ PLAN_50, PLAN_100, PLAN_OTHER, TRIAL, OTHER_SHOP_PLAN, PLATFORM_PLAN = 10, 11, 1
 
 class PlanLimitedCodeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{self.tmp.name}/test.db")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -46,7 +45,6 @@ class PlanLimitedCodeTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def order(self, session, *, plan_id: int | None, note: str | None = None) -> Order:
         row = Order(user_id=1, amount=100_000, reseller_id=SHOP, status="pending", plan_id=plan_id, note=note)
@@ -140,9 +138,8 @@ class PlanLimitPageTests(GiftCodeHarness):
         from app.api.ux20_pages import register_ux20_pages
 
         async with self.Session() as session:
+            # Shops 5 and 6 come from GiftCodeHarness.
             session.add_all([
-                BotUser(id=5, telegram_id=5, referral_code="s5"),
-                BotUser(id=6, telegram_id=6, referral_code="s6"),
                 Plan(id=PLAN_50, name="پلن <b>پنجاه</b>", price=100_000, owner_reseller_id=5),
                 Plan(id=PLAN_100, name="پلن صد", price=200_000, owner_reseller_id=5, is_active=False),
                 Plan(id=TRIAL, name="تست پنج", price=0, owner_reseller_id=5, is_trial=True),
@@ -208,7 +205,7 @@ class PlanIdsMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("charge_code_plan_ids_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE charge_codes (id INTEGER PRIMARY KEY, code VARCHAR(64))"))
             conn.execute(sa.text("INSERT INTO charge_codes (id, code) VALUES (1, 'KEEP')"))

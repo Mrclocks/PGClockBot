@@ -13,12 +13,11 @@ must never regress.
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 
 def _find_route(app: FastAPI, path: str, method: str):
@@ -35,12 +34,11 @@ class GiftCodeToggleAuthzTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "gifts.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, 42)
 
         from app.api.ux20_pages import register_ux20_pages
 
@@ -58,7 +56,6 @@ class GiftCodeToggleAuthzTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _make_platform_code(self, session, *, active: bool = True):
         from app.db.models import ChargeCode

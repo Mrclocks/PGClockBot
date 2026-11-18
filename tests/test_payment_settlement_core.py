@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from tests.postgres_support import scoped_async_engine
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ["ALLOW_SETTLEMENT_MOCK"] = "1"
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -112,7 +112,7 @@ class SettlementWiringTests(unittest.TestCase):
 
 class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
         from app.db import Base
         import app.db.models  # noqa: F401
@@ -123,8 +123,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
         get_settings.cache_clear()
 
         self._tmp = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmp.name) / "t.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

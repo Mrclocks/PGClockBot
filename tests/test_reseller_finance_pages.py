@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.app import templates
 from app.api.reseller_finance_pages import CHARGES_PAGE_SIZE, register_reseller_finance_pages
 from app.db.models import Base, BotUser, CreditStatement, ResellerCharge, ResellerProfile
 from app.services.wallet_topup import RECEIPT_MAX_BYTES, TopupError, TopupStart
+from tests.postgres_support import scoped_async_engine
 
 OWNER = {"role": "reseller", "bot_user_id": 5}
 NOW = datetime(2026, 11, 8, tzinfo=timezone.utc)
@@ -27,7 +26,7 @@ class FinancePagesCase(unittest.IsolatedAsyncioTestCase):
     staff: dict = OWNER
 
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

@@ -11,17 +11,11 @@ from __future__ import annotations
 
 import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy import event, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-
-def _enable_sqlite_fk(dbapi_conn, _connection_record):
-    cur = dbapi_conn.cursor()
-    cur.execute("PRAGMA foreign_keys=ON")
-    cur.close()
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from tests.postgres_support import scoped_async_engine
 
 
 class NotifyResellerRevokedNeverRaises(unittest.IsolatedAsyncioTestCase):
@@ -66,14 +60,9 @@ class PaygResellerFullDeleteFkTests(unittest.IsolatedAsyncioTestCase):
         import app.db.models  # noqa: F401
 
         self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "payg_del.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
-        event.listen(self.engine.sync_engine, "connect", _enable_sqlite_fk)
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            await conn.execute(
-                __import__("sqlalchemy").text("PRAGMA foreign_keys=ON")
-            )
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def asyncTearDown(self):

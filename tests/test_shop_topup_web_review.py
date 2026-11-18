@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from unittest.mock import AsyncMock, patch
 from urllib.parse import parse_qs, urlsplit
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

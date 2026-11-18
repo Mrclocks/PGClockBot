@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers.admin_resplan_payg import screen_keyboard, screen_text
 from app.db.models import Base, ResellerPlan
@@ -16,11 +16,12 @@ from app.services.reseller_plan_payg import (
     set_plan_price,
     toggle_plan_flag,
 )
+from tests.postgres_support import scoped_async_engine
 
 
 class PlanEditTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

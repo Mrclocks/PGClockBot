@@ -1,13 +1,12 @@
 """Checkout and wallet gift rules, including transactional and migration edges."""
 
 import asyncio
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import (
     Base,
@@ -30,17 +29,14 @@ from app.services.orders import (
     _release_order_discount,
 )
 from app.services.ux20 import create_charge_code, redeem_charge_code
+from tests.postgres_support import scoped_async_engine, scoped_database_url, scoped_sync_engine
 
 
 class GiftCodeRulesTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{self.tmp.name}/test.db", connect_args={"timeout": 10}
-        )
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            await conn.execute(text("PRAGMA foreign_keys=ON"))
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
         async with self.Session() as session:
             session.add_all(
@@ -56,7 +52,6 @@ class GiftCodeRulesTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def order(
         self,
@@ -614,58 +609,57 @@ class GiftCodeValidationTests(unittest.TestCase):
                 validate_rules(**rules)
 
     def test_migration_preserves_codes_and_backfills_usage(self):
-        from sqlalchemy import create_engine, inspect
+        from sqlalchemy import inspect
         from alembic import command
         from app.db.alembic_runner import alembic_config
 
-        with tempfile.TemporaryDirectory() as temp:
-            url = f"sqlite:///{temp}/old.db"
-            engine = create_engine(url)
-            Base.metadata.create_all(engine)
-            cfg = alembic_config(url)
-            # Stamp gift tip then drop only 0037 — avoid SQLite ALTER on 0036 uniques.
-            command.stamp(cfg, "0037_gift_code_rules")
-            command.downgrade(cfg, "0036_limits_guides_receipts")
-            with engine.begin() as conn:
+        url = scoped_database_url(tables=False)
+        engine = scoped_sync_engine()
+        Base.metadata.create_all(engine)
+        cfg = alembic_config(url)
+        # Stamp the gift-code revision, then step back over 0037 only.
+        command.stamp(cfg, "0037_gift_code_rules")
+        command.downgrade(cfg, "0036_limits_guides_receipts")
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO bot_users (id, telegram_id, referral_code, role, wallet_balance, points_balance, is_blocked) VALUES (1, 1, 'one', 'user', 50000, 0, false)"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO charge_codes (code, amount, max_uses, used_count, is_active) VALUES ('OLD', 50000, 10, 1, true)"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO wallet_transactions (user_id, amount, balance_after, reason) VALUES (1, 50000, 50000, 'کد هدیه OLD')"
+                )
+            )
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT kind, percent, amount, used_count, max_uses_per_user FROM charge_codes"
+                )
+            ).one()
+            self.assertEqual(tuple(row), ("wallet", 0, 50000, 1, None))
+            self.assertEqual(
                 conn.execute(
-                    text(
-                        "INSERT INTO bot_users (id, telegram_id, referral_code, role, wallet_balance, points_balance, is_blocked) VALUES (1, 1, 'one', 'user', 50000, 0, false)"
-                    )
-                )
+                    text("SELECT user_id, status FROM charge_code_uses")
+                ).one(),
+                (1, "consumed"),
+            )
+            self.assertIn(
+                "expires_at",
+                {c["name"] for c in inspect(conn).get_columns("charge_codes")},
+            )
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            self.assertEqual(
                 conn.execute(
-                    text(
-                        "INSERT INTO charge_codes (code, amount, max_uses, used_count, is_active) VALUES ('OLD', 50000, 10, 1, true)"
-                    )
-                )
-                conn.execute(
-                    text(
-                        "INSERT INTO wallet_transactions (user_id, amount, balance_after, reason) VALUES (1, 50000, 50000, 'کد هدیه OLD')"
-                    )
-                )
-            command.upgrade(cfg, "head")
-            with engine.connect() as conn:
-                row = conn.execute(
-                    text(
-                        "SELECT kind, percent, amount, used_count, max_uses_per_user FROM charge_codes"
-                    )
-                ).one()
-                self.assertEqual(tuple(row), ("wallet", 0, 50000, 1, None))
-                self.assertEqual(
-                    conn.execute(
-                        text("SELECT user_id, status FROM charge_code_uses")
-                    ).one(),
-                    (1, "consumed"),
-                )
-                self.assertIn(
-                    "expires_at",
-                    {c["name"] for c in inspect(conn).get_columns("charge_codes")},
-                )
-            command.upgrade(cfg, "head")
-            with engine.connect() as conn:
-                self.assertEqual(
-                    conn.execute(
-                        text("SELECT COUNT(*) FROM charge_code_uses")
-                    ).scalar_one(),
-                    1,
-                )
-            engine.dispose()
+                    text("SELECT COUNT(*) FROM charge_code_uses")
+                ).scalar_one(),
+                1,
+            )
+        engine.dispose()

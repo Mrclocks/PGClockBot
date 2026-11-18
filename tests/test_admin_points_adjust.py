@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
 from contextlib import asynccontextmanager
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.keyboards import admin_user_actions
 from app.services.staff_cards import format_staff_customer_card
+from tests.postgres_support import scoped_async_engine
 
 
 class KeyboardPointsButtonsTests(unittest.TestCase):
@@ -72,8 +71,7 @@ class AdminPointsAdjustHarness(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         from app.db.models import BotUser
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'pts.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -88,6 +86,8 @@ class AdminPointsAdjustHarness(unittest.IsolatedAsyncioTestCase):
                         full_name="Owner",
                         points_balance=0,
                     ),
+                    BotUser(id=99, telegram_id=1099, referral_code="shop99", role="reseller", full_name="Shop"),
+                    BotUser(id=88, telegram_id=1088, referral_code="shop88", role="reseller", full_name="Shop B"),
                     BotUser(
                         id=10,
                         telegram_id=1010,
@@ -113,7 +113,6 @@ class AdminPointsAdjustHarness(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _admin(self, session):
         from app.db.models import BotUser
