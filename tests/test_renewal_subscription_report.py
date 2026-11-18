@@ -30,6 +30,7 @@ class RenewalSubscriptionReportTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 Order(
                     id=281,
+                    status="delivered",
                     user_id=1,
                     amount=55_000,
                     payment_method="card",
@@ -37,6 +38,7 @@ class RenewalSubscriptionReportTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 Order(
                     id=283,
+                    status="delivered",
                     user_id=1,
                     amount=160_000,
                     payment_method="gateway",
@@ -46,6 +48,7 @@ class RenewalSubscriptionReportTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 Order(
                     id=284,
+                    status="delivered",
                     user_id=1,
                     amount=10_000,
                     payment_method="wallet",

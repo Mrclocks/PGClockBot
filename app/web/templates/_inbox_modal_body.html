@@ -1,0 +1,35 @@
+{# Body of the header's action-center modal (fragment of /inbox/panel): every visible item as a row in the settings
+   list style (DESIGN_SYSTEM.md §6-2), tapping it goes where to act; a round «×» at its end hides it through the inbox dismiss dialog. #}
+{% from "macros.html" import empty_state %}
+{% from "_icons.html" import icon %}
+<div class="inbox-panel">
+  {% if entries %}
+  <div class="hub-list inbox-list">
+    {% for entry in entries %}
+    <div class="inbox-row tone-{{ entry.tone }}">
+      <a class="hub-row inbox-row-link" href="{{ entry.href }}">
+        <span class="hub-ico" aria-hidden="true">{{ icon(entry.icon) }}</span>
+        <span class="hub-text">
+          <span class="hub-label">{{ entry.title | fa }}</span>
+          {%- if entry.detail %}<span class="hub-desc">{{ entry.detail | fa }}</span>{% endif %}
+        </span>
+      </a>
+      {% if entry.dismiss_key %}
+      <button type="button" class="inbox-row-dismiss" data-inbox-dismiss="{{ entry.dismiss_key }}"
+              {% if entry.entity_id %}data-inbox-entity="{{ entry.entity_id }}" {% endif %}aria-label="حذف اعلان: {{ entry.title | fa }}">
+        {{ icon('close') }}
+      </button>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="hub-list inbox-list">{{ empty_state('کاری منتظر شما نیست؛ اعلان تازه همین‌جا می‌آید.', 'inbox') }}</div>
+  {% endif %}
+  {% if hidden_count %}
+  <a class="inbox-hidden-link" href="/inbox">
+    <span>{{ hidden_count | num }} اعلان مخفی شده</span>
+    <span class="inbox-hidden-go">مدیریت{{ icon('chev') }}</span>
+  </a>
+  {% endif %}
+</div>

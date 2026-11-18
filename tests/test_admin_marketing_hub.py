@@ -39,11 +39,10 @@ class MarketingHubKeyboardTests(unittest.TestCase):
              "nv:adm:broadcast", "qlk:v", "ed:a:h", "menu:home"],
         )
 
-    def test_group_messages_get_their_own_full_width_row_in_the_admin_panel(self):
+    def test_group_messages_and_quick_links_share_one_row_in_the_admin_panel(self):
         rows = admin_groups_hub_keyboard({}).inline_keyboard
         broadcast_rows = [row for row in rows if any(b.callback_data == "nv:adm:broadcast" for b in row)]
-        self.assertEqual(len(broadcast_rows), 1)
-        self.assertEqual(len(broadcast_rows[0]), 1)
+        self.assertEqual([[b.callback_data for b in row] for row in broadcast_rows], [["nv:adm:broadcast", "qlk:v"]])
 
     def test_hub_lists_its_leaves_and_returns_home(self):
         self.assertEqual(

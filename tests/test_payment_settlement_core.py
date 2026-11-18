@@ -355,7 +355,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
                 )
 
             # Correct shop secret + payment_id works (approve stubbed)
-            async def _fake_approve(session, payment, reviewer_tg=0):
+            async def _fake_approve(session, payment, reviewer_tg=0, **_kwargs):
                 payment.status = PaymentStatus.APPROVED.value
                 await session.commit()
                 return None
@@ -525,7 +525,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
             await session.refresh(settlement)
             await session.refresh(payment)
 
-            async def _boom(session, payment, reviewer_tg=0):
+            async def _boom(session, payment, reviewer_tg=0, **_kwargs):
                 raise ValueError("تحویل ناموفق تست")
 
             orig = ps.approve_payment
@@ -547,7 +547,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payment.status, PaymentStatus.PENDING.value)
 
             # Retry after fix succeeds and settles.
-            async def _ok(session, payment, reviewer_tg=0):
+            async def _ok(session, payment, reviewer_tg=0, **_kwargs):
                 payment.status = PaymentStatus.APPROVED.value
                 await session.commit()
                 return None
@@ -612,7 +612,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
             sig = sign_payload("dup-secret-16chars", body)
             calls = {"n": 0}
 
-            async def _ok(session, payment, reviewer_tg=0):
+            async def _ok(session, payment, reviewer_tg=0, **_kwargs):
                 calls["n"] += 1
                 if payment.status != PaymentStatus.APPROVED.value:
                     payment.status = PaymentStatus.APPROVED.value
@@ -830,7 +830,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
         approve_calls = {"n": 0}
         gate = asyncio.Event()
 
-        async def _counting_approve(session, payment, reviewer_tg=0):
+        async def _counting_approve(session, payment, reviewer_tg=0, **_kwargs):
             approve_calls["n"] += 1
             # Hold claim so the peer session can attempt settle concurrently.
             await gate.wait()
