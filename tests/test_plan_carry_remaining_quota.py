@@ -151,7 +151,7 @@ class CarryRemainingCloneAndShopIsolationTests(unittest.IsolatedAsyncioTestCase)
     async def test_other_shop_cannot_toggle_carry_on_foreign_plan(self):
         profile = await self.session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == 3))
         callback = MagicMock(
-            data="res:plan:carry:10",
+            data="res:plan:carry:v:10",
             answer=AsyncMock(),
             message=MagicMock(),
         )
@@ -165,6 +165,7 @@ class CarryRemainingCloneAndShopIsolationTests(unittest.IsolatedAsyncioTestCase)
             )
         foreign = await self.session.get(Plan, 10)
         self.assertFalse(foreign.carry_remaining_quota)
+        self.assertFalse(foreign.carry_remaining_volume)
         callback.answer.assert_awaited()
         alert_kwargs = callback.answer.await_args.kwargs
         self.assertTrue(alert_kwargs.get("show_alert"))

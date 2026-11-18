@@ -73,6 +73,22 @@ class RenewalArithmeticTests(unittest.TestCase):
         self.assertFalse(result["carry_remaining"])
         self.assertIn("منتقل نمی‌شود", result["warnings"][0])
 
+    def test_disabled_carry_warning_names_what_is_lost_and_what_remains(self):
+        from app.services.formatting import format_bytes
+
+        warning = self.result(carry_remaining_quota=False)["warnings"][0]
+        self.assertIn(f"{format_bytes(7 * GB)} حجم", warning)
+        self.assertIn("5 روز زمان", warning)
+        self.assertIn("از بین می‌رود", warning)
+        self.assertIn(f"فقط {format_bytes(10 * GB)} حجم و 30 روز", warning)
+
+    def test_disabled_carry_with_nothing_left_has_no_loss_warning(self):
+        result = self.result(carry_remaining_quota=False, used=10 * GB, expire=1_700_000_000 - DAY)
+        self.assertEqual(result["warnings"], [])
+
+    def test_carry_over_has_no_loss_warning(self):
+        self.assertEqual(self.result()["warnings"], [])
+
     def test_renewal_terms_freeze_carry_flag_from_plan(self):
         terms = renewal_terms(SimpleNamespace(data_limit_gb=10, duration_days=30, carry_remaining_quota=False))
         self.assertEqual(terms["carry_remaining"], False)
