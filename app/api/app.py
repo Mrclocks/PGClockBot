@@ -97,7 +97,7 @@ from app.services.shop_scope import is_platform_admin, payment_shop_id
 from app.services.button_styles import STYLE_OPTIONS
 from app.services.message_buttons import target_groups as message_button_target_groups
 from app.services.staff_audit import actor_from_staff
-from app.services.usage_alert_messages import ALERT_NUMBER_KEYS, clamp_alert_setting
+from app.services.alert_thresholds import normalize_threshold_form
 from app.services.mobile_bar import load_bar_form, load_bar_order
 from app.services.panel_brand import (
     BRAND_PRESET_CSS,
@@ -5251,8 +5251,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                     from app.services.button_styles import normalize_style
 
                     val = normalize_style(val)
-                if key in ALERT_NUMBER_KEYS:
-                    val = clamp_alert_setting(key, val)
                 if key == "force_join_channel":
                     from app.services.users import normalize_force_join_channel_value
 
@@ -5268,6 +5266,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                     val = normalize_setting_value(key, val)
                 payload[key] = val
+        normalize_threshold_form(payload)
         if tab == "daily_report":
             from app.services.daily_report import (
                 ACTOR_OWNER,
