@@ -554,3 +554,4 @@ tests/test_bot_topup_presets.py
 tests/test_bot_payment_destinations.py
 tests/test_command_center.py
 tests/test_quick_switches.py
+tests/test_command_data_search.py
