@@ -41,9 +41,11 @@ from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.trial_offer import (
     PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS,
     TRIAL_SERVICE_OWNERS_KEY,
+    TRIAL_SHOW_CLAIMED_KEY,
     next_trial_placement,
     save_trial_placement,
     trial_placement,
+    trial_shown_to_claimed,
 )
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
@@ -425,6 +427,13 @@ async def _build_trial_screen(session: AsyncSession) -> tuple[str, InlineKeyboar
             _ib(
                 f"{'✅' if on(ui.get(TRIAL_SERVICE_OWNERS_KEY)) else '⬜️'} نمایش به کاربران دارای سرویس",
                 f"adm:plans:tog:{TRIAL_SERVICE_OWNERS_KEY}",
+                st,
+            )
+        ],
+        [
+            _ib(
+                f"{'✅' if trial_shown_to_claimed(ui) else '⬜️'} نمایش به کاربران محدود",
+                f"adm:plans:tog:{TRIAL_SHOW_CLAIMED_KEY}",
                 st,
             )
         ],
