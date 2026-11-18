@@ -10,7 +10,9 @@ from __future__ import annotations
 from app.services import bot_feedback_texts as feedback
 from app.services.approval_rule import MAX_MINUTES as APPROVAL_MAX_MINUTES
 from app.services.catalog_pricing import MAX_PRICE
+from app.services.customer_notice_texts import NOTICE_TEXT_KEYS
 from app.services.entry_approval_config import ENTRY_APPROVAL_NUMBER_BOUNDS
+from app.services.message_variables import template_variable_specs
 from app.services.numbers import normalize_number_text
 from app.services.service_import_config import (
     KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
@@ -118,3 +120,25 @@ def next_select_value(key: str, current: str | None) -> str:
     values = [value for value, _label in SELECT_OPTIONS[key]]
     cur = current if current in values else values[0]
     return values[(values.index(cur) + 1) % len(values)]
+
+
+# Texts whose empty value means «use the built-in text»; typing one of DEFAULT_WORDS clears them.
+EMPTY_MEANS_DEFAULT_KEYS: frozenset[str] = NOTICE_TEXT_KEYS | {"user_alert_time_text", "user_alert_traffic_text"}
+DEFAULT_WORDS: frozenset[str] = frozenset({"پیش‌فرض", "پیشفرض", "default"})
+
+
+def wants_default_text(key: str, text: str | None) -> bool:
+    """True when the typed value asks to go back to the built-in text of ``key``."""
+    return key in EMPTY_MEANS_DEFAULT_KEYS and str(text or "").strip().lower() in DEFAULT_WORDS
+
+
+def text_template_hint(key: str, *, actor: str = "owner") -> str:
+    """Extra prompt lines for a text template: its placeholders and how to restore the default."""
+    names = template_variable_specs(actor).get(key) or {}
+    lines = []
+    if names:
+        tokens = " ".join(f"<code>{{{name}}}</code>" for name in sorted(names))
+        lines.append(f"متغیرها: {tokens}")
+    if key in EMPTY_MEANS_DEFAULT_KEYS:
+        lines.append("برای برگشت به متن پیش‌فرض بنویسید: «پیش‌فرض»")
+    return "\n".join(lines)

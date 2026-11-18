@@ -28,10 +28,14 @@
   {% set fields = groups[group_name] %}
   <div class="card settings-card">
     <h2>{{ group_name }}</h2>
-    <p class="muted update-card-caption">
+    {% if group_name == 'هشدار سرویس کاربر' %}
+      <p class="muted update-card-caption">
       هشدار خودکار برای مشتری‌ها وقتی حجم یا زمان سرویس‌شان رو به اتمام است.
       درصد را طوری تنظیم کنید که قبل از قطع سرویس به کاربر یادآوری شود.
-    </p>
+      </p>
+    {% elif group_name in ['متن اعلان کار کارکنان روی سرویس', 'متن اعلان پاکسازی سرویس'] %}
+      <p class="muted update-card-caption">متن پیامی که مشتری دربارهٔ سرویسش می‌گیرد. خالی بماند، متن پیش‌فرض فرستاده می‌شود.</p>
+    {% endif %}
     <div class="settings-grid">
     {% for field in fields %}
       {% include "_settings_field.html" %}

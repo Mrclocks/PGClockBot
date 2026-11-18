@@ -56,6 +56,7 @@ from app.services.settings_button_labels import (
     BTN_PAY_WALLET_DISCOUNT,
     button_label_subs,
 )
+from app.services.customer_notice_texts import CLEANUP_BOT_FIELDS, STAFF_ACTION_BOT_FIELDS
 from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
 from app.services.bot_setting_values import (
     NUMBER_BOUNDS,
@@ -67,6 +68,8 @@ from app.services.bot_setting_values import (
     parse_bounded_int,
     parse_number_setting,
     select_label,
+    text_template_hint,
+    wants_default_text,
 )
 from app.services.settings_operation_fields import (
     AUTO_APPROVE_AFTER_FIELDS,
@@ -444,6 +447,8 @@ SECTIONS: dict[str, dict] = {
             ("usage_alerts", "هشدار سرویس کاربر", USAGE_ALERT_FIELDS),
             ("operations", "گزارش و عملیات", OPERATIONS_FIELDS),
             ("pg_link", "سلامت ارتباط پاسارگارد", PG_LINK_HEALTH_FIELDS),
+            ("staff_notices", "متن اعلان کار روی سرویس", STAFF_ACTION_BOT_FIELDS),
+            ("cleanup_notices", "متن اعلان پاکسازی سرویس", CLEANUP_BOT_FIELDS),
         ],
     },
 }
@@ -1354,6 +1359,9 @@ async def settings_edit_ask(
             )
         elif is_message_rich_key(key):
             hint += "\n<i>ایموجی پریمیوم در متن پیام حفظ می‌شود.</i>"
+    template_hint = text_template_hint(key)
+    if template_hint:
+        hint += "\n" + template_hint
     from app.bot.nav_input import ask_text
 
     prompt = (
@@ -1419,6 +1427,8 @@ async def settings_edit_save(
         from app.services.receipt_fingerprints import normalize_dup_policy
 
         await set_setting(session, key, normalize_dup_policy(text))
+    elif wants_default_text(key, text):
+        await set_setting(session, key, "")
     else:
         from app.services.rich_text import pack_setting_from_message
 
