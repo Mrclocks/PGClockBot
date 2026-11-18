@@ -1339,7 +1339,13 @@ SETTING_RISK_NOTES: dict[str, str] = {
 
 # Main-bot switch only: a shop gets the name step from its package permission instead.
 CUSTOM_SERVICE_NAME_GROUP = "نام دلخواه سرویس"
-PLATFORM_ONLY_SETTING_GROUPS: frozenset[str] = frozenset({CUSTOM_SERVICE_NAME_GROUP})
+# Only the main bot's Owner configures connection monitoring, so these prompts never reach a shop.
+MONITOR_ADMIN_TEXTS_GROUP = "متن‌های مدیریت وضعیت اتصال"
+# The one panel link is watched and reported platform-wide; a shop value would change nothing.
+PG_LINK_HEALTH_GROUP = "سلامت ارتباط پاسارگارد"
+PLATFORM_ONLY_SETTING_GROUPS: frozenset[str] = frozenset(
+    {CUSTOM_SERVICE_NAME_GROUP, MONITOR_ADMIN_TEXTS_GROUP, PG_LINK_HEALTH_GROUP}
+)
 
 SETTING_GROUPS = {
     "خوش‌آمد و هویت": [
@@ -1365,6 +1371,8 @@ SETTING_GROUPS = {
         ("connection_status_title", "عنوان وضعیت اتصال مشتری", "text", "بدون متغیر"),
         ("connection_status_empty", "فهرست وضعیت خالی", "textarea", "بدون متغیر"),
         ("connection_status_error", "خطای دریافت وضعیت", "textarea", "بدون متغیر"),
+    ],
+    MONITOR_ADMIN_TEXTS_GROUP: [
         ("connection_status_admin_title", "عنوان مدیریت وضعیت اتصال", "text", "بدون متغیر"),
         ("connection_status_account_prompt", "تنظیم کاربر تست", "textarea", "بدون متغیر"),
         ("connection_status_name_prompt", "دریافت نام عمومی هاست", "text", "بدون متغیر"),
@@ -1654,7 +1662,7 @@ SETTING_GROUPS = {
             "متغیرها: {admin_name} {users_new} {revenue_today} … — فهرست کامل در همین تب و /message-variables",
         ),
     ],
-    "سلامت ارتباط پاسارگارد": [
+    PG_LINK_HEALTH_GROUP: [
         (
             "pg_link_watchdog_enabled",
             "پایش خودکار ارتباط با پاسارگارد",
@@ -2125,7 +2133,7 @@ SETTING_GROUPS.update(BUTTON_LABEL_GROUPS_MORE)
 TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "menu": [],
     "welcome": ["خوش‌آمد و هویت"],
-    "messages": ["متن پیام‌ها"],
+    "messages": ["متن پیام‌ها", MONITOR_ADMIN_TEXTS_GROUP],
     "buttons": [BUTTON_LABELS_GROUP, *BUTTON_LABEL_GROUPS_MORE],
     SCREEN_TEXT_TAB: list(screen_text_setting_groups()),
     "colors": ["رنگ دکمه‌ها"],
@@ -2164,7 +2172,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],
     "billing": ["مدیریت PAYG"],
-    "notifications": ["هشدار سرویس کاربر", "گزارش و عملیات", "سلامت ارتباط پاسارگارد"],
+    "notifications": ["هشدار سرویس کاربر", "گزارش و عملیات", PG_LINK_HEALTH_GROUP],
     "daily_report": ["گزارش روزانه"],
     "backup": ["بکاپ زمان‌بندی", "ارسال بکاپ به تلگرام"],
     "pwa": [],
