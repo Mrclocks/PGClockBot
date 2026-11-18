@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import DeliveryFailure, Order, OrderStatus, Payment, PaymentStatus, Plan
 from app.services.db_safe import rollback_quiet
 from app.services.delivery_recovery_policy import (
+    DELIVERING_STALE_AFTER,
     AUTO_RETRY_WINDOW_HOURS,
     MAX_AUTO_ATTEMPTS,
     is_auto_recoverable_kind,
@@ -35,7 +36,11 @@ from app.services.delivery_recovery_policy import (
     is_renewal_order,
     payment_outcome_unknown,
 )
-from app.services.orders import DeliveryAttempt, fulfill_paid_order, hold_unknown_delivery_for_review
+from app.services.orders import (
+    DeliveryAttempt,
+    fulfill_paid_order,
+    hold_unknown_delivery_for_review,
+)
 from app.services.stuck_order_resolution import (
     Resolution,
     mutation_may_be_applied,
@@ -59,8 +64,6 @@ RETRY_BACKOFF = (
     timedelta(minutes=20),
     timedelta(minutes=30),
 )
-# A DELIVERING order younger than this may still be in another worker's hands.
-DELIVERING_STALE_AFTER = timedelta(minutes=10)
 RETRY_WINDOW = timedelta(hours=AUTO_RETRY_WINDOW_HOURS)
 # ShopBotUnavailable is a ValueError: a shop without its own bot cannot be messaged.
 NOTICE_ERRORS = (TelegramAPIError, SQLAlchemyError, ValueError)

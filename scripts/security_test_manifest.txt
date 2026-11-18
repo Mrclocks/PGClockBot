@@ -552,3 +552,6 @@ tests/test_bot_profile_texts.py
 tests/test_bot_crypto_rate_settings.py
 tests/test_bot_topup_presets.py
 tests/test_bot_payment_destinations.py
+#
+# Payment and delivery never run under a web page panel read deadline; no second attempt on a running delivery.
+tests/test_payment_read_budget.py
