@@ -2384,7 +2384,7 @@ async def deliver_order(
         await session.commit()
         await session.refresh(order)
         return order
-    # Atomic delivery claim (SQLite has no real row locks — status flip is the mutex)
+    # Atomic delivery claim: the status flip is the mutex.
     with session.no_autoflush:
         claim = await session.execute(
             update(Order)
@@ -2761,12 +2761,6 @@ async def renew_service_with_plan(
     if request_key is None:
         session.add(order)
     else:
-        # SQLite's legacy transaction mode needs BEGIN before a first SAVEPOINT.
-        connection = await session.connection()
-        if connection.dialect.name == "sqlite":
-            raw = await connection.get_raw_connection()
-            if not raw.driver_connection.in_transaction:
-                await connection.exec_driver_sql("BEGIN")
         try:
             async with session.begin_nested():
                 session.add(order)

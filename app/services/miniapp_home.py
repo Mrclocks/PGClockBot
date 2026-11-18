@@ -53,7 +53,7 @@ class HomeSummary:
 
 
 def _as_utc(value: datetime) -> datetime:
-    # SQLite returns naive datetimes for timezone-aware columns.
+    # Stored timestamps are UTC; a naive value (from Python code or a test) is read as UTC.
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
@@ -109,7 +109,7 @@ async def customer_home_summary(
             UserService.quota_synced_at.is_not(None),
             ending,
         )
-        # Portable "NULLS LAST": SQLite and PostgreSQL disagree on the default.
+        # Explicit "NULLS LAST": PostgreSQL sorts NULLs first in descending order.
         .order_by(
             UserService.quota_expire_at.is_(None),
             UserService.quota_expire_at.asc(),

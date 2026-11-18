@@ -9,7 +9,7 @@ Archive format (ZIP):
   env/.env                     (optional; included by default for full restore)
 
 The manifest records db_engine: postgresql. An archive without a PostgreSQL dump
-(made by an old SQLite install) is refused.
+(made by an install that did not run PostgreSQL) is refused.
 """
 
 from __future__ import annotations

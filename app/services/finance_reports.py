@@ -223,7 +223,7 @@ async def shop_payment_method_breakdown(
     else:
         scope = Order.reseller_id == int(reseller_id)
     # Label + group_by(same label) — required for PostgreSQL GROUP BY rules
-    # (SQLite is looser and hid this). Do not repeat coalesce() in group_by.
+    # Do not repeat coalesce() in group_by.
     method_col = func.coalesce(Order.payment_method, "—").label("pay_method")
     rows = (
         await session.execute(

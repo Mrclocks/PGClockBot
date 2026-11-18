@@ -32,7 +32,7 @@ def trial_wait_minutes(created_at: datetime | None, *, min_age_minutes: int, now
     if min_age_minutes <= 0 or created_at is None:
         return 0
     now = now or datetime.now(timezone.utc)
-    # SQLite returns naive values for timezone-aware columns.
+    # Stored timestamps are UTC; a naive value (from Python code or a test) is read as UTC.
     created = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
     remaining = min_age_minutes * SECONDS_PER_MINUTE - (now - created).total_seconds()
     return max(0, math.ceil(remaining / SECONDS_PER_MINUTE))

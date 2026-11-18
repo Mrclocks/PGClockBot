@@ -190,14 +190,6 @@ async def _policy_for_order(session: AsyncSession, order: Order, code: str | Non
     return await session.scalar(query.limit(1))
 
 
-async def _begin_sqlite_transaction(session: AsyncSession) -> None:
-    connection = await session.connection()
-    if connection.dialect.name == "sqlite":
-        raw = await connection.get_raw_connection()
-        if not raw.driver_connection.in_transaction:
-            await connection.exec_driver_sql("BEGIN")
-
-
 async def _existing_draw(session: AsyncSession, order: Order, code: str | None) -> bool:
     draw = await session.scalar(select(RandomDiscountDraw).where(
         RandomDiscountDraw.order_id == order.id, RandomDiscountDraw.shop_key == (order.reseller_id or 0),
@@ -413,7 +405,6 @@ async def apply_random_discount(session: AsyncSession, order: Order, *, code: st
         raise ValueError("سفارش این فروشگاه یافت نشد")
     if await _is_exempt_from_discount(session, order, policy, code):
         return False
-    await _begin_sqlite_transaction(session)
     try:
         async with session.begin_nested():
             locked = await session.execute(update(RandomDiscount).where(

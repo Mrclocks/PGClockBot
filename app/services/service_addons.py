@@ -1193,11 +1193,6 @@ async def create_addon_order(
     if key is None:
         session.add(order)
     else:
-        connection = await session.connection()
-        if connection.dialect.name == "sqlite":
-            raw = await connection.get_raw_connection()
-            if not raw.driver_connection.in_transaction:
-                await connection.exec_driver_sql("BEGIN")
         try:
             async with session.begin_nested():
                 session.add(order)

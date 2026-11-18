@@ -191,7 +191,7 @@ async def redeem_wallet_code(session: AsyncSession, *, user: BotUser, code: obje
         record_code_failure(user_id)
         raise CodeError(str(exc) or "کد نامعتبر است") from exc
     except OperationalError as exc:
-        # SQLite refuses a second concurrent writer; nothing was credited, the customer may retry.
+        # A transient database error (lost connection, lock timeout); nothing was credited, the customer may retry.
         await rollback_quiet(session)
         raise CodeError("سرور مشغول است؛ چند ثانیه بعد دوباره تلاش کنید") from exc
     return amount, int(balance)

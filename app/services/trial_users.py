@@ -117,7 +117,7 @@ def _is_buyer_clause(shop_id: int | None, user_column) -> ColumnElement[bool]:
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
-    # SQLite returns naive values for timezone-aware columns.
+    # Stored timestamps are UTC; a naive value (from Python code or a test) is read as UTC.
     if value is None:
         return None
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
