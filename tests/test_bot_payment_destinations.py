@@ -22,6 +22,7 @@ from app.services import bot_feedback_texts as feedback
 from app.services import payment_destination_edits as edits
 from app.services.payment_destinations import MAX_ITEMS, get_payment_cards
 from app.services.users import clear_settings_cache, get_setting
+from tests.dispatcher_support import create_isolated_dispatcher
 
 SHOP_A, SHOP_B = 51, 52
 CARD = "6037997512345678"
@@ -179,9 +180,7 @@ if __name__ == "__main__":
 
 class WiringTests(unittest.TestCase):
     def test_owner_editor_is_behind_the_owner_gate_and_blocked_on_shop_bots(self) -> None:
-        from app.bot import create_dispatcher
-
-        dp = create_dispatcher()
+        dp = create_isolated_dispatcher(self)
         names = {type(m).__name__ for m in editor.owner_router.callback_query.middleware}
         self.assertIn("_RequireBotOwnerPrincipal", names)
         self.assertIn("_BlockPlatformAdminOnResellerBot", names)

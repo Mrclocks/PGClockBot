@@ -108,9 +108,9 @@ class PgUsersFetchTests(unittest.IsolatedAsyncioTestCase):
 
 class PgUsersImportSmoke(unittest.TestCase):
     def test_dispatcher_includes_module(self):
-        from app.bot import create_dispatcher
+        from tests.dispatcher_support import create_isolated_dispatcher
 
-        dp = create_dispatcher()
+        dp = create_isolated_dispatcher(self)
         names = []
         for r in getattr(dp, "sub_routers", []) or []:
             names.append(getattr(r, "name", None) or str(r))
