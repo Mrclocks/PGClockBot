@@ -39,6 +39,7 @@ from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.miniapp_branding import NOTICE_SETTING as MINIAPP_NOTICE, normalize_notice
 from app.services.miniapp_shop import PLATFORM_SWITCH as MINIAPP_SHOPS_SWITCH, set_platform_shop_miniapps
 from app.services.reseller_bots import schedule_shop_menu_sync
+from app.bot.backup_entry import BACKUP_PANEL_CALLBACK
 from app.services.bbc_settlement import ENABLED_KEY as BBC_ENABLED_KEY, bbc_enable_error
 from app.services.service_import_config import (
     KEY_ENABLED as IMPORT_KEY_ENABLED,
@@ -434,6 +435,22 @@ SECTIONS: dict[str, dict] = {
             ("custom", "پلن دلخواه", "custom"),
         ],
     },
+    # Opened from the backup panel, not the settings hub. Recipients, the backup bot token and the
+    # .env switches stay on the web: from a chat they would let one stolen account send every secret away.
+    "backup": {
+        "title": "تنظیمات بکاپ",
+        "back": BACKUP_PANEL_CALLBACK,
+        "subs": [
+            ("schedule", "بکاپ زمان‌بندی", [
+                ("backup_schedule_enabled", "بکاپ خودکار شبانه", "toggle"),
+                ("backup_schedule_hour", "ساعت بکاپ (۰ تا ۲۳، UTC)", "number"),
+                ("backup_keep_count", "تعداد بکاپ نگه‌داشته‌شده", "select"),
+            ]),
+            ("telegram", "ارسال بکاپ به تلگرام", [
+                ("backup_telegram_enabled", "ارسال بکاپ به گیرنده‌های وب‌پنل", "toggle"),
+            ]),
+        ],
+    },
     "notify": {
         "title": "اعلان‌ها",
         "kind": "notify",
@@ -652,7 +669,7 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
         rows.append([colors_entry_button(for_reseller=False)])
     if sec_id == GUIDES_SECTION:
         rows.append([guides_entry_button(for_reseller=False)])
-    rows.append(_back_row("adm:st:hub"))
+    rows.append(_back_row(sec.get("back") or "adm:st:hub"))
     if callback.message:
         await callback.message.edit_text(
             f"⚙️ <b>{sec['title']}</b>\nزیر‌بخش را انتخاب کنید:",

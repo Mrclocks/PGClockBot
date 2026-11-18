@@ -23,6 +23,7 @@ from aiogram.types import (
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner_handler
+from app.bot.backup_entry import backup_settings_button
 from app.bot.nav_inline import admin_backup_hub_keyboard, with_inline_back
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
@@ -62,6 +63,7 @@ def backup_hub_markup(backups: list[dict] | None, ui: dict | None) -> InlineKeyb
     """The backup panel: create / upload actions, the backup files, «بازگشت» to the system hub."""
     hub = admin_backup_hub_keyboard(ui)
     actions = [list(row) for row in hub.inline_keyboard[:-1]]  # its own «بازگشت» comes after the files
+    actions.append([backup_settings_button(ui)])
     files = with_inline_back(kb.backup_files_keyboard(backups), ui, "nv:adm:system")
     return InlineKeyboardMarkup(inline_keyboard=actions + [list(row) for row in files.inline_keyboard])
 

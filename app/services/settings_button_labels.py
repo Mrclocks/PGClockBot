@@ -196,11 +196,14 @@ BTN_ADMIN_SETTINGS_MORE: list[Field] = [
     ("btn_adm_st_notify", "تنظیمات: اعلان‌ها", "text"),
 ]
 
-BTN_ADMIN_BACKUP_BROADCAST: list[Field] = [
+BTN_ADMIN_BACKUP: list[Field] = [
     ("btn_backup_create", "ساخت بکاپ", "text"),
     ("btn_backup_create_env", "بکاپ همراه .env", "text"),
     ("btn_backup_upload", "آپلود فایل بکاپ", "text"),
     ("btn_backup_refresh", "تازه‌سازی لیست بکاپ", "text"),
+    ("btn_backup_settings", "تنظیمات بکاپ", "text"),
+]
+BTN_ADMIN_BROADCAST: list[Field] = [
     ("btn_bc_aud_all", "پیام همگانی: همه", "text"),
     ("btn_bc_aud_users", "پیام همگانی: کاربران", "text"),
     ("btn_bc_aud_resellers", "پیام همگانی: نمایندگان", "text"),
@@ -336,7 +339,8 @@ PLATFORM_ONLY_BTN_KEYS = PLATFORM_ONLY_BTN_KEYS | frozenset(
         BTN_ADMIN_PEOPLE_SUB,
         BTN_ADMIN_SETTINGS_SUB,
         BTN_ADMIN_SETTINGS_MORE,
-        BTN_ADMIN_BACKUP_BROADCAST,
+        BTN_ADMIN_BACKUP,
+        BTN_ADMIN_BROADCAST,
         BTN_ADMIN_PLANS_SUB,
         BTN_ADMIN_PLAN_KINDS,
         BTN_ADMIN_LOYALTY_SUB,
@@ -404,7 +408,8 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         ("btn_adm_people_sub", "دکمه‌های ادمین — کاربران و نمایندگان", BTN_ADMIN_PEOPLE_SUB),
         ("btn_adm_settings_sub", "دکمه‌های ادمین — بخش‌های تنظیمات", BTN_ADMIN_SETTINGS_SUB),
         ("btn_adm_settings_more", "دکمه‌های ادمین — قوانین و پشتیبانی در تنظیمات", BTN_ADMIN_SETTINGS_MORE),
-        ("btn_adm_backup_sub", "دکمه‌های ادمین — بکاپ و پیام همگانی", BTN_ADMIN_BACKUP_BROADCAST),
+        ("btn_adm_backup_sub", "دکمه‌های ادمین — بکاپ", BTN_ADMIN_BACKUP),
+        ("btn_adm_broadcast_sub", "دکمه‌های ادمین — پیام همگانی", BTN_ADMIN_BROADCAST),
         ("btn_adm_plans_sub", "دکمه‌های ادمین — پلن‌ها", BTN_ADMIN_PLANS_SUB),
         ("btn_adm_plan_kinds", "دکمه‌های ادمین — نوع پلن نمایندگی", BTN_ADMIN_PLAN_KINDS),
         ("btn_adm_loy_sub", "دکمه‌های ادمین — باشگاه", BTN_ADMIN_LOYALTY_SUB),

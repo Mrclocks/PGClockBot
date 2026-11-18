@@ -114,18 +114,16 @@ WEB_ONLY_SETTINGS: dict[str, str] = {
     "admin_daily_report_template": "انتخاب‌گر متغیر و پیش‌نمایش گزارش",
     "service_import_paths": "مسیرهای پنل واحد؛ فقط مالک در وب",
     "service_import_admins": "ادمین‌های پنل واحد؛ فقط مالک در وب",
+    # From a chat, these would let one stolen Telegram account send every backup and secret away.
+    **{key: "امنیت: گیرنده، توکن و .env بکاپ فقط در وب" for key in (
+        "backup_include_env_scheduled", "backup_telegram_allow_env", "backup_telegram_custom_bot",
+        "backup_telegram_bot_token", "backup_telegram_chat_ids",
+    )},
 }
 
 # Web settings the owner bot cannot edit yet: open work, shrinking as the bot catches up.
 OWNER_BOT_GAPS: dict[str, str] = {
     "wallet_topup_presets": "مبالغ آمادهٔ شارژ (فهرست)",
-    **{key: "بکاپ زمان‌بندی" for key in (
-        "backup_schedule_enabled", "backup_schedule_hour", "backup_include_env_scheduled", "backup_keep_count",
-    )},
-    **{key: "ارسال بکاپ به تلگرام" for key in (
-        "backup_telegram_enabled", "backup_telegram_allow_env", "backup_telegram_custom_bot",
-        "backup_telegram_bot_token", "backup_telegram_chat_ids",
-    )},
     **{key: "فهرست چندتایی مقصدهای پرداخت" for key in (
         "payment_cards", "payment_gateways", "psp_gateways", "payment_crypto_wallets",
     )},

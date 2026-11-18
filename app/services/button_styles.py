@@ -260,6 +260,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "backup_create_noenv", "label": "بکاپ بدون .env (قدیمی)", "group": "بکاپ", "default": "primary"},
     {"id": "backup_upload", "label": "آپلود فایل بکاپ", "group": "بکاپ", "default": ""},
     {"id": "backup_refresh", "label": "تازه‌سازی لیست بکاپ", "group": "بکاپ", "default": ""},
+    {"id": "backup_settings", "label": "تنظیمات بکاپ", "group": "بکاپ", "default": ""},
     # Broadcast audience
     {"id": "bc_aud_all", "label": "همگانی: همه", "group": "پیام همگانی", "default": ""},
     {"id": "bc_aud_users", "label": "همگانی: کاربران", "group": "پیام همگانی", "default": ""},

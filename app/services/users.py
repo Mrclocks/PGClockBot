@@ -994,6 +994,7 @@ DEFAULT_SETTINGS = {
     "btn_backup_create_env": "🆕 بکاپ + .env",
     "btn_backup_upload": "📤 آپلود فایل بکاپ",
     "btn_backup_refresh": "🔄 تازه‌سازی لیست",
+    "btn_backup_settings": "⚙️ تنظیمات بکاپ",
     "btn_bc_aud_all": "📢 همه",
     "btn_bc_aud_users": "👥 مشتریان (بدون ادمین)",
     "btn_bc_aud_resellers": "🤝 فقط نمایندگان",
