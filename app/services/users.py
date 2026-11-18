@@ -799,6 +799,7 @@ DEFAULT_SETTINGS = {
     # Where «دریافت تست» shows: offer (home message), keyboard (main menu) or both.
     "trial_button_placement": "offer",
     "trial_for_service_owners": "0",
+    "trial_show_claimed": "1",
     "trial_require_contact": "0",
     "purchase_require_contact": "0",
     "trial_require_iran_phone": "0",

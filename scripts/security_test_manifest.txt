@@ -555,3 +555,5 @@ tests/test_bot_payment_destinations.py
 #
 # Gateway, payment webhook and Telegram webhook requests never get the web page panel read budget.
 tests/test_panel_read_budget_paths.py
+# Payment and delivery never run under a web page panel read deadline; no second attempt on a running delivery.
+tests/test_payment_read_budget.py

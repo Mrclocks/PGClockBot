@@ -21,6 +21,10 @@ UNKNOWN_DELIVERY_NOTE = "delivery_outcome_unknown"
 STAFF_ONLY_NOTE_PREFIXES = ("svc_addon:", "res_cap:", "res_pkg:", "reseller_app:")
 # Orders whose service_id names the service to change, so it is set before delivery.
 MUTATION_NOTE_PREFIXES = ("renew:", *STAFF_ONLY_NOTE_PREFIXES)
+# A delivery still DELIVERING after this long has crashed; a younger one may be running in
+# another worker, and reopening it would start a second attempt.
+DELIVERING_STALE_AFTER = timedelta(minutes=10)
+DELIVERY_IN_PROGRESS = "تحویل این سفارش همین حالا در جریان است؛ چند دقیقه بعد دوباره امتحان کنید"
 # The first automatic retry waits this long, so a short panel blip has passed.
 FIRST_AUTO_RETRY_DELAY = timedelta(minutes=2)
 # Attempts made while the panel answers; attempts are not spent while it is down.

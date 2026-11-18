@@ -19,6 +19,8 @@ TRIAL_LABEL_KEY = "btn_trial"
 TRIAL_PLACEMENT_KEY = "trial_button_placement"
 # On: a customer who already owns a service in the shop may still take its one trial.
 TRIAL_SERVICE_OWNERS_KEY = "trial_for_service_owners"
+# On (default): the shop's trial button stays visible to a customer who already took the trial.
+TRIAL_SHOW_CLAIMED_KEY = "trial_show_claimed"
 
 PLACEMENT_OFFER = "offer"
 PLACEMENT_KEYBOARD = "keyboard"
@@ -72,6 +74,11 @@ def shows_trial_on_keyboard(ui: Mapping[str, str] | None) -> bool:
 
 def trial_open_to_service_owners(ui: Mapping[str, str] | None) -> bool:
     return on((ui or {}).get(TRIAL_SERVICE_OWNERS_KEY))
+
+
+def trial_shown_to_claimed(ui: Mapping[str, str] | None) -> bool:
+    value = (ui or {}).get(TRIAL_SHOW_CLAIMED_KEY)
+    return True if value is None else on(value)
 
 
 def may_offer_trial(ui: Mapping[str, str] | None, *, has_services: bool) -> bool:
