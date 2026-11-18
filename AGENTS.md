@@ -106,7 +106,7 @@ PGClockBot serves many shops and customers from one process and one PasarGuard p
 
 - Every model change ships with an Alembic migration in the same pull request. Revision ids follow `NNNN_short_name`; `down_revision` is the current head. Check `alembic/versions/` on the target branch right before you open the pull request, because another merge may have taken your number.
 - Migrations **MUST** be idempotent (inspect columns, indexes and tables first) and **MUST** have a working `downgrade` that keeps existing rows. Give new `NOT NULL` columns a `server_default`.
-- **MUST** work on PostgreSQL. Until the SQLite removal track is finished, older tests still build the schema on SQLite, so keep declaring partial indexes with both `sqlite_where` and `postgresql_where` and wrap `ALTER` in `op.batch_alter_table` (plain `ALTER` on PostgreSQL); do not add any other SQLite-specific code.
+- **MUST** work on PostgreSQL, the only supported database. Declare partial indexes with `postgresql_where` and use plain `op.alter_column` / `op.add_column`; do not add `sqlite_where`, batch mode or any other SQLite-specific code. Older merged migrations keep theirs; never edit them.
 - Do not drop or rename a column in the same release that stops using it; remove it in a later release.
 - Never edit a migration that has been merged to `dev` or `main`; add a new one.
 - Add a test that upgrades an existing database, runs the upgrade twice, and downgrades (see `tests/test_customer_features.py::CustomerFeatureMigrationTests`).
