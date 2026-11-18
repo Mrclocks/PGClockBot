@@ -886,6 +886,8 @@ DEFAULT_SETTINGS = {
     "user_alert_low_enabled": "0",
     "user_alert_low_traffic_pct": "20",
     "user_alert_low_time_pct": "20",
+    "user_alert_low_traffic_unit": "pct",
+    "user_alert_low_time_unit": "pct",
     "first_use_nudge_enabled": "0",
     # Expired / volume-finished service cleanup (service_cleanup.py keeps the same defaults).
     "expired_cleanup_enabled": "0",
@@ -1563,19 +1565,21 @@ SETTING_GROUPS = {
             "user_alert_low_enabled",
             "ارسال خودکار هشدار کمبود به کاربر",
             "toggle",
-            "وقتی حجم یا زمان باقی‌ماندهٔ سرویس از درصد تعیین‌شده کمتر شود، به کاربر در تلگرام پیام می‌رود.",
+            "وقتی حجم یا زمان باقی‌ماندهٔ سرویس از حد تعیین‌شده کمتر شود، به کاربر در تلگرام پیام می‌رود.",
         ),
         (
             "user_alert_low_traffic_pct",
-            "کمتر از چند درصد حجم؟",
-            "number",
-            "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ حجم مانده پیام برود",
+            "حجم کمتر از",
+            "threshold",
+            "وقتی حجم باقی‌مانده از این مقدار کمتر شود پیام می‌رود. درصد از کل حجم سرویس است؛ گیگ مقدار ثابت باقی‌مانده.",
+            ("user_alert_low_traffic_unit", [("pct", "درصد"), ("gb", "گیگ")]),
         ),
         (
             "user_alert_low_time_pct",
-            "کمتر از چند درصد زمان؟",
-            "number",
-            "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام برود",
+            "زمان کمتر از",
+            "threshold",
+            "وقتی زمان باقی‌مانده از این مقدار کمتر شود پیام می‌رود. درصد از مدت سرویس است؛ روز تعداد روز باقی‌مانده.",
+            ("user_alert_low_time_unit", [("pct", "درصد"), ("day", "روز")]),
         ),
         (
             "first_use_nudge_enabled",
@@ -2167,6 +2171,8 @@ def keys_for_tab(tab: str) -> set[str]:
     for name in names:
         for item in SETTING_GROUPS.get(name, []):
             keys.add(item[0])
+            if len(item) > 4 and item[2] == "threshold":
+                keys.add(item[4][0])
     return keys
 
 
@@ -2256,15 +2262,6 @@ async def get_all_settings(
 
 def on(value: str | None) -> bool:
     return (value or "").strip() in {"1", "true", "yes", "on", "True"}
-
-
-def clamp_alert_percent(raw: str | None, default: int = 20) -> str:
-    """Keep user-alert thresholds in 1..99."""
-    try:
-        n = int(float(str(raw).strip()))
-    except Exception:
-        n = default
-    return str(max(1, min(99, n)))
 
 
 def is_protected_admin(user: BotUser) -> bool:

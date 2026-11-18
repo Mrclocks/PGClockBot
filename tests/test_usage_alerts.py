@@ -20,6 +20,7 @@ from app.db.models import (
     UserService,
 )
 from app.jobs import scheduler as jobs
+from app.services.alert_thresholds import AlertThreshold
 from app.services.service_automation import notify_once
 from app.services.usage_alerts import TOPUP_CALLBACK, AlertExtras, alert_extras, time_alert_markup, traffic_alert_markup
 from app.services.users import _SETTINGS_CACHE, clear_settings_cache, set_setting
@@ -197,6 +198,40 @@ class AlertJobTests(AlertCase):
     def sent(self, bot):
         return {call.args[0]: call for call in bot.send_message.await_args_list}
 
+    async def run_with_thresholds(self, *, info: dict, settings: dict[str, str]) -> list[str]:
+        async with self.Session() as session:
+            await set_setting(session, "user_alert_low_enabled", "1")
+            for key, value in settings.items():
+                await set_setting(session, key, value)
+        clear_settings_cache()
+        pg = SimpleNamespace(subscription_info=AsyncMock(return_value=info))
+        bot = AsyncMock()
+        with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg):
+            await jobs.check_expiring_services(bot)
+        return [c.args[1] for c in bot.send_message.await_args_list if c.args[0] == 1001]
+
+    async def test_gigabyte_and_day_thresholds_alert_on_what_is_left_not_on_the_share(self):
+        gb = 1024**3
+        info = {"status": "active", "expire": (self.now + timedelta(days=2)).isoformat(),
+                "used_traffic": 95 * gb, "data_limit": 100 * gb}  # 5 % and 2 days of a long period left
+        texts = await self.run_with_thresholds(info=info, settings={
+            "user_alert_low_traffic_pct": "10", "user_alert_low_traffic_unit": "gb",
+            "user_alert_low_time_pct": "3", "user_alert_low_time_unit": "day",
+        })
+        self.assertEqual(len(texts), 2)
+        self.assertTrue(any("حجم باقی‌مانده" in text and "گیگ" in text for text in texts))
+        self.assertTrue(any("زمان سرویس" in text and "روز" in text for text in texts))
+
+    async def test_a_gigabyte_threshold_below_the_left_volume_stays_quiet_even_when_the_share_is_small(self):
+        gb = 1024**3
+        info = {"status": "active", "expire": (self.now + timedelta(days=60)).isoformat(),
+                "used_traffic": 950 * gb, "data_limit": 1000 * gb}  # 5 % but 50 GB left
+        texts = await self.run_with_thresholds(info=info, settings={
+            "user_alert_low_traffic_pct": "10", "user_alert_low_traffic_unit": "gb",
+            "user_alert_low_time_pct": "3", "user_alert_low_time_unit": "day",
+        })
+        self.assertEqual(texts, [])
+
     async def test_platform_customer_with_a_short_wallet_is_warned_with_every_offer(self):
         await self.session.execute(BotUser.__table__.update().where(BotUser.id == 1).values(wallet_balance=100))
         self.session.add(ServiceAddonPack(name="Pack", kind="volume", amount=5, price=100, owner_reseller_id=None, is_active=True))
@@ -347,7 +382,7 @@ class RearmSweepTests(AlertCase):
             return answer
 
         async def thresholds(_shop):
-            return (enabled, 20, 20)
+            return (enabled, AlertThreshold(20), AlertThreshold(20))
 
         pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup))
         result = await rearm_flagged_alerts(self.session, pg, thresholds, now=self.now, limit=limit)
@@ -407,7 +442,7 @@ class RearmSweepTests(AlertCase):
             return answer
 
         async def thresholds(_shop):
-            return (True, 20, 20)
+            return (True, AlertThreshold(20), AlertThreshold(20))
 
         pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup))
         first = await rearm_flagged_alerts(self.session, pg, thresholds, now=self.now, limit=2)
@@ -428,7 +463,7 @@ class RearmSweepTests(AlertCase):
             return self.info(days_left=28, used=5)
 
         async def thresholds(_shop):
-            return (True, 20, 20)
+            return (True, AlertThreshold(20), AlertThreshold(20))
 
         await rearm_flagged_alerts(self.session, SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup)), thresholds,
                                    now=self.now, after_id=100, limit=2)
@@ -446,7 +481,7 @@ class RearmSweepTests(AlertCase):
             return self.info(days_left=28, used=5)
 
         async def thresholds(shop):
-            return (shop == 3, 20, 20)
+            return (shop == 3, AlertThreshold(20), AlertThreshold(20))
 
         await rearm_flagged_alerts(self.session, SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup)), thresholds,
                                    now=self.now, limit=2)

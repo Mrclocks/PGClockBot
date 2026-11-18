@@ -46,6 +46,22 @@
     </select>
     {{ setting_help(help) }}
   </label>
+  {% elif kind == 'threshold' %}
+  {# A number and the unit it is measured in (options[0] = unit key, options[1] = unit choices); only that unit is compared. #}
+  {% set unit_key = options[0] %}
+  {% set unit_val = values.get(unit_key, '') or options[1][0][0] %}
+  <div class="form-field">
+    <span>{{ label }}</span>
+    <div class="ds-grid-2">
+      <input name="s_{{ key }}" type="number" value="{{ val }}" dir="ltr" min="1" step="1" inputmode="numeric" aria-label="{{ label }}" />
+      <select name="s_{{ unit_key }}" aria-label="{{ label }} — واحد">
+        {% for opt_val, opt_label in options[1] %}
+        <option value="{{ opt_val }}" {% if unit_val == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {{ setting_help(help) }}
+  </div>
   {% elif kind == 'btn_color' %}
   {# Same tone-aware select as رنگبندی دکمه‌ها / plan color fields #}
   {% set cur_tone = 'default' if not val else val %}
@@ -141,9 +157,6 @@
       {% if key in ['referral_bonus', 'stars_toman_per_star', 'billing_price_per_gb', 'billing_low_balance'] %}data-money{% endif %}
       value="{{ val }}"
       dir="ltr"
-      {% if key in ['user_alert_low_traffic_pct', 'user_alert_low_time_pct'] %}
-      min="1" max="99" step="1" inputmode="numeric"
-      {% endif %}
     />
     {{ setting_help(help) }}
   </label>

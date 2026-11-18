@@ -20,13 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import UserService
 from app.services.formatting import parse_expire
-from app.services.usage_alerts import (
-    period_seconds,
-    plan_durations,
-    should_rearm,
-    time_remaining_pct,
-    traffic_remaining_pct,
-)
+from app.services.alert_thresholds import AlertThreshold, should_rearm_time, should_rearm_traffic
+from app.services.usage_alerts import period_seconds, plan_durations
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +31,7 @@ RECENT_CHANGE_WINDOW = timedelta(hours=12)
 FETCH_TIMEOUT_SECONDS = 12
 FETCH_CONCURRENCY = 8
 
-Thresholds = tuple[bool, int, int]  # (alerts on, traffic %, time %)
+Thresholds = tuple[bool, AlertThreshold, AlertThreshold]  # (alerts on, volume, time)
 ThresholdsFor = Callable[[int | None], Awaitable[Thresholds]]
 
 
@@ -50,13 +45,13 @@ async def _fetch(pg: Any, gate: asyncio.Semaphore, token: str) -> dict | None:
     return info if isinstance(info, dict) else None
 
 
-def _rearm_one(service: UserService, info: dict, *, now: datetime, plan_days: int | None, time_pct: int, traffic_pct: int) -> bool:
+def _rearm_one(service: UserService, info: dict, *, now: datetime, plan_days: int | None, time_limit: AlertThreshold, traffic_limit: AlertThreshold) -> bool:
     """Clear the flags of ``service`` that no longer apply; True when something changed."""
     changed = False
     expire = parse_expire(info.get("expire"))
     if service.notified_expire and expire is not None:
         period = period_seconds(plan_days=plan_days, created_at=service.created_at, expire=expire)
-        if should_rearm(time_remaining_pct(expire, now=now, period=period), time_pct):
+        if should_rearm_time((expire - now).total_seconds(), period, time_limit):
             service.notified_expire = False
             changed = True
     if service.notified_traffic and info.get("data_limit"):
@@ -64,7 +59,7 @@ def _rearm_one(service: UserService, info: dict, *, now: datetime, plan_days: in
             used, limit = float(info.get("used_traffic") or 0), float(info["data_limit"])
         except (TypeError, ValueError):
             return changed
-        if should_rearm(traffic_remaining_pct(used, limit), traffic_pct):
+        if should_rearm_traffic(used, limit, traffic_limit):
             service.notified_traffic = False
             changed = True
     return changed
@@ -155,7 +150,7 @@ async def rearm_flagged_alerts(
     infos = await asyncio.gather(*(_fetch(pg, gate, s.subscription_token) for s in services))
     rearmed = 0
     for service, info in zip(services, infos, strict=True):
-        _enabled, traffic_pct, time_pct = settings[service.shop_id]
+        _enabled, traffic_limit, time_limit = settings[service.shop_id]
         if info is None:
             continue
         checked = validate_service_info(info)
@@ -163,7 +158,7 @@ async def rearm_flagged_alerts(
             sync_service_quota_cache(service, info=checked)
         if _rearm_one(
             service, info, now=now, plan_days=plans.get(int(service.plan_id)) if service.plan_id else None,
-            time_pct=time_pct, traffic_pct=traffic_pct,
+            time_limit=time_limit, traffic_limit=traffic_limit,
         ):
             rearmed += 1
     await session.commit()

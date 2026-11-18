@@ -113,6 +113,7 @@ from app.services.settings_hub import (
     system_hub_sections,
     system_settings_groups,
 )
+from app.services.alert_thresholds import normalize_threshold_form
 from app.services.users import (
     SETTING_VISIBILITY,
     SETTINGS_DOMAIN_REDIRECTS,
@@ -5211,10 +5212,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                     from app.services.button_styles import normalize_style
 
                     val = normalize_style(val)
-                if key in ("user_alert_low_traffic_pct", "user_alert_low_time_pct"):
-                    from app.services.users import clamp_alert_percent
-
-                    val = clamp_alert_percent(val)
                 if key == "force_join_channel":
                     from app.services.users import normalize_force_join_channel_value
 
@@ -5230,6 +5227,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                     val = normalize_setting_value(key, val)
                 payload[key] = val
+        normalize_threshold_form(payload)
         if tab == "daily_report":
             from app.services.daily_report import (
                 ACTOR_OWNER,

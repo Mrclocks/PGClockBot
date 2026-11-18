@@ -20,7 +20,15 @@ from app.jobs.pg_link_watchdog import run_pg_link_watchdog
 from app.jobs.service_cleanup import run_service_cleanup
 from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
-from app.services.alert_rearm import rearm_flagged_alerts
+from app.services.alert_rearm import Thresholds, rearm_flagged_alerts
+from app.services.alert_thresholds import (
+    AlertThreshold,
+    describe_threshold,
+    time_is_low,
+    time_threshold,
+    traffic_is_low,
+    traffic_threshold,
+)
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
 from app.services.replaceable_notices import DAILY_REPORT_KEY, SUBORDINATE_REPORT_KEY, send_replacing_report
@@ -34,9 +42,7 @@ from app.services.usage_alerts import (
     plan_durations,
     replace_previous_alerts,
     time_alert_markup,
-    time_remaining_pct,
     traffic_alert_markup,
-    traffic_remaining_pct,
     usage_alert_key,
 )
 
@@ -47,13 +53,6 @@ scheduler = AsyncIOScheduler()
 _PG_FETCH_CONCURRENCY = 8
 # Where the next alert re-arm sweep continues (in memory: a restart simply starts from the beginning).
 _rearm_after_id = 0
-
-
-def _as_int(val, default: int) -> int:
-    try:
-        return int(float(val))
-    except Exception:
-        return default
 
 
 def _resolve_send_bot(
@@ -158,7 +157,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 ).scalars().all()
                 users_by_id = {u.id: u for u in rows}
 
-            eligible: list[tuple[UserService, BotUser, dict, int, int, int | None]] = []
+            eligible: list[tuple[UserService, BotUser, dict, AlertThreshold, AlertThreshold, int | None]] = []
             for svc in services:
                 user = users_by_id.get(svc.bot_user_id)
                 if not user or user.is_blocked:
@@ -175,9 +174,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 if not on(ui.get("user_alert_low_enabled", "0")):
                     continue
 
-                traffic_pct = max(1, min(99, _as_int(ui.get("user_alert_low_traffic_pct"), 20)))
-                time_pct = max(1, min(99, _as_int(ui.get("user_alert_low_time_pct"), 20)))
-                eligible.append((svc, user, ui, traffic_pct, time_pct, rid))
+                eligible.append((svc, user, ui, traffic_threshold(ui), time_threshold(ui), rid))
 
             if not eligible:
                 if len(services) < batch_size:
@@ -204,7 +201,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 *[_fetch_info(svc.subscription_token) for svc, *_rest in eligible]
             )
 
-            for (svc, user, _ui, traffic_pct, time_pct, shop_rid), info in zip(eligible, infos):
+            for (svc, user, _ui, traffic_limit, time_limit, shop_rid), info in zip(eligible, infos):
                 if not info:
                     continue
                 from app.services.bot_user_admin import sync_service_quota_cache
@@ -218,7 +215,7 @@ async def check_expiring_services(bot: Bot) -> None:
                     continue  # the shop's own bot is not running: never alert its customers from the platform bot
                 extras = extras_by_shop[shop_rid]
 
-                # --- remaining TIME percent ---
+                # --- remaining TIME ---
                 if not svc.notified_expire:
                     expire = parse_expire(info.get("expire"))
                     created = svc.created_at
@@ -230,32 +227,30 @@ async def check_expiring_services(bot: Bot) -> None:
                             created_at=created,
                             expire=expire,
                         )
-                        rem_pct = time_remaining_pct(expire, now=now, period=period)
-                        if rem_pct is not None:
-                            if rem_pct <= time_pct:
-                                try:
-                                    one_tap = on(_ui.get("one_tap_renew_enabled", "1"))
-                                    markup = time_alert_markup(_ui, svc.id, extras)
-                                    alert = await send_bot.send_message(
-                                        user.telegram_id,
-                                        f"⏰ زمان سرویس <b>{svc.pg_username}</b> به کمتر از "
-                                        f"<b>{time_pct}٪</b> رسیده است.\n"
-                                        "از بخش سرویس‌ها تمدید کنید."
-                                        + ("\nیا دکمه زیر را بزنید:" if one_tap else "")
-                                        + extras.note_for(svc.id),
-                                        parse_mode="HTML",
-                                        reply_markup=markup,
-                                    )
-                                    svc.notified_expire = True
-                                    sent_alerts.append((send_bot, usage_alert_key(ALERT_TIME, svc.id), alert))
-                                    if one_tap:
-                                        svc.renew_nudge_sent_at = now
-                                except Exception:
-                                    logger.debug(
-                                        "expire alert send failed tg=%s", user.telegram_id, exc_info=True
-                                    )
+                        if time_is_low((expire - now).total_seconds(), period, time_limit):
+                            try:
+                                one_tap = on(_ui.get("one_tap_renew_enabled", "1"))
+                                markup = time_alert_markup(_ui, svc.id, extras)
+                                alert = await send_bot.send_message(
+                                    user.telegram_id,
+                                    f"⏰ زمان سرویس <b>{svc.pg_username}</b> به کمتر از "
+                                    f"<b>{describe_threshold(time_limit)}</b> رسیده است.\n"
+                                    "از بخش سرویس‌ها تمدید کنید."
+                                    + ("\nیا دکمه زیر را بزنید:" if one_tap else "")
+                                    + extras.note_for(svc.id),
+                                    parse_mode="HTML",
+                                    reply_markup=markup,
+                                )
+                                svc.notified_expire = True
+                                sent_alerts.append((send_bot, usage_alert_key(ALERT_TIME, svc.id), alert))
+                                if one_tap:
+                                    svc.renew_nudge_sent_at = now
+                            except Exception:
+                                logger.debug(
+                                    "expire alert send failed tg=%s", user.telegram_id, exc_info=True
+                                )
 
-                # --- remaining TRAFFIC percent ---
+                # --- remaining TRAFFIC ---
                 if not svc.notified_traffic:
                     used = float(info.get("used_traffic") or 0)
                     limit = info.get("data_limit")
@@ -264,37 +259,35 @@ async def check_expiring_services(bot: Bot) -> None:
                             limit_f = float(limit)
                         except (TypeError, ValueError):
                             limit_f = 0
-                        rem_pct = traffic_remaining_pct(used, limit_f)
-                        if rem_pct is not None:
-                            if rem_pct <= traffic_pct:
-                                try:
-                                    alert = await send_bot.send_message(
-                                        user.telegram_id,
-                                        f"📉 حجم باقی‌مانده سرویس <b>{svc.pg_username}</b> کمتر از "
-                                        f"<b>{traffic_pct}٪</b> است "
-                                        f"({format_bytes_ratio(used, limit_f, joiner=' از ')})."
-                                        + extras.note_for(svc.id),
-                                        parse_mode="HTML",
-                                        reply_markup=traffic_alert_markup(_ui, svc.id, extras),
-                                    )
-                                    svc.notified_traffic = True
-                                    sent_alerts.append((send_bot, usage_alert_key(ALERT_TRAFFIC, svc.id), alert))
-                                except Exception:
-                                    logger.debug(
-                                        "traffic alert send failed tg=%s", user.telegram_id, exc_info=True
-                                    )
+                        if traffic_is_low(used, limit_f, traffic_limit):
+                            try:
+                                alert = await send_bot.send_message(
+                                    user.telegram_id,
+                                    f"📉 حجم باقی‌مانده سرویس <b>{svc.pg_username}</b> کمتر از "
+                                    f"<b>{describe_threshold(traffic_limit)}</b> است "
+                                    f"({format_bytes_ratio(used, limit_f, joiner=' از ')})."
+                                    + extras.note_for(svc.id),
+                                    parse_mode="HTML",
+                                    reply_markup=traffic_alert_markup(_ui, svc.id, extras),
+                                )
+                                svc.notified_traffic = True
+                                sent_alerts.append((send_bot, usage_alert_key(ALERT_TRAFFIC, svc.id), alert))
+                            except Exception:
+                                logger.debug(
+                                    "traffic alert send failed tg=%s", user.telegram_id, exc_info=True
+                                )
 
             await session.commit()
             await replace_previous_alerts(session, sent_alerts)
             if len(services) < batch_size:
                 break
 
-        async def thresholds_for(shop_id: int | None) -> tuple[bool, int, int]:
+        async def thresholds_for(shop_id: int | None) -> Thresholds:
             shop_ui = await ui_for(shop_id)
             return (
                 on(shop_ui.get("user_alert_low_enabled", "0")),
-                max(1, min(99, _as_int(shop_ui.get("user_alert_low_traffic_pct"), 20))),
-                max(1, min(99, _as_int(shop_ui.get("user_alert_low_time_pct"), 20))),
+                traffic_threshold(shop_ui),
+                time_threshold(shop_ui),
             )
 
         try:
