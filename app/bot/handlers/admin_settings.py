@@ -35,10 +35,7 @@ from app.services.settings_search import (
     search_settings,
 )
 from app.bot.entry_gate import ENTRY_APPROVAL_BOT_FIELDS, ENTRY_APPROVAL_SUB, ENTRY_APPROVAL_SUB_TITLE
-from app.services.entry_approval_config import ENTRY_APPROVAL_NUMBER_BOUNDS
 from app.services.users import get_all_settings, get_setting, on, set_setting
-from app.services.approval_rule import MAX_MINUTES as APPROVAL_MAX_MINUTES
-from app.services.catalog_pricing import MAX_PRICE
 from app.services.miniapp_branding import NOTICE_SETTING as MINIAPP_NOTICE, normalize_notice
 from app.services.miniapp_shop import PLATFORM_SWITCH as MINIAPP_SHOPS_SWITCH, set_platform_shop_miniapps
 from app.services.reseller_bots import schedule_shop_menu_sync
@@ -46,10 +43,6 @@ from app.services.service_import_config import (
     KEY_ENABLED as IMPORT_KEY_ENABLED,
     KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
     KEY_MODE as IMPORT_KEY_MODE,
-    MAX_PER_USER_LIMIT as IMPORT_MAX_PER_USER_LIMIT,
-    MIN_PER_USER as IMPORT_MIN_PER_USER,
-    UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
-    UNLIMITED_WORDS as IMPORT_UNLIMITED_WORDS,
 )
 from app.services.user_errors import domain_error_text
 from app.services.settings_button_labels import (
@@ -63,9 +56,18 @@ from app.services.settings_button_labels import (
     button_label_subs,
 )
 from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
+from app.services.bot_setting_values import (
+    NUMBER_BOUNDS,
+    NUMBER_UNLIMITED_VALUES,
+    SELECT_OPTIONS,
+    UNLIMITED_LABEL,
+    next_select_value,
+    number_range_hint,
+    parse_bounded_int,
+    parse_number_setting,
+    select_label,
+)
 from app.services.settings_operation_fields import (
-    ALERT_UNIT_OPTIONS,
-    OPERATION_NUMBER_BOUNDS,
     OPERATIONS_FIELDS,
     PG_LINK_HEALTH_FIELDS,
     RECEIPT_MATCH_FIELDS,
@@ -503,33 +505,9 @@ def _field_lookup() -> dict[str, Field]:
 
 FIELDS = _field_lookup()
 
-# Select fields cycle through these (value, Persian label); keep in sync with SETTING_GROUPS.
-SELECT_CYCLE_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
-    "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
-    IMPORT_KEY_MODE: (("instant", "فوری"), ("approval", "با تأیید ادمین")),
-    **ALERT_UNIT_OPTIONS,
-}
-
-# Integer ranges for PAYG settings (consumers clamp the same bounds).
-NUMBER_INT_RANGES: dict[str, tuple[int, int]] = {
-    "billing_low_balance": (0, 10_000_000_000),
-    "billing_tick_minutes": (1, 1440),
-    "credit_due_days": (0, 365),
-    "credit_block_create_days": (0, 365),
-    "credit_block_changes_days": (0, 365),
-    "credit_block_days": (0, 365),
-    # Same bounds the consumers apply (approval_rule, daily_report, service_import_config).
-    "auto_approve_after_minutes": (0, APPROVAL_MAX_MINUTES),
-    "auto_approve_after_max_amount": (0, MAX_PRICE),
-    "admin_daily_report_hour": (0, 23),
-    **OPERATION_NUMBER_BOUNDS,
-    IMPORT_KEY_MAX_PER_USER: (IMPORT_MIN_PER_USER, IMPORT_MAX_PER_USER_LIMIT),
-    **ENTRY_APPROVAL_NUMBER_BOUNDS,
-}
-
-# Number settings that also take «نامحدود» (stored as the value here), like the web field's button.
-NUMBER_UNLIMITED_VALUES: dict[str, str] = {IMPORT_KEY_MAX_PER_USER: IMPORT_UNLIMITED_VALUE}
-UNLIMITED_LABEL = "نامحدود"
+# Number bounds and choice values are shared with the shop bot (app/services/bot_setting_values.py).
+SELECT_CYCLE_OPTIONS = SELECT_OPTIONS
+NUMBER_INT_RANGES = NUMBER_BOUNDS
 
 # Plain one-line texts saved through their service normalizer instead of rich-text packing.
 TEXT_NORMALIZERS = {MINIAPP_NOTICE: normalize_notice}
@@ -555,41 +533,9 @@ def _is_toggleable_setting_key(key: str) -> bool:
     return bool(meta and meta[2] == "toggle")
 
 
-def _number_range_hint(key: str) -> str:
-    lo, hi = NUMBER_INT_RANGES[key]
-    hint = f"یک عدد صحیح بین {lo} و {hi} بفرستید"
-    return hint + (f" یا «{UNLIMITED_LABEL}»." if key in NUMBER_UNLIMITED_VALUES else ".")
-
-
-def _parse_number_setting(key: str, text: str) -> str:
-    """Stored text of a number setting; ``ValueError`` carries the Persian hint to show."""
-    raw = text.replace(",", "").replace("٬", "")
-    if key in NUMBER_UNLIMITED_VALUES and raw.strip().lower() in IMPORT_UNLIMITED_WORDS:
-        return NUMBER_UNLIMITED_VALUES[key]
-    bounds = NUMBER_INT_RANGES.get(key)
-    if bounds is not None:
-        try:
-            return str(_parse_bounded_int(raw, bounds[0], bounds[1]))
-        except ValueError:
-            raise ValueError(_number_range_hint(key)) from None
-    try:
-        float(raw)
-    except ValueError:
-        raise ValueError(feedback.ENTER_VALID_NUMBER_SHORT) from None
-    return raw
-
-
-def _parse_bounded_int(raw: str, lo: int, hi: int) -> int:
-    """Whole number in ``[lo, hi]``; rejects floats, NaN, and signs outside the range."""
-    from app.services.numbers import normalize_number_text
-
-    text = normalize_number_text(raw)
-    if not text or text in {".", "-", "+"} or any(ch in text for ch in ".eE"):
-        raise ValueError("not an integer")
-    value = int(text)
-    if value < lo or value > hi:
-        raise ValueError("out of range")
-    return value
+_number_range_hint = number_range_hint
+_parse_number_setting = parse_number_setting
+_parse_bounded_int = parse_bounded_int
 
 
 def _preview(value: str | None, *, limit: int = 120) -> str:
@@ -716,14 +662,7 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
         )
 
 
-def _select_label(key: str, raw: str | None) -> str:
-    options = SELECT_CYCLE_OPTIONS.get(key) or ()
-    by_value = {value: text for value, text in options}
-    if raw in by_value:
-        return by_value[raw]
-    if options:
-        return options[0][1]
-    return str(raw or "—")
+_select_label = select_label
 
 
 def _field_button(ui: dict, key: str, label: str, kind: str) -> InlineKeyboardButton:
@@ -1262,11 +1201,7 @@ async def settings_select_cycle(
     if not options or meta is None or meta[2] != "select":
         await callback.answer("کلید نامعتبر", show_alert=True)
         return
-    values = [value for value, _label in options]
-    cur = await get_setting(session, key)
-    if cur not in values:
-        cur = values[0]
-    nxt = values[(values.index(cur) + 1) % len(values)]
+    nxt = next_select_value(key, await get_setting(session, key))
     await set_setting(session, key, nxt)
     await callback.answer(feedback.SAVED)
     await _rerender_after_key(callback, session, key)

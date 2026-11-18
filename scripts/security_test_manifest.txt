@@ -543,3 +543,4 @@ tests/test_shop_settings_platform_only_groups.py
 tests/test_bot_settings_edit_path.py
 tests/test_bot_message_text_settings.py
 tests/test_owner_bot_operation_settings.py
+tests/test_bot_setting_values.py

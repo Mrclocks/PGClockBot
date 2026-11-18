@@ -1,0 +1,121 @@
+"""Value rules for number and choice settings typed or tapped in the owner and shop bots.
+
+Every number field a bot offers has whole-number bounds here, taken from what its consumers
+accept, so the bots never store NaN, infinity, a negative price or a value the reader would
+clamp or crash on. Choice fields list their values with the web's labels.
+"""
+
+from __future__ import annotations
+
+from app.services import bot_feedback_texts as feedback
+from app.services.approval_rule import MAX_MINUTES as APPROVAL_MAX_MINUTES
+from app.services.catalog_pricing import MAX_PRICE
+from app.services.entry_approval_config import ENTRY_APPROVAL_NUMBER_BOUNDS
+from app.services.numbers import normalize_number_text
+from app.services.service_import_config import (
+    KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
+    KEY_MODE as IMPORT_KEY_MODE,
+    MAX_PER_USER_LIMIT as IMPORT_MAX_PER_USER_LIMIT,
+    MIN_PER_USER as IMPORT_MIN_PER_USER,
+    UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
+    UNLIMITED_WORDS as IMPORT_UNLIMITED_WORDS,
+)
+from app.services.settings_operation_fields import ALERT_UNIT_OPTIONS, OPERATION_NUMBER_BOUNDS
+
+CUSTOM_PLAN_MAX_GB = 100_000
+CUSTOM_PLAN_MAX_DAYS = 3650
+DAILY_REPORT_LAST_HOUR = 23
+
+# Whole-number bounds, inclusive, of every bot number setting.
+NUMBER_BOUNDS: dict[str, tuple[int, int]] = {
+    "billing_low_balance": (0, 10_000_000_000),
+    "billing_tick_minutes": (1, 1440),
+    "credit_due_days": (0, 365),
+    "credit_block_create_days": (0, 365),
+    "credit_block_changes_days": (0, 365),
+    "credit_block_days": (0, 365),
+    # Same bounds the consumers apply (approval_rule, daily_report, service_import_config).
+    "auto_approve_after_minutes": (0, APPROVAL_MAX_MINUTES),
+    "auto_approve_after_max_amount": (0, MAX_PRICE),
+    "admin_daily_report_hour": (0, DAILY_REPORT_LAST_HOUR),
+    # Money and catalog numbers: never negative, never above the catalog price cap.
+    "referral_bonus": (0, MAX_PRICE),
+    "stars_toman_per_star": (1, MAX_PRICE),
+    "custom_plan_price_per_gb": (0, MAX_PRICE),
+    "custom_plan_price_per_day": (0, MAX_PRICE),
+    "custom_plan_min_gb": (1, CUSTOM_PLAN_MAX_GB),
+    "custom_plan_max_gb": (1, CUSTOM_PLAN_MAX_GB),
+    "custom_plan_min_days": (1, CUSTOM_PLAN_MAX_DAYS),
+    "custom_plan_max_days": (1, CUSTOM_PLAN_MAX_DAYS),
+    **OPERATION_NUMBER_BOUNDS,
+    IMPORT_KEY_MAX_PER_USER: (IMPORT_MIN_PER_USER, IMPORT_MAX_PER_USER_LIMIT),
+    **ENTRY_APPROVAL_NUMBER_BOUNDS,
+}
+
+# Number settings that also take «نامحدود» (stored as the value here), like the web field's button.
+NUMBER_UNLIMITED_VALUES: dict[str, str] = {IMPORT_KEY_MAX_PER_USER: IMPORT_UNLIMITED_VALUE}
+UNLIMITED_LABEL = "نامحدود"
+
+# Choice fields cycle through these (value, Persian label); the same values the web offers.
+SELECT_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
+    "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
+    IMPORT_KEY_MODE: (("instant", "فوری"), ("approval", "با تأیید ادمین")),
+    **ALERT_UNIT_OPTIONS,
+}
+
+
+def number_range_hint(key: str) -> str:
+    """The Persian hint for a bounded number field."""
+    low, high = NUMBER_BOUNDS[key]
+    hint = f"یک عدد صحیح بین {low} و {high} بفرستید"
+    return hint + (f" یا «{UNLIMITED_LABEL}»." if key in NUMBER_UNLIMITED_VALUES else ".")
+
+
+def parse_bounded_int(raw: str, low: int, high: int) -> int:
+    """Whole number in ``[low, high]``; rejects decimals, NaN, infinity, exponents and out-of-range values."""
+    text = normalize_number_text(raw)
+    if not text or text in {".", "-", "+"} or any(ch in text for ch in ".eE"):
+        raise ValueError("not an integer")
+    try:
+        value = int(text)
+    except ValueError:
+        raise ValueError("not an integer") from None
+    if value < low or value > high:
+        raise ValueError("out of range")
+    return value
+
+
+def parse_number_setting(key: str, text: str) -> str:
+    """Stored text of a number setting; ``ValueError`` carries the Persian hint to show.
+
+    A number field without bounds is refused: every bot number field must be listed in
+    ``NUMBER_BOUNDS``.
+    """
+    raw = str(text or "").replace(",", "").replace("٬", "")
+    if key in NUMBER_UNLIMITED_VALUES and raw.strip().lower() in IMPORT_UNLIMITED_WORDS:
+        return NUMBER_UNLIMITED_VALUES[key]
+    bounds = NUMBER_BOUNDS.get(key)
+    if bounds is None:
+        raise ValueError(feedback.ENTER_VALID_NUMBER_SHORT)
+    try:
+        return str(parse_bounded_int(raw, bounds[0], bounds[1]))
+    except ValueError:
+        raise ValueError(number_range_hint(key)) from None
+
+
+def select_label(key: str, raw: str | None) -> str:
+    """The label of the stored choice, or of the first choice when the stored value is unknown."""
+    options = SELECT_OPTIONS.get(key) or ()
+    by_value = dict(options)
+    if raw in by_value:
+        return by_value[raw]
+    if options:
+        return options[0][1]
+    return str(raw or "—")
+
+
+def next_select_value(key: str, current: str | None) -> str:
+    """The choice after ``current``; an unknown stored value moves to the second choice."""
+    values = [value for value, _label in SELECT_OPTIONS[key]]
+    cur = current if current in values else values[0]
+    return values[(values.index(cur) + 1) % len(values)]
