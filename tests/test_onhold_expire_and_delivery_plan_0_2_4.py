@@ -145,6 +145,7 @@ class DeliveryPlanTypeTests(unittest.IsolatedAsyncioTestCase):
         plan = SimpleNamespace(id=3, name="یک‌ماهه", is_trial=False, billing_mode=None, plan_kind=None)
         order = SimpleNamespace(
             id=11,
+            status="delivered",
             service_id=1,
             plan_id=3,
             plan=plan,

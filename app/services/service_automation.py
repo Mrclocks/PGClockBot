@@ -8,9 +8,10 @@ import math
 import secrets
 from datetime import datetime, timedelta, timezone
 
+from aiogram.exceptions import TelegramAPIError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import or_, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -348,6 +349,27 @@ async def _finish_order(session, row, service, user, bot, order) -> None:
         await session.commit()
 
 
+async def _queue_failed_order(session: AsyncSession, order: Order, user: BotUser, bot, *, error: str) -> None:
+    """List the paid order for the retry job (which refunds it if it never applies) and alert its staff."""
+    from app.services.notifications import notify_approved_delivery_stuck
+    from app.services.ux20 import note_delivery_send_failure
+
+    payment = await session.scalar(
+        select(Payment)
+        .where(Payment.order_id == order.id, Payment.status == PaymentStatus.APPROVED.value)
+        .order_by(Payment.id.desc())
+        .limit(1)
+    )
+    await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    if payment is None:
+        return
+    try:
+        await notify_approved_delivery_stuck(bot, session, payment, user.telegram_id, error=error)
+    except (TelegramAPIError, SQLAlchemyError, ValueError):
+        # The order is listed under failed deliveries either way.
+        log.warning("automation stuck notice failed order=%s", order.id, exc_info=True)
+
+
 async def _process_locked(session, row, service, user, bot) -> None:
     from app.services.orders import (
         _claim_payable_order,
@@ -361,6 +383,13 @@ async def _process_locked(session, row, service, user, bot) -> None:
         order = await session.get(Order, row.pending_order_id)
         if order and order.status == OrderStatus.DELIVERED.value:
             await _finish_order(session, row, service, user, bot, order)
+        elif order and order.status == OrderStatus.CANCELLED.value:
+            # Closed after a failed delivery (refunded or settled by staff, who told the
+            # customer); the next due period may buy again.
+            row.pending_order_id = None
+            row.pending_action = None
+            row.needs_review = False
+            await session.commit()
         elif order:
             # A restart or network failure after debit is ambiguous. Never buy
             # again or repeat a remote mutation; the normal admin order flow
@@ -530,12 +559,13 @@ async def _process_locked(session, row, service, user, bot) -> None:
                 )
             else:
                 order = await apply_service_addon(session, order)
-        except Exception:
+        except Exception as exc:
             log.exception(
                 "automatic delivery needs review service=%s order=%s",
                 service.id,
                 order.id,
             )
+            delivery_error = str(exc)
             await session.rollback()
             await session.refresh(row)
             await session.refresh(order)
@@ -544,6 +574,7 @@ async def _process_locked(session, row, service, user, bot) -> None:
             if order.status != OrderStatus.DELIVERED.value:
                 row.needs_review = True
                 await session.commit()
+                await _queue_failed_order(session, order, user, bot, error=delivery_error)
                 await notify_once(
                     session,
                     row,

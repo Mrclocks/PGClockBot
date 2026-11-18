@@ -144,15 +144,43 @@ def terms_carry(terms: dict) -> tuple[bool, bool]:
     return bool(terms.get("carry_volume", both)), bool(terms.get("carry_time", both))
 
 
+def carry_loss_warning(
+    *, lost_bytes: int | None, lost_seconds: int | None, volume_after: str, time_after: str
+) -> str | None:
+    """The buyer-facing warning for a renewal that drops part of the quota: what is lost, what remains.
+
+    None when nothing is left to lose (an unlimited or used-up quota is not "lost").
+    """
+    labels: list[str] = []
+    lost: list[str] = []
+    if lost_bytes:
+        labels.append("حجم")
+        lost.append(f"{format_bytes(lost_bytes)} حجم")
+    if lost_seconds and lost_seconds >= 60:
+        days = f"{lost_seconds / 86400:.1f}".rstrip("0").rstrip(".")
+        labels.append("زمان")
+        lost.append(f"{days} روز زمان")
+    if not lost:
+        return None
+    return (
+        f"⚠️ توجه: مانده {' و '.join(labels)} به دوره جدید منتقل نمی‌شود؛ "
+        f"با این تمدید، {' و '.join(lost)} باقی‌ماندهٔ فعلی شما از بین می‌رود. "
+        f"بعد از تمدید فقط {volume_after} حجم و {time_after} زمان خواهید داشت."
+    )
+
+
 def _renewal_warnings(
     *, carry_volume: bool, carry_time: bool, on_hold: bool, remaining, added, old_seconds, seconds, new_seconds,
+    volume_after: str, time_after: str,
 ) -> list[str]:
     warnings = []
-    lost = [label for label, kept in (("حجم", carry_volume), ("زمان", carry_time)) if not kept]
-    if lost:
-        warnings.append(
-            f"مانده {' و '.join(lost)} به دوره جدید منتقل نمی‌شود؛ فقط سهمیه همین پلن برای آن اعمال می‌شود."
-        )
+    loss = carry_loss_warning(
+        lost_bytes=None if carry_volume else remaining,
+        lost_seconds=None if carry_time else old_seconds,
+        volume_after=volume_after, time_after=time_after,
+    )
+    if loss:
+        warnings.append(loss)
     if on_hold and new_seconds is None:
         warnings.append("پلن زمان نامحدود، سرویس را بدون انتظار برای اتصال فعال می‌کند.")
     if remaining is None and added is not None:
@@ -193,7 +221,7 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
         payload["on_hold_expire_duration"] = new_seconds
     volume_label = lambda value: "نامحدود" if value is None else format_bytes(value)
     time_label = lambda value: "نامحدود" if value is None else f"{value / 86400:.2f}".rstrip("0").rstrip(".") + " روز"
-    carry_note = {True: " (منتقل می‌شود)", False: " (منتقل نمی‌شود)"}
+    carry_note = {True: " (منتقل می‌شود)", False: " (از بین می‌رود)"}
     lines = [
         f"حجم مانده: {volume_label(remaining)}{carry_note[carry_volume]}",
         f"حجم پلن: {volume_label(added)}",
@@ -207,12 +235,15 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
     warnings = _renewal_warnings(
         carry_volume=carry_volume, carry_time=carry_time, on_hold=on_hold, remaining=remaining,
         added=added, old_seconds=old_seconds, seconds=seconds, new_seconds=new_seconds,
+        volume_after=volume_label(new_remaining), time_after=time_label(new_seconds),
     )
     return {
         "payload": payload, "remaining_bytes": remaining,
         "result_remaining_bytes": new_remaining, "result_seconds": new_seconds,
         "carry_remaining": carry_volume and carry_time,
         "carry_volume": carry_volume, "carry_time": carry_time,
+        # Where the new period starts, for display (service_period); not part of the panel write.
+        "period_start": {"used": used, "lifetime": info.get("lifetime_used_traffic")},
         "lines": lines, "warnings": warnings, "notice": PREVIEW_NOTICE,
     }
 
@@ -254,5 +285,6 @@ async def preview_renewal(session, *, user_id, service, plan) -> dict:
     pg = await get_pg_for_reseller(session, shop_id) if shop_id else get_pg()
     result = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), terms)
     result.pop("payload")
+    result.pop("period_start")
     quote = await quote_product(session, plan, shop_id=shop_id)
     return {**result, **quote.payload(), "terms": terms, "plan_name": plan.name, "request_key": secrets.token_hex(16)}

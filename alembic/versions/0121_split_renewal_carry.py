@@ -1,8 +1,8 @@
 """Separate renewal carry-over switches for volume and time (customer plans) and for extra
 GB and extra users (reseller packages).
 
-Revision ID: 0119_split_renewal_carry
-Revises: 0118_shop_targeted_message_days
+Revision ID: 0121_split_renewal_carry
+Revises: 0120_service_period_baseline
 
 Adds ``plans.carry_remaining_volume`` / ``plans.carry_remaining_time`` and
 ``reseller_plans.keep_extra_gb_on_renew`` / ``reseller_plans.keep_extra_users_on_renew``
@@ -20,8 +20,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0119_split_renewal_carry"
-down_revision: Union[str, None] = "0118_shop_targeted_message_days"
+revision: str = "0121_split_renewal_carry"
+down_revision: Union[str, None] = "0120_service_period_baseline"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

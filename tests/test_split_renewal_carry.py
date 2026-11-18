@@ -143,7 +143,7 @@ class SplitMigrationTests(unittest.TestCase):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
-        spec = importlib.util.spec_from_file_location("split_carry", ROOT / "alembic/versions/0119_split_renewal_carry.py")
+        spec = importlib.util.spec_from_file_location("split_carry", ROOT / "alembic/versions/0121_split_renewal_carry.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
         engine = sa.create_engine("sqlite:///:memory:")
