@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -31,6 +32,7 @@ from app.db.models import (
     ResellerApplicationStatus,
 )
 from app.services.customer_notice_buttons import customer_notice_markup
+from app.services.delivery_recovery_policy import missing_delivery_clause
 from app.services.orders import is_mutation_order_note
 from app.services.payer_notify import notify_payer
 from app.services.shop_scope import assert_order_retry_in_scope
@@ -39,6 +41,7 @@ from app.services.wallet import credit_wallet
 logger = logging.getLogger(__name__)
 
 STALE_AFTER = timedelta(minutes=10)
+AUTO_REFUND_ACTOR = "auto-retry"
 STUCK_STATUSES = (OrderStatus.PAID.value, OrderStatus.DELIVERING.value)
 ORDER_NOT_FOUND = "سفارش پیدا نشد"
 NOT_STUCK = "این سفارش دیگر گیرکرده نیست یا همین حالا در حال تحویل است؛ چند دقیقه بعد دوباره امتحان کنید"
@@ -72,7 +75,7 @@ async def _load(session: AsyncSession, staff: dict, order_id: int) -> Order:
     return order
 
 
-def _mutation_may_be_applied(order: Order) -> bool:
+def mutation_may_be_applied(order: Order) -> bool:
     """A renewal or add-on whose last panel write may have gone through."""
     if not is_mutation_order_note(order.note):
         return False
@@ -96,7 +99,7 @@ async def _application(session: AsyncSession, order: Order) -> ResellerApplicati
 
 
 async def _assert_refund_safe(session: AsyncSession, order: Order) -> None:
-    if _mutation_may_be_applied(order):
+    if mutation_may_be_applied(order):
         raise ValueError(MUTATION_MAY_BE_APPLIED)
     app = await _application(session, order)
     if app is not None and app.status == ResellerApplicationStatus.APPROVED.value:
@@ -112,13 +115,19 @@ async def _close_application(session: AsyncSession, order: Order, actor: str) ->
 
 
 async def _claim(session: AsyncSession, order: Order, new_status: str, now: datetime) -> None:
+    await _claim_where(
+        session, order, new_status, now,
+        Order.status.in_(STUCK_STATUSES), Order.updated_at <= now - STALE_AFTER,
+    )
+
+
+async def _claim_where(session: AsyncSession, order: Order, new_status: str, now: datetime, *conditions) -> None:
     result = await session.execute(
         update(Order)
         .where(
             Order.id == int(order.id),
-            Order.status.in_(STUCK_STATUSES),
-            Order.service_id.is_(None),
-            Order.updated_at <= now - STALE_AFTER,
+            missing_delivery_clause(),
+            *conditions,
         )
         # A closed renewal or add-on no longer blocks other changes to its service.
         .values(status=new_status, service_mutation_pending=False, **delivered_stamp(new_status, now=now)),
@@ -158,11 +167,36 @@ async def cancel_and_refund(session: AsyncSession, staff: dict, order_id: int, *
     """Cancel the order and return what was paid for it to the customer's wallet (once)."""
     now = now or datetime.now(timezone.utc)
     order = await _load(session, staff, order_id)
+    return await _refund_claimed(
+        session, order, actor=actor, now=now,
+        claim=lambda: _claim(session, order, OrderStatus.CANCELLED.value, now),
+    )
+
+
+async def refund_undelivered_order(session: AsyncSession, order: Order, *, now: datetime) -> Resolution:
+    """Automatic refund after the retry job gave up: same checks and ledger as the staff refund.
+
+    The claim needs the order still PAID (a DELIVERING one may be mid-write) and no panel
+    write in doubt; it is atomic, so a staff action or a second job run changes it once.
+    """
+    return await _refund_claimed(
+        session, order, actor=AUTO_REFUND_ACTOR, now=now,
+        claim=lambda: _claim_where(
+            session, order, OrderStatus.CANCELLED.value, now,
+            Order.status == OrderStatus.PAID.value, Order.service_mutation_pending.is_(False),
+        ),
+    )
+
+
+async def _refund_claimed(
+    session: AsyncSession, order: Order, *, actor: str, now: datetime, claim: Callable[[], Awaitable[None]],
+) -> Resolution:
+    order_id = int(order.id)
     await _assert_refund_safe(session, order)
     user_id, shop_id = int(order.user_id), (int(order.reseller_id) if order.reseller_id else None)
     payments = await _approved_payments(session, order_id)
     amount = sum(max(0, int(p.amount or 0)) for p in payments)
-    await _claim(session, order, OrderStatus.CANCELLED.value, now)
+    await claim()
     await _close_application(session, order, actor)
     if amount > 0:
         user = await session.get(BotUser, user_id)
@@ -241,13 +275,15 @@ def _reason_text(order: Order, app: ResellerApplication | None) -> str:
     if note.startswith("reseller_app:"):
         return APPLICATION_REASONS.get(app.status if app else "", "درخواست نمایندگیِ این سفارش پیدا نشد")
     if is_mutation_order_note(note):
-        if _mutation_may_be_applied(order):
+        if mutation_may_be_applied(order):
             return "آخرین تلاش برای اعمال در پاسارگارد نتیجهٔ نامعلومی داشت"
         if note.startswith("res_cap:"):
             return "پرداخت شده ولی ظرفیت روی ادمین نماینده اعمال نشد"
         if note.startswith("res_pkg:"):
             return "پرداخت شده ولی تمدید بسته روی ادمین نماینده اعمال نشد"
-        return "سرویسی که باید تمدید یا افزوده شود دیگر وجود ندارد (حذف یا لغو شده)"
+        if order.service_id is None:
+            return "سرویسی که باید تمدید یا افزوده شود دیگر وجود ندارد (حذف یا لغو شده)"
+        return "پرداخت شده ولی هنوز در پاسارگارد اعمال نشده است (مثلاً پنل در دسترس نبود)"
     if order.status == OrderStatus.DELIVERING.value:
         return "ساخت سرویس شروع شد ولی تمام نشد"
     return "پرداخت شده ولی سرویسی ساخته نشد"
@@ -270,7 +306,7 @@ async def describe_stuck_orders(session: AsyncSession, orders: list[Order]) -> d
         out[int(order.id)] = StuckReason(
             kind=_order_kind((order.note or "").strip()),
             reason=_reason_text(order, app),
-            can_refund=not _mutation_may_be_applied(order)
+            can_refund=not mutation_may_be_applied(order)
             and not (app is not None and app.status == ResellerApplicationStatus.APPROVED.value),
         )
     return out
@@ -283,7 +319,7 @@ async def count_still_stuck(session: AsyncSession, order_ids: list[int]) -> int:
     return int(
         await session.scalar(
             select(func.count()).select_from(Order).where(
-                Order.id.in_([int(i) for i in order_ids]), Order.status.in_(STUCK_STATUSES), Order.service_id.is_(None)
+                Order.id.in_([int(i) for i in order_ids]), Order.status.in_(STUCK_STATUSES), missing_delivery_clause()
             )
         )
         or 0
