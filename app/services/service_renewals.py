@@ -194,6 +194,8 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
         "payload": payload, "remaining_bytes": remaining,
         "result_remaining_bytes": new_remaining, "result_seconds": new_seconds,
         "carry_remaining": carry,
+        # Where the new period starts, for display (service_period); not part of the panel write.
+        "period_start": {"used": used, "lifetime": info.get("lifetime_used_traffic")},
         "lines": lines, "warnings": warnings, "notice": PREVIEW_NOTICE,
     }
 
@@ -235,5 +237,6 @@ async def preview_renewal(session, *, user_id, service, plan) -> dict:
     pg = await get_pg_for_reseller(session, shop_id) if shop_id else get_pg()
     result = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), terms)
     result.pop("payload")
+    result.pop("period_start")
     quote = await quote_product(session, plan, shop_id=shop_id)
     return {**result, **quote.payload(), "terms": terms, "plan_name": plan.name, "request_key": secrets.token_hex(16)}

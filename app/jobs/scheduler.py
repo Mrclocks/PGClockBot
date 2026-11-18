@@ -22,6 +22,7 @@ from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
 from app.services.alert_rearm import rearm_flagged_alerts
 from app.services.daily_report_delivery import deliver_daily_reports
+from app.services.service_period import period_usage
 from app.services.formatting import parse_expire
 from app.services.pasarguard import get_pg
 from app.services.usage_alert_messages import (
@@ -268,6 +269,8 @@ async def check_expiring_services(bot: Bot) -> None:
                             limit_f = float(limit)
                         except (TypeError, ValueError):
                             limit_f = 0
+                        # This period's share: a renewal adds fresh volume on top of lifetime usage.
+                        used, limit_f = period_usage(svc, used, limit_f, info.get("lifetime_used_traffic"))
                         rem_pct = traffic_remaining_pct(used, limit_f)
                         if rem_pct is not None:
                             if rem_pct <= traffic_pct:

@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import UserService
 from app.services.formatting import parse_expire
+from app.services.service_period import period_usage
 from app.services.usage_alert_messages import days_left, should_rearm_time
 from app.services.usage_alerts import (
     REARM_MARGIN_PCT,
@@ -74,6 +75,7 @@ def _rearm_one(
             used, limit = float(info.get("used_traffic") or 0), float(info["data_limit"])
         except (TypeError, ValueError):
             return changed
+        used, limit = period_usage(service, used, limit, info.get("lifetime_used_traffic"))
         if should_rearm(traffic_remaining_pct(used, limit), traffic_pct):
             service.notified_traffic = False
             changed = True

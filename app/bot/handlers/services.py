@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.user_errors import domain_error_text
+from app.services.service_period import period_view
 from app.services.catalog_pricing import displayed_quote, price_html, quote_product, sale_price
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
@@ -506,7 +507,7 @@ async def svc_view(
             await record_presence(session, svc_id, PRESENT)
         await session.commit()
     # Display only, after the cache sync: saved values must never be written back as live.
-    info = with_stored_quota(info, svc)
+    info = period_view(with_stored_quota(info, svc), svc)
     info.setdefault("username", svc.pg_username)
     text = format_message("📦 سرویس شما", service_card(info))
     if callback.message:
@@ -583,7 +584,7 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     elif not url:
         parts.append("لینک موجود نیست.")
     sub_info.setdefault("username", svc.pg_username)
-    parts.append(service_card(sub_info))
+    parts.append(service_card(period_view(sub_info, svc)))
     text = format_message("📱 اشتراک", "\n\n".join(parts))
     if callback.message:
         markup = InlineKeyboardMarkup(
