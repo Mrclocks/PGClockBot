@@ -230,7 +230,7 @@ class HandlerTests(unittest.IsolatedAsyncioTestCase):
         callback = self._callback(data)
         state = FSMContext(MemoryStorage(), StorageKey(bot_id=1, chat_id=9, user_id=9))
         with patch.object(command_switches, "load_switch_viewer", AsyncMock(return_value=viewer)), patch.object(
-            command_switches, "set_switch", AsyncMock(return_value=True)
+            command_switches, "set_switch_by_hand", AsyncMock(return_value=True)
         ) as setter, patch.object(command_switches, "show_command_panel", AsyncMock()), patch.object(
             command_switches, "get_all_settings", AsyncMock(return_value=patches.get("ui", {}))
         ):

@@ -45,13 +45,11 @@ from app.services.quick_switches import (
     SHOP_SWITCHES,
     QuickSwitch,
     recent_switch_changes,
-    set_switch,
-    undo_switch_change,
 )
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
 from app.services.staff_audit import StaffActor, actor_from_staff
-from app.services.switch_schedule import pending_reverts, scenario_by_code
+from app.services.switch_schedule import pending_reverts, scenario_by_code, set_switch_by_hand, undo_by_hand
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -243,7 +241,9 @@ async def toggle_quick_switch(
             await callback.answer()
             await _confirm(callback, switch, enabled, reason)
             return
-    changed = await set_switch(session, switch=switch, shop_id=viewer.shop_id, enabled=enabled, actor=viewer.actor)
+    changed = await set_switch_by_hand(
+        session, switch=switch, shop_id=viewer.shop_id, enabled=enabled, actor=viewer.actor
+    )
     toast = (TURNED_ON if enabled else TURNED_OFF).format(label=switch.label) if changed else ALREADY
     await callback.answer(toast)
     await show_command_panel(callback, session, state, viewer)
@@ -267,7 +267,7 @@ async def undo_quick_switch(
     if viewer.actor is None or not raw_id.isdigit():
         await callback.answer(feedback.NO_ACCESS if raw_id.isdigit() else feedback.INVALID, show_alert=True)
         return
-    undone = await undo_switch_change(
+    undone = await undo_by_hand(
         session,
         shop_id=viewer.shop_id,
         record_id=int(raw_id),

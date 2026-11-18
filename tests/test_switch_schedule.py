@@ -23,6 +23,7 @@ from app.db.models import SwitchRevert
 from app.services import bot_feedback_texts as feedback
 from app.services.quick_switches import SHOP_SWITCHES, switch_by_code
 from app.services.staff_audit import StaffActor
+from app.services.quick_switches import recent_switch_changes
 from app.services.switch_schedule import (
     apply_revert,
     change_for_a_while,
@@ -31,6 +32,8 @@ from app.services.switch_schedule import (
     run_due_reverts,
     run_scenario,
     scenario_by_code,
+    set_switch_by_hand,
+    undo_by_hand,
 )
 from app.services.users import clear_settings_cache, get_setting, set_setting
 
@@ -131,7 +134,73 @@ class TimedSwitchTests(ScheduleDb):
         self.assertEqual(await self._card(OTHER_SHOP), "0")
 
 
+class ManualChangeTests(ScheduleDb):
+    async def test_a_persons_latest_choice_stands_even_when_it_matches_the_timer(self) -> None:
+        await self._card_off_for_an_hour()
+        async with self.Session() as session:
+            await set_switch_by_hand(session, switch=CARD, shop_id=SHOP, enabled=True, actor=_actor(SHOP))
+            await set_switch_by_hand(session, switch=CARD, shop_id=SHOP, enabled=False, actor=_actor(SHOP))
+        self.assertEqual(await run_due_reverts(self.Session, now=NOW + timedelta(hours=2)), 0)
+        self.assertEqual(await self._card(SHOP), "0")
+        self.assertEqual(await self._statuses(), ["cancelled"])
+
+    async def test_a_tap_that_changes_nothing_keeps_the_timer(self) -> None:
+        await self._card_off_for_an_hour()
+        async with self.Session() as session:
+            changed = await set_switch_by_hand(session, switch=CARD, shop_id=SHOP, enabled=False, actor=_actor(SHOP))
+        self.assertFalse(changed)
+        self.assertEqual(await self._statuses(), ["pending"])
+
+    async def test_undo_by_hand_cancels_the_timer(self) -> None:
+        await self._card_off_for_an_hour()
+        async with self.Session() as session:
+            record_id = (await recent_switch_changes(session, shop_id=SHOP))[0].record_id
+            undone = await undo_by_hand(
+                session, shop_id=SHOP, record_id=record_id, actor=_actor(SHOP), allowed_keys=SHOP_KEYS
+            )
+        self.assertTrue(undone)
+        self.assertEqual(await self._statuses(), ["cancelled"])
+        self.assertEqual(await self._card(SHOP), "1")
+
+    async def test_another_shops_timer_is_not_touched_by_a_failed_undo(self) -> None:
+        await self._card_off_for_an_hour(OTHER_SHOP)
+        async with self.Session() as session:
+            record_id = (await recent_switch_changes(session, shop_id=OTHER_SHOP))[0].record_id
+            undone = await undo_by_hand(
+                session, shop_id=SHOP, record_id=record_id, actor=_actor(SHOP), allowed_keys=SHOP_KEYS
+            )
+        self.assertFalse(undone)
+        self.assertEqual(await self._statuses(), ["pending"])
+
+
 class ScenarioTests(ScheduleDb):
+    async def test_a_run_that_fails_halfway_puts_back_what_it_changed(self) -> None:
+        from app.services import switch_schedule
+
+        real = switch_schedule.change_for_a_while
+        calls = {"n": 0}
+
+        async def second_fails(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise ValueError("raced")
+            return await real(*args, **kwargs)
+
+        async with self.Session() as session:
+            await set_setting(session, "trial_enabled", "1")
+            await set_setting(session, "entry_approval_enabled", "0")
+            with patch.object(switch_schedule, "change_for_a_while", side_effect=second_fails):
+                with self.assertRaises(ValueError):
+                    await run_scenario(
+                        session, scenario=scenario_by_code("abuse"), shop_id=None,
+                        allowed=(switch_by_code(None, "tr"), switch_by_code(None, "ea"), switch_by_code(None, "fj")),
+                        actor=_actor(None), now=NOW,
+                    )
+        clear_settings_cache()
+        async with self.Session() as session:
+            self.assertEqual(await get_setting(session, "trial_enabled"), "1")
+        self.assertEqual(await self._statuses(), ["done"])
+
     async def test_a_shop_runs_only_the_actions_it_may_take_and_ends_them(self) -> None:
         async with self.Session() as session:
             await set_setting(session, "shop_maintenance_enabled", "0", reseller_id=SHOP)
