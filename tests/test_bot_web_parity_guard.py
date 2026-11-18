@@ -9,10 +9,8 @@ must leave the gap list, so the lists always describe the code.
 
 from __future__ import annotations
 
-import os
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot.handlers import admin_settings, reseller_settings
 from app.services import marketing_nav, panel_nav

@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timezone
-from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Order, Plan, Role
 from app.services.trial_users import list_trial_users
+from tests.postgres_support import scoped_async_engine
 
 OWNER = {
     "role": "admin",
@@ -33,8 +30,7 @@ def shop_staff(shop_id: int, permissions: list[str]) -> dict:
 
 class TrialUsersTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 't.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -48,7 +44,6 @@ class TrialUsersTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _user(self, session, telegram_id: int, *, name: str | None = None, shop: int | None = None, role: str = Role.USER.value) -> BotUser:
         user = BotUser(

@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 import unittest
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 

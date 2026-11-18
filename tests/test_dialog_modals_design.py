@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.api.app import templates
 

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 HOSTILE = '<img src=x onerror="alert(1)">'
 IDENTITY = '<section class="edit-section edit-section--identity">'

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from jinja2 import Environment, FileSystemLoader
 

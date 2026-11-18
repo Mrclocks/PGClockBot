@@ -4,19 +4,18 @@ and the bot answers the tap before it waits on the panel."""
 from __future__ import annotations
 
 import asyncio
-import tempfile
 import time
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import admin
 from app.db.models import Base, BotUser, UserService
 from app.services import bot_user_admin
 from app.services.pasarguard import PasarGuardError
+from tests.postgres_support import scoped_async_engine
 
 PANEL_DELAY = 0.3
 
@@ -40,8 +39,7 @@ class _Panel:
 
 class SnapshotCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 's.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -56,7 +54,6 @@ class SnapshotCase(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def snapshots(self, panel: _Panel):
         with patch.object(bot_user_admin, "get_pg", return_value=panel):

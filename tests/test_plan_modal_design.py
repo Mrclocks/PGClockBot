@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.api.app import templates
 from app.services.button_styles import ITEM_BUTTON_STYLE_OPTIONS, PLAN_BUTTON_STYLE_OPTIONS

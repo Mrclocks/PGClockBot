@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import sqlalchemy as sa
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, Plan, ResellerPlan
 from app.services.pg_admin_subscription import (
@@ -31,6 +31,7 @@ from app.services.renewal_carry import (
 )
 from app.services.reseller_package import EXTRA_USERS_CLEARED_WARN, renew_confirm_warnings_from_invoice
 from app.services.service_renewals import calculate_renewal, renewal_terms
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 GB = 1024**3
 DAY = 86400
@@ -122,7 +123,7 @@ class ResellerExtrasTests(unittest.TestCase):
 class LegacyInsertTests(unittest.IsolatedAsyncioTestCase):
     async def test_rows_created_with_the_old_switch_copy_it(self) -> None:
         tmp = tempfile.TemporaryDirectory()
-        engine = create_async_engine(f"sqlite+aiosqlite:///{Path(tmp.name) / 'c.db'}")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         async with async_sessionmaker(engine, expire_on_commit=False)() as session:
@@ -146,15 +147,15 @@ class SplitMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("split_carry", ROOT / "alembic/versions/0121_split_renewal_carry.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text("CREATE TABLE plans (id INTEGER PRIMARY KEY, carry_remaining_quota BOOLEAN)"))
             conn.execute(text("CREATE TABLE reseller_plans (id INTEGER PRIMARY KEY, keep_extras_on_renew BOOLEAN)"))
-            conn.execute(text("INSERT INTO plans VALUES (1, 0), (2, 1)"))
-            conn.execute(text("INSERT INTO reseller_plans VALUES (1, 0)"))
+            conn.execute(text("INSERT INTO plans VALUES (1, false), (2, true)"))
+            conn.execute(text("INSERT INTO reseller_plans VALUES (1, false)"))
             with Operations.context(MigrationContext.configure(conn)):
                 migration.upgrade()
-                conn.execute(text("UPDATE plans SET carry_remaining_time = 1 WHERE id = 1"))
+                conn.execute(text("UPDATE plans SET carry_remaining_time = true WHERE id = 1"))
                 migration.upgrade()
                 self.assertEqual(
                     conn.execute(text("SELECT carry_remaining_volume, carry_remaining_time FROM plans ORDER BY id")).all(),

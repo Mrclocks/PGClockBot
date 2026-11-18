@@ -2,21 +2,20 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, Setting
 from app.jobs import scheduler
 from app.services.daily_report import DEFAULT_REPORT_HOUR, is_report_due, report_day_key, report_hour
 from app.services.users import clear_settings_cache
+from tests.postgres_support import scoped_async_engine
 
 TEHRAN = ZoneInfo("Asia/Tehran")
 
@@ -49,8 +48,7 @@ class DueTests(unittest.TestCase):
 
 class JobTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'r.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -63,7 +61,6 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def run_at(self, now: datetime) -> MagicMock:
         bot = MagicMock(id=1)

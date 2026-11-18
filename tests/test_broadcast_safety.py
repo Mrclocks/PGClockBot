@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,7 +12,7 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import admin_broadcast_confirm as confirm
 from app.db import Base
@@ -22,6 +20,7 @@ from app.db.models import BotUser, BroadcastLog
 from app.services.broadcast_queue import BroadcastRequest, new_request_token, queue_broadcast
 from app.services.message_buttons import ButtonInput
 from app.services.telegram_html import normalize_telegram_html
+from tests.postgres_support import scoped_async_engine
 
 
 class NormalizeTests(unittest.TestCase):
@@ -55,8 +54,7 @@ class RequiredAttributeTests(unittest.TestCase):
 
 class DbCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'b.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -66,7 +64,6 @@ class DbCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def broadcasts(self, session) -> int:
         return int(await session.scalar(select(func.count()).select_from(BroadcastLog)))

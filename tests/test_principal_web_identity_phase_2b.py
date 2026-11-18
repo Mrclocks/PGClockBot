@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -33,6 +33,7 @@ from app.services.principal_web_identity import (
     session_contains_plaintext_secret,
     staff_uses_owner_pg_credentials,
 )
+from tests.postgres_support import scoped_async_engine
 
 
 _WEB_PASSWORD = "WebLogin12!@Ab"
@@ -40,7 +41,7 @@ _WEB_PASSWORD = "WebLogin12!@Ab"
 
 class Phase2BWebIdentityTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

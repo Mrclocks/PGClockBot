@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -21,19 +21,25 @@ from app.services.org_principals import (
     bind_reseller_profile_principal,
     ensure_owner_principal,
 )
+from tests.postgres_support import scoped_async_engine, scoped_database_url, scoped_sync_engine
 
 
 def _plans_ddl(conn) -> None:
+    # The legacy-migrator tests below still run on SQLite until that migrator is removed.
+    if conn.dialect.name == "sqlite":
+        id_column, true, false = "id INTEGER PRIMARY KEY AUTOINCREMENT", "1", "0"
+    else:
+        id_column, true, false = "id SERIAL PRIMARY KEY", "true", "false"
     conn.execute(
         text(
-            """
+            f"""
             CREATE TABLE plans (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                {id_column},
                 name VARCHAR(128),
                 price INTEGER,
                 duration_days INTEGER DEFAULT 30,
-                is_active BOOLEAN DEFAULT 1,
-                is_trial BOOLEAN DEFAULT 0,
+                is_active BOOLEAN DEFAULT {true},
+                is_trial BOOLEAN DEFAULT {false},
                 sort_order INTEGER DEFAULT 0
             )
             """
@@ -45,7 +51,7 @@ class OwnerBootstrapTests(unittest.IsolatedAsyncioTestCase):
     def test_active_owner_not_duplicated(self) -> None:
         from app.db.session import _migrate_sqlite_legacy, _seed_owner_if_no_depth0
 
-        eng = create_engine("sqlite:///:memory:")
+        eng = create_engine("sqlite:///:memory:")  # SQLite-only legacy migrator; removed with it
         with eng.begin() as conn:
             _plans_ddl(conn)
             conn.execute(
@@ -80,7 +86,7 @@ class OwnerBootstrapTests(unittest.IsolatedAsyncioTestCase):
     def test_disabled_owner_not_replaced(self) -> None:
         from app.db.session import _migrate_sqlite_legacy, _seed_owner_if_no_depth0
 
-        eng = create_engine("sqlite:///:memory:")
+        eng = create_engine("sqlite:///:memory:")  # SQLite-only legacy migrator; removed with it
         with eng.begin() as conn:
             _plans_ddl(conn)
             conn.execute(
@@ -112,7 +118,7 @@ class OwnerBootstrapTests(unittest.IsolatedAsyncioTestCase):
     def test_zero_owner_rows_seeds_exactly_one(self) -> None:
         from app.db.session import _migrate_sqlite_legacy
 
-        eng = create_engine("sqlite:///:memory:")
+        eng = create_engine("sqlite:///:memory:")  # SQLite-only legacy migrator; removed with it
         with eng.begin() as conn:
             _plans_ddl(conn)
             _migrate_sqlite_legacy(conn)
@@ -128,7 +134,7 @@ class OwnerBootstrapTests(unittest.IsolatedAsyncioTestCase):
         eng.dispose()
 
     async def test_duplicate_depth0_still_fail_closed(self) -> None:
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
@@ -177,36 +183,41 @@ class BotUserIdUniqueIndexTests(unittest.TestCase):
     def test_migration_creates_partial_unique_index(self) -> None:
         from app.db.alembic_runner import upgrade_head
 
-        with tempfile.TemporaryDirectory() as td:
-            db_path = Path(td) / "idx.db"
-            url = f"sqlite+aiosqlite:///{db_path}"
-            upgrade_head(url)
-            sync_eng = create_engine(f"sqlite:///{db_path}")
-            try:
-                insp = inspect(sync_eng)
-                names = {ix["name"] for ix in insp.get_indexes("org_principals")}
-                self.assertIn("uq_org_principals_bot_user_id", names)
-                with sync_eng.begin() as conn:
-                    conn.execute(
-                        text(
-                            "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
-                            "VALUES (NULL, 0, 'active', NULL)"
-                        )
+        upgrade_head(scoped_database_url(tables=False))
+        sync_eng = scoped_sync_engine()
+        try:
+            insp = inspect(sync_eng)
+            names = {ix["name"] for ix in insp.get_indexes("org_principals")}
+            self.assertIn("uq_org_principals_bot_user_id", names)
+            with sync_eng.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
+                        "VALUES (NULL, 0, 'active', NULL)"
                     )
-                    conn.execute(
-                        text(
-                            "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
-                            "VALUES (NULL, 1, 'active', NULL)"
-                        )
+                )
+                conn.execute(
+                    text(
+                        "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
+                        "VALUES (NULL, 1, 'active', NULL)"
                     )
-                    conn.execute(
-                        text(
-                            "INSERT INTO bot_users (telegram_id, role, wallet_balance, "
-                            "points_balance, referral_code, is_blocked) "
-                            "VALUES (9001, 'user', 0, 0, 'r9001', 0)"
-                        )
+                )
+                conn.execute(
+                    text(
+                        "INSERT INTO bot_users (telegram_id, role, wallet_balance, "
+                        "points_balance, referral_code, is_blocked) "
+                        "VALUES (9001, 'user', 0, 0, 'r9001', false)"
                     )
-                    uid = conn.execute(text("SELECT id FROM bot_users WHERE telegram_id=9001")).scalar()
+                )
+                uid = conn.execute(text("SELECT id FROM bot_users WHERE telegram_id=9001")).scalar()
+                conn.execute(
+                    text(
+                        "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
+                        "VALUES (1, 1, 'active', :uid)"
+                    ),
+                    {"uid": uid},
+                )
+                with self.assertRaises(IntegrityError), conn.begin_nested():
                     conn.execute(
                         text(
                             "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
@@ -214,16 +225,8 @@ class BotUserIdUniqueIndexTests(unittest.TestCase):
                         ),
                         {"uid": uid},
                     )
-                    with self.assertRaises(IntegrityError):
-                        conn.execute(
-                            text(
-                                "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
-                                "VALUES (1, 1, 'active', :uid)"
-                            ),
-                            {"uid": uid},
-                        )
-            finally:
-                sync_eng.dispose()
+        finally:
+            sync_eng.dispose()
 
     def test_duplicate_non_null_fails_index_create(self) -> None:
         index_sql = (
@@ -270,7 +273,7 @@ class BotUserIdUniqueIndexTests(unittest.TestCase):
                         ),
                         {"uid": uid},
                     )
-                    with self.assertRaises(IntegrityError):
+                    with self.assertRaises(IntegrityError), conn.begin_nested():
                         conn.execute(text(index_sql))
             finally:
                 eng.dispose()
@@ -280,7 +283,7 @@ class PreAlembicStampTests(unittest.TestCase):
     def test_incomplete_schema_refuses_stamp(self) -> None:
         from app.db.session import _assert_ready_to_stamp_head, _missing_alembic_head_schema
 
-        eng = create_engine("sqlite:///:memory:")
+        eng = scoped_sync_engine()
         with eng.begin() as conn:
             _plans_ddl(conn)
             missing = _missing_alembic_head_schema(conn)
@@ -298,7 +301,7 @@ class PreAlembicStampTests(unittest.TestCase):
             _missing_alembic_head_schema,
         )
 
-        eng = create_engine("sqlite:///:memory:")
+        eng = create_engine("sqlite:///:memory:")  # SQLite-only legacy migrator; removed with it
         with eng.begin() as conn:
             _plans_ddl(conn)
             _migrate_sqlite_legacy(conn)
@@ -351,7 +354,7 @@ class WebSecretTests(unittest.TestCase):
 
 class AdapterCredentialPathTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

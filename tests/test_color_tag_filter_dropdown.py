@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import re
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 ROOT = Path(__file__).resolve().parents[1]
 
