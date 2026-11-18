@@ -24,6 +24,7 @@ from app.services.support_contacts import (
     get_support_contacts,
     upsert_support_contact,
 )
+from app.services.bbc_settlement import ENABLED_KEY as BBC_ENABLED_KEY, bbc_enable_error
 from app.services.receipt_fingerprints import normalize_dup_policy
 from app.services.rich_text import pack_setting_from_message
 from app.services.users import (
@@ -851,6 +852,15 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
     with _Scoped(profile.user_id):
         cur = await get_setting(session, key, reseller_id=profile.user_id)
         new_val = "0" if on(cur) else "1"
+        # Same check as the web payment save: the gateway calls back over https only.
+        refusal = (
+            await bbc_enable_error(session, {key: new_val}, reseller_id=profile.user_id)
+            if key == BBC_ENABLED_KEY
+            else None
+        )
+        if refusal:
+            await callback.answer(refusal, show_alert=True)
+            return
         await set_setting(session, key, new_val, reseller_id=profile.user_id)
     await callback.answer(feedback.SAVED)
     loc = _owner_screen_for_key(key)

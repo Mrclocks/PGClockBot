@@ -39,6 +39,7 @@ from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.miniapp_branding import NOTICE_SETTING as MINIAPP_NOTICE, normalize_notice
 from app.services.miniapp_shop import PLATFORM_SWITCH as MINIAPP_SHOPS_SWITCH, set_platform_shop_miniapps
 from app.services.reseller_bots import schedule_shop_menu_sync
+from app.services.bbc_settlement import ENABLED_KEY as BBC_ENABLED_KEY, bbc_enable_error
 from app.services.service_import_config import (
     KEY_ENABLED as IMPORT_KEY_ENABLED,
     KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
@@ -1155,25 +1156,36 @@ async def settings_toggle(
     if not _is_toggleable_setting_key(key):
         await callback.answer("کلید نامعتبر", show_alert=True)
         return
-    await _flip_setting(session, key)
+    refusal = await _flip_setting(session, key)
+    if refusal:
+        await callback.answer(refusal, show_alert=True)
+        return
     await callback.answer(feedback.SAVED)
     await _rerender_after_key(callback, session, key)
 
 
-async def _flip_setting(session: AsyncSession, key: str) -> None:
-    """Flip one switch, with the side effects the web save of the same switch has."""
+async def _flip_setting(session: AsyncSession, key: str) -> str | None:
+    """Flip one switch, with the checks and side effects the web save of the same switch has.
+
+    Returns the reason when the switch may not be turned on (nothing is saved then).
+    """
     new_on = not on(await get_setting(session, key))
+    if new_on and key == BBC_ENABLED_KEY:
+        refusal = await bbc_enable_error(session, {key: "1"}, reseller_id=None)
+        if refusal:
+            return refusal
     if key == MINIAPP_SHOPS_SWITCH:
         if await set_platform_shop_miniapps(session, enabled=new_on):
             # Shop bots' «Open» buttons appear or go away with the switch, as after the web save.
             schedule_shop_menu_sync()
-        return
+        return None
     await set_setting(session, key, "1" if new_on else "0")
     if key == "trial_enabled":
         trial = (await session.execute(select(Plan).where(Plan.is_trial.is_(True)))).scalar_one_or_none()
         if trial:
             trial.is_active = new_on
             await session.commit()
+    return None
 
 
 @settings_actor_required
