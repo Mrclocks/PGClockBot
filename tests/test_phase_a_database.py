@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from sqlalchemy import create_engine, text
 
 from app.db.engine_url import to_sync_url
@@ -14,8 +15,11 @@ def test_engine_url_helpers():
     from app.db.engine_url import normalize_async_url, parse_engine, to_sync_url
 
     assert normalize_async_url("postgresql://u:p@localhost/db").startswith("postgresql+asyncpg://")
-    info = parse_engine("sqlite+aiosqlite:////tmp/x.db")
-    assert info.is_sqlite and info.sqlite_path == Path("/tmp/x.db")
+    info = parse_engine("postgresql://u:p@db.local:6543/shop")
+    assert info.dialect == "postgresql" and info.pg_dsn == "postgresql://u:p@db.local:6543/shop"
+    with pytest.raises(ValueError) as refused:
+        parse_engine("mysql://root:s3cret@db/shop")
+    assert "s3cret" not in str(refused.value)
     sync = to_sync_url("postgresql+asyncpg://u:p@127.0.0.1:5432/db")
     assert sync.startswith("postgresql+psycopg://")
 

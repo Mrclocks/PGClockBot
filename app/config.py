@@ -141,12 +141,9 @@ class Settings(BaseSettings):
     web_admin_user: str = Field(default="admin", alias="WEB_ADMIN_USER")
     web_admin_password: str = Field(default="", alias="WEB_ADMIN_PASSWORD")
 
-    # Installs always provision local PostgreSQL (or honor PGCLOCK_DATABASE_URL).
-    # SQLite remains only as an in-memory option for unit tests — not for product installs.
-    database_url: str = Field(
-        default=f"sqlite+aiosqlite:///{DATA_DIR / 'bot.db'}",
-        alias="DATABASE_URL",
-    )
+    # PostgreSQL only. The installer writes it (or takes PGCLOCK_DATABASE_URL); there is
+    # no default database, so a missing value fails at startup instead of picking a file.
+    database_url: str = Field(default="", alias="DATABASE_URL")
     db_pool_size: int = Field(default=DB_POOL_SIZE_DEFAULT, alias="DB_POOL_SIZE")
     db_max_overflow: int = Field(default=DB_MAX_OVERFLOW_DEFAULT, alias="DB_MAX_OVERFLOW")
 

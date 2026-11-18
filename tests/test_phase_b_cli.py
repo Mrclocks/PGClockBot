@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-
 import pytest
+
+from tests.postgres_support import scoped_database_url
 
 
 @pytest.fixture()
@@ -22,7 +23,7 @@ def install_tree(tmp_path, monkeypatch):
     (root / "data").mkdir()
     (root / ".env").write_text(
         'WEB_PORT="9019"\nWEB_SECRET="cli-test-secret-xxxxxxxxxxxxxxxx"\n'
-        f'DATABASE_URL="sqlite+aiosqlite:///{root / "data" / "bot.db"}"\n',
+        f'DATABASE_URL="{scoped_database_url(tables=False)}"\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("PGCLOCK_HOME", str(root))

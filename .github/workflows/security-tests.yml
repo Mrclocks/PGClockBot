@@ -85,7 +85,8 @@ jobs:
 
       - name: Compile every module and import the app
         env:
-          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          # Importing builds the engine but opens no connection; no server is needed.
+          DATABASE_URL: "postgresql+asyncpg://pgclock:import-check@127.0.0.1:5432/pgclock"
         run: |
           python -m compileall -q app alembic scripts run.py
           python -c "import app.main, app.bot, app.api.app"

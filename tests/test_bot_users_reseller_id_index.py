@@ -32,13 +32,5 @@ class BotUsersResellerIdIndexTests(unittest.TestCase):
         finally:
             engine.dispose()
 
-    def test_ensure_indexes_statement_present(self):
-        """Legacy pre-Alembic SQLite bootstrap path must also get this index."""
-        from pathlib import Path
-
-        src = Path("app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn("ix_bot_users_reseller_id ON bot_users (reseller_id)", src)
-
-
 if __name__ == "__main__":
     unittest.main()

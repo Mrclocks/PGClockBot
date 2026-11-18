@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import os
-import tempfile
 import unittest
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import patch
 
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -25,21 +23,16 @@ from tests.postgres_support import scoped_async_engine, scoped_database_url, sco
 
 
 def _plans_ddl(conn) -> None:
-    # The legacy-migrator tests below still run on SQLite until that migrator is removed.
-    if conn.dialect.name == "sqlite":
-        id_column, true, false = "id INTEGER PRIMARY KEY AUTOINCREMENT", "1", "0"
-    else:
-        id_column, true, false = "id SERIAL PRIMARY KEY", "true", "false"
     conn.execute(
         text(
-            f"""
+            """
             CREATE TABLE plans (
-                {id_column},
+                id SERIAL PRIMARY KEY,
                 name VARCHAR(128),
                 price INTEGER,
                 duration_days INTEGER DEFAULT 30,
-                is_active BOOLEAN DEFAULT {true},
-                is_trial BOOLEAN DEFAULT {false},
+                is_active BOOLEAN DEFAULT true,
+                is_trial BOOLEAN DEFAULT false,
                 sort_order INTEGER DEFAULT 0
             )
             """
@@ -48,90 +41,6 @@ def _plans_ddl(conn) -> None:
 
 
 class OwnerBootstrapTests(unittest.IsolatedAsyncioTestCase):
-    def test_active_owner_not_duplicated(self) -> None:
-        from app.db.session import _migrate_sqlite_legacy, _seed_owner_if_no_depth0
-
-        eng = create_engine("sqlite:///:memory:")  # SQLite-only legacy migrator; removed with it
-        with eng.begin() as conn:
-            _plans_ddl(conn)
-            conn.execute(
-                text(
-                    "CREATE TABLE org_principals ("
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                    "parent_id INTEGER, depth INTEGER NOT NULL, "
-                    "status VARCHAR(32) DEFAULT 'active' NOT NULL, "
-                    "pg_username VARCHAR(128), pg_password_enc TEXT, "
-                    "reseller_profile_id INTEGER, pg_staff_id INTEGER, "
-                    "bot_user_id INTEGER)"
-                )
-            )
-            conn.execute(
-                text(
-                    "INSERT INTO org_principals "
-                    "(parent_id, depth, status) VALUES (NULL, 0, 'active')"
-                )
-            )
-            _seed_owner_if_no_depth0(conn)
-            _migrate_sqlite_legacy(conn)
-            n = conn.execute(
-                text("SELECT COUNT(1) FROM org_principals WHERE depth = 0")
-            ).scalar()
-            self.assertEqual(n, 1)
-            status = conn.execute(
-                text("SELECT status FROM org_principals WHERE depth = 0")
-            ).scalar()
-            self.assertEqual(status, "active")
-        eng.dispose()
-
-    def test_disabled_owner_not_replaced(self) -> None:
-        from app.db.session import _migrate_sqlite_legacy, _seed_owner_if_no_depth0
-
-        eng = create_engine("sqlite:///:memory:")  # SQLite-only legacy migrator; removed with it
-        with eng.begin() as conn:
-            _plans_ddl(conn)
-            conn.execute(
-                text(
-                    "CREATE TABLE org_principals ("
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                    "parent_id INTEGER, depth INTEGER NOT NULL, "
-                    "status VARCHAR(32) DEFAULT 'active' NOT NULL, "
-                    "pg_username VARCHAR(128), pg_password_enc TEXT, "
-                    "reseller_profile_id INTEGER, pg_staff_id INTEGER, "
-                    "bot_user_id INTEGER)"
-                )
-            )
-            conn.execute(
-                text(
-                    "INSERT INTO org_principals "
-                    "(parent_id, depth, status) VALUES (NULL, 0, 'disabled')"
-                )
-            )
-            _seed_owner_if_no_depth0(conn)
-            _migrate_sqlite_legacy(conn)
-            rows = conn.execute(
-                text("SELECT id, status FROM org_principals WHERE depth = 0")
-            ).fetchall()
-            self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0][1], "disabled")
-        eng.dispose()
-
-    def test_zero_owner_rows_seeds_exactly_one(self) -> None:
-        from app.db.session import _migrate_sqlite_legacy
-
-        eng = create_engine("sqlite:///:memory:")  # SQLite-only legacy migrator; removed with it
-        with eng.begin() as conn:
-            _plans_ddl(conn)
-            _migrate_sqlite_legacy(conn)
-            rows = conn.execute(
-                text(
-                    "SELECT depth, parent_id, status FROM org_principals "
-                    "WHERE depth = 0"
-                )
-            ).fetchall()
-            self.assertEqual(len(rows), 1)
-            self.assertIsNone(rows[0][1])
-            self.assertEqual(rows[0][2], "active")
-        eng.dispose()
 
     async def test_duplicate_depth0_still_fail_closed(self) -> None:
         engine = scoped_async_engine()
@@ -235,48 +144,45 @@ class BotUserIdUniqueIndexTests(unittest.TestCase):
             "WHERE bot_user_id IS NOT NULL"
         )
 
-        with tempfile.TemporaryDirectory() as td:
-            db_path = Path(td) / "dup.db"
-            url = f"sqlite:///{db_path}"
-            eng = create_engine(url)
-            try:
-                Base.metadata.create_all(eng)
-                with eng.begin() as conn:
-                    conn.execute(text("DROP INDEX IF EXISTS uq_org_principals_bot_user_id"))
-                    conn.execute(
-                        text(
-                            "INSERT INTO bot_users (telegram_id, role, wallet_balance, "
-                            "points_balance, referral_code, is_blocked) "
-                            "VALUES (8001, 'user', 0, 0, 'r8001', 0)"
-                        )
+        eng = scoped_sync_engine()
+        try:
+            Base.metadata.create_all(eng)
+            with eng.begin() as conn:
+                conn.execute(text("DROP INDEX IF EXISTS uq_org_principals_bot_user_id"))
+                conn.execute(
+                    text(
+                        "INSERT INTO bot_users (telegram_id, role, wallet_balance, "
+                        "points_balance, referral_code, is_blocked) "
+                        "VALUES (8001, 'user', 0, 0, 'r8001', false)"
                     )
-                    uid = conn.execute(
-                        text("SELECT id FROM bot_users WHERE telegram_id=8001")
-                    ).scalar()
-                    conn.execute(
-                        text(
-                            "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
-                            "VALUES (NULL, 0, 'active', NULL)"
-                        )
+                )
+                uid = conn.execute(
+                    text("SELECT id FROM bot_users WHERE telegram_id=8001")
+                ).scalar()
+                conn.execute(
+                    text(
+                        "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
+                        "VALUES (NULL, 0, 'active', NULL)"
                     )
-                    conn.execute(
-                        text(
-                            "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
-                            "VALUES (1, 1, 'active', :uid)"
-                        ),
-                        {"uid": uid},
-                    )
-                    conn.execute(
-                        text(
-                            "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
-                            "VALUES (1, 1, 'active', :uid)"
-                        ),
-                        {"uid": uid},
-                    )
-                    with self.assertRaises(IntegrityError), conn.begin_nested():
-                        conn.execute(text(index_sql))
-            finally:
-                eng.dispose()
+                )
+                conn.execute(
+                    text(
+                        "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
+                        "VALUES (1, 1, 'active', :uid)"
+                    ),
+                    {"uid": uid},
+                )
+                conn.execute(
+                    text(
+                        "INSERT INTO org_principals (parent_id, depth, status, bot_user_id) "
+                        "VALUES (1, 1, 'active', :uid)"
+                    ),
+                    {"uid": uid},
+                )
+                with self.assertRaises(IntegrityError), conn.begin_nested():
+                    conn.execute(text(index_sql))
+        finally:
+            eng.dispose()
 
 
 class PreAlembicStampTests(unittest.TestCase):
@@ -293,25 +199,6 @@ class PreAlembicStampTests(unittest.TestCase):
             self.assertIn("Refusing to stamp", str(ctx.exception))
             self.assertIn("org_principals", str(ctx.exception))
         eng.dispose()
-
-    def test_legacy_migrator_makes_schema_stampable(self) -> None:
-        from app.db.session import (
-            _assert_ready_to_stamp_head,
-            _migrate_sqlite_legacy,
-            _missing_alembic_head_schema,
-        )
-
-        eng = create_engine("sqlite:///:memory:")  # SQLite-only legacy migrator; removed with it
-        with eng.begin() as conn:
-            _plans_ddl(conn)
-            _migrate_sqlite_legacy(conn)
-            missing = _missing_alembic_head_schema(conn)
-            self.assertEqual(missing, [])
-            _assert_ready_to_stamp_head(conn)
-            cols = {c["name"] for c in inspect(conn).get_columns("org_principals")}
-            self.assertIn("pg_password_enc", cols)
-        eng.dispose()
-
 
 class WebSecretTests(unittest.TestCase):
     def test_external_secret_allowed_when_env_unwritable(self) -> None:

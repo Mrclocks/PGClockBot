@@ -17,22 +17,6 @@ class BillingModeMigrateTests(unittest.TestCase):
         self.assertIn("0002_pg_staff_credentials", src)
         self.assertIn("reseller_plans", src)
 
-    def test_init_db_always_runs_additive_ensure(self):
-        src = (ROOT / "app/db/session.py").read_text(encoding="utf-8")
-        # After alembic upgrade, SQLite additive migrator still runs (idempotent).
-        # On PostgreSQL it must NOT run — Alembic owns the schema (v11.0.10).
-        self.assertIn("await conn.run_sync(_migrate_sqlite_legacy)", src)
-        self.assertIn("if _engine_info.is_sqlite:", src)
-        upgrade_idx = src.find("upgrade_head(_db_url)")
-        ensure_idx = src.find(
-            "await conn.run_sync(_migrate_sqlite_legacy)",
-            upgrade_idx,
-        )
-        self.assertGreater(ensure_idx, upgrade_idx)
-        # Guard: PG path skips SQLite-era DDL after upgrade.
-        pg_guard = src.find("SQLite-era additive migrator", upgrade_idx)
-        self.assertGreater(pg_guard, upgrade_idx)
-
     def test_plans_page_soft_fails_reseller_list(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
         fn = src[src.find("async def plans_page") : src.find("async def plans_create")]
