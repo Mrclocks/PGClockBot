@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -422,7 +423,8 @@ class MonitorWebTests(MonitorDatabaseCase):
         self.panel.get_current_admin.assert_not_awaited()
 
     async def test_real_panel_middleware_rejects_missing_csrf_and_accepts_the_valid_form(self) -> None:
-        with patch("app.api.app.DATA_DIR", Path(self.temporary.name)):
+        with tempfile.TemporaryDirectory(prefix="pgclock-monitor-web-") as data_dir, \
+                patch("app.api.app.DATA_DIR", Path(data_dir)):
             app = create_api_app()
         route = next(route for route in app.routes if getattr(route, "path", None) == "/connection-status")
         dependencies = list(route.dependant.dependencies)

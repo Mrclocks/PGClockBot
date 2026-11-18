@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import os
-import secrets
-import tempfile
 import unittest
 from pathlib import Path
 from types import ModuleType
@@ -14,7 +11,8 @@ import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import create_async_engine
+
+from tests.postgres_support import isolated_schema
 
 
 def load_migration(name: str) -> ModuleType:
@@ -27,22 +25,9 @@ def load_migration(name: str) -> ModuleType:
 
 class SubscriptionMigrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_repeat_upgrade_and_downgrade_keep_legacy_and_new_rows_with_foreign_keys(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="pgclock-subscription-migration-") as folder:
-            url = os.environ.get("PGCLOCK_CONNECTION_TEST_URL") or f"sqlite+aiosqlite:///{Path(folder) / 'existing.db'}"
-            engine = create_async_engine(url)
-            schema = "subscription_migration_" + secrets.token_hex(8)
-            try:
-                async with engine.begin() as connection:
-                    if connection.dialect.name == "postgresql":
-                        await connection.execute(sa.text(f'CREATE SCHEMA "{schema}"'))
-                        await connection.execute(sa.text(f'SET LOCAL search_path TO "{schema}"'))
-                    else:
-                        await connection.execute(sa.text("PRAGMA foreign_keys=ON"))
-                    await connection.run_sync(self.check_migration)
-                    if connection.dialect.name == "postgresql":
-                        await connection.execute(sa.text(f'DROP SCHEMA "{schema}" CASCADE'))
-            finally:
-                await engine.dispose()
+        async with isolated_schema(create_tables=False) as database:
+            async with database.engine.begin() as connection:
+                await connection.run_sync(self.check_migration)
 
     def check_migration(self, connection: sa.Connection) -> None:
         migration = load_migration("0058_monitor_subscription_configs")
