@@ -31,6 +31,13 @@ CONNECTION_STATUS_CUSTOMER_TEXTS: list[Field] = [
     ("connection_status_error", "خطای دریافت وضعیت", "textarea"),
 ]
 
+# The bot's own name and descriptions in Telegram; saving pushes them to Telegram (bot_appearance).
+PROFILE_BOT_FIELDS: list[Field] = [
+    ("bot_tg_name", "نام ربات", "text"),
+    ("bot_tg_short_description", "کپشن / درباره (پروفایل)", "text"),
+    ("bot_tg_description", "متن وسط صفحهٔ چت خالی", "textarea"),
+]
+
 # Subsections of «نام و متن‌ها»: (sub id, title, fields).
 MESSAGE_TEXT_SUBS: list[tuple[str, str, list[Field]]] = [
     ("guide_texts", "راهنما و حالت خالی", CUSTOMER_GUIDE_TEXTS),

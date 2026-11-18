@@ -35,7 +35,17 @@ from app.services.settings_search import (
     search_settings,
 )
 from app.bot.entry_gate import ENTRY_APPROVAL_BOT_FIELDS, ENTRY_APPROVAL_SUB, ENTRY_APPROVAL_SUB_TITLE
-from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.services.bot_appearance import PROFILE_TEXT_FIELDS, update_bot_profile_text
+from app.services.receipt_fingerprints import normalize_dup_policy
+from app.services.rich_text import pack_setting_from_message
+from app.services.setup_wizard import current_setup_values
+from app.services.users import (
+    get_all_settings,
+    get_setting,
+    normalize_force_join_channel_value,
+    on,
+    set_setting,
+)
 from app.services.miniapp_branding import NOTICE_SETTING as MINIAPP_NOTICE, normalize_notice
 from app.services.miniapp_shop import PLATFORM_SWITCH as MINIAPP_SHOPS_SWITCH, set_platform_shop_miniapps
 from app.services.reseller_bots import schedule_shop_menu_sync
@@ -58,7 +68,11 @@ from app.services.settings_button_labels import (
     button_label_subs,
 )
 from app.services.customer_notice_texts import CLEANUP_BOT_FIELDS, STAFF_ACTION_BOT_FIELDS
-from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
+from app.services.settings_message_texts import (
+    CONNECTION_STATUS_CUSTOMER_TEXTS,
+    MESSAGE_TEXT_SUBS,
+    PROFILE_BOT_FIELDS,
+)
 from app.services.bot_setting_values import (
     NUMBER_BOUNDS,
     NUMBER_UNLIMITED_VALUES,
@@ -236,6 +250,7 @@ SECTIONS: dict[str, dict] = {
                 ("referral_text", "متن دعوت", "textarea"),
                 ("referral_bonus", "پاداش دعوت", "number"),
             ]),
+            ("profile", "پروفایل تلگرام ربات", PROFILE_BOT_FIELDS),
             *MESSAGE_TEXT_SUBS,
             ("status_texts", "متن‌های وضعیت اتصال", [
                 *CONNECTION_STATUS_CUSTOMER_TEXTS,
@@ -1396,6 +1411,35 @@ async def settings_edit_ask(
     )
 
 
+def _owner_setting_value(key: str, kind: str, text: str, message: Message) -> str:
+    """The stored form of a typed owner setting; ``ValueError`` carries the message to show."""
+    if is_secret(kind):
+        return text
+    if kind == "number":
+        return _parse_number_setting(key, text)
+    if key in TEXT_NORMALIZERS:
+        try:
+            return TEXT_NORMALIZERS[key](text)
+        except ValueError as exc:
+            raise ValueError(domain_error_text(exc)) from exc
+    if key == "force_join_channel":
+        return normalize_force_join_channel_value(text)
+    if key == "receipt_dup_policy":
+        return normalize_dup_policy(text)
+    if wants_default_text(key, text):
+        return ""
+    return pack_setting_from_message(key, message)
+
+
+async def _store_owner_setting(session: AsyncSession, key: str, value: str) -> None:
+    """Save one owner setting; the bot's Telegram profile texts are pushed to Telegram first."""
+    if key in PROFILE_TEXT_FIELDS:
+        token = current_setup_values().get("BOT_TOKEN")
+        await update_bot_profile_text(session, token=token, key=key, value=value, reseller_id=None)
+        return
+    await set_setting(session, key, value)
+
+
 @settings_actor_required
 @router.message(SettingsStates.edit_value)
 async def settings_edit_save(
@@ -1421,36 +1465,11 @@ async def settings_edit_save(
     kind = meta[2] if meta else "text"
     if is_secret(kind):
         await delete_user_message(message)
-        await set_setting(session, key, text)
-    elif kind == "number":
-        try:
-            text = _parse_number_setting(key, text)
-        except ValueError as exc:
-            await message.answer(str(exc))
-            return
-        await set_setting(session, key, text)
-    elif key in TEXT_NORMALIZERS:
-        try:
-            text = TEXT_NORMALIZERS[key](text)
-        except ValueError as exc:
-            await message.answer(domain_error_text(exc))
-            return
-        await set_setting(session, key, text)
-    elif key == "force_join_channel":
-        from app.services.users import normalize_force_join_channel_value
-
-        await set_setting(session, key, normalize_force_join_channel_value(text))
-    elif key == "receipt_dup_policy":
-        from app.services.receipt_fingerprints import normalize_dup_policy
-
-        await set_setting(session, key, normalize_dup_policy(text))
-    elif wants_default_text(key, text):
-        await set_setting(session, key, "")
-    else:
-        from app.services.rich_text import pack_setting_from_message
-
-        text = pack_setting_from_message(key, message)
-        await set_setting(session, key, text)
+    try:
+        await _store_owner_setting(session, key, _owner_setting_value(key, kind, text, message))
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
     await _finish_settings_text_edit(message, state, session, db_user, loc=loc)
 
 

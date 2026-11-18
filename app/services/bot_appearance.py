@@ -10,6 +10,8 @@ from typing import Any
 from aiogram import Bot
 from aiogram.types import BufferedInputFile, InputProfilePhotoStatic
 
+from app.services.users import set_settings_bulk
+
 log = logging.getLogger(__name__)
 
 # Shared with bot_profile_photo, which copies a photo set in @BotFather for the Mini App logo.
@@ -304,3 +306,52 @@ async def save_appearance_from_form(
     await set_settings_bulk(session, payload, reseller_id=reseller_id)
 
     return True, "هویت ربات در تلگرام اعمال شد"
+
+
+# Profile texts editable one at a time from the bots: setting key -> (Bot API field, length limit, label).
+PROFILE_TEXT_FIELDS: dict[str, tuple[str, int, str]] = {
+    "bot_tg_name": ("name", NAME_MAX, "نام ربات"),
+    "bot_tg_short_description": ("short_description", SHORT_DESCRIPTION_MAX, "کپشن / درباره"),
+    "bot_tg_description": ("description", DESCRIPTION_MAX, "متن وسط صفحه"),
+}
+PROFILE_NO_TOKEN = "توکن ربات تنظیم نشده است."
+PROFILE_READ_FAILED = "پروفایل ربات از تلگرام خوانده نشد؛ کمی بعد دوباره امتحان کنید."
+PROFILE_APPLY_FAILED = "تلگرام تغییر پروفایل ربات را نپذیرفت؛ کمی بعد دوباره امتحان کنید."
+
+
+async def update_bot_profile_text(
+    session, *, token: str | None, key: str, value: str, reseller_id: int | None
+) -> None:
+    """Change one profile text of a bot in Telegram and keep the panel's copy in step.
+
+    The other two texts are read from Telegram first so they are pushed back unchanged.
+    Raises ``ValueError`` with a message safe to show; the cause goes to the log.
+    """
+    api_field, limit, label = PROFILE_TEXT_FIELDS[key]
+    cleaned = (value or "").strip()
+    if len(cleaned) > limit:
+        raise ValueError(f"{label} حداکثر {limit} کاراکتر است.")
+    if not (token or "").strip():
+        raise ValueError(PROFILE_NO_TOKEN)
+    current = await fetch_appearance(token or "")
+    if not current.ok:
+        raise ValueError(PROFILE_READ_FAILED)
+    texts = {
+        "name": current.name,
+        "description": current.description,
+        "short_description": current.short_description,
+        api_field: cleaned,
+    }
+    result = await apply_appearance(token or "", **texts, is_platform_bot=reseller_id is None)
+    if not result.ok:
+        log.warning("bot profile update refused key=%s shop=%s", key, reseller_id)
+        raise ValueError(PROFILE_APPLY_FAILED)
+    await set_settings_bulk(
+        session,
+        {
+            "bot_tg_name": texts["name"],
+            "bot_tg_description": texts["description"],
+            "bot_tg_short_description": texts["short_description"],
+        },
+        reseller_id=reseller_id,
+    )
