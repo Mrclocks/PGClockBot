@@ -15,12 +15,13 @@ from aiogram.types import Message
 # State names are ``StatesGroup:state`` strings so this module imports no handler module.
 VERBATIM_TEXT_INPUT_STATES: frozenset[str] = frozenset(
     {
-        # Owner bot settings: values (button labels, texts), support, trial name, search.
+        # Owner bot settings: values (button labels, texts), support, trial name.
         "SettingsStates:edit_value",
         "SettingsStates:support_title",
         "SettingsStates:support_telegram",
         "SettingsStates:trial_name",
-        "SettingsStates:search_query",
+        # Command center search: a typed «خرید» searches for the shop instead of opening it.
+        "CommandCenterStates:query",
         # Shop bot settings.
         "ResellerSettingsStates:edit_value",
         "ResellerSettingsStates:support_title",

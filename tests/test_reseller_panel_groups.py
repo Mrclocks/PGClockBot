@@ -31,7 +31,7 @@ class PanelLayoutTests(unittest.TestCase):
         with patch("app.bot.reply_keyboards._reseller_submenu_entries", return_value=ENTRIES):
             markup = reseller_manage_hub_keyboard(MagicMock(), {})
         self.assertEqual(
-            _callbacks(markup), ["nv:res:grp:daily", "nv:res:grp:customers", "nv:res:grp:shop", "qlk:v", "menu:home"]
+            _callbacks(markup), ["cmd:h", "nv:res:grp:daily", "nv:res:grp:customers", "nv:res:grp:shop", "qlk:v", "menu:home"]
         )
 
     def test_group_messages_sit_on_the_panel_home_beside_quick_links(self) -> None:

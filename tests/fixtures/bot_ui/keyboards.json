@@ -84,6 +84,13 @@
     "inline_keyboard": [
       [
         {
+          "callback_data": "cmd:h",
+          "style": "primary",
+          "text": "⚡ مرکز فرمان"
+        }
+      ],
+      [
+        {
           "callback_data": "nv:adm:ops",
           "style": "success",
           "text": "🗓 عملیات روزانه"
@@ -159,6 +166,13 @@
           "callback_data": "adm:cancellations",
           "style": "danger",
           "text": "📝 لغو (۲)"
+        }
+      ],
+      [
+        {
+          "callback_data": "cmd:h",
+          "style": "primary",
+          "text": "⚡ مرکز فرمان"
         }
       ],
       [
@@ -762,7 +776,7 @@
     "inline_keyboard": [
       [
         {
-          "callback_data": "adm:st:find",
+          "callback_data": "cmd:hs",
           "text": "🔍 جستجو در تنظیمات"
         }
       ],
@@ -981,6 +995,13 @@
       ],
       [
         {
+          "callback_data": "cmd:h",
+          "style": "primary",
+          "text": "⚡ مرکز فرمان"
+        }
+      ],
+      [
+        {
           "callback_data": "nv:res:grp:daily",
           "style": "success",
           "text": "📥 کارهای روزانه (۳)"
@@ -1025,6 +1046,13 @@
   },
   "hub.reseller.manage_payg": {
     "inline_keyboard": [
+      [
+        {
+          "callback_data": "cmd:h",
+          "style": "primary",
+          "text": "⚡ مرکز فرمان"
+        }
+      ],
       [
         {
           "callback_data": "nv:res:grp:daily",

@@ -21,6 +21,7 @@ class AdminHubKeyboardTests(unittest.TestCase):
         self.assertEqual(
             groups,
             [
+                "cmd:h",
                 "nv:adm:ops",
                 "nv:adm:people",
                 "nv:adm:product",
@@ -107,7 +108,7 @@ class AdminHubKeyboardTests(unittest.TestCase):
                 ).inline_keyboard
                 for b in row
             ]
-        self.assertEqual(data, ["nv:res:grp:daily", "nv:res:grp:shop", "qlk:v", "menu:home"])
+        self.assertEqual(data, ["cmd:h", "nv:res:grp:daily", "nv:res:grp:shop", "qlk:v", "menu:home"])
 
 
 class OpenAdminOpsInlineTests(unittest.IsolatedAsyncioTestCase):
