@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import inspect
 from typing import Any
 from aiogram import F, Router
@@ -1386,7 +1387,7 @@ async def settings_edit_ask(
     prompt = (
         secret_prompt(label, cur)
         if is_secret(kind)
-        else f"<b>{label}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}"
+        else f"<b>{label}</b>\nفعلی:\n<code>{html.escape(_preview(cur))}</code>\n\n{hint}"
     )
     await ask_text(
         callback,
