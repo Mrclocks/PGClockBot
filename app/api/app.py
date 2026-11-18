@@ -4653,10 +4653,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         elif tab == "backup":
             from app.services.backup import (
                 clear_idle_restore_status,
+                database_label,
                 list_backups,
                 read_restore_notice,
                 resolve_stale_restore_status,
-                sqlite_db_path,
             )
 
             if request.query_params.get("ok"):
@@ -4665,7 +4665,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["restore_status"] = resolve_stale_restore_status()
             ctx["restore_warnings"] = read_restore_notice()
             ctx["local_version"] = local_version()
-            ctx["db_path"] = str(sqlite_db_path())
+            ctx["db_label"] = database_label()
             # values already loaded above — do not re-import get_all_settings
             # (that would shadow the module-level name and 500 every settings tab).
             names = TAB_SETTING_GROUPS.get("backup") or []

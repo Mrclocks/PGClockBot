@@ -1,66 +1,40 @@
-"""Restoring a SQLite backup, storing an uploaded archive and checking member hashes are safe."""
+"""Storing an uploaded archive, checking member hashes and refusing non-PostgreSQL archives are safe."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import shutil
-import sqlite3
 import stat
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 from app.services import backup as backup_mod
 
-
-def _wal_database(path: Path, value: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(path)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA wal_autocheckpoint=0")
-    conn.execute("CREATE TABLE t (v TEXT)")
-    conn.execute("INSERT INTO t VALUES (?)", (value,))
-    conn.commit()
-    return conn
+DUMP_BYTES = b"PGDMP" + b"x" * 200
+# The member an old SQLite install wrote instead of a PostgreSQL dump.
+LEGACY_DB_MEMBER = "data/bot.db"
 
 
-def _values(path: Path) -> list[str]:
-    with sqlite3.connect(path) as conn:
-        assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-        return [row[0] for row in conn.execute("SELECT v FROM t")]
-
-
-def test_a_wal_left_by_the_old_database_is_not_replayed_onto_the_restored_one(tmp_path: Path) -> None:
-    live = tmp_path / "bot.db"
-    conn = _wal_database(live, "old")
-    # The service was stopped hard: its WAL still holds committed frames of the old database.
-    stale_wal = tmp_path / "stale-wal"
-    shutil.copy2(f"{live}-wal", stale_wal)
-    conn.close()
-    shutil.copy2(stale_wal, f"{live}-wal")
-
-    restored = tmp_path / "restored.db"
-    _wal_database(restored, "new").close()
-
-    backup_mod._replace_sqlite_database(restored, live)
-
-    assert _values(live) == ["new"]
-    assert not Path(f"{live}-wal").exists() or Path(f"{live}-wal").stat().st_size == 0
-    assert stat.S_IMODE(live.stat().st_mode) == 0o600
-
-
-def _archive(path: Path, *, db_bytes: bytes = b"SQLite format 3\x00" + b"x" * 200, declared: bytes | None = None) -> bytes:
+def _archive(
+    path: Path,
+    *,
+    member: str = backup_mod.POSTGRES_DUMP_MEMBER,
+    engine: str = backup_mod.DB_ENGINE,
+    declared: bytes | None = None,
+) -> bytes:
     manifest = {
         "magic": backup_mod.MAGIC,
-        "db_engine": "sqlite",
+        "db_engine": engine,
         "include_env": True,
-        "files": [{"path": backup_mod.SQLITE_DB_MEMBER, "sha256": hashlib.sha256(declared or db_bytes).hexdigest()}],
+        "files": [{"path": member, "sha256": hashlib.sha256(declared or DUMP_BYTES).hexdigest()}],
     }
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr(backup_mod.MANIFEST_NAME, json.dumps(manifest))
-        zf.writestr(backup_mod.SQLITE_DB_MEMBER, db_bytes)
+        zf.writestr(member, DUMP_BYTES)
         zf.writestr("env/.env", "BOT_TOKEN=1:secret\n")
     return path.read_bytes()
 
@@ -94,3 +68,33 @@ def test_an_upload_whose_member_does_not_match_its_declared_hash_is_refused_and_
     assert result["ok"] is False
     assert "هش" in result["error"]
     assert list(backup_dir.glob("*.zip")) == []
+
+
+@pytest.mark.parametrize(
+    ("member", "engine"),
+    [(LEGACY_DB_MEMBER, "sqlite"), (LEGACY_DB_MEMBER, ""), (backup_mod.POSTGRES_DUMP_MEMBER, "sqlite")],
+)
+def test_an_archive_without_a_postgres_dump_is_refused(
+    tmp_path: Path, backup_dir: Path, member: str, engine: str
+) -> None:
+    result = backup_mod.save_uploaded_backup(_archive(tmp_path / "in.zip", member=member, engine=engine), filename="in.zip")
+
+    assert result["ok"] is False
+    assert result["error"] == backup_mod.NOT_POSTGRES_BACKUP_MESSAGE
+    assert list(backup_dir.glob("*.zip")) == []
+
+
+def test_the_settings_page_names_the_database_without_its_password() -> None:
+    url = "postgresql+asyncpg://pgclock:s3cret-pass@db.internal:5432/pgclock_prod"
+    with patch.object(backup_mod, "get_settings", return_value=SimpleNamespace(database_url=url)):
+        label = backup_mod.database_label()
+
+    assert label == "PostgreSQL · pgclock_prod@db.internal"
+    assert "s3cret-pass" not in label
+
+
+def test_an_unreadable_database_url_is_not_echoed() -> None:
+    with patch.object(backup_mod, "get_settings", return_value=SimpleNamespace(database_url="::not a url s3cret")):
+        label = backup_mod.database_label()
+
+    assert "s3cret" not in label

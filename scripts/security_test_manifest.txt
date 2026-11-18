@@ -556,3 +556,6 @@ tests/test_postgres_support.py
 tests/test_postgres_only_check.py
 # Operator CLI: PostgreSQL only, never prints DATABASE_URL.
 tests/test_cli_postgres_only.py
+# PostgreSQL backups: all-or-nothing restore, refused archives, .env and secrets kept safe.
+tests/test_backup_postgres_restore.py
+tests/test_backup_env_restore.py

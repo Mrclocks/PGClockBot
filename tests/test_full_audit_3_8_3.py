@@ -177,7 +177,6 @@ class BackupManifestPathTests(unittest.TestCase):
     def test_manifest_uses_relative_db_path(self):
         src = (ROOT / "app/services/backup.py").read_text(encoding="utf-8")
         # Relative archive members only (never absolute live paths).
-        self.assertIn('SQLITE_DB_MEMBER = "data/bot.db"', src)
         self.assertIn('POSTGRES_DUMP_MEMBER = "data/postgres.dump"', src)
         self.assertIn('"db_path": db_member', src)
         self.assertNotIn('"db_path": str(db_src)', src)
