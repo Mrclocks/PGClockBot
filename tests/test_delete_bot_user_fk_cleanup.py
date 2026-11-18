@@ -2,7 +2,7 @@
 
 Root cause of «کاربر حذف نمی‌شود»: delete_bot_user never cleaned
 terms_acceptances / points_transactions / referral_events / lucky_wheel_* /
-reward_redemptions / … so Postgres (and SQLite with FK=ON) raised
+reward_redemptions / … so PostgreSQL raised
 IntegrityError on DELETE FROM bot_users and the row stayed.
 
 Previous agents patched the panel «reason» field; that never reached this path.

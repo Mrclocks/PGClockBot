@@ -15,7 +15,7 @@ import pytest
 from app.services import backup as backup_mod
 
 DUMP_BYTES = b"PGDMP" + b"x" * 200
-# The member an old SQLite install wrote instead of a PostgreSQL dump.
+# A database file member some other install wrote instead of a PostgreSQL dump.
 LEGACY_DB_MEMBER = "data/bot.db"
 
 
@@ -72,7 +72,7 @@ def test_an_upload_whose_member_does_not_match_its_declared_hash_is_refused_and_
 
 @pytest.mark.parametrize(
     ("member", "engine"),
-    [(LEGACY_DB_MEMBER, "sqlite"), (LEGACY_DB_MEMBER, ""), (backup_mod.POSTGRES_DUMP_MEMBER, "sqlite")],
+    [(LEGACY_DB_MEMBER, "mysql"), (LEGACY_DB_MEMBER, ""), (backup_mod.POSTGRES_DUMP_MEMBER, "mysql")],
 )
 def test_an_archive_without_a_postgres_dump_is_refused(
     tmp_path: Path, backup_dir: Path, member: str, engine: str
