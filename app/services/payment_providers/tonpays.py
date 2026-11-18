@@ -86,9 +86,9 @@ _MSG_UNKNOWN_STATUS = "وضعیت پرداخت قابل تشخیص نیست"
 _MSG_NO_INVOICE = "شناسه فاکتور موجود نیست"
 _MSG_API_KEY_MISSING = "کلید API تون پیز تنظیم نشده"
 _MSG_MIN_AMOUNT = "حداقل مبلغ تون پیز {minimum} تومان است"
-_MSG_INVALID_FIELD_FA = "{field} نامconsider است"
-_MSG_CHECKOUT_FAILED = "درخواست تون پیز نامconsider بود"
-_MSG_INVALID_CHECKOUT_URL = "آدرس پرداخت نامconsider است"
+_MSG_INVALID_FIELD_FA = "{field} نام است"
+_MSG_CHECKOUT_FAILED = "درخواست تون پیز نام بود"
+_MSG_INVALID_CHECKOUT_URL = "آدرس پرداخت نام است"
 
 
 def _safe_int(value: Any, *, field: str) -> int:
@@ -111,7 +111,7 @@ def _validate_callback_url(value: str) -> str:
     try:
         parts = urlparse(raw)
     except ValueError as exc:
-        raise ValueError("آدرس وب‌هوک ناماقعرست است") from exc
+        raise ValueError("آدرس وب‌هوک نام است") from exc
     if parts.scheme != "https" or not parts.netloc:
         raise ValueError("آدرس وب‌هوک باید با https و میزبان عمومی باشد")
     return raw
