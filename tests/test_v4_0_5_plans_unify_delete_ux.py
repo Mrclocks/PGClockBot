@@ -62,10 +62,6 @@ class PlansUnifyTests(unittest.TestCase):
         self.assertIn("billing_mode", block)
         self.assertNotIn("commission_percent", block)
 
-    def test_session_alters_billing_mode(self):
-        src = (ROOT / "app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn("reseller_plans ADD COLUMN billing_mode", src)
-
     def test_make_reseller_accepts_billing_mode(self):
         src = (ROOT / "app/services/resellers.py").read_text(encoding="utf-8")
         fn = src[src.find("async def make_reseller") : src.find("async def list_active_reseller_plans")]

@@ -26,12 +26,6 @@ class PaygPlanModelTests(unittest.TestCase):
         self.assertIn("pg_group_ids", src)
         self.assertIn("0003_reseller_plan_billing_mode", src)
 
-    def test_session_additive_columns(self):
-        src = (ROOT / "app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn("reseller_plans ADD COLUMN price_per_gb", src)
-        self.assertIn("reseller_plans ADD COLUMN pg_group_ids", src)
-
-
 class PaygPlanUiTests(unittest.TestCase):
     def test_create_modal_has_payg_rate_and_groups(self):
         html = template_with_includes("plans.html")

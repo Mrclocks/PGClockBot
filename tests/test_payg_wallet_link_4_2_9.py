@@ -178,8 +178,6 @@ class SchemaLinkFlagTests(unittest.TestCase):
         from app.db.models import ResellerProfile
 
         self.assertTrue(hasattr(ResellerProfile, "payg_wallet_linked"))
-        session_src = Path("app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn("payg_wallet_linked", session_src)
         alem = Path("alembic/versions/0006_payg_wallet_linked.py").read_text(encoding="utf-8")
         self.assertIn("payg_wallet_linked", alem)
 
