@@ -92,7 +92,7 @@
 </div>
 
 {% if extras and (extras.gb_price or extras.user_price) %}
-<p class="muted">{% if ov.current and ov.current.keep_extras_on_renew %}ظرفیت اضافه تا پایان دوره می‌ماند و در تمدید بعدی هم حساب می‌شود.{% else %}ظرفیت اضافه تا پایان همین دوره می‌ماند؛ بستهٔ فعلی در تمدید آن را حفظ نمی‌کند.{% endif %} هر نوع را جدا بخرید.</p>
+<p class="muted">حجم اضافه {% if ov.current and ov.current.keep_extra_gb_on_renew %}در تمدید بعدی هم می‌ماند{% else %}فقط تا پایان همین دوره می‌ماند{% endif %}؛ کاربر اضافه {% if ov.current and ov.current.keep_extra_users_on_renew %}در تمدید بعدی هم می‌ماند{% else %}فقط تا پایان همین دوره می‌ماند{% endif %}. هر نوع را جدا بخرید.</p>
 {% if extras.gb_price and extras.gb_options %}
 <div class="card">
   {{ card_title('payments', '📦 حجم اضافه') }}

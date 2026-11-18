@@ -41,6 +41,7 @@ from app.services.orders import (
 )
 from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
 from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
+from app.services.renewal_carry import set_plan_carry_from_form
 from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
 from app.services.trial_offer import TRIAL_SERVICE_OWNERS_KEY, parse_trial_placement, save_trial_placement
@@ -2930,9 +2931,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             category_id=category_id,
             owner_reseller_id=owner_id,
             description=description or None,
-            carry_remaining_quota=bool(form.get("carry_remaining_quota")),
             is_active=True,
         )
+        set_plan_carry_from_form(plan, form)
         from app.services.service_addons import (
             apply_plan_extra_rates_from_form,
             replace_plan_scoped_packs_from_form,
@@ -3430,7 +3431,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         plan.sort_order = sort_order
         plan.pg_template_id = tpl
         plan.pg_group_ids = group_csv
-        plan.carry_remaining_quota = bool(form.get("carry_remaining_quota"))
+        set_plan_carry_from_form(plan, form)
         from app.services.orders import parse_naming_form
         from app.services.button_styles import parse_plan_button_style_form
         from app.services.plan_categories import resolve_category_for_plan_write

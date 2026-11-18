@@ -1192,7 +1192,7 @@ async def admin_renew_service(
 ) -> ServiceSnapshot:
     """Admin renew: always a fresh period from now (does not follow plan carry).
 
-    Customer paid renewals, Mini App and automation use ``Plan.carry_remaining_quota``.
+    Customer paid renewals, Mini App and automation use the plan's volume/time carry switches.
     Staff renew from the users page stays the historical start-from-now + optional
     traffic reset so operators are not surprised after an upgrade.
     """
