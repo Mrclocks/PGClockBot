@@ -16,19 +16,25 @@ from app.jobs.chat_message_purge import run_chat_message_purge
 from app.jobs.connection_status import run_connection_status
 from app.jobs.customer_notices import run_customer_notices
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
+from app.jobs.paid_order_recovery import run_paid_order_recovery
 from app.jobs.pg_link_watchdog import run_pg_link_watchdog
 from app.jobs.service_cleanup import run_service_cleanup
 from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
-from app.services.alert_rearm import rearm_flagged_alerts
+from app.services.alert_rearm import Thresholds, rearm_flagged_alerts
+from app.services.alert_thresholds import (
+    AlertThreshold,
+    time_is_low,
+    time_threshold,
+    traffic_is_low,
+    traffic_threshold,
+)
 from app.services.daily_report_delivery import deliver_daily_reports
+from app.services.service_period import period_usage
 from app.services.formatting import parse_expire
 from app.services.pasarguard import get_pg
 from app.services.usage_alert_messages import (
-    alert_days,
-    days_left,
     send_alert_with_default_fallback,
-    time_alert_due,
     time_alert_text,
     traffic_alert_text,
 )
@@ -41,9 +47,7 @@ from app.services.usage_alerts import (
     plan_durations,
     replace_previous_alerts,
     time_alert_markup,
-    time_remaining_pct,
     traffic_alert_markup,
-    traffic_remaining_pct,
     usage_alert_key,
 )
 
@@ -54,13 +58,6 @@ scheduler = AsyncIOScheduler()
 _PG_FETCH_CONCURRENCY = 8
 # Where the next alert re-arm sweep continues (in memory: a restart simply starts from the beginning).
 _rearm_after_id = 0
-
-
-def _as_int(val, default: int) -> int:
-    try:
-        return int(float(val))
-    except Exception:
-        return default
 
 
 def _resolve_send_bot(
@@ -165,7 +162,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 ).scalars().all()
                 users_by_id = {u.id: u for u in rows}
 
-            eligible: list[tuple[UserService, BotUser, dict, int, int, int | None]] = []
+            eligible: list[tuple[UserService, BotUser, dict, AlertThreshold, AlertThreshold, int | None]] = []
             for svc in services:
                 user = users_by_id.get(svc.bot_user_id)
                 if not user or user.is_blocked:
@@ -182,9 +179,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 if not on(ui.get("user_alert_low_enabled", "0")):
                     continue
 
-                traffic_pct = max(1, min(99, _as_int(ui.get("user_alert_low_traffic_pct"), 20)))
-                time_pct = max(1, min(99, _as_int(ui.get("user_alert_low_time_pct"), 20)))
-                eligible.append((svc, user, ui, traffic_pct, time_pct, rid))
+                eligible.append((svc, user, ui, traffic_threshold(ui), time_threshold(ui), rid))
 
             if not eligible:
                 if len(services) < batch_size:
@@ -211,7 +206,7 @@ async def check_expiring_services(bot: Bot) -> None:
                 *[_fetch_info(svc.subscription_token) for svc, *_rest in eligible]
             )
 
-            for (svc, user, _ui, traffic_pct, time_pct, shop_rid), info in zip(eligible, infos):
+            for (svc, user, _ui, traffic_limit, time_limit, shop_rid), info in zip(eligible, infos):
                 if not info:
                     continue
                 from app.services.bot_user_admin import sync_service_quota_cache
@@ -225,7 +220,7 @@ async def check_expiring_services(bot: Bot) -> None:
                     continue  # the shop's own bot is not running: never alert its customers from the platform bot
                 extras = extras_by_shop[shop_rid]
 
-                # --- remaining TIME percent ---
+                # --- remaining TIME ---
                 if not svc.notified_expire:
                     expire = parse_expire(info.get("expire"))
                     created = svc.created_at
@@ -237,8 +232,7 @@ async def check_expiring_services(bot: Bot) -> None:
                             created_at=created,
                             expire=expire,
                         )
-                        rem_pct = time_remaining_pct(expire, now=now, period=period)
-                        if time_alert_due(rem_pct, days_left(expire, now), time_pct=time_pct, days=alert_days(_ui)):
+                        if time_is_low((expire - now).total_seconds(), period, time_limit):
                             try:
                                 one_tap = on(_ui.get("one_tap_renew_enabled", "1"))
                                 markup = time_alert_markup(_ui, svc.id, extras)
@@ -259,7 +253,7 @@ async def check_expiring_services(bot: Bot) -> None:
                                     "expire alert send failed tg=%s", user.telegram_id, exc_info=True
                                 )
 
-                # --- remaining TRAFFIC percent ---
+                # --- remaining TRAFFIC ---
                 if not svc.notified_traffic:
                     used = float(info.get("used_traffic") or 0)
                     limit = info.get("data_limit")
@@ -268,39 +262,38 @@ async def check_expiring_services(bot: Bot) -> None:
                             limit_f = float(limit)
                         except (TypeError, ValueError):
                             limit_f = 0
-                        rem_pct = traffic_remaining_pct(used, limit_f)
-                        if rem_pct is not None:
-                            if rem_pct <= traffic_pct:
-                                try:
-                                    alert = await send_alert_with_default_fallback(
-                                        send_bot,
-                                        user.telegram_id,
-                                        _ui,
-                                        lambda ui, name=svc.pg_username or "", used=used, limit=limit_f: traffic_alert_text(
-                                            ui, service_name=name, used=used, limit=limit
-                                        ),
-                                        note=extras.note_for(svc.id),
-                                        markup=traffic_alert_markup(_ui, svc.id, extras),
-                                    )
-                                    svc.notified_traffic = True
-                                    sent_alerts.append((send_bot, usage_alert_key(ALERT_TRAFFIC, svc.id), alert))
-                                except Exception:
-                                    logger.debug(
-                                        "traffic alert send failed tg=%s", user.telegram_id, exc_info=True
-                                    )
+                        # This period's share: a renewal adds fresh volume on top of lifetime usage.
+                        used, limit_f = period_usage(svc, used, limit_f, info.get("lifetime_used_traffic"))
+                        if traffic_is_low(used, limit_f, traffic_limit):
+                            try:
+                                alert = await send_alert_with_default_fallback(
+                                    send_bot,
+                                    user.telegram_id,
+                                    _ui,
+                                    lambda ui, name=svc.pg_username or "", used=used, limit=limit_f: traffic_alert_text(
+                                        ui, service_name=name, used=used, limit=limit
+                                    ),
+                                    note=extras.note_for(svc.id),
+                                    markup=traffic_alert_markup(_ui, svc.id, extras),
+                                )
+                                svc.notified_traffic = True
+                                sent_alerts.append((send_bot, usage_alert_key(ALERT_TRAFFIC, svc.id), alert))
+                            except Exception:
+                                logger.debug(
+                                    "traffic alert send failed tg=%s", user.telegram_id, exc_info=True
+                                )
 
             await session.commit()
             await replace_previous_alerts(session, sent_alerts)
             if len(services) < batch_size:
                 break
 
-        async def thresholds_for(shop_id: int | None) -> tuple[bool, int, int, int]:
+        async def thresholds_for(shop_id: int | None) -> Thresholds:
             shop_ui = await ui_for(shop_id)
             return (
                 on(shop_ui.get("user_alert_low_enabled", "0")),
-                max(1, min(99, _as_int(shop_ui.get("user_alert_low_traffic_pct"), 20))),
-                max(1, min(99, _as_int(shop_ui.get("user_alert_low_time_pct"), 20))),
-                alert_days(shop_ui),
+                traffic_threshold(shop_ui),
+                time_threshold(shop_ui),
             )
 
         try:
@@ -628,6 +621,8 @@ def start_background_scheduler() -> None:
         ("pg_link_watchdog", run_pg_link_watchdog, {"seconds": 60}, 60),
         ("bbc_settlement_poll", run_bbc_settlement_poll, {"seconds": 45}, 90),
         ("psp_settlement_poll", run_psp_settlement_poll, {"seconds": 45}, 90),
+        # Cheap when idle (one indexed query); probes the panel only when a retry is due.
+        ("paid_order_recovery", run_paid_order_recovery, {"minutes": 1}, 120),
         # Ticks often; each shop is recounted on the period set in volume_external_sync_minutes.
         ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
         ("chat_message_purge", run_chat_message_purge, {"hours": 1}, 3600),

@@ -609,7 +609,7 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
 
     from app.services.billing import BILLING_MODE_PAYG
     from app.services.formatting import format_toman
-    from app.services.pg_admin_subscription import is_addon_plan, plan_kind_of
+    from app.services.pg_admin_subscription import EXTRA_GB, EXTRA_USERS, is_addon_plan, plan_keeps_extra, plan_kind_of
 
     desc = html.escape((plan.description or "").strip() or "بدون توضیح")
     name = html.escape((plan.name or "").strip() or "—")
@@ -658,16 +658,16 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
                 f"کاربر {format_toman(eu, currency) if eu else '—'})"
             )
         carry_period = bool(getattr(plan, "carry_remaining_period", True))
-        keep_extras = bool(getattr(plan, "keep_extras_on_renew", True))
+        keep_gb = plan_keeps_extra(plan, EXTRA_GB)
+        keep_users = plan_keeps_extra(plan, EXTRA_USERS)
         lines.append(
             "زمان مانده در تمدید: <b>"
             + ("منتقل می‌شود" if carry_period else "منتقل نمی‌شود")
             + "</b>"
         )
         lines.append(
-            "حجم/کاربر اضافه در تمدید: <b>"
-            + ("حفظ می‌شود" if keep_extras else "پاک می‌شود")
-            + "</b>"
+            "حجم اضافه در تمدید: <b>" + ("حفظ می‌شود" if keep_gb else "پاک می‌شود") + "</b> · "
+            "کاربر اضافه در تمدید: <b>" + ("حفظ می‌شود" if keep_users else "پاک می‌شود") + "</b>"
         )
     groups = (getattr(plan, "pg_group_ids", None) or "").strip()
     lines.append(
