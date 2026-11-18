@@ -1,8 +1,10 @@
-"""Every web menu entry and every bot setting is classified for web/bot parity (docs/BOT_PARITY_MATRIX.md).
+"""Every web menu entry and every setting is classified for web/bot parity (docs/BOT_PARITY_MATRIX.md).
 
-A new sidebar item, marketing section or owner-bot setting fails here until it is placed in one of
-the lists below, with where it lives on the other side or why it stays on one side. This keeps a
-feature from quietly landing in only the web panel or only the bot.
+Both directions are checked. A new sidebar item, marketing section or bot setting fails here until
+it is placed in one of the lists below, with where it lives on the other side or why it stays on one
+side; so does a new web setting that the owner bot or the shop bot cannot edit. This keeps a feature
+from quietly landing in only the web panel or only the bot. When a gap is closed in the bot, its entry
+must leave the gap list, so the lists always describe the code.
 """
 
 from __future__ import annotations
@@ -14,7 +16,11 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot.handlers import admin_settings, reseller_settings
 from app.services import marketing_nav, panel_nav
-from app.services.users import SETTING_GROUPS
+from app.services.resellers import RESELLER_SETTINGS_TABS
+from app.services.screen_titles import is_screen_text_key, platform_only_screen_text_keys
+from app.services.service_import_config import PLATFORM_ONLY_KEYS as IMPORT_PLATFORM_ONLY_KEYS
+from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
+from app.services.users import PLATFORM_ONLY_SETTING_GROUPS, SETTING_GROUPS, TAB_SETTING_GROUPS
 
 # Sidebar item -> where the bot offers it.
 NAV_IN_BOT: dict[str, str] = {
@@ -92,6 +98,82 @@ BOT_SETTINGS_OUTSIDE_WEB_TABS: dict[str, str] = {
     "miniapp_notice": "وب: تنظیمات ربات › مینی‌اپ (فرم اختصاصی)",
 }
 
+# Web settings the bots edit outside the settings field lists, and where.
+BOT_OTHER_EDITORS: dict[str, str] = {
+    "menu_layout": "تنظیمات › ظاهر منو › چیدمان کیبورد",
+    "connection_guides": "تنظیمات › آموزش اتصال (ویرایشگر آموزش‌ها، gde:*)",
+}
+
+# Web settings that stay on the web for both bots, and why.
+WEB_ONLY_SETTINGS: dict[str, str] = {
+    "qr_background": "آپلود تصویر با پیش‌نمایش",
+    "admin_daily_report_template": "انتخاب‌گر متغیر و پیش‌نمایش گزارش",
+    "service_import_paths": "مسیرهای پنل واحد؛ فقط مالک در وب",
+    "service_import_admins": "ادمین‌های پنل واحد؛ فقط مالک در وب",
+}
+
+# Web settings the owner bot cannot edit yet: open work, shrinking as the bot catches up.
+OWNER_BOT_GAPS: dict[str, str] = {
+    **{key: "متن پیام‌ها" for key in (
+        "guide_text", "faq_text", "empty_services_text", "shop_empty_text", "delivery_title", "payment_ok_title",
+        "wallet_success_title", "wallet_success_text", "shop_maintenance_text",
+        "connection_status_title", "connection_status_empty", "connection_status_error",
+        "connection_status_admin_title", "connection_status_account_prompt", "connection_status_name_prompt",
+        "connection_status_order_prompt", "user_alert_time_text", "user_alert_traffic_text",
+    )},
+    **{key: "هشدار سرویس کاربر" for key in (
+        "user_alert_low_enabled", "user_alert_low_traffic_pct", "user_alert_low_time_pct", "user_alert_low_days",
+        "first_use_nudge_enabled",
+    )},
+    **{key: "گزارش و عملیات" for key in (
+        "action_center_expire_days", "one_tap_renew_enabled", "capacity_warn_pct", "funnel_tracking_enabled",
+    )},
+    "pg_link_watchdog_enabled": "سلامت ارتباط پاسارگارد",
+    "pg_link_alerts_enabled": "سلامت ارتباط پاسارگارد",
+    "shop_maintenance_enabled": "وضعیت فروش",
+    "receipt_auto_match_enabled": "رسیدها",
+    "receipt_match_window_minutes": "رسیدها",
+    "trial_min_account_minutes": "اکانت تست",
+    "screen_editor_enabled": "حالت ویرایش منوها",
+    "wallet_topup_presets": "مبالغ آمادهٔ شارژ (فهرست)",
+    **{key: "بکاپ زمان‌بندی" for key in (
+        "backup_schedule_enabled", "backup_schedule_hour", "backup_include_env_scheduled", "backup_keep_count",
+    )},
+    **{key: "ارسال بکاپ به تلگرام" for key in (
+        "backup_telegram_enabled", "backup_telegram_allow_env", "backup_telegram_custom_bot",
+        "backup_telegram_bot_token", "backup_telegram_chat_ids",
+    )},
+    **{key: "فهرست چندتایی مقصدهای پرداخت" for key in (
+        "payment_cards", "payment_gateways", "psp_gateways", "payment_crypto_wallets",
+    )},
+    **{key: "نرخ تبدیل رمزارز" for key in (
+        "crypto_rate_mode", "crypto_rate_asset", "crypto_rate_manual", "crypto_rate_api_url", "crypto_rate_api_path",
+        "crypto_rate_api_divisor", "crypto_rate_margin_percent", "crypto_quote_minutes",
+    )},
+}
+
+# Web settings of «/shop-settings» the shop bot cannot edit yet.
+SHOP_BOT_GAPS: dict[str, str] = {
+    **{key: OWNER_BOT_GAPS[key] for key in (
+        "guide_text", "faq_text", "empty_services_text", "shop_empty_text", "delivery_title", "payment_ok_title",
+        "wallet_success_title", "wallet_success_text", "connection_status_title", "connection_status_empty",
+        "connection_status_error", "connection_status_admin_title", "connection_status_account_prompt",
+        "connection_status_name_prompt", "connection_status_order_prompt", "user_alert_time_text",
+        "user_alert_traffic_text", "user_alert_low_enabled", "user_alert_low_traffic_pct", "user_alert_low_time_pct",
+        "user_alert_low_days", "first_use_nudge_enabled", "action_center_expire_days", "one_tap_renew_enabled",
+        "capacity_warn_pct", "funnel_tracking_enabled", "pg_link_watchdog_enabled", "pg_link_alerts_enabled",
+        "trial_min_account_minutes", "wallet_topup_presets",
+    )},
+    "btn_buy_continue": "متن دکمه‌ها (فقط در فهرست مالک)",
+    **{key: "افزودن سرویس قبلی" for key in (
+        "service_import_enabled", "service_import_mode", "service_import_max_per_user",
+    )},
+    **{key: "قالب نام‌گذاری" for key in ("pg_username_prefix", "pg_username_suffix", "pg_username_pattern")},
+    **{key: "گزارش روزانه" for key in (
+        "admin_daily_report_enabled", "subordinate_report_enabled", "admin_daily_report_hour",
+    )},
+}
+
 
 def _marketing_keys() -> set[str]:
     keys: set[str] = set()
@@ -103,6 +185,31 @@ def _marketing_keys() -> set[str]:
 
 def _web_setting_keys() -> set[str]:
     return {field[0] for fields in SETTING_GROUPS.values() for field in fields}
+
+
+def _edited_by_edit_mode(key: str) -> bool:
+    """Menu titles, captions and button colours: «حالت ویرایش منوها» and the colour editor edit them."""
+    return is_screen_text_key(key) or key.startswith("btn_style_")
+
+
+def _shop_web_setting_keys() -> set[str]:
+    """Fields «/shop-settings» offers a shop (the same filters its page and save route apply)."""
+    keys = {
+        field[0]
+        for tab, _label in RESELLER_SETTINGS_TABS
+        for name in TAB_SETTING_GROUPS.get(tab, [])
+        if name in SETTING_GROUPS and name not in PLATFORM_ONLY_SETTING_GROUPS
+        for field in SETTING_GROUPS[name]
+    }
+    hidden = set(IMPORT_PLATFORM_ONLY_KEYS) | set(PLATFORM_ONLY_BTN_KEYS) | set(platform_only_screen_text_keys())
+    return keys - hidden - {"show_reseller_apply"}
+
+
+def _not_in_bot(web_keys: set[str], bot_fields: set[str]) -> set[str]:
+    return {
+        key for key in web_keys - bot_fields - set(BOT_OTHER_EDITORS) - set(WEB_ONLY_SETTINGS)
+        if not _edited_by_edit_mode(key)
+    }
 
 
 class ParityClassificationTests(unittest.TestCase):
@@ -127,3 +234,24 @@ class ParityClassificationTests(unittest.TestCase):
     def test_every_shop_bot_setting_is_editable_on_the_web(self) -> None:
         outside = set(reseller_settings.FIELDS) - _web_setting_keys()
         self.assertEqual(outside - set(BOT_SETTINGS_OUTSIDE_WEB_TABS), set(), "add a web field or classify it")
+
+    def test_every_web_setting_is_editable_in_owner_bot_or_classified(self) -> None:
+        missing = _not_in_bot(_web_setting_keys(), set(admin_settings.FIELDS))
+        self.assertEqual(missing - set(OWNER_BOT_GAPS), set(), "add a bot field, or list it in OWNER_BOT_GAPS")
+
+    def test_every_shop_web_setting_is_editable_in_shop_bot_or_classified(self) -> None:
+        missing = _not_in_bot(_shop_web_setting_keys(), set(reseller_settings.FIELDS))
+        self.assertEqual(missing - set(SHOP_BOT_GAPS), set(), "add a shop bot field, or list it in SHOP_BOT_GAPS")
+
+    def test_gap_lists_only_name_settings_still_missing(self) -> None:
+        self.assertEqual(set(OWNER_BOT_GAPS) & set(admin_settings.FIELDS), set(), "now in the owner bot: drop the gap")
+        self.assertEqual(set(SHOP_BOT_GAPS) & set(reseller_settings.FIELDS), set(), "now in the shop bot: drop the gap")
+        self.assertEqual(set(OWNER_BOT_GAPS) - _web_setting_keys(), set(), "not a web setting any more")
+        self.assertEqual(set(SHOP_BOT_GAPS) - _shop_web_setting_keys(), set(), "not a shop web setting any more")
+
+    def test_web_only_and_gap_lists_do_not_overlap(self) -> None:
+        for group in (OWNER_BOT_GAPS, SHOP_BOT_GAPS, BOT_OTHER_EDITORS):
+            self.assertEqual(set(group) & set(WEB_ONLY_SETTINGS), set())
+        for group in (OWNER_BOT_GAPS, SHOP_BOT_GAPS, WEB_ONLY_SETTINGS, BOT_OTHER_EDITORS):
+            for key, note in group.items():
+                self.assertTrue(note.strip(), key)
