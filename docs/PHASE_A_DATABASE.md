@@ -84,20 +84,8 @@ Baseline revision: `0001_baseline` (full schema from `app.db.models` + `uq_walle
 
 ## SQLite → PostgreSQL migration
 
-```bash
-# 1) Phase 0 baseline first
-.venv/bin/python -m scripts.phase0_baseline
-
-# 2) Prepare empty PostgreSQL + schema
-sudo bash scripts/setup_postgres.sh
-.venv/bin/python -m scripts.migrate_sqlite_to_pg \
-  --source 'sqlite+aiosqlite:////ABS/PATH/data/bot.db' \
-  --target 'postgresql+asyncpg://pgclock:SECRET@127.0.0.1:5432/pgclock'
-
-# 3) Point .env DATABASE_URL at PostgreSQL and restart service
-```
-
-Validation compares row counts, settings keys, wallet/billing sums, and reports VARCHAR overflows.
+Removed. PGClockBot runs on PostgreSQL only and no installation runs on SQLite, so the one-shot
+SQLite → PostgreSQL ETL (`pgclock migrate --from-sqlite`, `scripts/migrate_sqlite_to_pg.py`) is gone.
 
 ---
 
@@ -131,7 +119,6 @@ Executed in the migration environment before Phase A merge:
 ```text
 .venv/bin/python -m scripts.phase0_baseline --note "phase0-verified-before-phase-a"
 → ok=true, restore_verification.ok=true, sqlite tables_sample present
-.venv/bin/python -m scripts.migrate_sqlite_to_pg … → ok=true, counts matched
 pytest tests/test_phase0_baseline.py tests/test_phase_a_database.py → 6 passed
 ```
 

@@ -938,7 +938,7 @@ ensure_pg_client_tools() {
 }
 
 # Start local PostgreSQL and ensure a DATABASE_URL for fresh installs.
-# Honors PGCLOCK_DATABASE_URL (external/managed Postgres). Never scaffolds SQLite.
+# Honors PGCLOCK_DATABASE_URL (external/managed Postgres).
 ensure_postgresql() {
   info "Preparing PostgreSQL..."
 
@@ -961,11 +961,6 @@ ensure_postgresql() {
       postgresql://*|postgresql+asyncpg://*|postgres://*)
         export PGCLOCK_DATABASE_URL="$existing"
         ok "Found PostgreSQL DATABASE_URL in existing .env"
-        ;;
-      sqlite*|*"sqlite"*)
-        err "Existing .env still points at SQLite. New installs require PostgreSQL."
-        err "Set DATABASE_URL to postgresql+asyncpg://… or remove .env and re-run install."
-        return 1
         ;;
       "")
         ;;
@@ -2186,7 +2181,6 @@ cmd_status() {
     db_url="$(env_get DATABASE_URL "")"
     case "$db_url" in
       postgresql://*|postgresql+asyncpg://*|postgres://*) db_kind="PostgreSQL" ;;
-      sqlite*) db_kind="SQLite (unsupported for new installs)" ;;
       "") db_kind="missing DATABASE_URL" ;;
       *) db_kind="unknown" ;;
     esac

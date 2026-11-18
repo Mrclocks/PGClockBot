@@ -554,3 +554,5 @@ tests/test_bot_payment_destinations.py
 # PostgreSQL test isolation (one schema or database per test) and the PostgreSQL-only check.
 tests/test_postgres_support.py
 tests/test_postgres_only_check.py
+# Operator CLI: PostgreSQL only, never prints DATABASE_URL.
+tests/test_cli_postgres_only.py

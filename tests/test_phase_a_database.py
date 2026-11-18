@@ -1,10 +1,8 @@
-"""Phase A — Alembic, SQLite→PG migration, validation, engine-aware backup."""
+"""Phase A — Alembic and engine-aware backup."""
 
 from __future__ import annotations
 
-import json
 import os
-import uuid
 from pathlib import Path
 
 import pytest
@@ -174,38 +172,6 @@ def test_alembic_upgrade_and_downgrade_postgres():
 
     downgrade_one(PG_URL)
     assert current_revision(PG_URL) is None
-
-
-@requires_pg
-def test_sqlite_to_pg_migration_and_validation(tmp_path):
-    from app.db.alembic_runner import upgrade_head
-    from app.db.engine_url import to_sync_url
-    from app.db.sqlite_to_pg import migrate_sqlite_to_postgres
-    from app.db.validate import compare_databases
-    from sqlalchemy import create_engine, text
-
-    db_path = tmp_path / "src.db"
-    source = _seed_sqlite(db_path)
-
-    eng = create_engine(to_sync_url(PG_URL))
-    with eng.begin() as conn:
-        conn.execute(text("DROP SCHEMA public CASCADE"))
-        conn.execute(text("CREATE SCHEMA public"))
-        conn.execute(text("GRANT ALL ON SCHEMA public TO pgclock"))
-    eng.dispose()
-    upgrade_head(PG_URL)
-
-    result = migrate_sqlite_to_postgres(source, PG_URL, validate=True)
-    assert result.ok, result.errors
-    assert result.tables_copied["bot_users"] == 2
-    assert result.tables_copied["settings"] == 1
-    assert result.tables_copied["reseller_profiles"] == 1
-    assert result.validation and result.validation.ok
-
-    report = compare_databases(source, PG_URL)
-    assert report.ok, report.mismatches
-    assert report.extras["wallet_balance_sum"]["source"] == report.extras["wallet_balance_sum"]["target"]
-    assert report.extras["billing_balance_sum"]["source"] == 777
 
 
 def test_engine_aware_sqlite_backup_roundtrip(tmp_path, monkeypatch):
