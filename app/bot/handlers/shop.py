@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.catalog_descriptions import with_descriptions
 from app.services.chat_records import keep_sent
 from app.services.service_scope import list_customer_services
+from app.services.trial_offer import has_claimed_trial
 from app.services.users import current_shop_reseller_id
 from app.services.catalog_pricing import PriceTarget, active_discounts, displayed_quote, price_html, quote_price, sale_price
 from app.bot import bbc_checkout_view as bbc_view
@@ -288,7 +289,7 @@ async def _shop_kind_flags(
     if not trial_setting:
         plans = [p for p in plans if not p.is_trial]
     has_svc = await list_customer_services(session, db_user.id, current_shop_reseller_id(), limit=1)
-    if has_svc:
+    if has_svc or (not on(ui.get("trial_show_claimed", "1")) and await has_claimed_trial(session, db_user.id)):
         plans = [p for p in plans if not p.is_trial]
     fixed_plans = [p for p in plans if not p.is_trial]
     trial_plans = [p for p in plans if p.is_trial]

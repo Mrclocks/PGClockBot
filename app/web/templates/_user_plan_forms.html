@@ -137,6 +137,7 @@
     {% call ds_sec('پلن تست', sid='utp-sec-basic') %}
       <p class="ds-desc">حجم، مدت و اتصال پاسارگارد برای تست — از فروشگاه فقط یک‌بار به هر کاربر نشان داده می‌شود.</p>
       <div class="ds-rows">{{ ds_switch('trial_enabled', 'نمایش پلن تست در فروشگاه', checked=trial_on) }}</div>
+      <div class="ds-rows">{{ ds_switch('trial_show_claimed', 'نمایش به کاربران محدود', 'خاموش: دکمهٔ تست برای کاربری که تستش را قبلاً گرفته نمایش داده نمی‌شود', checked=trial_show_claimed, default=true) }}</div>
       <label class="form-field"><span class="ds-label-text">نام <span class="ds-req" aria-hidden="true">*</span></span>
         <input name="name" value="{{ trial.name if trial else 'تست رایگان' }}" required data-ds-label="نام" />
       </label>

@@ -2956,6 +2956,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
         enabled = str(form.get("trial_enabled") or "") in {"1", "on", "true", "yes"}
         await set_setting(session, "trial_enabled", "1" if enabled else "0", reseller_id=owner_id)
+        show_claimed = str(form.get("trial_show_claimed") or "") in {"1", "on", "true", "yes"}
+        await set_setting(session, "trial_show_claimed", "1" if show_claimed else "0", reseller_id=owner_id)
         name = str(form.get("name") or "تست رایگان").strip() or "تست رایگان"
         try:
             days = max(1, int(str(form.get("duration_days") or "1")))

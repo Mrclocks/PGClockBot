@@ -786,6 +786,7 @@ DEFAULT_SETTINGS = {
     "terms_buy_reseller_btn": "موافقم",
     "terms_buy_reseller_reaccept": "1",
     "trial_enabled": "0",
+    "trial_show_claimed": "1",
     "trial_require_contact": "0",
     "purchase_require_contact": "0",
     "trial_require_iran_phone": "0",

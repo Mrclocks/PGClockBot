@@ -27,6 +27,7 @@
 
 <div data-plans-panel="users" role="tabpanel"{% if plans_tab != 'users' %} hidden{% endif %}>
 {% set trial_on = values.get('trial_enabled') in ['1','true','yes','on'] %}
+{% set trial_show_claimed = values.get('trial_show_claimed', '1') in ['1','true','yes','on'] %}
 {% set custom_on = values.get('custom_plan_enabled') in ['1','true','yes','on'] %}
 {% set wholesale_on = values.get('wholesale_enabled') in ['1','true','yes','on'] %}
 
