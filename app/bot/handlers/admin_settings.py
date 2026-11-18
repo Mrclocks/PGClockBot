@@ -68,10 +68,12 @@ from app.services.bot_setting_values import (
     select_label,
 )
 from app.services.settings_operation_fields import (
+    AUTO_APPROVE_AFTER_FIELDS,
     OPERATIONS_FIELDS,
     PG_LINK_HEALTH_FIELDS,
     RECEIPT_MATCH_FIELDS,
     SALES_STATE_FIELDS,
+    STARS_FIELDS,
     TRIAL_MIN_AGE_FIELD,
     USAGE_ALERT_FIELDS,
 )
@@ -311,18 +313,8 @@ SECTIONS: dict[str, dict] = {
                 ("crypto_pay_text", "راهنما", "textarea"),
                 *BTN_PAY_CRYPTO,
             ]),
-            ("stars", "استارز", [
-                ("stars_toman_per_star", "تومان هر استارز", "number"),
-                ("stars_title", "عنوان فاکتور", "text"),
-                ("stars_description", "توضیح فاکتور", "text"),
-                *BTN_PAY_STARS,
-            ]),
-            # Same keys as the web «رسیدها» section; they apply while «تأیید خودکار رسید» is on.
-            ("auto_after", "تأیید خودکار با مهلت", [
-                ("auto_approve_after_minutes", "مهلت تأیید خودکار (دقیقه، ۰ = فوری)", "number"),
-                ("auto_approve_after_max_amount", "سقف مبلغ (تومان، ۰ = بدون سقف)", "number"),
-                ("auto_approve_after_returning_only", "فقط مشتریان با خرید قبلی", "toggle"),
-            ]),
+            ("stars", "استارز", [*STARS_FIELDS, *BTN_PAY_STARS]),
+            ("auto_after", "تأیید خودکار با مهلت", AUTO_APPROVE_AFTER_FIELDS),
             # Same keys as web finance modal tab «مدیریت PAYG» (SETTING_GROUPS).
             ("payg", "مدیریت PAYG", [
                 ("billing_enabled", "فعال‌سازی PAYG", "toggle"),

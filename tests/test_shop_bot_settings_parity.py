@@ -42,14 +42,25 @@ NEW_SHOP_KEYS = (
     "subordinate_report_enabled",
     "admin_daily_report_hour",
     "btn_buy_continue",
+    "shop_maintenance_enabled",
+    "shop_maintenance_text",
+    "receipt_auto_match_enabled",
+    "receipt_match_window_minutes",
+    "auto_approve_after_minutes",
+    "auto_approve_after_max_amount",
+    "auto_approve_after_returning_only",
+    "stars_toman_per_star",
+    "stars_title",
+    "stars_description",
+    "referral_bonus",
 )
 OWNER_ONLY_KEYS = (
     "pg_link_watchdog_enabled",
     "pg_link_alerts_enabled",
     "service_import_paths",
     "service_import_admins",
-    "shop_maintenance_enabled",
     "screen_editor_enabled",
+    "custom_service_name_enabled",
 )
 
 
@@ -115,6 +126,15 @@ class NumberSaveTests(ShopEditHarness):
     async def test_text_in_a_notify_sub_screen_is_saved_for_the_shop(self) -> None:
         saved, _ = await self.save("user_alert_time_text", "سرویس {service_name} رو به پایان است")
         self.assertEqual(saved.await_args.args[1], "user_alert_time_text")
+        self.assertEqual(saved.await_args.kwargs["reseller_id"], SHOP_ID)
+
+    async def test_money_numbers_are_bounded_for_the_shop(self) -> None:
+        for key, raw in (("referral_bonus", "-1000"), ("stars_toman_per_star", "0"), ("auto_approve_after_max_amount", "nan")):
+            with self.subTest(key=key):
+                saved, _ = await self.save(key, raw)
+                saved.assert_not_awaited()
+        saved, _ = await self.save("referral_bonus", "5000")
+        self.assertEqual(saved.await_args.args[1:], ("referral_bonus", "5000"))
         self.assertEqual(saved.await_args.kwargs["reseller_id"], SHOP_ID)
 
     async def test_forged_key_is_refused(self) -> None:

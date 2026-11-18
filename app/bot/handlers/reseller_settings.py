@@ -60,7 +60,15 @@ from app.services.service_import_config import (
     KEY_MODE as IMPORT_KEY_MODE,
 )
 from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
-from app.services.settings_operation_fields import OPERATIONS_FIELDS, TRIAL_MIN_AGE_FIELD, USAGE_ALERT_FIELDS
+from app.services.settings_operation_fields import (
+    AUTO_APPROVE_AFTER_FIELDS,
+    OPERATIONS_FIELDS,
+    RECEIPT_MATCH_FIELDS,
+    SALES_STATE_FIELDS,
+    STARS_FIELDS,
+    TRIAL_MIN_AGE_FIELD,
+    USAGE_ALERT_FIELDS,
+)
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
@@ -101,9 +109,12 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("texts", "متن‌های ضروری", [
                 ("support_text", "متن پشتیبانی", "textarea"),
-                ("referral_text", "متن دعوت", "textarea"),
                 ("purchase_success_text", "موفقیت خرید", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
+            ]),
+            ("invite", "دعوت دوستان", [
+                ("referral_text", "متن دعوت", "textarea"),
+                ("referral_bonus", "پاداش دعوت", "number"),
             ]),
             *MESSAGE_TEXT_SUBS,
             ("status_texts", "متن‌های وضعیت اتصال", CONNECTION_STATUS_CUSTOMER_TEXTS),
@@ -180,6 +191,8 @@ SECTIONS: dict[str, dict] = {
                 ("crypto_pay_text", "راهنما", "textarea"),
                 *BTN_PAY_CRYPTO,
             ]),
+            ("stars", "استارز", STARS_FIELDS),
+            ("auto_after", "تأیید خودکار با مهلت", AUTO_APPROVE_AFTER_FIELDS),
         ],
     },
     "support": {
@@ -238,12 +251,14 @@ SECTIONS: dict[str, dict] = {
                 ("trial_require_iran_phone", "فقط شماره ایران", "toggle"),
                 TRIAL_MIN_AGE_FIELD,
             ]),
+            ("sales", "وضعیت فروش", SALES_STATE_FIELDS),
             ("purchase_contact", "شماره تماس خرید", [
                 ("purchase_require_contact", "شماره تماس اجباری", "toggle"),
             ]),
             ("receipt_dup", "ضدتقلب رسید", [
                 ("receipt_dup_policy", "رسید تکراری (warn/block)", "text"),
             ]),
+            ("receipt_match", "تطبیق رسید", RECEIPT_MATCH_FIELDS),
             ("terms_buy", "قوانین خرید", [
                 ("terms_buy_user_enabled", "فعال خرید کاربر", "toggle"),
                 ("terms_buy_user_text", "متن قوانین خرید کاربر", "textarea"),

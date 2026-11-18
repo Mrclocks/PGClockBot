@@ -16,7 +16,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot.handlers import admin_settings, reseller_settings
 from app.services import marketing_nav, panel_nav
-from app.services.resellers import RESELLER_SETTINGS_TABS
+from app.services.resellers import RESELLER_SETTINGS_TABS, SHOP_SETTINGS_DOMAIN_POST_TABS
 from app.services.screen_titles import is_screen_text_key, platform_only_screen_text_keys
 from app.services.service_import_config import PLATFORM_ONLY_KEYS as IMPORT_PLATFORM_ONLY_KEYS
 from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
@@ -133,7 +133,12 @@ OWNER_BOT_GAPS: dict[str, str] = {
 
 # Web settings of «/shop-settings» the shop bot cannot edit yet.
 SHOP_BOT_GAPS: dict[str, str] = {
-    "wallet_topup_presets": "مبالغ آمادهٔ شارژ (فهرست)",
+    "wallet_topup_presets": OWNER_BOT_GAPS["wallet_topup_presets"],
+    **{key: OWNER_BOT_GAPS[key] for key in (
+        "payment_cards", "payment_gateways", "psp_gateways", "payment_crypto_wallets",
+        "crypto_rate_mode", "crypto_rate_asset", "crypto_rate_manual", "crypto_rate_api_url", "crypto_rate_api_path",
+        "crypto_rate_api_divisor", "crypto_rate_margin_percent", "crypto_quote_minutes",
+    )},
 }
 
 
@@ -155,10 +160,14 @@ def _edited_by_edit_mode(key: str) -> bool:
 
 
 def _shop_web_setting_keys() -> set[str]:
-    """Fields «/shop-settings» offers a shop (the same filters its page and save route apply)."""
+    """Fields a shop edits on the web: «/shop-settings» tabs and the domain forms (payment, loyalty, …).
+
+    The same filters the shop page and save route apply.
+    """
+    tabs = [tab for tab, _label in RESELLER_SETTINGS_TABS] + sorted(SHOP_SETTINGS_DOMAIN_POST_TABS)
     keys = {
         field[0]
-        for tab, _label in RESELLER_SETTINGS_TABS
+        for tab in tabs
         for name in TAB_SETTING_GROUPS.get(tab, [])
         if name in SETTING_GROUPS and name not in PLATFORM_ONLY_SETTING_GROUPS
         for field in SETTING_GROUPS[name]
