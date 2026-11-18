@@ -130,10 +130,6 @@ OWNER_BOT_GAPS: dict[str, str] = {
     **{key: "فهرست چندتایی مقصدهای پرداخت" for key in (
         "payment_cards", "payment_gateways", "psp_gateways", "payment_crypto_wallets",
     )},
-    **{key: "نرخ تبدیل رمزارز" for key in (
-        "crypto_rate_mode", "crypto_rate_asset", "crypto_rate_manual", "crypto_rate_api_url", "crypto_rate_api_path",
-        "crypto_rate_api_divisor", "crypto_rate_margin_percent", "crypto_quote_minutes",
-    )},
 }
 
 # Web settings of «/shop-settings» the shop bot cannot edit yet.
@@ -141,8 +137,6 @@ SHOP_BOT_GAPS: dict[str, str] = {
     "wallet_topup_presets": OWNER_BOT_GAPS["wallet_topup_presets"],
     **{key: OWNER_BOT_GAPS[key] for key in (
         "payment_cards", "payment_gateways", "psp_gateways", "payment_crypto_wallets",
-        "crypto_rate_mode", "crypto_rate_asset", "crypto_rate_manual", "crypto_rate_api_url", "crypto_rate_api_path",
-        "crypto_rate_api_divisor", "crypto_rate_margin_percent", "crypto_quote_minutes",
     )},
 }
 

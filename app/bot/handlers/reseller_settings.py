@@ -52,6 +52,7 @@ from app.services.bot_setting_values import (
     NUMBER_UNLIMITED_VALUES,
     SELECT_OPTIONS,
     UNLIMITED_LABEL,
+    VALUE_NORMALIZERS,
     next_select_value,
     number_range_hint,
     parse_number_setting,
@@ -72,6 +73,7 @@ from app.services.settings_message_texts import (
 )
 from app.services.settings_operation_fields import (
     AUTO_APPROVE_AFTER_FIELDS,
+    CRYPTO_RATE_FIELDS,
     RECEIPT_MATCH_FIELDS,
     SALES_STATE_FIELDS,
     STARS_FIELDS,
@@ -203,6 +205,7 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("stars", "استارز", STARS_FIELDS),
             ("auto_after", "تأیید خودکار با مهلت", AUTO_APPROVE_AFTER_FIELDS),
+            ("crypto_rate", "نرخ تبدیل رمزارز", CRYPTO_RATE_FIELDS),
         ],
     },
     "support": {
@@ -1105,8 +1108,19 @@ async def _store_shop_setting(session: AsyncSession, profile, key: str, value: s
     await set_setting(session, key, value, reseller_id=profile.user_id)
 
 
+def _shop_typed_value(key: str, kind: str, text: str, message: Message) -> str:
+    """The stored form of a typed shop setting; ``ValueError`` carries the message to show."""
+    if is_secret(kind):
+        return text
+    if kind == "number":
+        return parse_number_setting(key, text)
+    if key in VALUE_NORMALIZERS:
+        return VALUE_NORMALIZERS[key](text)
+    return _shop_setting_value(key, message)
+
+
 def _shop_setting_value(key: str, message: Message) -> str:
-    """The stored form of a typed shop setting: the same normalisation the owner bot and the web apply."""
+    """The stored form of a typed shop text: the same normalisation the owner bot and the web apply."""
     if key == "force_join_channel":
         return normalize_force_join_channel_value(message.text or "")
     if key == "receipt_dup_policy":
@@ -1139,18 +1153,10 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
         return
     if is_secret(meta[2]):
         await delete_user_message(message)
-    elif meta[2] == "number":
-        try:
-            text = parse_number_setting(key, text)
-        except ValueError as exc:
-            await message.answer(str(exc))
-            return
-    else:
-        text = _shop_setting_value(key, message)
     try:
-        await _store_shop_setting(session, profile, key, text)
+        await _store_shop_setting(session, profile, key, _shop_typed_value(key, meta[2], text, message))
     except ValueError as exc:
-        await message.answer(str(exc))
+        await message.answer(domain_error_text(exc))
         return
     await _close_input_to_location(message, state, session, profile, note=feedback.SAVED_WITH_ICON)
 

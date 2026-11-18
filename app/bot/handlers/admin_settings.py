@@ -46,7 +46,7 @@ from app.services.users import (
     on,
     set_setting,
 )
-from app.services.miniapp_branding import NOTICE_SETTING as MINIAPP_NOTICE, normalize_notice
+from app.services.miniapp_branding import NOTICE_SETTING as MINIAPP_NOTICE
 from app.services.miniapp_shop import PLATFORM_SWITCH as MINIAPP_SHOPS_SWITCH, set_platform_shop_miniapps
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.bot.backup_entry import BACKUP_PANEL_CALLBACK
@@ -78,6 +78,7 @@ from app.services.bot_setting_values import (
     NUMBER_UNLIMITED_VALUES,
     SELECT_OPTIONS,
     UNLIMITED_LABEL,
+    VALUE_NORMALIZERS,
     next_select_value,
     number_range_hint,
     parse_bounded_int,
@@ -88,6 +89,7 @@ from app.services.bot_setting_values import (
 )
 from app.services.settings_operation_fields import (
     AUTO_APPROVE_AFTER_FIELDS,
+    CRYPTO_RATE_FIELDS,
     OPERATIONS_FIELDS,
     PG_LINK_HEALTH_FIELDS,
     RECEIPT_MATCH_FIELDS,
@@ -335,6 +337,7 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("stars", "استارز", [*STARS_FIELDS, *BTN_PAY_STARS]),
             ("auto_after", "تأیید خودکار با مهلت", AUTO_APPROVE_AFTER_FIELDS),
+            ("crypto_rate", "نرخ تبدیل رمزارز", CRYPTO_RATE_FIELDS),
             # Same keys as web finance modal tab «مدیریت PAYG» (SETTING_GROUPS).
             ("payg", "مدیریت PAYG", [
                 ("billing_enabled", "فعال‌سازی PAYG", "toggle"),
@@ -539,8 +542,8 @@ FIELDS = _field_lookup()
 SELECT_CYCLE_OPTIONS = SELECT_OPTIONS
 NUMBER_INT_RANGES = NUMBER_BOUNDS
 
-# Plain one-line texts saved through their service normalizer instead of rich-text packing.
-TEXT_NORMALIZERS = {MINIAPP_NOTICE: normalize_notice}
+# Texts saved through their service rule instead of rich-text packing (shared with the shop bot).
+TEXT_NORMALIZERS = VALUE_NORMALIZERS
 
 NOTIFY_KEYS: frozenset[str] = frozenset(key for key, *_ in NOTIFY_PREFS)
 
