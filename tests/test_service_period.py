@@ -71,7 +71,7 @@ class PeriodViewTests(unittest.TestCase):
 
 class RenewalPeriodTests(RenewalFixture):
     async def renew(self, *, carry: bool) -> Order:
-        self.plan.carry_remaining_quota = carry
+        self.plan.carry_remaining_volume = self.plan.carry_remaining_time = carry
         await self.session.commit()
         order = await self.create()
         await pay_with_wallet(self.session, order, self.user)

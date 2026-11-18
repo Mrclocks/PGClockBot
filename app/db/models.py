@@ -149,6 +149,17 @@ class PlanCategory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+def _legacy_carry_default(context) -> bool:
+    """Insert default of the split carry switches: the old combined switch when it was given."""
+    value = context.get_current_parameters().get("carry_remaining_quota")
+    return True if value is None else bool(value)
+
+
+def _legacy_keep_extras_default(context) -> bool:
+    value = context.get_current_parameters().get("keep_extras_on_renew")
+    return True if value is None else bool(value)
+
+
 class Plan(Base):
     __tablename__ = "plans"
 
@@ -179,10 +190,18 @@ class Plan(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
-    # When true (default), renewal/upgrade/downgrade adds leftover volume and time.
-    # When false, the new period is exactly this plan's volume and duration.
+    # Superseded by carry_remaining_volume / carry_remaining_time; kept one release, no longer read.
     carry_remaining_quota: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
+    )
+    # When true (default), a renewal/upgrade/downgrade adds the leftover volume (time) to the
+    # plan's; when false, that part of the new period is exactly this plan's. A row inserted
+    # with only the old switch copies it.
+    carry_remaining_volume: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_carry_default, server_default=text("true")
+    )
+    carry_remaining_time: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_carry_default, server_default=text("true")
     )
     # Plan-scoped customer extra stairs (volume GB / duration months), like reseller fixed.
     allow_buy_extra: Mapped[bool] = mapped_column(
@@ -1385,9 +1404,16 @@ class ResellerPlan(Base):
     carry_remaining_period: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
     )
-    # When true (default), purchased extra GB/user slots survive into the next period.
+    # Superseded by keep_extra_gb_on_renew / keep_extra_users_on_renew; kept one release, no longer read.
     keep_extras_on_renew: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
+    )
+    # When true (default), purchased extra GB (user slots) survive into the next period.
+    keep_extra_gb_on_renew: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_keep_extras_default, server_default=text("true")
+    )
+    keep_extra_users_on_renew: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_keep_extras_default, server_default=text("true")
     )
     # NULL = inherit plan-kind btn_style_*; "" = explicit Telegram default (white)
     button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)

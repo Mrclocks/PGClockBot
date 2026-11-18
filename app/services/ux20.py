@@ -36,6 +36,7 @@ from app.services.delivery_recovery_policy import (
     is_delivered,
     missing_delivery_clause,
 )
+from app.services.renewal_carry import CARRY_TIME, CARRY_VOLUME, plan_carries, set_plan_carry
 from app.services.demo_users import non_demo_customer
 from app.services.pasarguard import is_pg_permission_denied
 from app.services.pg_read_resilience import PG_READ_UNAVAILABLE_MESSAGE, PgReadUnavailable
@@ -668,9 +669,9 @@ async def clone_plan(session: AsyncSession, plan_id: int, *, owner_reseller_id: 
         owner_reseller_id=src.owner_reseller_id,
         is_active=False,
         is_trial=bool(src.is_trial),
-        carry_remaining_quota=bool(getattr(src, "carry_remaining_quota", True)),
         sort_order=int(src.sort_order or 0),
     )
+    set_plan_carry(copy, volume=plan_carries(src, CARRY_VOLUME), time=plan_carries(src, CARRY_TIME))
     session.add(copy)
     await session.commit()
     await session.refresh(copy)
