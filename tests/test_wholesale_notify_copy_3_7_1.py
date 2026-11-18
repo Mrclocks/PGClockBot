@@ -79,7 +79,7 @@ class WholesaleNoQrTests(unittest.IsolatedAsyncioTestCase):
     async def test_qty_gt_1_sets_skip_qr_and_no_sub_url(self):
         from app.services.delivery import build_delivery_content
 
-        order = SimpleNamespace(id=5, service_id=1, reseller_id=None, quantity=5, note="wholesale:5")
+        order = SimpleNamespace(id=5, status="delivered", service_id=1, reseller_id=None, quantity=5, note="wholesale:5")
         payment = None
         siblings = [
             SimpleNamespace(

@@ -93,6 +93,10 @@ BOT_SETTINGS_OUTSIDE_WEB_TABS: dict[str, str] = {
     **{key: "وب: درگاه‌های API (psp_gateways)؛ ربات فقط درگاه قدیمی" for key in (
         "psp_merchant_id", "psp_pay_url", "psp_provider", "psp_sandbox", "psp_sunpay_request_method",
     )},
+    # The web edits each alert threshold as one number with a unit select beside it.
+    **{key: "وب: هشدار سرویس کاربر › واحد کنار عدد آستانه" for key in (
+        "user_alert_low_traffic_unit", "user_alert_low_time_unit",
+    )},
     "custom_service_name_enabled": "وب: تنظیمات ربات › قالب نام‌گذاری",
     "miniapp_shops_enabled": "وب: تنظیمات ربات › مینی‌اپ (فرم اختصاصی)",
     "miniapp_notice": "وب: تنظیمات ربات › مینی‌اپ (فرم اختصاصی)",

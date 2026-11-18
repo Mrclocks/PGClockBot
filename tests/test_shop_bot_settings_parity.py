@@ -79,8 +79,9 @@ class FieldTests(unittest.TestCase):
                 self.assertIn(key, reseller_settings.FIELDS)
                 kind = reseller_settings.FIELDS[key][2]
                 web = _web_kind(key)
-                # The web shows the import cap as a number with an «unlimited» button.
-                self.assertEqual(kind, "number" if web == "number_unlimited" else web)
+                # The web shows the import cap as a number with an «unlimited» button, and an alert
+                # threshold as a number with a unit select; the bot edits the number.
+                self.assertEqual(kind, "number" if web in {"number_unlimited", "threshold"} else web)
 
     def test_shop_bot_never_offers_platform_settings(self) -> None:
         for key in OWNER_ONLY_KEYS:
@@ -217,7 +218,7 @@ class ScreenTests(ShopEditHarness):
             await reseller_settings.settings_edit_ask(callback, AsyncMock(), MagicMock(), SimpleNamespace(id=1))
         prompt = asked.await_args.kwargs["prompt"]
         self.assertIn("1", prompt)
-        self.assertIn("99", prompt)
+        self.assertIn("3650", prompt)
 
 
 if __name__ == "__main__":

@@ -30,6 +30,13 @@ from app.db.models import (
     UserService,
 )
 from app.services.connection_guides import serialize_submitted_guides
+from app.services.delivery_recovery_policy import (
+    FIRST_AUTO_RETRY_DELAY,
+    is_auto_recoverable_kind,
+    is_delivered,
+    missing_delivery_clause,
+)
+from app.services.renewal_carry import CARRY_TIME, CARRY_VOLUME, plan_carries, set_plan_carry
 from app.services.demo_users import non_demo_customer
 from app.services.pasarguard import is_pg_permission_denied
 from app.services.pg_read_resilience import PG_READ_UNAVAILABLE_MESSAGE, PgReadUnavailable
@@ -393,6 +400,7 @@ async def record_delivery_failure(
             existing.payment_id = int(payment_id)
         await session.flush()
         return existing
+    auto = is_auto_recoverable_kind(order) and not is_delivered(order)
     row = DeliveryFailure(
         order_id=int(order.id),
         payment_id=int(payment_id) if payment_id else None,
@@ -400,6 +408,9 @@ async def record_delivery_failure(
         error=msg,
         attempts=1,
         last_attempt_at=now,
+        # Renewals and purchases are retried by paid_order_recovery; the rest stay with staff.
+        next_auto_retry_at=now + FIRST_AUTO_RETRY_DELAY if auto else None,
+        auto_retry_stopped_at=None if auto else now,
     )
     session.add(row)
     await session.flush()
@@ -445,14 +456,14 @@ async def resolve_delivery_failure(session: AsyncSession, order_id: int) -> None
 async def list_stuck_paid_orders(
     session: AsyncSession, *, reseller_id: int | None = None, limit: int = 100
 ) -> list[Order]:
-    """Orders paid/delivering with no local service — need delivery retry."""
+    """Paid orders not delivered yet (no service, or a renewal/add-on not applied) — need a retry."""
     from app.db.models import OrderStatus
 
     q = (
         select(Order)
         .where(
             Order.status.in_([OrderStatus.PAID.value, OrderStatus.DELIVERING.value]),
-            Order.service_id.is_(None),
+            missing_delivery_clause(),
         )
         .order_by(Order.id.desc())
         .limit(limit)
@@ -476,7 +487,7 @@ async def count_stuck_paid_orders(
         .select_from(Order)
         .where(
             Order.status.in_([OrderStatus.PAID.value, OrderStatus.DELIVERING.value]),
-            Order.service_id.is_(None),
+            missing_delivery_clause(),
         )
     )
     if reseller_id is None:
@@ -523,6 +534,45 @@ def _assert_retryable(order: Order) -> None:
         raise DeliveryNotRetryable("این سفارش برای تلاش مجدد آماده نیست؛ در صورت نیاز از «حذف از لیست» استفاده کنید")
 
 
+RETRY_IN_PROGRESS = "تحویل این سفارش همین حالا در جریان است؛ چند دقیقه بعد دوباره امتحان کنید"
+NOT_PAID_FOR_RETRY = "برای این سفارش پرداخت تأییدشده‌ای نیست؛ اول پرداخت را تأیید کنید"
+# A delivery attempt still running after this long has crashed and may be reopened.
+DELIVERING_STALE_AFTER = timedelta(minutes=10)
+
+
+async def _reopen_for_retry(session: AsyncSession, order: Order) -> None:
+    """Move a crashed DELIVERING (or approved-but-unclaimed) order back to PAID, atomically.
+
+    A DELIVERING order that is still fresh may be mid-create (the retry job or another
+    admin), and an order awaiting approval is only reopened when its payment was approved.
+    """
+    from app.db.models import Payment, PaymentStatus
+
+    query = update(Order).where(Order.id == int(order.id))
+    if order.status == OrderStatus.DELIVERING.value:
+        query = query.where(
+            Order.status == OrderStatus.DELIVERING.value,
+            Order.updated_at <= _utcnow() - DELIVERING_STALE_AFTER,
+        )
+    else:
+        approved = await session.scalar(
+            select(Payment.id).where(
+                Payment.order_id == int(order.id), Payment.status == PaymentStatus.APPROVED.value
+            ).limit(1)
+        )
+        if approved is None:
+            raise DeliveryNotRetryable(NOT_PAID_FOR_RETRY)
+        query = query.where(Order.status == order.status)
+    result = await session.execute(
+        query.values(status=OrderStatus.PAID.value).execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        await session.rollback()
+        raise ValueError(RETRY_IN_PROGRESS)
+    await session.commit()
+    await session.refresh(order)
+
+
 async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
     from app.db.models import BotUser, Payment
     from app.services.delivery import send_delivery_to_user
@@ -566,14 +616,15 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
                 except Exception:
                     logger.debug("_resend: ignored failure", exc_info=True)
 
+    resend_only = order.status == OrderStatus.DELIVERED.value and bool(order.service_id)
+    if not resend_only and order.status != OrderStatus.PAID.value:
+        # Before the try: a refusal here is not one more failed delivery attempt.
+        await _reopen_for_retry(session, order)
     try:
-        if order.status == OrderStatus.DELIVERED.value and order.service_id:
+        if resend_only:
             # Resend Telegram delivery only
             await _resend()
         else:
-            if order.status != OrderStatus.PAID.value:
-                order.status = OrderStatus.PAID.value
-                await session.commit()
             # Route renew/addon/reseller_app correctly — deliver_order alone
             # seals mutation orders (service_id already set) without applying.
             order = await fulfill_paid_order(session, order)
@@ -618,9 +669,9 @@ async def clone_plan(session: AsyncSession, plan_id: int, *, owner_reseller_id: 
         owner_reseller_id=src.owner_reseller_id,
         is_active=False,
         is_trial=bool(src.is_trial),
-        carry_remaining_quota=bool(getattr(src, "carry_remaining_quota", True)),
         sort_order=int(src.sort_order or 0),
     )
+    set_plan_carry(copy, volume=plan_carries(src, CARRY_VOLUME), time=plan_carries(src, CARRY_TIME))
     session.add(copy)
     await session.commit()
     await session.refresh(copy)

@@ -21,7 +21,6 @@ NEW_KEYS = (
     "user_alert_low_enabled",
     "user_alert_low_traffic_pct",
     "user_alert_low_time_pct",
-    "user_alert_low_days",
     "user_alert_time_text",
     "user_alert_traffic_text",
     "first_use_nudge_enabled",
@@ -39,9 +38,8 @@ NEW_KEYS = (
     "screen_editor_enabled",
 )
 NUMBER_LIMITS = {
-    "user_alert_low_traffic_pct": (1, 99),
-    "user_alert_low_time_pct": (1, 99),
-    "user_alert_low_days": (0, 60),
+    "user_alert_low_traffic_pct": (1, 100_000),
+    "user_alert_low_time_pct": (1, 3650),
     "action_center_expire_days": (1, 365),
     "capacity_warn_pct": (1, 100),
     "receipt_match_window_minutes": (1, 10080),
@@ -49,8 +47,14 @@ NUMBER_LIMITS = {
 }
 
 
+# The web edits a threshold as one number with a unit select; the bot offers the number field.
+WEB_TO_BOT_KIND = {"threshold": "number"}
+ALERT_UNIT_KEYS = ("user_alert_low_traffic_unit", "user_alert_low_time_unit")
+
+
 def _web_kind(key: str) -> str:
-    return next(field[2] for fields in SETTING_GROUPS.values() for field in fields if field[0] == key)
+    kind = next(field[2] for fields in SETTING_GROUPS.values() for field in fields if field[0] == key)
+    return WEB_TO_BOT_KIND.get(kind, kind)
 
 
 class FieldTests(unittest.TestCase):
@@ -65,6 +69,20 @@ class FieldTests(unittest.TestCase):
         self.assertEqual(numbers, set(NUMBER_LIMITS))
         for key, bounds in NUMBER_LIMITS.items():
             self.assertEqual(admin_settings.NUMBER_INT_RANGES[key], bounds, key)
+
+
+    def test_alert_threshold_units_are_choices_with_the_web_units(self) -> None:
+        web_units = {
+            field[4][0]: [value for value, _label in field[4][1]]
+            for fields in SETTING_GROUPS.values()
+            for field in fields
+            if field[2] == "threshold"
+        }
+        for key in ALERT_UNIT_KEYS:
+            with self.subTest(key=key):
+                self.assertEqual(admin_settings.FIELDS[key][2], "select")
+                options = [value for value, _label in admin_settings.SELECT_CYCLE_OPTIONS[key]]
+                self.assertEqual(options, web_units[key])
 
 
 class NumberParsingTests(unittest.TestCase):
