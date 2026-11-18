@@ -64,6 +64,7 @@ from app.services.settings_button_labels import (
 )
 from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
 from app.services.settings_operation_fields import (
+    ALERT_UNIT_OPTIONS,
     OPERATION_NUMBER_BOUNDS,
     OPERATIONS_FIELDS,
     PG_LINK_HEALTH_FIELDS,
@@ -506,6 +507,7 @@ FIELDS = _field_lookup()
 SELECT_CYCLE_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
     IMPORT_KEY_MODE: (("instant", "فوری"), ("approval", "با تأیید ادمین")),
+    **ALERT_UNIT_OPTIONS,
 }
 
 # Integer ranges for PAYG settings (consumers clamp the same bounds).

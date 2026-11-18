@@ -12,7 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.db.models import BotUser, Order, Payment
+from app.db.models import BotUser, Order, OrderStatus, Payment
+from app.services.delivery_recovery_policy import staff_follow_up_note
 from app.services.message_variables import DOMAIN_QR
 from app.services.notice_links import notice_markup
 from app.services.formatting import (
@@ -756,8 +757,17 @@ async def notify_new_subscription(
     user_name: str | None = None,
     plan_name: str | None = None,
     needs_approval: bool = False,
+    after_retry: bool = False,
 ) -> None:
-    """Inform platform admins and/or shop staff that a subscription was delivered."""
+    """Inform platform admins and/or shop staff that a subscription was delivered.
+
+    A renewal keeps its target ``service_id`` before it is applied, so the order status is
+    the only proof of delivery: an undelivered order never gets a «تحویل‌شده» notice (its
+    staff already got the stuck-delivery notice instead).
+    """
+    if not needs_approval and order.status != OrderStatus.DELIVERED.value:
+        logger.warning("delivered notice skipped: order=%s status=%s", order.id, order.status)
+        return
     settings = get_settings()
     user = await session.get(BotUser, order.user_id) if order.user_id else None
     _ = user_name  # kept for callers; the report is built from the user row
@@ -778,6 +788,8 @@ async def notify_new_subscription(
 
         lines.append(kv_line("💳", "پرداخت", payment_method_fa(order.payment_method)))
     lines.append(kv_line("📌", "وضعیت", "نیاز به تأیید" if needs_approval else "تحویل‌شده"))
+    if after_retry:
+        lines.append(kv_line("🔁", "پیگیری", "بعد از قطعی موقت پنل، با تلاش خودکار انجام شد"))
     note = (order.note or "").strip()
     if addon_details:
         title = f"➕ {addon_details[0]}"
@@ -1578,9 +1590,10 @@ async def notify_approved_delivery_stuck(
         lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
     if err:
         lines.append(kv_line("📝", "خطا", err))
+    follow_up = f"\n\n{staff_follow_up_note(order, payment)}" if order is not None else ""
     text = format_message(
         "⚠️ تحویل پس از تأیید ناقص ماند",
-        info_block(lines) + f"\n\n{action_hint}",
+        info_block(lines) + f"\n\n{action_hint}{follow_up}",
     )
     markup = kb.payment_action_markup(int(payment.id), action=action)
     await _dispatch_dual_notify(
@@ -1592,6 +1605,51 @@ async def notify_approved_delivery_stuck(
         photo=payment.receipt_file_id,
         payment=payment,
         shop=not payment.is_wallet_topup or payment.wallet_shop_id is not None,
+    )
+
+
+AUTO_RECOVERY_KEY = "notify_pending_approval"
+
+
+async def notify_auto_recovery_closed(
+    bot: Bot,
+    session: AsyncSession,
+    *,
+    order: Order,
+    refunded: int | None,
+    reason: str,
+) -> None:
+    """Tell the order's own staff that automatic delivery ended without delivering.
+
+    ``refunded`` is the amount returned to the customer's wallet; ``None`` means nothing was
+    refunded because the panel may already hold the change, so a person must check it.
+    """
+    settings = get_settings()
+    user = await session.get(BotUser, order.user_id) if order.user_id else None
+    kind = "تمدید" if (order.note or "").startswith("renew:") else "خرید سرویس"
+    lines = [
+        kv_line("🛒", "سفارش", f"#{order.id}"),
+        kv_line("📦", "نوع", kind),
+        *_buyer_lines(user),
+        kv_line("📝", "علت", html.escape(reason)),
+    ]
+    if refunded is not None:
+        lines.append(kv_line("↩️", "برگشت به کیف پول", format_toman(refunded, settings.currency)))
+        title = "↩️ تحویل انجام نشد؛ مبلغ برگشت داده شد"
+        hint = "سفارش لغو شد و مشتری از بازگشت مبلغ باخبر شد. کاری لازم نیست."
+    else:
+        title = "⛔ تحویل خودکار متوقف شد؛ بررسی دستی لازم است"
+        hint = (
+            "شاید تغییر در پاسارگارد اعمال شده باشد، پس مبلغ خودکار برنگشت. سرویس را در پنل بررسی کنید و از "
+            "«تحویل ناموفق» یکی از «تحویل دستی انجام شد» یا «لغو و بازگشت وجه» را بزنید."
+        )
+    await _dispatch_dual_notify(
+        bot,
+        session,
+        AUTO_RECOVERY_KEY,
+        format_message(title, info_block(lines) + f"\n\n{hint}"),
+        markup=customer_markup(user_id=order.user_id, service_id=order.service_id, shop_id=order.reseller_id),
+        order=order,
     )
 
 

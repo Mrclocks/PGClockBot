@@ -3,6 +3,7 @@ from __future__ import annotations
 """Receipt submission: manual admin approve or optional auto-approve."""
 
 from aiogram import Bot
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Order, Payment
@@ -15,7 +16,8 @@ from app.services.notifications import (
     notify_pending_approval,
     notify_wallet_topup_ok,
 )
-from app.services.orders import approve_payment, attach_receipt
+from app.services.delivery_recovery_policy import PENDING_STAFF_NOTE, is_delivered, pending_buyer_note
+from app.services.orders import DeliveryAttempt, approve_payment, attach_receipt, hold_unknown_delivery_for_review
 from app.services.receipt_fingerprints import (
     download_receipt_sha256,
     find_duplicate_receipts,
@@ -115,19 +117,12 @@ async def auto_approve_receipt(
     ``reason`` is shown to staff in the «تأیید خودکار» notice (why this one was automatic).
     """
     order = None
+    attempt = DeliveryAttempt()
     try:
-        order = await approve_payment(session, payment, reviewer_tg=0)
+        order = await approve_payment(session, payment, reviewer_tg=0, attempt=attempt)
         if user_tg_id:
-            try:
-                await send_delivery_to_user(bot, user_tg_id, session, payment, order)
-            except Exception as send_exc:
-                if order is not None:
-                    from app.services.ux20 import note_delivery_send_failure
-
-                    await note_delivery_send_failure(
-                        session, order=order, payment=payment, error=str(send_exc)
-                    )
-                raise
+            # A failed send is queued once by the handler below.
+            await send_delivery_to_user(bot, user_tg_id, session, payment, order)
         await notify_auto_approve(bot, session, payment, reason=reason)
         if payment.is_wallet_topup:
             await notify_wallet_topup_ok(bot, session, payment, user_tg_id)
@@ -163,32 +158,42 @@ async def auto_approve_receipt(
 
                 stuck_order = await session.get(Order, payment.order_id)
             if stuck_order is not None:
-                try:
-                    from app.services.ux20 import note_delivery_send_failure
-
-                    await note_delivery_send_failure(
-                        session,
-                        order=stuck_order,
-                        payment=payment,
-                        error=str(e),
-                    )
-                except Exception:
-                    logger.debug("process_receipt: ignored failure", exc_info=True)
+                await _queue_undelivered(session, stuck_order, payment, error=str(e), attempt=attempt)
             await notify_approved_delivery_stuck(
                 bot, session, payment, user_tg_id, error=str(e)
             )
-            return format_message(
-                "⚠️ رسید ثبت شد",
-                "پرداخت تأیید شد ولی تحویل کامل نشد.\n"
-                "ادمین می‌تواند «تلاش مجدد تحویل» را بزند یا از «تحویل ناموفق» پیگیری کند.",
-            )
+            if stuck_order is None:
+                return format_message("⚠️ رسید ثبت شد", PENDING_STAFF_NOTE)
+            if is_delivered(stuck_order):
+                return format_message(
+                    "✅ پرداخت تأیید شد",
+                    "سفارش انجام شد ولی ارسال پیام آن ناموفق بود؛ جزئیات را از «سرویس‌های من» ببینید.",
+                )
+            return format_message("⚠️ رسید ثبت شد", pending_buyer_note(stuck_order, payment))
+        logger.warning("receipt auto-approve failed payment=%s", payment.id, exc_info=True)
         await notify_pending_approval(
             bot, session, payment, user_tg_id, extra_note=reviewer_note
         )
         return format_message(
             "⚠️ رسید ثبت شد",
-            f"تأیید خودکار ناموفق بود ({e}).\nمنتظر تأیید دستی ادمین بمانید.",
+            "تأیید خودکار انجام نشد.\nرسید شما ثبت شده است؛ منتظر تأیید ادمین بمانید.",
         )
+
+
+async def _queue_undelivered(
+    session: AsyncSession, order: Order, payment: Payment, *, error: str, attempt: DeliveryAttempt
+) -> None:
+    """List an approved, undelivered order for the retry job and staff (unknown outcome stamped)."""
+    try:
+        if attempt.panel_may_hold_account:
+            await hold_unknown_delivery_for_review(session, order, error=error)
+            await session.refresh(payment)
+        else:
+            from app.services.ux20 import note_delivery_send_failure
+
+            await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    except SQLAlchemyError:
+        logger.warning("undelivered receipt order not queued order=%s", order.id, exc_info=True)
 
 
 async def _waits_for_schedule(session: AsyncSession, payment: Payment, shop_rid: int | None) -> bool:

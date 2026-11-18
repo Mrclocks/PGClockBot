@@ -117,15 +117,17 @@ def test_money_settings_enable_grouped_input_without_changing_value(template_env
     assert field["value"] == "1250000"
 
 
-def test_quota_settings_do_not_enable_money_grouping(template_env: Environment) -> None:
+def test_alert_threshold_field_renders_number_and_unit_choice(template_env: Environment) -> None:
     html = template_env.get_template("_settings_field.html").render(
-        field=("user_alert_low_traffic_pct", "آستانه حجم", "number"),
-        values={"user_alert_low_traffic_pct": "20"},
+        field=("user_alert_low_traffic_pct", "حجم کمتر از", "threshold", "",
+               ("user_alert_low_traffic_unit", [("pct", "درصد"), ("gb", "گیگ")])),
+        values={"user_alert_low_traffic_pct": "5", "user_alert_low_traffic_unit": "gb"},
     )
-    field = RenderedHtml(html).inputs[0]
-    assert "data-money" not in field
-    assert field["min"] == "1"
-    assert field["max"] == "99"
+    number = next(item for item in RenderedHtml(html).inputs if item.get("name") == "s_user_alert_low_traffic_pct")
+    assert "data-money" not in number
+    assert number["value"] == "5"
+    assert 'name="s_user_alert_low_traffic_unit"' in html
+    assert '<option value="gb" selected>' in html.replace("\n", " ").replace("  ", " ")
 
 
 def test_catalog_reductions_group_amounts_and_keep_percentages_plain(template_env: Environment) -> None:

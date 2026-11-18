@@ -499,8 +499,8 @@
     const pid = Number(planId) || 0;
     return `<div class="sum-row"><span class="muted">پلن</span><strong>${esc(preview.plan_name)}</strong></div>
       <div class="sum-row is-total"><span>مبلغ</span><span>${priceHtml(preview)}</span></div>
+      ${(preview.warnings || []).map((line) => `<p class="inline-error" role="alert">${esc(line)}</p>`).join("")}
       ${(preview.lines || []).map((line) => `<p class="sm">${esc(line)}</p>`).join("")}
-      ${(preview.warnings || []).map((line) => `<p class="inline-error">${esc(line)}</p>`).join("")}
       ${preview.notice ? `<p class="muted sm">${esc(preview.notice)}</p>` : ""}
       <div class="btn-col">
         <button type="button" class="btn block" data-action="confirm-renew" data-id="${sid}" data-plan="${pid}">تأیید و پرداخت از کیف پول</button>

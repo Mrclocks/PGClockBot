@@ -121,9 +121,7 @@
         {
           "callback_data": "nv:adm:broadcast",
           "text": "📢 پیام گروهی"
-        }
-      ],
-      [
+        },
         {
           "callback_data": "qlk:v",
           "text": "🔗 لینک‌های سریع"
@@ -202,9 +200,7 @@
         {
           "callback_data": "nv:adm:broadcast",
           "text": "📢 پیام گروهی"
-        }
-      ],
-      [
+        },
         {
           "callback_data": "qlk:v",
           "text": "🔗 لینک‌های سریع"
@@ -1012,9 +1008,7 @@
           "callback_data": "shp:bc:hub",
           "style": "primary",
           "text": "📢 پیام گروهی"
-        }
-      ],
-      [
+        },
         {
           "callback_data": "qlk:v",
           "text": "🔗 لینک‌های سریع"
@@ -1060,9 +1054,7 @@
           "callback_data": "shp:bc:hub",
           "style": "primary",
           "text": "📢 پیام گروهی"
-        }
-      ],
-      [
+        },
         {
           "callback_data": "qlk:v",
           "text": "🔗 لینک‌های سریع"
