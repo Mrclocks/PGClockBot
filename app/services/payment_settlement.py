@@ -36,7 +36,8 @@ from app.db.models import (
     PaymentStatus,
     SettlementStatus,
 )
-from app.services.orders import approve_payment
+from app.services.delivery_recovery_policy import is_delivered
+from app.services.orders import DeliveryAttempt, approve_payment
 from app.services.shop_scope import payment_shop_id
 from app.services.payment_providers import get_psp_adapter
 from app.services.psp_gateways import PspGateway, choose_psp_gateway, find_psp_gateway
@@ -858,19 +859,27 @@ async def _approved_but_undelivered(session: AsyncSession, payment: Payment) -> 
     return payment.status == PaymentStatus.APPROVED.value
 
 
-async def _report_undelivered(session: AsyncSession, payment: Payment, error: str) -> None:
-    """Queue the order under failed deliveries and alert its shop's staff, who resume it.
+async def _report_undelivered(
+    session: AsyncSession, payment: Payment, error: str, *, outcome_unknown: bool
+) -> None:
+    """Queue the order under failed deliveries and alert its shop's staff.
 
-    Delivery is not retried automatically: a panel that failed mid-create may already
-    hold the user, and only a person can tell before a second user is created.
+    The retry job finishes renewals and purchases whose attempt created nothing. When the
+    panel may already hold the change (``outcome_unknown``), the payment is stamped so a new
+    purchase is never created twice; staff decide those.
     """
     # Local imports: notifications and the bot pull in handler modules that import this one.
     from app.bot import create_bot
     from app.services.notifications import notify_approved_delivery_stuck
+    from app.services.orders import hold_unknown_delivery_for_review
     from app.services.ux20 import note_delivery_send_failure
 
     order = await session.get(Order, int(payment.order_id)) if payment.order_id else None
-    await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    if outcome_unknown and order is not None:
+        await hold_unknown_delivery_for_review(session, order, error=error)
+        await session.refresh(payment)
+    else:
+        await note_delivery_send_failure(session, order=order, payment=payment, error=error)
     payer = await session.get(BotUser, int(payment.user_id)) if payment.user_id else None
     bot = create_bot()
     try:
@@ -948,8 +957,9 @@ async def settle_and_approve(
         ref = external_ref or settlement.external_ref or str(settlement.id)
         payment.receipt_file_id = f"{settlement.channel}:{settlement.provider}:{ref}"[:255]
 
+    attempt = DeliveryAttempt()
     try:
-        await approve_payment(session, payment, reviewer_tg=reviewer_tg)
+        await approve_payment(session, payment, reviewer_tg=reviewer_tg, attempt=attempt)
     except Exception as exc:
         if isinstance(exc, ValueError) and "قبلاً تأیید شده" in str(exc):
             await _finalize_settled(session, settlement)
@@ -963,7 +973,9 @@ async def settle_and_approve(
             # hand the unfinished delivery to staff instead of reporting a payment failure.
             await _finalize_settled(session, settlement)
             await session.commit()
-            await _report_undelivered(session, payment, str(exc))
+            await _report_undelivered(
+                session, payment, str(exc), outcome_unknown=attempt.panel_may_hold_account
+            )
             return payment
         await _revert_claim_to_awaiting(session, settlement, error=str(exc))
         await session.commit()
@@ -1523,7 +1535,9 @@ async def notify_after_settlement(
             return
         if payment.is_wallet_topup:
             await notify_wallet_topup_ok(bot, session, payment, user.telegram_id)
-        elif order:
+        elif order and is_delivered(order):
+            # An undelivered order got the «در حال آماده‌سازی» card above; its staff got the
+            # stuck-delivery notice, never a «تحویل‌شده» one.
             plan = await session.get(Plan, order.plan_id) if order.plan_id else None
             await notify_new_subscription(
                 bot,

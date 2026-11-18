@@ -536,3 +536,6 @@ tests/test_pg_quota_parity.py
 tests/test_trial_keyboard_button.py
 tests/test_inbox_customer_alerts_off.py
 tests/test_inbox_modal.py
+#
+# Paid orders the panel did not apply: retry, one wallet refund per order, shop purse isolation.
+tests/test_paid_order_recovery.py

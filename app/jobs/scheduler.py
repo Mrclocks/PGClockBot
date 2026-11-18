@@ -16,6 +16,7 @@ from app.jobs.chat_message_purge import run_chat_message_purge
 from app.jobs.connection_status import run_connection_status
 from app.jobs.customer_notices import run_customer_notices
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
+from app.jobs.paid_order_recovery import run_paid_order_recovery
 from app.jobs.pg_link_watchdog import run_pg_link_watchdog
 from app.jobs.service_cleanup import run_service_cleanup
 from app.jobs.user_photo_cache import run_user_photo_prune
@@ -617,6 +618,8 @@ def start_background_scheduler() -> None:
         ("pg_link_watchdog", run_pg_link_watchdog, {"seconds": 60}, 60),
         ("bbc_settlement_poll", run_bbc_settlement_poll, {"seconds": 45}, 90),
         ("psp_settlement_poll", run_psp_settlement_poll, {"seconds": 45}, 90),
+        # Cheap when idle (one indexed query); probes the panel only when a retry is due.
+        ("paid_order_recovery", run_paid_order_recovery, {"minutes": 1}, 120),
         # Ticks often; each shop is recounted on the period set in volume_external_sync_minutes.
         ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
         ("chat_message_purge", run_chat_message_purge, {"hours": 1}, 3600),

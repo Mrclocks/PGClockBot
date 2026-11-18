@@ -95,6 +95,7 @@ class DeliveryFlowMockTests(unittest.IsolatedAsyncioTestCase):
         session = AsyncMock()
         order = MagicMock(
             id=6,
+            status="delivered",
             note=None,
             service_id=9,
             user_id=1,

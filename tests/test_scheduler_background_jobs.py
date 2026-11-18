@@ -29,6 +29,8 @@ OPERATIONS = {
     "pg_link_watchdog",
     "bbc_settlement_poll",
     "psp_settlement_poll",
+    # Retries paid orders the panel did not apply; needs no running bot.
+    "paid_order_recovery",
     "volume_external_sync",
     "chat_message_purge",
     # Queues the warnings before an expired service is deleted; needs no running bot.

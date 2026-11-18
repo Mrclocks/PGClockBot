@@ -205,7 +205,7 @@ class ApprovePaymentResumeTests(unittest.IsolatedAsyncioTestCase):
         src = Path("app/services/receipts.py").read_text(encoding="utf-8")
         self.assertIn("notify_approved_delivery_stuck", src)
         self.assertIn("PaymentStatus.APPROVED.value", src)
-        self.assertIn("تلاش مجدد تحویل", src)
+        self.assertIn("pending_buyer_note", src)
 
 
 class NotifyStuckMarkupTests(unittest.TestCase):
