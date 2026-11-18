@@ -18,8 +18,8 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import SwitchRevert
-from app.services.quick_switches import QuickSwitch, set_switch, switch_by_code, switches_for
+from app.db.models import ShopStaffAction, SwitchRevert
+from app.services.quick_switches import QuickSwitch, set_switch, switch_by_code, switches_for, undo_switch_change
 from app.services.staff_audit import ACTOR_SYSTEM, StaffActor
 from app.services.users import get_setting, on
 
@@ -148,6 +148,52 @@ async def change_for_a_while(
         raise ValueError("این کلید همین حالا زمان‌بندی دیگری دارد") from exc
 
 
+async def set_switch_by_hand(
+    session: AsyncSession, *, switch: QuickSwitch, shop_id: int | None, enabled: bool, actor: StaffActor
+) -> bool:
+    """A person sets ``switch``: any pending revert of it is cancelled in the same commit.
+
+    The person's latest choice must stand, even when it equals the value a timer or scenario set.
+    Nothing is cancelled when the tap changes nothing.
+    """
+    await _cancel_pending(session, shop_id, switch.key)
+    changed = await set_switch(session, switch=switch, shop_id=shop_id, enabled=enabled, actor=actor)
+    if not changed:
+        await session.rollback()
+    return changed
+
+
+async def undo_by_hand(
+    session: AsyncSession,
+    *,
+    shop_id: int | None,
+    record_id: int,
+    actor: StaffActor,
+    allowed_keys: frozenset[str],
+) -> bool:
+    """«↩️ برگرداندن» by a person: like ``set_switch_by_hand``, a pending revert of that switch is cancelled."""
+    row = await session.get(ShopStaffAction, int(record_id))
+    key = row.reason if row is not None else None
+    if key in allowed_keys:
+        await _cancel_pending(session, shop_id, key)
+    undone = await undo_switch_change(
+        session, shop_id=shop_id, record_id=record_id, actor=actor, allowed_keys=allowed_keys
+    )
+    if not undone:
+        await session.rollback()
+    return undone
+
+
+async def _undo_partial_run(
+    session: AsyncSession, *, scenario: str, shop_id: int | None, changed: list[QuickSwitch], actor: StaffActor
+) -> None:
+    """Put back what a failed scenario run already changed, so a run applies all of it or none."""
+    keys = frozenset(switch.key for switch in changed)
+    for row in await pending_reverts(session, shop_id=shop_id):
+        if row.scenario == scenario and row.setting_key in keys:
+            await apply_revert(session, row.id, shop_id=shop_id, actor=actor, allowed_keys=keys)
+
+
 async def run_scenario(
     session: AsyncSession,
     *,
@@ -157,23 +203,32 @@ async def run_scenario(
     actor: StaffActor,
     now: datetime,
 ) -> list[QuickSwitch]:
-    """Apply every action of ``scenario`` the viewer may take; returns the switches it changed."""
+    """Apply every action of ``scenario`` the viewer may take; returns the switches it changed.
+
+    Each switch commits on its own; if one fails (``ValueError``: another timer won the race), the
+    switches this run already changed are put back before the error is raised again.
+    """
     revert_at = next_morning(now) if scenario.until_morning else None
     allowed_codes = {switch.code for switch in allowed}
-    changed = []
+    changed: list[QuickSwitch] = []
     for code, enabled in scenario.actions:
         switch = switch_by_code(shop_id, code)
         if switch is None or code not in allowed_codes:
             continue
-        if await change_for_a_while(
-            session,
-            switch=switch,
-            shop_id=shop_id,
-            enabled=enabled,
-            actor=actor,
-            revert_at=revert_at,
-            scenario=scenario.code,
-        ):
+        try:
+            applied = await change_for_a_while(
+                session,
+                switch=switch,
+                shop_id=shop_id,
+                enabled=enabled,
+                actor=actor,
+                revert_at=revert_at,
+                scenario=scenario.code,
+            )
+        except ValueError as exc:
+            await _undo_partial_run(session, scenario=scenario.code, shop_id=shop_id, changed=changed, actor=actor)
+            raise ValueError("سناریو کامل اجرا نشد و تغییرهایش برگردانده شد؛ دوباره امتحان کنید") from exc
+        if applied:
             changed.append(switch)
     return changed
 
