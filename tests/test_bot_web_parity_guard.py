@@ -114,23 +114,6 @@ WEB_ONLY_SETTINGS: dict[str, str] = {
 
 # Web settings the owner bot cannot edit yet: open work, shrinking as the bot catches up.
 OWNER_BOT_GAPS: dict[str, str] = {
-    **{key: "متن پیام‌ها (کنار تنظیم مربوط)" for key in (
-        "shop_maintenance_text", "user_alert_time_text", "user_alert_traffic_text",
-    )},
-    **{key: "هشدار سرویس کاربر" for key in (
-        "user_alert_low_enabled", "user_alert_low_traffic_pct", "user_alert_low_time_pct", "user_alert_low_days",
-        "first_use_nudge_enabled",
-    )},
-    **{key: "گزارش و عملیات" for key in (
-        "action_center_expire_days", "one_tap_renew_enabled", "capacity_warn_pct", "funnel_tracking_enabled",
-    )},
-    "pg_link_watchdog_enabled": "سلامت ارتباط پاسارگارد",
-    "pg_link_alerts_enabled": "سلامت ارتباط پاسارگارد",
-    "shop_maintenance_enabled": "وضعیت فروش",
-    "receipt_auto_match_enabled": "رسیدها",
-    "receipt_match_window_minutes": "رسیدها",
-    "trial_min_account_minutes": "اکانت تست",
-    "screen_editor_enabled": "حالت ویرایش منوها",
     "wallet_topup_presets": "مبالغ آمادهٔ شارژ (فهرست)",
     **{key: "بکاپ زمان‌بندی" for key in (
         "backup_schedule_enabled", "backup_schedule_hour", "backup_include_env_scheduled", "backup_keep_count",
@@ -150,12 +133,15 @@ OWNER_BOT_GAPS: dict[str, str] = {
 
 # Web settings of «/shop-settings» the shop bot cannot edit yet.
 SHOP_BOT_GAPS: dict[str, str] = {
-    **{key: OWNER_BOT_GAPS[key] for key in (
-        "user_alert_time_text", "user_alert_traffic_text", "user_alert_low_enabled",
-        "user_alert_low_traffic_pct", "user_alert_low_time_pct", "user_alert_low_days", "first_use_nudge_enabled",
-        "action_center_expire_days", "one_tap_renew_enabled", "capacity_warn_pct", "funnel_tracking_enabled",
-        "trial_min_account_minutes", "wallet_topup_presets",
+    **{key: "هشدار سرویس کاربر" for key in (
+        "user_alert_low_enabled", "user_alert_low_traffic_pct", "user_alert_low_time_pct", "user_alert_low_days",
+        "user_alert_time_text", "user_alert_traffic_text", "first_use_nudge_enabled",
     )},
+    **{key: "گزارش و عملیات" for key in (
+        "action_center_expire_days", "one_tap_renew_enabled", "capacity_warn_pct", "funnel_tracking_enabled",
+    )},
+    "trial_min_account_minutes": "اکانت تست",
+    "wallet_topup_presets": "مبالغ آمادهٔ شارژ (فهرست)",
     "btn_buy_continue": "متن دکمه‌ها (فقط در فهرست مالک)",
     **{key: "افزودن سرویس قبلی" for key in (
         "service_import_enabled", "service_import_mode", "service_import_max_per_user",

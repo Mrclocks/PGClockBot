@@ -22,7 +22,6 @@ from app.db.models import BotUser, Plan
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 from app.services.trial_offer import TRIAL_MENU_KEY
 from app.services.notifications import NOTIFY_PREFS, PLATFORM_NOTIFY_PREFS
-from app.services.usage_alert_messages import DAYS_MAX
 from app.services.pasarguard import get_pg
 from app.services.support_contacts import (
     delete_support_contact,
@@ -64,6 +63,15 @@ from app.services.settings_button_labels import (
     button_label_subs,
 )
 from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
+from app.services.settings_operation_fields import (
+    OPERATION_NUMBER_BOUNDS,
+    OPERATIONS_FIELDS,
+    PG_LINK_HEALTH_FIELDS,
+    RECEIPT_MATCH_FIELDS,
+    SALES_STATE_FIELDS,
+    TRIAL_MIN_AGE_FIELD,
+    USAGE_ALERT_FIELDS,
+)
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
@@ -233,6 +241,9 @@ SECTIONS: dict[str, dict] = {
         "subs": [
             ("layout", "چیدمان کیبورد", "menu_layout"),
             ("order", "ترتیب دکمه‌ها", "menu_order"),
+            ("editor", "حالت ویرایش منوها", [
+                ("screen_editor_enabled", "ویرایش منوها از داخل ربات", "toggle"),
+            ]),
         ],
     },
     LABELS_SECTION: {
@@ -379,13 +390,16 @@ SECTIONS: dict[str, dict] = {
             ("trial_gate", "اکانت تست", [
                 ("trial_require_contact", "تأیید شماره تماس", "toggle"),
                 ("trial_require_iran_phone", "فقط شماره ایران", "toggle"),
+                TRIAL_MIN_AGE_FIELD,
             ]),
+            ("sales", "وضعیت فروش", SALES_STATE_FIELDS),
             ("purchase_contact", "شماره تماس خرید", [
                 ("purchase_require_contact", "شماره تماس اجباری", "toggle"),
             ]),
             ("receipt_dup", "ضدتقلب رسید", [
                 ("receipt_dup_policy", "رسید تکراری (warn/block)", "text"),
             ]),
+            ("receipt_match", "تطبیق رسید", RECEIPT_MATCH_FIELDS),
             ("terms_buy", "قوانین خرید", [
                 ("terms_buy_user_enabled", "فعال خرید کاربر", "toggle"),
                 ("terms_buy_user_text", "متن قوانین خرید کاربر", "textarea"),
@@ -431,6 +445,9 @@ SECTIONS: dict[str, dict] = {
                 ("subordinate_report_enabled", "گزارش نمایندگان زیرمجموعه", "toggle"),
                 ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، به وقت تهران)", "number"),
             ]),
+            ("usage_alerts", "هشدار سرویس کاربر", USAGE_ALERT_FIELDS),
+            ("operations", "گزارش و عملیات", OPERATIONS_FIELDS),
+            ("pg_link", "سلامت ارتباط پاسارگارد", PG_LINK_HEALTH_FIELDS),
         ],
     },
 }
@@ -503,7 +520,7 @@ NUMBER_INT_RANGES: dict[str, tuple[int, int]] = {
     "auto_approve_after_minutes": (0, APPROVAL_MAX_MINUTES),
     "auto_approve_after_max_amount": (0, MAX_PRICE),
     "admin_daily_report_hour": (0, 23),
-    "user_alert_low_days": (0, DAYS_MAX),
+    **OPERATION_NUMBER_BOUNDS,
     IMPORT_KEY_MAX_PER_USER: (IMPORT_MIN_PER_USER, IMPORT_MAX_PER_USER_LIMIT),
     **ENTRY_APPROVAL_NUMBER_BOUNDS,
 }
@@ -882,7 +899,10 @@ async def _render_notify(callback: CallbackQuery, session: AsyncSession) -> None
             for key, title, _, default in PLATFORM_NOTIFY_PREFS
         ]
     )
-    rows.append([InlineKeyboardButton(text="📊 گزارش روزانه", callback_data="adm:st:sub:notify:daily")])
+    rows.extend(
+        [InlineKeyboardButton(text=title, callback_data=f"adm:st:sub:notify:{sub_id}")]
+        for sub_id, title, _fields in SECTIONS["notify"]["subs"]
+    )
     rows.append(_back_row("adm:st:hub"))
     if callback.message:
         await callback.message.edit_text(
@@ -962,7 +982,7 @@ async def _rerender_after_key(callback: CallbackQuery, session: AsyncSession, ke
         await _render_hub(callback, session)
         return
     sec_id, sub_id = loc
-    if sec_id == "notify":
+    if sec_id == "notify" and not sub_id:
         await _render_notify(callback, session)
     elif not sub_id:
         await _render_section(callback, session, sec_id)

@@ -1,0 +1,66 @@
+"""Operational settings offered in the bot settings: customer usage alerts, action center, sales state.
+
+The same keys, labels and kinds as the web settings groups of the same names. Number bounds
+match what the consumers accept, so a value saved from the bot means the same as one saved
+from the web.
+"""
+
+from __future__ import annotations
+
+from app.services.trial_guard import MAX_WAIT_MINUTES
+from app.services.usage_alert_messages import DAYS_KEY as ALERT_DAYS_KEY
+from app.services.usage_alert_messages import DAYS_MAX as ALERT_DAYS_MAX
+
+# (key, short label, kind) — the shape of every bot settings field.
+Field = tuple[str, str, str]
+
+ALERT_PERCENT_MIN = 1
+ALERT_PERCENT_MAX = 99
+MAX_EXPIRE_WINDOW_DAYS = 365
+MAX_RECEIPT_MATCH_MINUTES = 7 * 24 * 60
+
+USAGE_ALERT_FIELDS: list[Field] = [
+    ("user_alert_low_enabled", "ارسال خودکار هشدار کمبود", "toggle"),
+    ("user_alert_low_traffic_pct", "کمتر از چند درصد حجم", "number"),
+    ("user_alert_low_time_pct", "کمتر از چند درصد زمان", "number"),
+    (ALERT_DAYS_KEY, "یا چند روز مانده (۰ = خاموش)", "number"),
+    ("user_alert_time_text", "متن هشدار کمبود زمان", "textarea"),
+    ("user_alert_traffic_text", "متن هشدار کمبود حجم", "textarea"),
+    ("first_use_nudge_enabled", "پیام کمکی سرویس بدون مصرف", "toggle"),
+]
+
+OPERATIONS_FIELDS: list[Field] = [
+    ("action_center_expire_days", "پنجرهٔ نزدیک انقضا (روز)", "number"),
+    ("one_tap_renew_enabled", "دکمهٔ تمدید در هشدارها", "toggle"),
+    ("capacity_warn_pct", "آستانهٔ هشدار ظرفیت (٪)", "number"),
+    ("funnel_tracking_enabled", "ثبت رفتار کاربر", "toggle"),
+]
+
+# Platform-wide: the one panel link is watched once for every shop.
+PG_LINK_HEALTH_FIELDS: list[Field] = [
+    ("pg_link_watchdog_enabled", "پایش خودکار ارتباط", "toggle"),
+    ("pg_link_alerts_enabled", "اعلان قطع و وصل", "toggle"),
+]
+
+SALES_STATE_FIELDS: list[Field] = [
+    ("shop_maintenance_enabled", "حالت تعمیرات فروشگاه", "toggle"),
+    ("shop_maintenance_text", "متن حالت تعمیرات", "textarea"),
+]
+
+RECEIPT_MATCH_FIELDS: list[Field] = [
+    ("receipt_auto_match_enabled", "پیشنهاد تطبیق رسیدهای هم‌مبلغ", "toggle"),
+    ("receipt_match_window_minutes", "بازهٔ تطبیق (دقیقه)", "number"),
+]
+
+TRIAL_MIN_AGE_FIELD: Field = ("trial_min_account_minutes", "حداقل سن حساب (دقیقه، ۰ = خاموش)", "number")
+
+# Whole-number bounds of the fields above.
+OPERATION_NUMBER_BOUNDS: dict[str, tuple[int, int]] = {
+    "user_alert_low_traffic_pct": (ALERT_PERCENT_MIN, ALERT_PERCENT_MAX),
+    "user_alert_low_time_pct": (ALERT_PERCENT_MIN, ALERT_PERCENT_MAX),
+    ALERT_DAYS_KEY: (0, ALERT_DAYS_MAX),
+    "action_center_expire_days": (1, MAX_EXPIRE_WINDOW_DAYS),
+    "capacity_warn_pct": (1, 100),
+    "receipt_match_window_minutes": (1, MAX_RECEIPT_MATCH_MINUTES),
+    "trial_min_account_minutes": (0, MAX_WAIT_MINUTES),
+}
