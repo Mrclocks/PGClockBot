@@ -133,23 +133,7 @@ OWNER_BOT_GAPS: dict[str, str] = {
 
 # Web settings of «/shop-settings» the shop bot cannot edit yet.
 SHOP_BOT_GAPS: dict[str, str] = {
-    **{key: "هشدار سرویس کاربر" for key in (
-        "user_alert_low_enabled", "user_alert_low_traffic_pct", "user_alert_low_time_pct", "user_alert_low_days",
-        "user_alert_time_text", "user_alert_traffic_text", "first_use_nudge_enabled",
-    )},
-    **{key: "گزارش و عملیات" for key in (
-        "action_center_expire_days", "one_tap_renew_enabled", "capacity_warn_pct", "funnel_tracking_enabled",
-    )},
-    "trial_min_account_minutes": "اکانت تست",
     "wallet_topup_presets": "مبالغ آمادهٔ شارژ (فهرست)",
-    "btn_buy_continue": "متن دکمه‌ها (فقط در فهرست مالک)",
-    **{key: "افزودن سرویس قبلی" for key in (
-        "service_import_enabled", "service_import_mode", "service_import_max_per_user",
-    )},
-    **{key: "قالب نام‌گذاری" for key in ("pg_username_prefix", "pg_username_suffix", "pg_username_pattern")},
-    **{key: "گزارش روزانه" for key in (
-        "admin_daily_report_enabled", "subordinate_report_enabled", "admin_daily_report_hour",
-    )},
 }
 
 

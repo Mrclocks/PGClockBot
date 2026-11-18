@@ -45,7 +45,22 @@ from app.services.settings_button_labels import (
     BTN_PAY_WALLET_DISCOUNT,
     button_label_subs,
 )
+from app.services.bot_setting_values import (
+    NUMBER_UNLIMITED_VALUES,
+    SELECT_OPTIONS,
+    UNLIMITED_LABEL,
+    next_select_value,
+    number_range_hint,
+    parse_number_setting,
+    select_label,
+)
+from app.services.service_import_config import (
+    KEY_ENABLED as IMPORT_KEY_ENABLED,
+    KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
+    KEY_MODE as IMPORT_KEY_MODE,
+)
 from app.services.settings_message_texts import CONNECTION_STATUS_CUSTOMER_TEXTS, MESSAGE_TEXT_SUBS
+from app.services.settings_operation_fields import OPERATIONS_FIELDS, TRIAL_MIN_AGE_FIELD, USAGE_ALERT_FIELDS
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
@@ -179,6 +194,17 @@ SECTIONS: dict[str, dict] = {
                 ("show_sub_link_in_text", "لینک در کپشن", "toggle"),
                 ("qr_caption", "کپشن QR", "textarea"),
             ]),
+            # Same keys as the web «افزودن سرویس قبلی» tab; paths and panel admins stay with the Owner.
+            ("import", "افزودن سرویس قبلی", [
+                (IMPORT_KEY_ENABLED, "افزودن سرویس قبلی توسط مشتری", "toggle"),
+                (IMPORT_KEY_MODE, "روش پذیرش", "select"),
+                (IMPORT_KEY_MAX_PER_USER, "سقف سرویس هر مشتری", "number"),
+            ]),
+            ("naming", "نام در پاسارگارد", [
+                ("pg_username_prefix", "پیشوند", "text"),
+                ("pg_username_suffix", "پسوند", "text"),
+                ("pg_username_pattern", "الگو", "text"),
+            ]),
         ],
     },
     "limits": {
@@ -210,6 +236,7 @@ SECTIONS: dict[str, dict] = {
             ("trial_gate", "سرویس تست", [
                 ("trial_require_contact", "تأیید شماره تماس", "toggle"),
                 ("trial_require_iran_phone", "فقط شماره ایران", "toggle"),
+                TRIAL_MIN_AGE_FIELD,
             ]),
             ("purchase_contact", "شماره تماس خرید", [
                 ("purchase_require_contact", "شماره تماس اجباری", "toggle"),
@@ -241,6 +268,16 @@ SECTIONS: dict[str, dict] = {
     "notify": {
         "title": "اعلان‌ها",
         "kind": "notify",
+        # Opened from the notify screen; the report text and metrics stay on the web (placeholder picker).
+        "subs": [
+            ("daily", "گزارش روزانه", [
+                ("admin_daily_report_enabled", "ارسال گزارش روزانه", "toggle"),
+                ("subordinate_report_enabled", "گزارش نمایندگان زیرمجموعه", "toggle"),
+                ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، به وقت تهران)", "number"),
+            ]),
+            ("usage_alerts", "هشدار سرویس کاربر", USAGE_ALERT_FIELDS),
+            ("operations", "گزارش و عملیات", OPERATIONS_FIELDS),
+        ],
     },
     # Own shop bot token only — never platform BOT_TOKEN.
     "bot": {
@@ -561,6 +598,10 @@ async def _render_notify(callback: CallbackQuery, session: AsyncSession, reselle
         rows.append(
             [InlineKeyboardButton(text="— اعلانی برای دسترسی شما نیست —", callback_data="res:st:hub")]
         )
+    rows.extend(
+        [InlineKeyboardButton(text=title, callback_data=f"res:st:sub:notify:{sub_id}")]
+        for sub_id, title, _fields in SECTIONS["notify"]["subs"]
+    )
     rows.append([kb.back_button(None, "res:st:hub")])
     if callback.message:
         await safe_edit_text(
@@ -626,6 +667,10 @@ async def _sub_panel(session: AsyncSession, sec_id: str, sub_id: str, reseller_i
             if kind == "toggle":
                 mark = "✅" if on(cur) else "❌"
                 rows.append([InlineKeyboardButton(text=f"{mark} {label}", callback_data=f"res:st:tog:{key}")])
+            elif kind == "select":
+                rows.append(
+                    [InlineKeyboardButton(text=f"{label}: {select_label(key, cur)}", callback_data=f"res:st:sel:{key}")]
+                )
             else:
                 shown = secret_state(cur) if is_secret(kind) else _preview(cur, limit=28)
                 rows.append(
@@ -798,6 +843,28 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         await _render_sub(callback, session, loc[0], loc[1], profile.user_id)
 
 
+@router.callback_query(F.data.startswith("res:st:sel:"))
+async def settings_select_cycle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    key = callback.data.split(":", 3)[-1]
+    meta = FIELDS.get(key)
+    if meta is None or meta[2] != "select" or key not in SELECT_OPTIONS:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    with _Scoped(profile.user_id):
+        cur = await get_setting(session, key, reseller_id=profile.user_id)
+        await set_setting(session, key, next_select_value(key, cur), reseller_id=profile.user_id)
+    await callback.answer(feedback.SAVED)
+    loc = _owner_screen_for_key(key)
+    if loc:
+        await _render_sub(callback, session, loc[0], loc[1], profile.user_id)
+
+
 @router.callback_query(F.data == "res:st:menu:layout")
 async def menu_layout_toggle(
     callback: CallbackQuery,
@@ -946,16 +1013,23 @@ async def settings_edit_ask(
     if not meta:
         await callback.answer(feedback.INVALID, show_alert=True)
         return
+    if meta[2] == "select":
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
     with _Scoped(profile.user_id):
         cur = await get_setting(session, key, reseller_id=profile.user_id)
     if key == "force_join_channel":
         from app.services.users import format_force_join_for_edit
 
         cur = format_force_join_for_edit(cur)
+    if cur and cur == NUMBER_UNLIMITED_VALUES.get(key):
+        cur = UNLIMITED_LABEL
     await callback.answer()
     await state.update_data(edit_key=key, reseller_id=profile.user_id, rs_loc=_owner_screen_for_key(key))
     hint = feedback.ENTER_NEW_TEXT
-    if key == "force_join_channel":
+    if meta[2] == "number":
+        hint = number_range_hint(key)
+    elif key == "force_join_channel":
         hint = "هر خط یک کانال (@channel یا آیدی).\nعضویت همه الزامی ذخیره می‌شود.\nبرای انصراف: انصراف"
     else:
         from app.services.rich_text import is_button_label_key, is_message_rich_key
@@ -1009,8 +1083,18 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
                             is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
         return
     meta = FIELDS.get(key)
-    if meta and is_secret(meta[2]):
+    if meta is None:
+        await state.clear()
+        await message.answer(feedback.INVALID)
+        return
+    if is_secret(meta[2]):
         await delete_user_message(message)
+    elif meta[2] == "number":
+        try:
+            text = parse_number_setting(key, text)
+        except ValueError as exc:
+            await message.answer(str(exc))
+            return
     else:
         text = _shop_setting_value(key, message)
     await set_setting(session, key, text, reseller_id=profile.user_id)
