@@ -120,8 +120,9 @@ class AdminSettingsListsTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(len(row) == 2 for row in markup.inline_keyboard))
         marks = {b.callback_data: b.text for row in markup.inline_keyboard for b in row}
         self.assertTrue(marks[f"adm:st:tog:{first_key}"].startswith("✅"))
-        # Every switch, the «گزارش روزانه» screen and «بازگشت».
-        self.assertEqual(len(marks), len(admin_settings.PLATFORM_NOTIFY_PREFS) + 2)
+        # Every switch, one button per sub-screen (daily report, alerts, …) and «بازگشت».
+        subs = admin_settings.SECTIONS["notify"]["subs"]
+        self.assertEqual(len(marks), len(admin_settings.PLATFORM_NOTIFY_PREFS) + len(subs) + 1)
 
 
 class ResellerSettingsListsTests(unittest.IsolatedAsyncioTestCase):
