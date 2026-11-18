@@ -174,6 +174,12 @@ Progress:
 |---|---|---|
 | 1 Baseline | done | 428 of 866 |
 | 2 Test infrastructure | done | 426 of 869 (the check's own test not counted) |
+| 3 Move the tests | done | 15 of 870 |
+| 4 Remove SQLite from the product | next | |
+
+After step 3 the full suite runs on PostgreSQL in about 9 minutes with 4 workers (17 minutes on SQLite before). The 15 modules still on SQLite test SQLite-only product code, or name SQLite only in text, and go away in step 4: the pre-Alembic legacy migrator (`test_phase6a_production_readiness`, `test_v4_0_6_plans_billing_mode_fix`, `test_bot_users_reseller_id_index`), the SQLite backup and baseline (`test_backup_archive_safety`, `test_backup_env_restore`, `test_phase0_baseline`, `test_full_audit_3_8_3`), the ETL (`test_phase_a_database`, `test_arch_cleanup_footprints`), the CLI and WAL settings (`test_phase_b_cli`, `test_bot_perf_footer`), and text-only mentions (`test_pg_operator_errors`, `test_v4_0_4_admin_reseller_unify`, `test_delete_bot_user_fk_cleanup`, `test_postgres_only_install`).
+
+Moving the tests found two product bugs, fixed in their own commits: a wallet gift code could be redeemed several times by concurrent requests, and the resellers page never saved a child representative it had created on the panel.
 
 ## Phase 7. Dependencies and operations
 
