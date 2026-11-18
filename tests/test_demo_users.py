@@ -16,7 +16,7 @@ from alembic.operations import Operations
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.user_pages import register_user_pages
 from app.db.models import (
@@ -33,6 +33,7 @@ from app.services.subordinate_report import SubordinateShop, collect_subordinate
 from app.services.ux20 import funnel_summary
 from app.services.shop_scope import ShopScopeError
 from app.services.numbers import to_fa_digits
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
@@ -47,7 +48,7 @@ def shop_staff(shop_id: int, *, has_permission: bool = True) -> dict[str, Any]:
 
 class DemoUserTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -333,7 +334,7 @@ class DemoUserMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("demo_user_migration", ROOT / "alembic/versions/0041_demo_users.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as connection:
             connection.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY, full_name TEXT)"))
             connection.execute(sa.text("INSERT INTO bot_users VALUES (1, 'existing')"))

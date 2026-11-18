@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,6 +10,7 @@ import sqlalchemy as sa
 
 from app.bot.handlers.reseller_customer_services import PERMISSION, may_manage_customer_services
 from app.services.resellers import DEFAULT_FEATURE_PERMS, FEATURE_PERMS, parse_perms
+from tests.postgres_support import scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "alembic" / "versions" / "0088_customer_services_permission.py"
@@ -77,7 +77,7 @@ class CustomerServicesMigrationTests(unittest.TestCase):
         from alembic.operations import Operations
 
         migration = _load_migration()
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             self._setup(conn)
             with Operations.context(MigrationContext.configure(conn)):

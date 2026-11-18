@@ -1,19 +1,18 @@
 """Approving and rejecting service cancellations from the bot: scope, permissions, amount and back steps."""
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import cancellation_review as review
 from app.db.models import Base, BotUser, ServiceCancellation, ShopWallet, UserService
 from app.services import bot_feedback_texts as feedback
 from app.services.service_cancellations import request_cancellation
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 CTX = {"is_reseller_bot": False, "reseller_owner_id": None}
 
@@ -41,8 +40,7 @@ def buttons(markup) -> list[str]:
 
 class ReviewCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'review.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -78,7 +76,6 @@ class ReviewCase(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
         reset_shop_reseller_id(self.token)
         _SETTINGS_CACHE.clear()
-        self.tmp.cleanup()
 
     def callback(self, data):
         callback = AsyncMock()

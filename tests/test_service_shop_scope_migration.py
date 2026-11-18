@@ -9,6 +9,7 @@ from pathlib import Path
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from tests.postgres_support import scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP = 5
@@ -24,7 +25,7 @@ def _load_migration():
 class ServiceShopMigrationTests(unittest.TestCase):
     def setUp(self):
         self.migration = _load_migration()
-        self.engine = sa.create_engine("sqlite:///:memory:")
+        self.engine = scoped_sync_engine()
         self.addCleanup(self.engine.dispose)
         with self.engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY, reseller_id INTEGER)"))
@@ -105,7 +106,7 @@ class ServiceShopMigrationTests(unittest.TestCase):
             self.run_migration(conn)
             total = conn.execute(sa.text("SELECT COUNT(*) FROM user_services WHERE bot_user_id = 100")).scalar()
             review = conn.execute(
-                sa.text("SELECT COUNT(*) FROM user_services WHERE bot_user_id = 100 AND shop_needs_review = 1")
+                sa.text("SELECT COUNT(*) FROM user_services WHERE bot_user_id = 100 AND shop_needs_review")
             ).scalar()
         self.assertEqual((total, review), (self.migration.BATCH_SIZE * 2 + 7, 0))
 

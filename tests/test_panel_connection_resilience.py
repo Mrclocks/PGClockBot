@@ -18,7 +18,7 @@ import httpx
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse
 from itsdangerous import URLSafeTimedSerializer
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
 from app.config import Settings
@@ -28,6 +28,7 @@ from app.services.pasarguard import PasarGuardClient, PasarGuardError
 from app.services.pg_access import resolve_acl_from_client
 from app.services.pg_staff_access import enforce_pg_admin_web_gate
 from app.services.ux20 import check_pg_connection
+from tests.postgres_support import scoped_async_engine
 
 
 class PanelReadTests(unittest.IsolatedAsyncioTestCase):
@@ -396,7 +397,7 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
             raise httpx.ConnectError("offline", request=request)
 
         pg = await self.make_client(offline)
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         sessions = async_sessionmaker(engine, expire_on_commit=False)
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)

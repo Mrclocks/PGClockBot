@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Order, UserService
 from app.services.dashboard_trend import (
     TEHRAN, change_percent, empty_trend, own_account_summary, sales_trend,
 )
+from tests.postgres_support import scoped_async_engine
 
 NOW = datetime(2026, 10, 17, 12, 0, tzinfo=TEHRAN)
 SHOP = 5
@@ -33,8 +30,7 @@ def order(user_id: int, amount: int, when: datetime, *, shop: int | None = None,
 
 class TrendTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 't.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -56,7 +52,6 @@ class TrendTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def trend(self, **kw):
         async with self.Session() as session:
@@ -105,13 +100,14 @@ class TrendTests(unittest.IsolatedAsyncioTestCase):
 
 class AccountSummaryTests(unittest.IsolatedAsyncioTestCase):
     async def test_summary_counts_active_platform_services_and_nearest_expiry(self):
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False)
         now = datetime(2026, 10, 17, tzinfo=timezone.utc)
         async with Session() as session:
             session.add(BotUser(id=1, telegram_id=1, referral_code="a", role="admin", wallet_balance=1200))
+            session.add(BotUser(id=5, telegram_id=5, referral_code="shop5", role="reseller"))
             await session.flush()
             session.add_all([
                 UserService(bot_user_id=1, pg_user_id=1, pg_username="a", quota_expire_at=now + timedelta(days=9, hours=2)),
@@ -125,7 +121,7 @@ class AccountSummaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summary, {"wallet": 1200, "services": 2, "nearest_expiry_days": 9})
 
     async def test_expired_or_blocked_services_are_not_counted_as_active(self):
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False)
@@ -157,8 +153,7 @@ class TrendRouteTests(unittest.IsolatedAsyncioTestCase):
 
         from app.api.dashboard_trend_pages import register_dashboard_trend_pages
 
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'r.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -187,7 +182,6 @@ class TrendRouteTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.client.aclose()
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def test_a_shop_staff_gets_only_its_own_numbers(self):
         response = await self.client.get("/home/sales-trend?days=7")

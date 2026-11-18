@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Plan, Role, TrialClaim
 from app.services.orders import create_order
 from app.services.trial_guard import MAX_WAIT_MINUTES, parse_min_account_age, trial_wait_minutes
 from app.services.users import DEFAULT_SETTINGS, set_setting
+from tests.postgres_support import scoped_async_engine
 
 NOW = datetime(2026, 10, 31, 12, 0, tzinfo=timezone.utc)
 
@@ -48,15 +45,13 @@ class WaitMathTests(unittest.TestCase):
 
 class TrialAgeGateTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'a.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _setup(self, session, *, age_minutes: float, gate: str):
         user = BotUser(

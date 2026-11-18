@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import (
     Base,
@@ -23,6 +21,7 @@ from app.db.models import (
     Role,
 )
 from app.services import staff_free_checkout as free
+from tests.postgres_support import scoped_async_engine
 
 SHOP_ID = 2
 OTHER_SHOP_ID = 3
@@ -32,8 +31,7 @@ PRICE = 120_000
 
 class ShopFixture(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'free.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -71,7 +69,6 @@ class ShopFixture(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def order(self, *, user_id: int, shop_id: int | None, note: str | None = None) -> Order:
         order = Order(user_id=user_id, plan_id=1, reseller_id=shop_id, amount=PRICE, note=note)

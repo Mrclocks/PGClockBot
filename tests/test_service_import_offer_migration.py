@@ -9,6 +9,7 @@ from pathlib import Path
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from tests.postgres_support import scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 TABLE = "service_import_offer_dismissals"
@@ -26,7 +27,7 @@ def _load_migration():
 class ServiceImportOfferMigrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.migration = _load_migration()
-        self.engine = sa.create_engine("sqlite:///:memory:")
+        self.engine = scoped_sync_engine()
         self.addCleanup(self.engine.dispose)
         with self.engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))
@@ -42,7 +43,7 @@ class ServiceImportOfferMigrationTests(unittest.TestCase):
             self.assertTrue(sa.inspect(conn).has_table(TABLE))
             conn.execute(sa.text("INSERT INTO bot_users (id) VALUES (1)"))
             conn.execute(sa.text(f"INSERT INTO {TABLE} (user_id, shop_key) VALUES (1, 0)"))
-            with self.assertRaises(sa.exc.IntegrityError):
+            with self.assertRaises(sa.exc.IntegrityError), conn.begin_nested():
                 conn.execute(sa.text(f"INSERT INTO {TABLE} (user_id, shop_key) VALUES (1, 0)"))
         with self.engine.begin() as conn:
             self._run(conn, down=True)

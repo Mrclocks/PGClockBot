@@ -4,20 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import os
-import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.pg_panel_access_pages import access_target_from_form, apply_access_before_save
 from app.db import Base
@@ -44,6 +41,7 @@ from app.services.resellers import (
     provision_reseller,
 )
 from app.services.secret_box import decrypt_secret, encrypt_secret
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 ALL_PG_USER_ACTIONS = {"create": True, "update": True, "delete": True, "reset": True, "revoke": True}
@@ -155,8 +153,7 @@ class FakeOwnerPanel:
 
 class DbCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'a.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -179,7 +176,6 @@ class DbCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def profile(self, session, pid: int = 1) -> ResellerProfile:
         return await session.get(ResellerProfile, pid)
@@ -322,8 +318,7 @@ class PrincipalSessionTests(DbCase):
 
 class ProvisionTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'p.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -337,7 +332,6 @@ class ProvisionTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def test_closed_plan_creates_a_private_panel_password(self) -> None:
         pg = SimpleNamespace(create_admin=AsyncMock(return_value={"id": 2}))
@@ -371,7 +365,7 @@ def _load_migration():
 class MigrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.migration = _load_migration()
-        self.engine = sa.create_engine("sqlite:///:memory:")
+        self.engine = scoped_sync_engine()
         self.addCleanup(self.engine.dispose)
         with self.engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE reseller_plans (id INTEGER PRIMARY KEY, name TEXT)"))

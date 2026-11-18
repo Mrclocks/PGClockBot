@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models import (
     Base,
@@ -25,6 +25,7 @@ from app.services.admin_counters import (
     with_badge,
 )
 from app.services.numbers import to_fa_digits
+from tests.postgres_support import add_rows, scoped_async_engine
 
 
 class ToFaDigitsTests(unittest.TestCase):
@@ -93,14 +94,14 @@ class KeyboardBadgeTests(unittest.TestCase):
 
 class PendingCountsIsolationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.session: AsyncSession = async_sessionmaker(
             self.engine, expire_on_commit=False
         )()
         now = datetime.now(timezone.utc)
-        self.session.add_all(
+        await add_rows(self.session,
             [
                 BotUser(
                     id=1,
@@ -153,7 +154,7 @@ class PendingCountsIsolationTests(unittest.IsolatedAsyncioTestCase):
         )
         await self.session.flush()
         # Platform: 1 order receipt + 1 platform topup
-        self.session.add_all(
+        await add_rows(self.session,
             [
                 Order(
                     id=100,
@@ -203,7 +204,7 @@ class PendingCountsIsolationTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
         # Shop 10: order receipt + shop topup + ticket + cancel
-        self.session.add_all(
+        await add_rows(self.session,
             [
                 Order(
                     id=200,
@@ -262,7 +263,7 @@ class PendingCountsIsolationTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
         # Shop 20: separate queue — must not leak into shop 10 or platform
-        self.session.add_all(
+        await add_rows(self.session,
             [
                 Order(
                     id=300,

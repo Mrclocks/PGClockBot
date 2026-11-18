@@ -5,14 +5,13 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import sqlalchemy as sa
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import (
     Base,
@@ -43,6 +42,7 @@ from app.services.broadcast_audience import (
 from app.services.broadcast_queue import process_broadcast_batch, queue_broadcast
 from app.services.campaigns import TARGETED_PER_DAY, claim_shop_message_slot, create_campaign
 from app.services.shop_broadcast import new_shop_request_key, queue_shop_broadcast
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime.now(timezone.utc)
@@ -83,8 +83,7 @@ class AudienceCase(unittest.IsolatedAsyncioTestCase):
     9 admin, 10 blocked; the shop owners 50 and 60 are resellers on the platform. Shop 50: 21 active with a shop wallet, 22 never bought. Shop 60: 31 active."""
 
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'aud.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -125,7 +124,6 @@ class AudienceCase(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def ids(self, spec: AudienceSpec, shop_id: int | None = None) -> list[int]:
         rows = await self.session.scalars(
@@ -366,7 +364,7 @@ class TargetedCapMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("m0118", ROOT / "alembic/versions/0118_shop_targeted_message_days.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             migration.upgrade()
             migration.upgrade()
@@ -385,7 +383,7 @@ class MigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("m0117", ROOT / "alembic/versions/0117_broadcast_audience_spec.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE broadcast_logs (id INTEGER PRIMARY KEY, audience TEXT, text TEXT)"))
             conn.execute(sa.text("INSERT INTO broadcast_logs VALUES (1, 'users', 'hi')"))

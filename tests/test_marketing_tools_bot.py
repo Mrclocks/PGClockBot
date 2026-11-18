@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot import marketing_panels as panels
 from app.bot.handlers import marketing_tools
@@ -20,6 +16,7 @@ from app.db.models import BotUser, CampaignRecipient, ChargeCode, TargetedCampai
 from app.services.formatting import format_number
 from app.services.campaigns import campaign_progress_map, list_recent_campaigns
 from app.services.gift_codes import set_gift_code_active
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 
 def _callbacks(markup) -> list[str]:
@@ -88,15 +85,14 @@ class MarketingDbCase(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'm.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, 5)
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
 
 class GiftCodeServiceTests(MarketingDbCase):
@@ -147,6 +143,8 @@ class CampaignServiceTests(MarketingDbCase):
             both = await list_recent_campaigns(session, shop_id=None)
             self.assertEqual({c.text for c in both}, {"a", "b"})
             self.assertEqual(await campaign_progress_map(session, []), {})
+            session.add_all(BotUser(id=uid, telegram_id=uid, referral_code=f"recipient{uid}") for uid in (1, 2, 3))
+            await session.flush()
             session.add_all([
                 CampaignRecipient(campaign_id=ids[1], user_id=1, status="sent"),
                 CampaignRecipient(campaign_id=ids[1], user_id=2, status="sent"),

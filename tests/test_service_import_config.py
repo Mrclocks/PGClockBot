@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
 
@@ -24,6 +22,7 @@ from app.services.service_import import (
 )
 from app.services.users import set_settings_bulk
 from tests.test_service_import import PLATFORM_ADMIN, SHOP_ADMIN, ImportCase
+from tests.postgres_support import scoped_sync_engine
 
 
 class ConfigCase(ImportCase):
@@ -267,11 +266,11 @@ class ReasonMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("reason_migration", root / "alembic/versions/0052_service_import_reason.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(sa.text(
                 "CREATE TABLE service_import_attempts (id INTEGER PRIMARY KEY, bot_user_id INTEGER NOT NULL, "
-                "token_hash VARCHAR(64) NOT NULL, outcome VARCHAR(24) NOT NULL, created_at DATETIME)"
+                "token_hash VARCHAR(64) NOT NULL, outcome VARCHAR(24) NOT NULL, created_at TIMESTAMPTZ)"
             ))
             conn.execute(sa.text("INSERT INTO service_import_attempts VALUES (1, 1, 'h', 'refused', NULL)"))
             with Operations.context(MigrationContext.configure(conn)):
@@ -289,7 +288,6 @@ class ReasonMigrationTests(unittest.TestCase):
         import importlib.util
         from pathlib import Path
 
-        import sqlalchemy as sa
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
@@ -297,7 +295,7 @@ class ReasonMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("reason_migration2", root / "alembic/versions/0052_service_import_reason.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             migration.upgrade()
             migration.downgrade()

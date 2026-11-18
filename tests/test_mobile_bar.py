@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import os
 import re
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.mobile_bar_settings import register_mobile_bar_settings
 from app.db import Base
@@ -32,6 +28,7 @@ from app.services.mobile_bar import (
 from app.services.panel_nav import DOCK_SLOTS, NavViewer, build_dock, build_sidebar, dock_choices
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.users import get_setting
+from tests.postgres_support import scoped_async_engine
 
 ALL_PG = frozenset({"pg_overview", "pg_users", "pg_admins", "pg_nodes", "pg_groups", "pg_hosts", "pg_templates", "pg_inbounds"})
 OWNER_VIEW = NavViewer(role="admin", perms=frozenset(), pg_perms=ALL_PG, is_owner=True,
@@ -109,8 +106,7 @@ class SlotValidationTests(unittest.TestCase):
 
 class StoreTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'bar.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -119,7 +115,6 @@ class StoreTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         mobile_bar.invalidate_bar_cache()
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def stored(self) -> str:
         async with self.Session() as session:

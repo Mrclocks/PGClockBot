@@ -6,11 +6,12 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.db.models import Base, BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan
+from app.db.models import Base, BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan, UserService
 from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
 from app.services.trial_notify import notify_trial_claimed
+from tests.postgres_support import add_rows, scoped_async_engine
 
 
 def _callbacks(markup) -> list[str]:
@@ -21,11 +22,11 @@ def _callbacks(markup) -> list[str]:
 
 class StaffNotifyViewUserTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
-        self.session.add_all(
+        await add_rows(self.session,
             [
                 BotUser(
                     id=1,
@@ -38,6 +39,10 @@ class StaffNotifyViewUserTests(unittest.IsolatedAsyncioTestCase):
                 BotUser(id=5, telegram_id=5005, referral_code="s5", role="reseller"),
                 Plan(id=1, name="پلن ترکیبی", price=150_000, is_active=True),
                 Plan(id=2, name="تست", price=0, is_active=True, is_trial=True),
+                UserService(id=11, bot_user_id=1, plan_id=1, pg_username="svc11"),
+                UserService(id=12, bot_user_id=1, plan_id=1, pg_username="svc12", shop_id=5),
+                UserService(id=13, bot_user_id=1, plan_id=2, pg_username="svc13"),
+                UserService(id=14, bot_user_id=1, plan_id=2, pg_username="svc14", shop_id=5),
                 Order(
                     id=38,
                     user_id=1,

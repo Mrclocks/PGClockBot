@@ -7,6 +7,7 @@ pick it up on upgrade.
 from __future__ import annotations
 
 import unittest
+from tests.postgres_support import scoped_database_url, scoped_sync_engine
 
 
 class BotUsersResellerIdIndexTests(unittest.TestCase):
@@ -18,25 +19,18 @@ class BotUsersResellerIdIndexTests(unittest.TestCase):
             col.index, "bot_users.reseller_id must be indexed (tenant-isolation queries filter on it)"
         )
 
-    def test_migration_creates_index_on_sqlite(self):
-        import tempfile
-        from pathlib import Path
-
-        from sqlalchemy import create_engine, inspect
+    def test_migration_creates_index(self):
+        from sqlalchemy import inspect
 
         from app.db.alembic_runner import upgrade_head
 
-        with tempfile.TemporaryDirectory() as td:
-            db_path = Path(td) / "idx.db"
-            url = f"sqlite+aiosqlite:///{db_path}"
-            upgrade_head(url)
-            sync_eng = create_engine(f"sqlite:///{db_path}")
-            try:
-                insp = inspect(sync_eng)
-                names = {ix["name"] for ix in insp.get_indexes("bot_users")}
-                self.assertIn("ix_bot_users_reseller_id", names)
-            finally:
-                sync_eng.dispose()
+        upgrade_head(scoped_database_url(tables=False))
+        engine = scoped_sync_engine()
+        try:
+            names = {ix["name"] for ix in inspect(engine).get_indexes("bot_users")}
+            self.assertIn("ix_bot_users_reseller_id", names)
+        finally:
+            engine.dispose()
 
     def test_ensure_indexes_statement_present(self):
         """Legacy pre-Alembic SQLite bootstrap path must also get this index."""

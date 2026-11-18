@@ -292,7 +292,7 @@ class ShopWalletMigrationTests(unittest.TestCase):
             migration.upgrade()
             migration.upgrade()
             conn.execute(sa.text("INSERT INTO shop_wallet_adjust_days (shop_id, day, used) VALUES (1, '2026-01-01', 5)"))
-            with self.assertRaises(sa.exc.IntegrityError):
+            with self.assertRaises(sa.exc.IntegrityError), conn.begin_nested():
                 conn.execute(sa.text("INSERT INTO shop_wallet_adjust_days (shop_id, day, used) VALUES (1, '2026-01-01', 1)"))
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             migration.downgrade()

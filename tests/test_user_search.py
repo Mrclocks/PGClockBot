@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import unittest
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser
 from app.services.user_search import clean_handle, find_bot_user, with_search_matches
 from app.services.users_ops import scoped_users_where
+from tests.postgres_support import scoped_async_engine
 
 SHOP = 5
 
@@ -23,7 +24,7 @@ class CleanHandleTests(unittest.TestCase):
 
 class UserSearchTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

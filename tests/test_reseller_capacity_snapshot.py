@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, ResellerPlan, ResellerProfile
@@ -21,6 +17,7 @@ from app.services.pg_quota import extract_admin_capacity
 from app.services.reseller_capacity_repair import repair_current_capacity_snapshots
 from app.services.resellers import ensure_current_capacity_reseller_plan, provision_existing_pg_admin
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarness
+from tests.postgres_support import scoped_async_engine
 
 GB = 1024**3
 
@@ -85,8 +82,7 @@ class LiveReadTests(unittest.IsolatedAsyncioTestCase):
 
 class DbCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'c.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -96,7 +92,6 @@ class DbCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def subscription(self, username: str):
         async with self.Session() as session:

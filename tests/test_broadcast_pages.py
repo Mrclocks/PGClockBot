@@ -3,10 +3,8 @@ with a segment. A shop only ever counts, sends to and sees its own customers and
 
 from __future__ import annotations
 
-import os
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import FastAPI

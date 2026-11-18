@@ -3,27 +3,25 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, DeliveryFailure, Order, PanelAlertState
 from app.jobs import panel_alert_notifications as job
 from app.services import panel_alert_notifications as svc
 from app.services.notifications import PLATFORM_NOTIFY_PREFS, SHOP_NOTIFY_PERM_MAP, shop_notify_catalog
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 GB = 1024**3
 T0 = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
@@ -35,15 +33,13 @@ def sig(count=1, *, shop=None, alert=svc.ALERT_FAILURES, fingerprint="", key=svc
 
 class DbCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'a.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def claim(self, signal, at):
         async with self.Session() as session:
@@ -283,14 +279,13 @@ class MigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("alert_states_migration", path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        with tempfile.TemporaryDirectory() as tmp:
-            engine = sa.create_engine(f"sqlite:///{Path(tmp) / 'm.db'}")
-            with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
-                module.upgrade()
-                module.upgrade()
-                self.assertIn("uq_panel_alert_states_scope_alert", {i["name"] for i in sa.inspect(conn).get_indexes("panel_alert_states")})
+        engine = scoped_sync_engine()
+        with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
+            module.upgrade()
+            module.upgrade()
+            self.assertIn("uq_panel_alert_states_scope_alert", {i["name"] for i in sa.inspect(conn).get_indexes("panel_alert_states")})
+            conn.execute(sa.text("INSERT INTO panel_alert_states (scope_key, alert) VALUES ('platform', 'update')"))
+            with self.assertRaises(sa.exc.IntegrityError), conn.begin_nested():
                 conn.execute(sa.text("INSERT INTO panel_alert_states (scope_key, alert) VALUES ('platform', 'update')"))
-                with self.assertRaises(sa.exc.IntegrityError):
-                    conn.execute(sa.text("INSERT INTO panel_alert_states (scope_key, alert) VALUES ('platform', 'update')"))
-                module.downgrade()
-                self.assertFalse(sa.inspect(conn).has_table("panel_alert_states"))
+            module.downgrade()
+            self.assertFalse(sa.inspect(conn).has_table("panel_alert_states"))

@@ -7,17 +7,16 @@ the next read of user.role failed with MissingGreenlet (a 500 in the Mini App).
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models import Base, BotUser, Role, TermsAcceptance
 from app.services import terms
 from app.services.terms import current_hash, record_acceptance
+from tests.postgres_support import scoped_async_engine
 
 UI = {
     "terms_entry_enabled": "1",
@@ -28,8 +27,7 @@ UI = {
 
 class TermsAcceptanceRaceTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'terms.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
@@ -41,7 +39,6 @@ class TermsAcceptanceRaceTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _rows(self) -> list[TermsAcceptance]:
         async with self.Session() as session:

@@ -95,8 +95,7 @@ class MonitorSnapshotTests(MonitorDatabaseCase):
             await session.commit()
             await session.execute(text("ANALYZE user_services"))
             query = "SELECT id FROM user_services WHERE pg_user_id = :user_id OR lower(pg_username) = :username"
-            prefix = "EXPLAIN QUERY PLAN " if self.engine.dialect.name == "sqlite" else "EXPLAIN (FORMAT JSON) "
-            result = await session.execute(text(prefix + query), {"user_id": 6000, "username": "monitor-only"})
+            result = await session.execute(text("EXPLAIN (FORMAT JSON) " + query), {"user_id": 6000, "username": "monitor-only"})
             plan = json.dumps([tuple(row) for row in result.all()])
             self.assertIn("ix_user_services_pg_user_id", plan)
             self.assertIn("ix_user_services_pg_username_lower", plan)

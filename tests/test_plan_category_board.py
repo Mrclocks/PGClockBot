@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, Plan, PlanCategory
 from app.services.plan_categories import move_category
@@ -18,6 +16,7 @@ from app.services.plan_category_board import (
     build_plan_board,
 )
 from app.services.shop_scope import ShopScopeError
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 SHOP = 42
 OTHER_SHOP = 77
@@ -109,11 +108,11 @@ class _CategoryDbCase(unittest.IsolatedAsyncioTestCase):
     """Two shops, the platform and a reseller-audience category, each with its own order."""
 
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'db.sqlite'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, SHOP, OTHER_SHOP)
         async with self.Session() as session:
             session.add_all([
                 _category(1, "الف", order=0, owner=SHOP),
@@ -127,7 +126,6 @@ class _CategoryDbCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _order(self, owner: int | None, audience: str = "users") -> list[str]:
         async with self.Session() as session:

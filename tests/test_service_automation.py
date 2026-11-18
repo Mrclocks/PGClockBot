@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy import event, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import (
     Base,
@@ -31,6 +28,7 @@ from app.services.service_automation import (
     process_service_automation,
 )
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 GB = 1024**3
 
@@ -66,15 +64,7 @@ class FakePG:
 
 class AutomationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'test.db'}"
-        )
-
-        @event.listens_for(self.engine.sync_engine, "connect")
-        def foreign_keys(connection, record):
-            connection.execute("PRAGMA foreign_keys=ON")
-
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -132,7 +122,6 @@ class AutomationTests(unittest.IsolatedAsyncioTestCase):
         for p in reversed(self.patches):
             p.stop()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def enable(self, action="renew", choice_id=None):
         choices = {
@@ -650,7 +639,7 @@ class ExhaustionTests(unittest.TestCase):
 
 
 class AutomationMigrationTests(unittest.TestCase):
-    def test_upgrade_and_deleted_choices_on_sqlite(self):
+    def test_upgrade_and_deleted_choices_clear_the_automation(self):
         import importlib.util
         import sqlalchemy as sa
         from alembic.migration import MigrationContext
@@ -660,9 +649,8 @@ class AutomationMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("automation_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite://")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
-            conn.execute(sa.text("PRAGMA foreign_keys=ON"))
             for name in (
                 "bot_users",
                 "user_services",

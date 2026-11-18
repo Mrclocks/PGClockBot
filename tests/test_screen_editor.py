@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import tempfile
 from datetime import datetime, timezone
 import time
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.fsm.context import FSMContext
@@ -14,7 +12,7 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, Chat, InlineKeyboardMarkup, Message, MessageEntity, Update, User
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
@@ -33,6 +31,7 @@ from app.services.screen_editor import (
 from app.services.rich_text import button_icon_custom_emoji_id
 from app.services.users import DEFAULT_SETTINGS, clear_settings_cache
 from tests.test_bot_ui_keyboard_snapshots import default_ui, sample_reseller_profile
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 OWNER = EditorActor(user_id=7, shop_id=None)
 SHOP_A = 501
@@ -229,11 +228,11 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401  (registers every table on Base)
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'editor.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, SHOP_A)
         self.state = FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=1, user_id=1))
         clear_settings_cache()
 
@@ -242,7 +241,6 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         edit_mode_store.deactivate(SHOP_OWNER)
         clear_settings_cache()
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _owner(self, data: str) -> MagicMock:
         callback = _callback(data)
@@ -467,8 +465,7 @@ class EditorInputRoutingTests(unittest.IsolatedAsyncioTestCase):
 
         import app.bot as bot_package
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'routing.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -476,6 +473,7 @@ class EditorInputRoutingTests(unittest.IsolatedAsyncioTestCase):
             session.add(BotUser(id=OWNER.user_id, telegram_id=OWNER.user_id, referral_code="own", role="admin"))
             session.add(BotUser(id=SHOP_OWNER.user_id, telegram_id=SHOP_OWNER.user_id, referral_code="shp", role="reseller"))
             await session.commit()
+        await add_shop_users(self.Session, SHOP_A)
         self.on_shop_bot = False
         clear_settings_cache()
         self.routers = bot_package.bot_routers()
@@ -516,7 +514,6 @@ class EditorInputRoutingTests(unittest.IsolatedAsyncioTestCase):
         edit_mode_store.deactivate(SHOP_OWNER)
         clear_settings_cache()
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _type_new_name(
         self, screen_id: str, label_key: str, text: str, *, premium: bool = False, nav_level: str = nav.NAV_ADMIN

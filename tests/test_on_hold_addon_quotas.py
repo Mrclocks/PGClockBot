@@ -7,11 +7,12 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
-from app.db.models import Order, OrderStatus, Plan, ServiceAddonPack, UserService
+from app.db.models import BotUser, Order, OrderStatus, Plan, ServiceAddonPack, UserService
 from app.services.service_addons import _apply_pack_to_service, apply_service_addon
+from tests.postgres_support import add_rows, scoped_async_engine
 
 NOW = 2_000_000_000
 DAY = 86400
@@ -259,17 +260,20 @@ class OnHoldAddonQuotaTests(unittest.IsolatedAsyncioTestCase):
 
 class OnHoldAddonDeliveryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        async with self.Session() as session:
+            session.add(BotUser(id=1, telegram_id=1, referral_code="buyer"))
+            await session.commit()
 
     async def asyncTearDown(self):
         await self.engine.dispose()
 
     async def seed_order(self, kind, *, plan_days):
         async with self.Session() as session:
-            session.add_all(
+            await add_rows(session,
                 [
                     Plan(id=7, name="base", price=1, duration_days=plan_days),
                     ServiceAddonPack(id=1, name="extra", kind=kind, amount=5, price=1),
@@ -337,6 +341,8 @@ class OnHoldAddonDeliveryTests(unittest.IsolatedAsyncioTestCase):
                             await session.delete(
                                 await session.get(model, 1 if model is not Plan else 7)
                             )
+                            # Children first: the unit of work does not order deletes by foreign key.
+                            await session.flush()
                         await session.commit()
                 pg.modify_user_by_id.assert_awaited_once()
 

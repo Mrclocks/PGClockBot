@@ -1,18 +1,17 @@
 """Staff search by subscription link: shop scope, no secret leak, result buttons and the typed step."""
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.exceptions import TelegramBadRequest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import admin
 from app.bot.handlers import subscription_lookup as bot
 from app.db.models import Base, BotUser, Plan, ShopWallet, UserService
 from app.services import bot_feedback_texts as feedback
 from app.services.subscription_lookup import find_service_by_link, link_token
+from tests.postgres_support import scoped_async_engine
 
 PLATFORM_TOKEN = "PlatformTokenAbcdef0123456789ABCDEF-_xyz"
 SHOP_TOKEN = "ShopTwoTokenAbcdef0123456789ABCDEF-_xyzq"
@@ -23,8 +22,7 @@ URL = "https://sub.example.com/sub/{}"
 
 class LookupCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'lookup.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -53,7 +51,6 @@ class LookupCase(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
 
 class LookupServiceTests(LookupCase):

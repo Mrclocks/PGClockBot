@@ -11,14 +11,13 @@ PasarGuard identity/permissions instead of the newly-assigned admin's.
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 import app.services.pasarguard as pasarguard_mod
+from tests.postgres_support import scoped_async_engine
 
 
 class PgResellerClientCacheKeyTests(unittest.IsolatedAsyncioTestCase):
@@ -26,9 +25,7 @@ class PgResellerClientCacheKeyTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "pgcache.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -37,7 +34,6 @@ class PgResellerClientCacheKeyTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         pasarguard_mod.reset_pg()
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _make_reseller_profile(self, session, *, user_id: int, pg_username: str):
         from app.db.models import BotUser, ResellerProfile, Role

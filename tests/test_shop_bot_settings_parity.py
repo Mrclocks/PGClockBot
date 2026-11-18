@@ -7,12 +7,10 @@ cycled on the shop's own copy.
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot.handlers import reseller_settings
 from app.services import bot_feedback_texts as feedback

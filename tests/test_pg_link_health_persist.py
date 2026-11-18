@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services import pg_link_health as health
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,10 +21,7 @@ class PersistLinkHealthTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'persist.db'}"
-        )
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -32,7 +29,6 @@ class PersistLinkHealthTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmpdir.cleanup()
         health.reset()
 
     async def test_persist_is_debounced_to_once_per_minute(self) -> None:
@@ -79,7 +75,7 @@ class PersistLinkHealthTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PgLinkHealthStateMigrationTests(unittest.TestCase):
-    def test_sqlite_upgrade_repeat_and_downgrade(self) -> None:
+    def test_upgrade_repeat_and_downgrade(self) -> None:
         import sqlalchemy as sa
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
@@ -91,7 +87,7 @@ class PgLinkHealthStateMigrationTests(unittest.TestCase):
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             with Operations.context(MigrationContext.configure(conn)):
                 migration.upgrade()

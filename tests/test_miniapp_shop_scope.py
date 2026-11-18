@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.miniapp_pages import register_miniapp_pages
 from app.db.models import Base, BotUser, BotUserShop, ResellerProfile
@@ -36,6 +36,7 @@ from app.services.miniapp_shop import (
 )
 from app.services.secret_box import seal_bot_token
 from app.services.users import clear_settings_cache, set_setting
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN_TOKEN = "111111:main-bot-token"
@@ -60,7 +61,7 @@ def signed(token: str, telegram_id: int, *, age: int = 0) -> str:
 class ShopScopeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -226,7 +227,7 @@ class ShopKeyMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("m0070", ROOT / "alembic/versions/0070_shop_miniapp_key.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text("CREATE TABLE reseller_profiles (id INTEGER PRIMARY KEY, user_id INTEGER)"))
             conn.execute(text("INSERT INTO reseller_profiles VALUES (1, 5), (2, 6)"))

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
