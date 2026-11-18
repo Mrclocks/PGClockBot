@@ -175,6 +175,8 @@
       {% include "_plan_naming_fields.html" %}
     {% endcall %}
     {% call ds_sec('نمایش در ربات', sid='utp-sec-bot') %}
+      {# The placement choices come from the /plans route; the service-owner switch is saved with them. #}
+      {% if trial_placement_labels is defined %}
       {% set trial_placement = values.get('trial_button_placement') %}
       {% if trial_placement not in trial_placement_labels %}{% set trial_placement = 'offer' %}{% endif %}
       <div class="form-field" data-ds-show-when="#trial-enabled:1"{% if not trial_on %} hidden{% endif %}>
@@ -188,6 +190,7 @@
         <small class="muted">پیام ورودی: زیر پیام خوش‌آمد. کیبورد اصلی: در منوی پایین ربات؛ جایش را در تنظیمات منو، بخش «منوی فعال» عوض کنید. کاربری که تستش را گرفته، دکمه را دیگر نمی‌بیند.</small>
       </div>
       <div class="ds-rows">{{ ds_switch('trial_for_service_owners', 'نمایش به کاربرانی که سرویس دارند', help='خاموش: فقط کاربری که در این فروشگاه سرویسی ندارد تست می‌گیرد. روشن: مشتری‌ای که سرویس دارد هم اگر تست نگرفته باشد، دکمه و پلن تست را می‌بیند.', checked=values.get('trial_for_service_owners') in ['1','true','yes','on'], show_when='#trial-enabled:1', hidden=not trial_on) }}</div>
+      {% endif %}
       {% if trial and trial.button_style is not none %}{% set plan_button_style = trial.button_style if trial.button_style else '' %}{% else %}{% set plan_button_style = 'inherit' %}{% endif %}
       {% set plan_color_compact = true %}
       <div class="form-field">رنگ دکمه{% include "_plan_button_style_field.html" %}</div>
