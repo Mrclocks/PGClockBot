@@ -21,6 +21,7 @@ from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarn
 
 SHOP_ID = 5
 PG_LINK_KEYS = ("pg_link_watchdog_enabled", "pg_link_alerts_enabled")
+OPERATIONS_KEYS = ("action_center_expire_days", "one_tap_renew_enabled", "capacity_warn_pct", "funnel_tracking_enabled")
 MONITOR_ADMIN_KEYS = (
     "connection_status_admin_title",
     "connection_status_account_prompt",
@@ -72,6 +73,23 @@ class ShopNotificationsTabTests(PlatformOnlyGroupsHarness):
         self.assertEqual(response.status_code, 303)
         self.assertEqual(await self.shop_rows(PG_LINK_KEYS), {})
 
+    async def test_saving_shop_alerts_does_not_switch_off_hidden_operations_toggles(self) -> None:
+        # The page shows only the shop's alerts; the save used to store "0" for the unseen toggles.
+        response = await self.form(
+            SHOP_SESSION, "/shop-settings?tab=notifications", {"s_user_alert_low_enabled": "1"}
+        )
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(await self.shop_rows(OPERATIONS_KEYS), {})
+        self.assertEqual((await self.shop_rows(("user_alert_low_enabled",))), {"user_alert_low_enabled": "1"})
+        shop = await self.stored(SHOP_ID)
+        self.assertEqual(shop["one_tap_renew_enabled"], "1")
+        self.assertEqual(shop["funnel_tracking_enabled"], "1")
+
+    async def test_shop_page_does_not_offer_operations_settings(self) -> None:
+        response = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=notifications")
+        for key in OPERATIONS_KEYS:
+            self.assertNotIn(f'name="s_{key}"', response.text)
+
     async def test_owner_still_edits_panel_link_switches(self) -> None:
         response = await self.call(OWNER_SESSION, "GET", "/settings?tab=notifications")
         self.assertEqual(response.status_code, 200)
@@ -110,5 +128,5 @@ class ShopMessagesTabTests(PlatformOnlyGroupsHarness):
 class ShopImportTests(PlatformOnlyGroupsHarness):
     async def test_shop_settings_import_may_not_write_platform_only_fields(self) -> None:
         allowed = shop_bundle_allowed_setting_keys()
-        for key in (*PG_LINK_KEYS, *MONITOR_ADMIN_KEYS):
+        for key in (*PG_LINK_KEYS, *MONITOR_ADMIN_KEYS, *OPERATIONS_KEYS):
             self.assertNotIn(key, allowed)
