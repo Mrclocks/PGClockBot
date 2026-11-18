@@ -17,7 +17,7 @@ from app.db.models import Base, BotUser, PgAdminSubscription, ResellerPlan
 from app.services.pg_admin_subscription import (
     compute_renew_invoice,
     plan_carries_remaining_period,
-    plan_keeps_extras_on_renew,
+    plan_keeps_extra,
     renew_subscription,
 )
 
@@ -29,7 +29,8 @@ class ResellerCarryHelpersTests(unittest.TestCase):
     def test_defaults_keep_previous_behavior(self):
         plan = SimpleNamespace()
         self.assertTrue(plan_carries_remaining_period(plan))
-        self.assertTrue(plan_keeps_extras_on_renew(plan))
+        self.assertTrue(plan_keeps_extra(plan, "gb"))
+        self.assertTrue(plan_keeps_extra(plan, "users"))
 
     def test_invoice_skips_extras_when_plan_clears_them(self):
         plan = SimpleNamespace(
