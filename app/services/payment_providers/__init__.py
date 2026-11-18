@@ -29,7 +29,6 @@ def get_psp_adapter(provider: str, *, ui: dict, public_base_url: str) -> PspAdap
     if name == "tonpays":
         return TonPaysAdapter(
             api_key=str(ui.get("psp_merchant_id") or ""),
-            sandbox=str(ui.get("psp_sandbox") or "1") in {"1", "true", "yes", "on"},
             webhook_secret=str(ui.get("tonpays_webhook_secret") or ""),
         )
     raise ValueError(f"unknown psp provider: {name}")

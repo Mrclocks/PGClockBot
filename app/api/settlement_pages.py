@@ -482,7 +482,8 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
         if provider_l == "tonpays" and request.method.upper() == "POST":
             signature = (request.headers.get("x-tonpays-signature") or "").strip()
             body = await request.body()
-            tp_ui = await _tp_get_all_settings(session, reseller_id=reseller_id)
+            # Webhook secret is a global/platform setting, not reseller-specific
+            tp_ui = await _tp_get_all_settings(session, reseller_id=None)
             wh = await verify_tonpays_webhook(
                 api_key=str(tp_ui.get("psp_merchant_id") or ""),
                 webhook_secret=str(tp_ui.get("tonpays_webhook_secret") or ""),

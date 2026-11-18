@@ -7,6 +7,7 @@ import hmac
 import importlib.util
 import json
 import os
+import secrets
 import tempfile
 import time
 import unittest
@@ -33,6 +34,7 @@ from app.db.models import (
 )
 from app.services.payment_providers.base import CheckoutResult, VerifyResult
 from app.services.payment_providers.tonpays import TonPaysAdapter, TonPaysError
+from app.services.payment_providers import verify_tonpays_webhook
 from app.services.payment_settlement import complete_psp_return, create_psp_checkout
 from app.services.psp_gateways import (
     MAX_PSP_GATEWAYS,
@@ -367,6 +369,125 @@ class TonPaysAdapterTests(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(TonPaysError):
             await self.adapter.create_checkout(req)
+
+
+class TonPaysWebhookRouteTests(unittest.IsolatedAsyncioTestCase):
+    """Integration test for the TonPays webhook HTTP endpoint."""
+
+    async def asyncSetUp(self) -> None:
+        clear_settings_cache()
+        self._tmp = tempfile.TemporaryDirectory()
+        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 't.db'}")
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.Session = async_sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
+        async with self.Session() as session:
+            await set_setting(session, "pay_psp_enabled", "1")
+            await set_setting(session, "psp_merchant_id", "test-merchant")
+            await set_setting(session, "psp_provider", "tonpays")
+            await set_setting(session, "tonpays_webhook_secret", "wh-secret")
+            user = BotUser(telegram_id=7002, username="u2", full_name="u2", referral_code="r72", role=Role.USER.value)
+            session.add(user)
+            await session.commit()
+            self.user_id = int(user.id)
+        clear_settings_cache()
+
+    async def asyncTearDown(self) -> None:
+        await self.engine.dispose()
+        self._tmp.cleanup()
+        clear_settings_cache()
+
+    def _signed_body(self, body: dict, offset_seconds: int = 0) -> tuple[bytes, str]:
+        import time
+        raw = json.dumps(body, separators=(",", ":")).encode()
+        ts = int(time.time()) + offset_seconds
+        msg = f"{ts}.".encode() + raw
+        sig = hmac.new(b"wh-secret", msg, hashlib.sha256).hexdigest()
+        return raw, f"t={ts},v1={sig}"
+
+    async def test_webhook_invalid_signature_returns_400(self) -> None:
+        """Invalid signature should return 400 without touching settlement."""
+        from app.api.settlement_pages import _register_psp_return
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        app = FastAPI()
+        from app.db.session import SessionLocal
+        _register_psp_return(app, lambda: self.Session())
+        client = TestClient(app, raise_server_exceptions=False)
+
+        # Create a settlement directly in DB (skip real TonPays API call)
+        async with self.Session() as session:
+            await set_setting(session, "pay_psp_enabled", "1")
+            await set_setting(session, "psp_merchant_id", "test-merchant")
+            await set_setting(session, "psp_provider", "tonpays")
+            await set_setting(session, "tonpays_webhook_secret", "wh-secret")
+            import random
+            unique_id = random.randint(10000, 99999)
+            user = BotUser(telegram_id=unique_id, username=f"u{unique_id}", full_name=f"u{unique_id}", referral_code=f"r{unique_id}", role=Role.USER.value)
+            session.add(user)
+            await session.commit()
+            self.user_id = int(user.id)
+            
+            payment = Payment(
+                user_id=self.user_id,
+                amount=10000,
+                method=PaymentMethod.PSP.value,
+                status=PaymentStatus.PENDING.value,
+                is_wallet_topup=True,
+            )
+            session.add(payment)
+            await session.commit()
+            
+            # Create settlement manually with known external_ref (TonPays invoice_id)
+            settlement = PaymentSettlement(
+                payment_id=payment.id,
+                channel="psp",
+                provider="tonpays",
+                amount=10000,
+                status=SettlementStatus.AWAITING.value,
+                external_ref="test-invoice-123",  # TonPays invoice_id
+                checkout_token=secrets.token_urlsafe(24),
+                shop_owner_id=user.id,
+                idempotency_key=secrets.token_urlsafe(24),
+            )
+            session.add(settlement)
+            await session.commit()
+            await session.refresh(settlement)
+            settlement_id = int(settlement.id)
+
+        # Clear settings cache to ensure fresh settings read
+        clear_settings_cache()
+
+        body = {"event": "invoice.completed", "paid": True, "status": "completed", "invoice_id": "test-invoice-123"}
+        raw, _ = self._signed_body(body)
+
+        # Invalid signature
+        resp = client.post(
+            f"/payments/settlement/psp/tonpays/return/{settlement_id}",
+            content=raw,
+            headers={"Content-Type": "application/json", "X-TonPays-Signature": "t=1,v1=deadbeef"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("نامعتبر", resp.text)
+
+    async def test_webhook_no_secret_skips_verification(self) -> None:
+        """When no webhook_secret configured, webhook verification is skipped (returns None)."""
+        result = await verify_tonpays_webhook(
+            api_key="test-key",
+            webhook_secret="",
+            body=b'{"event": "invoice.completed", "paid": true, "status": "completed", "invoice_id": "inv-1"}',
+            signature="t=1,v1=deadbeef",
+        )
+        self.assertIsNone(result)
+
+    def _signed_body(self, body: dict, offset_seconds: int = 0) -> tuple[bytes, str]:
+        import time
+        raw = json.dumps(body, separators=(",", ":")).encode()
+        ts = int(time.time()) + offset_seconds
+        msg = f"{ts}.".encode() + raw
+        sig = hmac.new(b"wh-secret", msg, hashlib.sha256).hexdigest()
+        return raw, f"t={ts},v1={sig}"
 
 
 if __name__ == "__main__":
