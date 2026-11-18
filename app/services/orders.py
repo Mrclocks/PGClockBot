@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.services.custom_plans import discard_unsold_custom_plan
+from app.services.panel_user_note import build_panel_user_note
 from app.services.funnel_events import STEP_DELIVERED, STEP_RECEIPT, record_order_funnel
 from app.services.catalog_pricing import PriceTarget, active_discounts, annotate_prices, assert_expected_price, displayed_quote, quote_price, quote_product, sale_price
 from app.db.models import (
@@ -2492,9 +2493,13 @@ async def deliver_order(
 
         async def _create_one(index: int) -> UserService:
             username = await _username(chosen_name)
-            note = f"PGClockBot order #{order.id}"
-            if qty > 1:
-                note = f"{note} ({index}/{qty})"
+            note = build_panel_user_note(
+                order_id=int(order.id),
+                telegram_id=getattr(order.user, "telegram_id", None),
+                telegram_username=getattr(order.user, "username", None),
+                index=index,
+                quantity=qty,
+            )
             pg_user, username = await create_with_name_fallback(
                 lambda name: _create_panel_user(name, note),
                 username,

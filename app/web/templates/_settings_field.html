@@ -1,6 +1,5 @@
 {% from "_list_input.html" import list_input %}
 {% from "macros.html" import setting_help %}
-{% from "_icons.html" import icon %}
 {% set key = field[0] %}
 {% set label = field[1] %}
 {% set kind = field[2] if field|length > 2 else 'text' %}
@@ -25,9 +24,7 @@
 {% set controller_value = (values.get(rule[0], '')|string|lower) if rule else '' %}
 {% set controller_value = '1' if controller_value in ['true', 'yes', 'on'] else controller_value %}
 {% set rule_hidden = rule and controller_value not in rule[1] %}
-{# A switch whose "on" accepts a security risk carries its warning right under it (DESIGN_SYSTEM.md §6, risk switch). #}
-{% set risk_note = (setting_risk_notes|default({})).get(key) if kind == 'toggle' else '' %}
-<div class="setting-item {% if kind in full_kinds or key in full_keys %}full{% endif %}{% if risk_note %} setting-item--risk{% endif %}"{% if rule %} data-setting="{{ key }}" data-show-when="s_{{ rule[0] }}:{{ rule[1]|join(',') }}"{% endif %}{% if rule_hidden %} hidden{% endif %}>
+<div class="setting-item {% if kind in full_kinds or key in full_keys %}full{% endif %}"{% if rule %} data-setting="{{ key }}" data-show-when="s_{{ rule[0] }}:{{ rule[1]|join(',') }}"{% endif %}{% if rule_hidden %} hidden{% endif %}>
   {% if kind == 'toggle' %}
   <label class="toggle-row ui-switch-row">
     <span class="ui-switch-copy">
@@ -35,13 +32,10 @@
       {{ setting_help(help) }}
     </span>
     <span class="ui-switch">
-      <input type="checkbox" name="s_{{ key }}" value="1" {% if val in ['1','true','yes','on'] %}checked{% endif %}{% if risk_note %} aria-describedby="risk-note-{{ key }}"{% endif %} />
+      <input type="checkbox" name="s_{{ key }}" value="1" {% if val in ['1','true','yes','on'] %}checked{% endif %} />
       <span class="ui-switch-track" aria-hidden="true"></span>
     </span>
   </label>
-  {% if risk_note %}
-  <div class="ds-note" data-tone="danger" role="note" id="risk-note-{{ key }}">{{ icon('shield-alert') }}<span>{{ risk_note }}</span></div>
-  {% endif %}
   {% elif kind == 'select' %}
   {% set select_val = val if val else (options[0][0] if options else '') %}
   <label>{{ label }}
@@ -52,6 +46,22 @@
     </select>
     {{ setting_help(help) }}
   </label>
+  {% elif kind == 'threshold' %}
+  {# A number and the unit it is measured in (options[0] = unit key, options[1] = unit choices); only that unit is compared. #}
+  {% set unit_key = options[0] %}
+  {% set unit_val = values.get(unit_key, '') or options[1][0][0] %}
+  <div class="form-field">
+    <span>{{ label }}</span>
+    <div class="ds-grid-2">
+      <input name="s_{{ key }}" type="number" value="{{ val }}" dir="ltr" min="1" step="1" inputmode="numeric" aria-label="{{ label }}" />
+      <select name="s_{{ unit_key }}" aria-label="{{ label }} — واحد">
+        {% for opt_val, opt_label in options[1] %}
+        <option value="{{ opt_val }}" {% if unit_val == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {{ setting_help(help) }}
+  </div>
   {% elif kind == 'btn_color' %}
   {# Same tone-aware select as رنگبندی دکمه‌ها / plan color fields #}
   {% set cur_tone = 'default' if not val else val %}
@@ -147,25 +157,9 @@
       {% if key in ['referral_bonus', 'stars_toman_per_star', 'billing_price_per_gb', 'billing_low_balance'] %}data-money{% endif %}
       value="{{ val }}"
       dir="ltr"
-      {% if key in ['user_alert_low_traffic_pct', 'user_alert_low_time_pct'] %}
-      min="1" max="99" step="1" inputmode="numeric"
-      {% endif %}
     />
     {{ setting_help(help) }}
   </label>
-  {% elif kind == 'number_unlimited' %}
-  {# «نامحدود» button as in the plan and gift-code forms: it empties the field, and an empty field saves as no limit.
-     options = (stored unlimited value, default number). Pressed only for the stored unlimited value; anything
-     else shows the number the service reads (the default when nothing valid is stored), so a re-save keeps it. #}
-  {% set unlimited_value, default_number = options %}
-  {% set capped = (val | string | trim) != unlimited_value %}
-  {% set val = val if (val is string and val.isdigit()) else default_number %}
-  <div class="form-field">
-    <span class="ds-label-row"><span class="ds-label-text">{{ label }}</span>
-      <button type="button" class="ds-mini" aria-pressed="{{ 'false' if capped else 'true' }}" data-ds-unlimited="#s-{{ key }}" data-ds-empty-is-unlimited aria-label="{{ label }} نامحدود">نامحدود</button></span>
-    <span class="ds-unit{% if not capped %} is-unlimited{% endif %}" data-unlimited-label="نامحدود"><input name="s_{{ key }}" id="s-{{ key }}" type="number" min="1" step="1" value="{{ val if capped else '' }}" inputmode="numeric" dir="ltr" aria-label="{{ label }}"{% if not capped %} readonly{% endif %} /><span class="ds-unit-label">عدد</span></span>
-    {{ setting_help(help) }}
-  </div>
   {% elif kind == 'image' %}
   <div class="image-setting">
     <strong>{{ label }}</strong>
