@@ -22,7 +22,7 @@ RESELLER_FORM_FIELDS = {
     "billing_mode", "plan_kind", "category_id", "name", "price", "price_per_gb", "sort_order", "description",
     "duration_days", "included_gb", "included_users", "addon_gb", "addon_users", "renew_price",
     "renew_pricing_mode", "create_pg_admin", "share_pg_panel_url", "carry_remaining_period",
-    "keep_extras_on_renew", "allow_buy_extra", "extra_gb_price", "extra_user_price", "extra_gb_amount",
+    "keep_extra_gb_on_renew", "keep_extra_users_on_renew", "allow_buy_extra", "extra_gb_price", "extra_user_price", "extra_gb_amount",
     "extra_gb_style", "extra_user_amount", "extra_user_style", "pg_role_id", "is_active", "button_style",
 }
 RISKY = {"payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "service_cleanup", "free_checkout"}

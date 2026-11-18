@@ -22,7 +22,7 @@ from app.services.service_import_config import (
     UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
     UNLIMITED_WORDS as IMPORT_UNLIMITED_WORDS,
 )
-from app.services.settings_operation_fields import OPERATION_NUMBER_BOUNDS
+from app.services.settings_operation_fields import ALERT_UNIT_OPTIONS, OPERATION_NUMBER_BOUNDS
 
 CUSTOM_PLAN_MAX_GB = 100_000
 CUSTOM_PLAN_MAX_DAYS = 3650
@@ -62,6 +62,7 @@ UNLIMITED_LABEL = "نامحدود"
 SELECT_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
     IMPORT_KEY_MODE: (("instant", "فوری"), ("approval", "با تأیید ادمین")),
+    **ALERT_UNIT_OPTIONS,
 }
 
 

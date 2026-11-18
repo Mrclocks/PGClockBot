@@ -23,6 +23,7 @@ from app.bot.auth import (
 )
 from app.config import get_settings
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan, Role, Ticket, UserService
+from app.services.renewal_carry import CARRY_CODES, carry_button_text, carry_status_text, toggle_plan_carry
 from app.services.color_tags import risk_mark
 from app.services.home_overview import bot_dashboard_summary
 from app.services.formatting import (
@@ -326,14 +327,13 @@ async def _plan_detail_text(p: Plan, *, category_name: str | None = None) -> str
     else:
         link = "⚠️ هنوز به تمپلیت/گروه وصل نشده — خرید تحویل نمی‌شود"
     cat = html.escape(category_name) if category_name else "—"
-    carry = bool(getattr(p, "carry_remaining_quota", True))
     return (
         f"💎 <b>پلن #{p.id}</b> — {html.escape(p.name)}\n\n"
         f"قیمت: {format_toman(p.price, get_settings().currency)}\n"
         f"مدت: {format_plan_duration_days(p.duration_days)}\n"
         f"حجم: {gb}\n"
         f"برچسب دسته: {cat}\n"
-        f"مانده در تمدید: {'منتقل می‌شود' if carry else 'منتقل نمی‌شود'}\n"
+        f"مانده در تمدید: {carry_status_text(p)}\n"
         f"وضعیت: {'فعال' if p.is_active else 'خاموش'}\n"
         f"اتصال پاسارگارد: {link}"
     )
@@ -384,13 +384,9 @@ def _plan_detail_keyboard(p: Plan, ui: dict | None = None) -> InlineKeyboardMark
                 style=st,
             )
         ],
-        [
-            kb._ikb(
-                ("✅ " if getattr(p, "carry_remaining_quota", True) else "⬜️ ")
-                + "انتقال مانده در تمدید",
-                callback_data=f"adm:plan:flag:carry:{p.id}",
-                style=st,
-            )
+        *[
+            [kb._ikb(carry_button_text(p, kind), callback_data=f"adm:plan:flag:carry:{code}:{p.id}", style=st)]
+            for code, kind in CARRY_CODES.items()
         ],
         [
             kb._ikb(
@@ -2022,17 +2018,18 @@ async def plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: B
     await _render_plans_list(callback, session)
 
 
-@router.callback_query(F.data.regexp(r"^adm:plan:flag:carry:\d+$"))
+@router.callback_query(F.data.regexp(r"^adm:plan:flag:carry:[vt]:\d+$"))
 @require_bot_owner_handler
 async def plan_carry_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
-    plan = await session.get(Plan, int(callback.data.rsplit(":", 1)[-1]))
+    _, _, _, _, code, plan_id = callback.data.split(":")
+    plan = await session.get(Plan, int(plan_id))
     if not plan or plan.is_trial:
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
-    plan.carry_remaining_quota = not bool(getattr(plan, "carry_remaining_quota", True))
+    toggle_plan_carry(plan, CARRY_CODES[code])
     await session.commit()
     await callback.answer(feedback.UPDATED)
     if callback.message:

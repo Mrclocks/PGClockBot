@@ -109,7 +109,8 @@
       </div>
       <div class="ds-rows" id="edit-renew-carry-block">
         {{ ds_switch('carry_remaining_period', 'انتقال زمان باقی‌مانده در تمدید', 'روشن: مدت جدید از تاریخ انقضای فعلی اضافه می‌شود. خاموش: دوره از همین الان شروع می‌شود.', plan.carry_remaining_period) }}
-        {{ ds_switch('keep_extras_on_renew', 'حفظ حجم و کاربر اضافه در تمدید', 'روشن: ظرفیت اضافه‌خریداری‌شده به دوره بعد می‌ماند و در قیمت بر اساس ظرفیت حساب می‌شود. خاموش: با تمدید پاک می‌شود.', plan.keep_extras_on_renew) }}
+        {{ ds_switch('keep_extra_gb_on_renew', 'حفظ حجم اضافه در تمدید', 'روشن: حجم اضافه‌خریداری‌شده به دوره بعد می‌ماند و در قیمت بر اساس ظرفیت حساب می‌شود. خاموش: با تمدید پاک می‌شود.', plan.keep_extra_gb_on_renew) }}
+        {{ ds_switch('keep_extra_users_on_renew', 'حفظ کاربر اضافه در تمدید', 'روشن: کاربر اضافه‌خریداری‌شده به دوره بعد می‌ماند و در قیمت بر اساس ظرفیت حساب می‌شود. خاموش: با تمدید پاک می‌شود.', plan.keep_extra_users_on_renew) }}
       </div>
     </div>
   </section>

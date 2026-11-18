@@ -535,6 +535,10 @@ tests/test_reseller_revoke_panel_admin.py
 tests/test_pg_quota_parity.py
 tests/test_trial_keyboard_button.py
 tests/test_inbox_customer_alerts_off.py
+tests/test_inbox_modal.py
+#
+# Paid orders the panel did not apply: retry, one wallet refund per order, shop purse isolation.
+tests/test_paid_order_recovery.py
 tests/test_shop_settings_platform_only_groups.py
 tests/test_bot_settings_edit_path.py
 tests/test_bot_message_text_settings.py

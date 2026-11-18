@@ -899,7 +899,11 @@ DEFAULT_SETTINGS = {
     "user_alert_low_enabled": "0",
     "user_alert_low_traffic_pct": "20",
     "user_alert_low_time_pct": "20",
+    # Superseded by the time unit below; still read for shops that set it and have not saved the new form.
     "user_alert_low_days": "0",
+    "user_alert_low_traffic_unit": "pct",
+    # Empty until the alert form is saved: then a legacy days value (above) decides (apply_legacy_alert_days).
+    "user_alert_low_time_unit": "",
     # Empty = the built-in alert texts (usage_alert_messages).
     "user_alert_time_text": "",
     "user_alert_traffic_text": "",
@@ -1606,25 +1610,21 @@ SETTING_GROUPS = {
             "user_alert_low_enabled",
             "ارسال خودکار هشدار کمبود به کاربر",
             "toggle",
-            "وقتی حجم یا زمان باقی‌ماندهٔ سرویس از درصد تعیین‌شده کمتر شود، به کاربر در تلگرام پیام می‌رود.",
+            "وقتی حجم یا زمان باقی‌ماندهٔ سرویس از حد تعیین‌شده کمتر شود، به کاربر در تلگرام پیام می‌رود.",
         ),
         (
             "user_alert_low_traffic_pct",
-            "کمتر از چند درصد حجم؟",
-            "number",
-            "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ حجم مانده پیام برود",
+            "حجم کمتر از",
+            "threshold",
+            "وقتی حجم باقی‌مانده از این مقدار کمتر شود پیام می‌رود. درصد از کل حجم سرویس است؛ گیگ مقدار ثابت باقی‌مانده.",
+            ("user_alert_low_traffic_unit", [("pct", "درصد"), ("gb", "گیگ")]),
         ),
         (
             "user_alert_low_time_pct",
-            "کمتر از چند درصد زمان؟",
-            "number",
-            "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام برود",
-        ),
-        (
-            "user_alert_low_days",
-            "یا وقتی چند روز مانده؟",
-            "number",
-            "۰ تا ۶۰ — مثلاً ۳ یعنی سه روز مانده به پایان هم پیام برود، هر کدام زودتر برسد؛ ۰ = فقط درصد",
+            "زمان کمتر از",
+            "threshold",
+            "وقتی زمان باقی‌مانده از این مقدار کمتر شود پیام می‌رود. درصد از مدت سرویس است؛ روز تعداد روز باقی‌مانده.",
+            ("user_alert_low_time_unit", [("pct", "درصد"), ("day", "روز")]),
         ),
         (
             "user_alert_time_text",
@@ -2243,6 +2243,8 @@ def keys_for_tab(tab: str) -> set[str]:
     for name in names:
         for item in SETTING_GROUPS.get(name, []):
             keys.add(item[0])
+            if len(item) > 4 and item[2] == "threshold":
+                keys.add(item[4][0])
     return keys
 
 
@@ -2326,8 +2328,25 @@ async def get_all_settings(
     from app.services.payment_destinations import enrich_payment_settings
 
     data = enrich_payment_settings(refresh_retired_defaults(readable_monitor_texts(data), DEFAULT_SETTINGS))
+    apply_legacy_alert_days(data)
     _SETTINGS_CACHE[cache_key] = (now, dict(data))
     return data
+
+
+def apply_legacy_alert_days(data: dict[str, str]) -> None:
+    """Carry a days threshold saved before the unit choice existed into the time threshold, in place.
+
+    Only while the time unit is still empty: saving the alert form stores an explicit unit.
+    """
+    if (data.get("user_alert_low_time_unit") or "").strip():
+        return
+    try:
+        legacy_days = int(float(str(data.get("user_alert_low_days") or "0").strip()))
+    except (TypeError, ValueError, OverflowError):
+        legacy_days = 0
+    if legacy_days > 0:
+        data["user_alert_low_time_unit"] = "day"
+        data["user_alert_low_time_pct"] = str(legacy_days)
 
 
 def on(value: str | None) -> bool:

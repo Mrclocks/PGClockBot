@@ -15,6 +15,7 @@ from app.bot import keyboards as kb
 from app.bot.list_pages import page_number
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
+from app.services.renewal_carry import CARRY_CODES, carry_button_text, carry_status_text, toggle_plan_carry
 from app.services.plans_catalog import (
     load_pg_plan_options,
     plan_groups_denial,
@@ -104,7 +105,6 @@ async def _plans_kb(
 
 def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
     """One plan's actions; «بازگشت» returns to the plans screen."""
-    carry = bool(getattr(plan, "carry_remaining_quota", True))
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -114,11 +114,9 @@ def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
                 ),
                 InlineKeyboardButton(text="🗑 حذف", callback_data=f"res:plan:del:{plan.id}"),
             ],
-            [
-                InlineKeyboardButton(
-                    text=("✅ " if carry else "⬜️ ") + "انتقال مانده در تمدید",
-                    callback_data=f"res:plan:carry:{plan.id}",
-                )
+            *[
+                [InlineKeyboardButton(text=carry_button_text(plan, kind), callback_data=f"res:plan:carry:{code}:{plan.id}")]
+                for code, kind in CARRY_CODES.items()
             ],
             [InlineKeyboardButton(text="✏️ توضیح", callback_data=f"res:plan:desc:{plan.id}")],
             [
@@ -150,14 +148,13 @@ def _plan_text(plan: Plan, *, category_name: str | None = None) -> str:
     )
     cat = category_name or "—"
     description = html.escape((plan.description or "").strip()) or "—"
-    carry = bool(getattr(plan, "carry_remaining_quota", True))
     return (
         f"💎 <b>{html.escape(plan.name)}</b>\n"
         f"قیمت: {plan.price:,} تومان\n"
         f"مدت: {plan.duration_days} روز · حجم: {gb}\n"
         f"برچسب دسته: {cat}\n"
         f"توضیح: {description}\n"
-        f"مانده در تمدید: {'منتقل می‌شود' if carry else 'منتقل نمی‌شود'}\n"
+        f"مانده در تمدید: {carry_status_text(plan)}\n"
         f"پاسارگارد: {src}\n"
         f"وضعیت: {'فعال' if plan.is_active else 'خاموش'}"
     )
@@ -384,7 +381,7 @@ async def res_plan_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         )
 
 
-@router.callback_query(F.data.startswith("res:plan:carry:"))
+@router.callback_query(F.data.regexp(r"^res:plan:carry:[vt]:\d+$"))
 async def res_plan_carry_toggle(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -401,11 +398,12 @@ async def res_plan_carry_toggle(
     if not has_bot_perm(profile, "plans"):
         await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
-    plan = await session.get(Plan, int(callback.data.rsplit(":", 1)[-1]))
+    _, _, _, code, plan_id = callback.data.split(":")
+    plan = await session.get(Plan, int(plan_id))
     if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
-    plan.carry_remaining_quota = not bool(getattr(plan, "carry_remaining_quota", True))
+    toggle_plan_carry(plan, CARRY_CODES[code])
     await session.commit()
     await callback.answer(feedback.SAVED)
     if callback.message:
