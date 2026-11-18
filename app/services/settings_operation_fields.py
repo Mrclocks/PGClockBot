@@ -59,6 +59,19 @@ RECEIPT_MATCH_FIELDS: list[Field] = [
     ("receipt_match_window_minutes", "بازهٔ تطبیق (دقیقه)", "number"),
 ]
 
+# Same keys as the web «رسیدها» section; they apply while «تأیید خودکار رسید» is on.
+AUTO_APPROVE_AFTER_FIELDS: list[Field] = [
+    ("auto_approve_after_minutes", "مهلت تأیید خودکار (دقیقه، ۰ = فوری)", "number"),
+    ("auto_approve_after_max_amount", "سقف مبلغ (تومان، ۰ = بدون سقف)", "number"),
+    ("auto_approve_after_returning_only", "فقط مشتریان با خرید قبلی", "toggle"),
+]
+
+STARS_FIELDS: list[Field] = [
+    ("stars_toman_per_star", "تومان هر استارز", "number"),
+    ("stars_title", "عنوان فاکتور", "text"),
+    ("stars_description", "توضیح فاکتور", "text"),
+]
+
 TRIAL_MIN_AGE_FIELD: Field = ("trial_min_account_minutes", "حداقل سن حساب (دقیقه، ۰ = خاموش)", "number")
 
 # Whole-number bounds of the fields above.

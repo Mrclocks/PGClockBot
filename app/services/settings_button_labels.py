@@ -357,7 +357,6 @@ PLATFORM_ONLY_BTN_KEYS = PLATFORM_ONLY_BTN_KEYS | frozenset(
 def appearance_button_subs() -> list[tuple]:
     """Owner-only button labels that no other settings screen exposes."""
     return [
-        ("btn_store_extra", "دکمه‌های خرید و مینی‌اپ", BTN_STORE_EXTRA),
         ("btn_adm_hubs", "دکمه‌های ادمین — گروه‌ها", BTN_ADMIN_HUBS),
         ("btn_adm_items", "دکمه‌های ادمین — بخش‌ها", BTN_ADMIN_HUB_ITEMS),
     ]
@@ -390,6 +389,7 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
     pairs: list[tuple[str, str, list[Field]]] = [
         ("btn_main", "دکمه‌های منوی اصلی", BTN_MAIN_MENU),
         ("btn_shop_kinds", "دکمه‌های قدم اول خرید", BTN_SHOP_KINDS),
+        ("btn_store_extra", "دکمه‌های خرید و مینی‌اپ", BTN_STORE_EXTRA),
         ("btn_wallet_sub", "دکمه‌های کیف پول", BTN_WALLET_SUB),
         ("btn_support_sub", "دکمه‌های پشتیبانی", BTN_SUPPORT_SUB),
         ("btn_loyalty_sub", "دکمه‌های باشگاه", BTN_LOYALTY_SUB),

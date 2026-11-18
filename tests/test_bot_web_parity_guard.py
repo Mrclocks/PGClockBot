@@ -16,7 +16,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot.handlers import admin_settings, reseller_settings
 from app.services import marketing_nav, panel_nav
-from app.services.resellers import RESELLER_SETTINGS_TABS
+from app.services.resellers import RESELLER_SETTINGS_TABS, SHOP_SETTINGS_DOMAIN_POST_TABS
 from app.services.screen_titles import is_screen_text_key, platform_only_screen_text_keys
 from app.services.service_import_config import PLATFORM_ONLY_KEYS as IMPORT_PLATFORM_ONLY_KEYS
 from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
@@ -137,22 +137,11 @@ OWNER_BOT_GAPS: dict[str, str] = {
 
 # Web settings of «/shop-settings» the shop bot cannot edit yet.
 SHOP_BOT_GAPS: dict[str, str] = {
-    **{key: "هشدار سرویس کاربر" for key in (
-        "user_alert_low_enabled", "user_alert_low_traffic_pct", "user_alert_low_time_pct", "user_alert_low_days",
-        "user_alert_time_text", "user_alert_traffic_text", "first_use_nudge_enabled",
-    )},
-    **{key: "گزارش و عملیات" for key in (
-        "action_center_expire_days", "one_tap_renew_enabled", "capacity_warn_pct", "funnel_tracking_enabled",
-    )},
-    "trial_min_account_minutes": "اکانت تست",
-    "wallet_topup_presets": "مبالغ آمادهٔ شارژ (فهرست)",
-    "btn_buy_continue": "متن دکمه‌ها (فقط در فهرست مالک)",
-    **{key: "افزودن سرویس قبلی" for key in (
-        "service_import_enabled", "service_import_mode", "service_import_max_per_user",
-    )},
-    **{key: "قالب نام‌گذاری" for key in ("pg_username_prefix", "pg_username_suffix", "pg_username_pattern")},
-    **{key: "گزارش روزانه" for key in (
-        "admin_daily_report_enabled", "subordinate_report_enabled", "admin_daily_report_hour",
+    "wallet_topup_presets": OWNER_BOT_GAPS["wallet_topup_presets"],
+    **{key: OWNER_BOT_GAPS[key] for key in (
+        "payment_cards", "payment_gateways", "psp_gateways", "payment_crypto_wallets",
+        "crypto_rate_mode", "crypto_rate_asset", "crypto_rate_manual", "crypto_rate_api_url", "crypto_rate_api_path",
+        "crypto_rate_api_divisor", "crypto_rate_margin_percent", "crypto_quote_minutes",
     )},
 }
 
@@ -175,10 +164,14 @@ def _edited_by_edit_mode(key: str) -> bool:
 
 
 def _shop_web_setting_keys() -> set[str]:
-    """Fields «/shop-settings» offers a shop (the same filters its page and save route apply)."""
+    """Fields a shop edits on the web: «/shop-settings» tabs and the domain forms (payment, loyalty, …).
+
+    The same filters the shop page and save route apply.
+    """
+    tabs = [tab for tab, _label in RESELLER_SETTINGS_TABS] + sorted(SHOP_SETTINGS_DOMAIN_POST_TABS)
     keys = {
         field[0]
-        for tab, _label in RESELLER_SETTINGS_TABS
+        for tab in tabs
         for name in TAB_SETTING_GROUPS.get(tab, [])
         if name in SETTING_GROUPS and name not in PLATFORM_ONLY_SETTING_GROUPS
         for field in SETTING_GROUPS[name]
