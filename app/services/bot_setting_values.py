@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from app.services import bot_feedback_texts as feedback
 from app.services.approval_rule import MAX_MINUTES as APPROVAL_MAX_MINUTES
+from app.services.backup_settings import KEEP_CHOICES as BACKUP_KEEP_CHOICES, KEEP_KEY as BACKUP_KEEP_KEY
 from app.services.catalog_pricing import MAX_PRICE
 from app.services.customer_notice_texts import NOTICE_TEXT_KEYS
 from app.services.entry_approval_config import ENTRY_APPROVAL_NUMBER_BOUNDS
 from app.services.message_variables import template_variable_specs
-from app.services.numbers import normalize_number_text
+from app.services.numbers import normalize_number_text, to_fa_digits
 from app.services.service_import_config import (
     KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
     KEY_MODE as IMPORT_KEY_MODE,
@@ -40,6 +41,7 @@ NUMBER_BOUNDS: dict[str, tuple[int, int]] = {
     "auto_approve_after_minutes": (0, APPROVAL_MAX_MINUTES),
     "auto_approve_after_max_amount": (0, MAX_PRICE),
     "admin_daily_report_hour": (0, DAILY_REPORT_LAST_HOUR),
+    "backup_schedule_hour": (0, 23),
     # Money and catalog numbers: never negative, never above the catalog price cap.
     "referral_bonus": (0, MAX_PRICE),
     "stars_toman_per_star": (1, MAX_PRICE),
@@ -62,6 +64,8 @@ UNLIMITED_LABEL = "نامحدود"
 SELECT_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
     IMPORT_KEY_MODE: (("instant", "فوری"), ("approval", "با تأیید ادمین")),
+    # Same choices as the web; the new count applies when the next backup prunes the old ones.
+    BACKUP_KEEP_KEY: tuple((str(count), f"{to_fa_digits(count)} بکاپ") for count in BACKUP_KEEP_CHOICES),
 }
 
 
