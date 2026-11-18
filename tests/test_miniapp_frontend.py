@@ -55,6 +55,9 @@ class MiniAppFrontendTests(unittest.TestCase):
     def test_renewal_offers_the_current_plan_then_categories(self) -> None:
         self.run_node("miniapp_renew_categories.test.cjs")
 
+    def test_renewal_carry_loss_warning(self) -> None:
+        self.run_node("miniapp_renew_warning.test.cjs")
+
 
 if __name__ == "__main__":
     unittest.main()

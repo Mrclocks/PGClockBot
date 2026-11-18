@@ -15,6 +15,7 @@ from app.services.formatting import format_message, format_toman, info_block, kv
 from app.bot import keyboards as kb
 from app.config import get_settings
 from app.services.pasarguard import absolutize_subscription_url, get_pg
+from app.services.service_period import period_view
 from app.services.qrcode_gen import make_subscription_qr
 from app.services.support_button import support_markup
 from app.services.message_variables import DOMAIN_ORDER, DOMAIN_WALLET, render_message_template
@@ -22,6 +23,7 @@ from app.services.users import get_all_settings, on
 from app.services.wireguard_delivery import has_wireguard
 from app.services.wireguard_send import deliver_wireguard
 from app.services.chat_records import keeps_sent
+from app.services.delivery_recovery_policy import is_delivered, is_renewal_order, pending_buyer_note
 from app.services import notice_links
 from app.services.staff_notice_buttons import reseller_card_markup
 
@@ -165,10 +167,36 @@ def _subscription_success_outbound(ui: dict[str, str], order) -> tuple[str, dict
     return text, send_kw
 
 
-UNDELIVERED_ORDER_NOTE = (
-    "پرداخت شما دریافت و تأیید شد، ولی ساخت سرویس هنوز کامل نشده است. "
-    "پشتیبانی در جریان است و سرویس به‌محض آماده شدن برایتان فرستاده می‌شود؛ نیازی به پرداخت دوباره نیست."
-)
+def _pending_order_payload(ui: dict[str, str], payment: Payment | None, order, markup: Any) -> dict[str, Any]:
+    """Card for a paid order whose service is not ready yet; never claims success."""
+    from app.services.rich_text import rich_plain_text
+
+    title = rich_plain_text(ui.get("payment_ok_title")) or "✅ پرداخت تأیید شد"
+    state_line = (
+        kv_line("⏳", "وضعیت تمدید", "در انتظار اعمال روی سرور")
+        if is_renewal_order(order)
+        else kv_line("⏳", "وضعیت سفارش", "در حال آماده‌سازی")
+    )
+    body = info_block(
+        [
+            kv_line("🧾", "پرداخت", f"#{payment.id if payment else '—'}"),
+            kv_line("🛒", "سفارش", f"#{order.id}"),
+            state_line,
+        ]
+    ) + f"\n\n{pending_buyer_note(order, payment)}"
+    return {
+        "title": title,
+        "text": format_message(title, body),
+        "send_kw": {},
+        "detail_text": None,
+        "markup": markup,
+        "sub_url": None,
+        "sub_info": None,
+        "ui": ui,
+        "is_subscription": False,
+        "skip_qr": True,
+        "needs_support": True,
+    }
 
 
 async def build_delivery_content(
@@ -205,7 +233,8 @@ async def build_delivery_content(
 
             order.plan = await session.get(Plan, int(plan_id))
 
-    if order and order.service_id:
+    # A renewal keeps its target service_id while unpaid or stuck, so only DELIVERED means done.
+    if order and order.service_id and is_delivered(order):
         from app.services.orders import order_quantity
 
         qty = order_quantity(order)
@@ -273,7 +302,8 @@ async def build_delivery_content(
         if svc:
             from app.services.service_live_info import fetch_live_service_info
 
-            info = await fetch_live_service_info(svc, client_factory=get_pg)
+            # Display only: this period's volume (the card, the QR caption).
+            info = period_view(await fetch_live_service_info(svc, client_factory=get_pg), svc)
             info.setdefault("username", svc.pg_username)
             sub_info = info if not info.get("error") else None
             if include_details:
@@ -352,29 +382,8 @@ async def build_delivery_content(
         }
 
     if order is not None:
-        # Paid but nothing created yet (the panel failed; staff were alerted to resume it).
-        # Saying only "approved" here left buyers waiting for a service that never came.
-        title = rich_plain_text(ui.get("payment_ok_title")) or "✅ پرداخت تأیید شد"
-        body = info_block(
-            [
-                kv_line("🧾", "پرداخت", f"#{payment.id if payment else '—'}"),
-                kv_line("🛒", "سفارش", f"#{order.id}"),
-                kv_line("⏳", "وضعیت سرویس", "در حال آماده‌سازی"),
-            ]
-        ) + f"\n\n{UNDELIVERED_ORDER_NOTE}"
-        return {
-            "title": title,
-            "text": format_message(title, body),
-            "send_kw": {},
-            "detail_text": None,
-            "markup": markup,
-            "sub_url": None,
-            "sub_info": None,
-            "ui": ui,
-            "is_subscription": False,
-            "skip_qr": True,
-            "needs_support": True,
-        }
+        # Paid but not delivered yet (the panel failed; the retry job or staff finish it).
+        return _pending_order_payload(ui, payment, order, markup)
 
     title = rich_plain_text(ui.get("payment_ok_title")) or "✅ پرداخت تأیید شد"
     body = info_block(
@@ -473,6 +482,16 @@ async def _try_send_html(
             return True
         except Exception:
             return False
+
+
+async def _deliver_pending_order(
+    bot: Bot, chat_id: int, payment: Payment | None, order, *, ui: dict[str, str]
+) -> str:
+    """Tell the buyer the payment arrived but the order is not applied yet (with a support button)."""
+    payload = _pending_order_payload(ui, payment, order, None)
+    if not await _try_send_html(bot, chat_id, payload["text"], reply_markup=support_markup()):
+        logger.warning("pending order notice failed order=%s chat_id=%s", getattr(order, "id", None), chat_id)
+    return payload["text"]
 
 
 async def _deliver_capacity_order(bot: Bot, chat_id: int, order, reply_kb: Any) -> str:
@@ -770,6 +789,8 @@ async def send_delivery_to_user(
     ui = await get_all_settings(session, reseller_id=shop_rid)
     reply_kb = await _buyer_reply_markup(session, payment, order)
     note = str(order.note) if order and order.note else ""
+    if order is not None and not is_delivered(order) and not note.startswith("reseller_app:"):
+        return await _deliver_pending_order(bot, chat_id, payment, order, ui=ui)
     if note.startswith("svc_addon:"):
         return await _deliver_addon_order(bot, chat_id, session, order, reply_kb)
     if note.startswith("res_cap:"):

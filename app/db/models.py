@@ -149,6 +149,17 @@ class PlanCategory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+def _legacy_carry_default(context) -> bool:
+    """Insert default of the split carry switches: the old combined switch when it was given."""
+    value = context.get_current_parameters().get("carry_remaining_quota")
+    return True if value is None else bool(value)
+
+
+def _legacy_keep_extras_default(context) -> bool:
+    value = context.get_current_parameters().get("keep_extras_on_renew")
+    return True if value is None else bool(value)
+
+
 class Plan(Base):
     __tablename__ = "plans"
 
@@ -179,10 +190,18 @@ class Plan(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
-    # When true (default), renewal/upgrade/downgrade adds leftover volume and time.
-    # When false, the new period is exactly this plan's volume and duration.
+    # Superseded by carry_remaining_volume / carry_remaining_time; kept one release, no longer read.
     carry_remaining_quota: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
+    )
+    # When true (default), a renewal/upgrade/downgrade adds the leftover volume (time) to the
+    # plan's; when false, that part of the new period is exactly this plan's. A row inserted
+    # with only the old switch copies it.
+    carry_remaining_volume: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_carry_default, server_default=text("true")
+    )
+    carry_remaining_time: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_carry_default, server_default=text("true")
     )
     # Plan-scoped customer extra stairs (volume GB / duration months), like reseller fixed.
     allow_buy_extra: Mapped[bool] = mapped_column(
@@ -533,6 +552,10 @@ class UserService(Base):
         DateTime(timezone=True), nullable=True
     )
     quota_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Panel usage (and lifetime usage) when the last renewal opened the current period;
+    # display and alerts subtract it (service_period). NULL = the raw numbers are the period.
+    period_used_baseline_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    period_lifetime_baseline_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -1381,9 +1404,16 @@ class ResellerPlan(Base):
     carry_remaining_period: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
     )
-    # When true (default), purchased extra GB/user slots survive into the next period.
+    # Superseded by keep_extra_gb_on_renew / keep_extra_users_on_renew; kept one release, no longer read.
     keep_extras_on_renew: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
+    )
+    # When true (default), purchased extra GB (user slots) survive into the next period.
+    keep_extra_gb_on_renew: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_keep_extras_default, server_default=text("true")
+    )
+    keep_extra_users_on_renew: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_keep_extras_default, server_default=text("true")
     )
     # NULL = inherit plan-kind btn_style_*; "" = explicit Telegram default (white)
     button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
@@ -1956,6 +1986,14 @@ class DeliveryFailure(Base):
     """Orders that failed Telegram/PG delivery and need retry."""
 
     __tablename__ = "delivery_failures"
+    __table_args__ = (
+        # What the retry job scans: open rows still under automatic handling.
+        Index(
+            "ix_delivery_failures_auto_retry", "next_auto_retry_at",
+            sqlite_where=text("resolved_at IS NULL AND auto_retry_stopped_at IS NULL"),
+            postgresql_where=text("resolved_at IS NULL AND auto_retry_stopped_at IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
@@ -1970,6 +2008,11 @@ class DeliveryFailure(Base):
     )
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Automatic retry: attempts made while the panel answered, when the next one is due, and
+    # when automatic handling ended (refunded, or handed to staff). NULL due time = not scheduled.
+    auto_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    next_auto_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    auto_retry_stopped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ChargeCode(Base):
