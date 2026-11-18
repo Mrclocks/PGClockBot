@@ -15,6 +15,7 @@ from app.services.backup_settings import KEEP_CHOICES as BACKUP_KEEP_CHOICES, KE
 from app.services import crypto_rates
 from app.services.catalog_pricing import MAX_PRICE
 from app.services.miniapp_branding import NOTICE_SETTING as MINIAPP_NOTICE, normalize_notice
+from app.services.wallet_topup import normalize_topup_presets
 from app.services.customer_notice_texts import NOTICE_TEXT_KEYS
 from app.services.entry_approval_config import ENTRY_APPROVAL_NUMBER_BOUNDS
 from app.services.message_variables import template_variable_specs
@@ -29,6 +30,7 @@ from app.services.service_import_config import (
 )
 from app.services.settings_operation_fields import ALERT_UNIT_OPTIONS, OPERATION_NUMBER_BOUNDS
 
+TOPUP_PRESETS_KEY = "wallet_topup_presets"
 CUSTOM_PLAN_MAX_GB = 100_000
 CUSTOM_PLAN_MAX_DAYS = 3650
 DAILY_REPORT_LAST_HOUR = 23
@@ -139,7 +141,11 @@ def next_select_value(key: str, current: str | None) -> str:
 
 
 # Texts whose empty value means «use the built-in text»; typing one of DEFAULT_WORDS clears them.
-EMPTY_MEANS_DEFAULT_KEYS: frozenset[str] = NOTICE_TEXT_KEYS | {"user_alert_time_text", "user_alert_traffic_text"}
+EMPTY_MEANS_DEFAULT_KEYS: frozenset[str] = NOTICE_TEXT_KEYS | {
+    "user_alert_time_text",
+    "user_alert_traffic_text",
+    TOPUP_PRESETS_KEY,
+}
 DEFAULT_WORDS: frozenset[str] = frozenset({"پیش‌فرض", "پیشفرض", "default"})
 
 
@@ -179,5 +185,6 @@ def _crypto_normalizer(key: str) -> Callable[[str], str]:
 
 VALUE_NORMALIZERS: dict[str, Callable[[str], str]] = {
     MINIAPP_NOTICE: normalize_notice,
+    TOPUP_PRESETS_KEY: normalize_topup_presets,
     **{key: _crypto_normalizer(key) for key in CRYPTO_TEXT_KEYS},
 }

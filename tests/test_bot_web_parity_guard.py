@@ -126,7 +126,6 @@ WEB_ONLY_SETTINGS: dict[str, str] = {
 
 # Web settings the owner bot cannot edit yet: open work, shrinking as the bot catches up.
 OWNER_BOT_GAPS: dict[str, str] = {
-    "wallet_topup_presets": "مبالغ آمادهٔ شارژ (فهرست)",
     **{key: "فهرست چندتایی مقصدهای پرداخت" for key in (
         "payment_cards", "payment_gateways", "psp_gateways", "payment_crypto_wallets",
     )},
@@ -134,7 +133,6 @@ OWNER_BOT_GAPS: dict[str, str] = {
 
 # Web settings of «/shop-settings» the shop bot cannot edit yet.
 SHOP_BOT_GAPS: dict[str, str] = {
-    "wallet_topup_presets": OWNER_BOT_GAPS["wallet_topup_presets"],
     **{key: OWNER_BOT_GAPS[key] for key in (
         "payment_cards", "payment_gateways", "psp_gateways", "payment_crypto_wallets",
     )},

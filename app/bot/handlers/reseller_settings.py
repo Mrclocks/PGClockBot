@@ -79,6 +79,7 @@ from app.services.settings_operation_fields import (
     STARS_FIELDS,
     TRIAL_MIN_AGE_FIELD,
     USAGE_ALERT_FIELDS,
+    WALLET_TOPUP_FIELDS,
 )
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
@@ -206,6 +207,7 @@ SECTIONS: dict[str, dict] = {
             ("stars", "استارز", STARS_FIELDS),
             ("auto_after", "تأیید خودکار با مهلت", AUTO_APPROVE_AFTER_FIELDS),
             ("crypto_rate", "نرخ تبدیل رمزارز", CRYPTO_RATE_FIELDS),
+            ("wallet_topup", "شارژ کیف پول", WALLET_TOPUP_FIELDS),
         ],
     },
     "support": {
