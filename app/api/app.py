@@ -1596,8 +1596,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
-    from app.api.monitor_tickets import router as monitor_tickets_router
-    app.include_router(monitor_tickets_router)
     from app.api.miniapp_codes import register_miniapp_codes
     from app.api.miniapp_feeds import register_miniapp_feeds
     from app.api.miniapp_guides import register_miniapp_guides

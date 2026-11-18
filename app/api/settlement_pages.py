@@ -454,8 +454,7 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
         )
         from app.services.psp_settlement_review import is_in_review
         from app.services.users import get_all_settings as _tp_get_all_settings
-        from app.services.payment_providers import get_psp_adapter
-        from app.services.payment_settlement import _verify_gateway, _public_base
+        from app.services.payment_providers import verify_tonpays_webhook
 
         provider_l = (provider or "").strip().lower()
         if provider_l == "mock" and not settlement_mock_allowed():

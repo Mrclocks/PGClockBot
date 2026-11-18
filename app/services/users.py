@@ -1133,7 +1133,7 @@ DEFAULT_SETTINGS = {
     "custom_service_name_enabled": "0",
     # JSON list of API gateways (see psp_gateways.py); empty = the single psp_* gateway below.
     "psp_gateways": "[]",
-    "psp_provider": "tonpays",
+    "psp_provider": "zarinpal",
     "psp_merchant_id": "",
     "psp_pay_url": "",
     "psp_sunpay_request_method": "GET",

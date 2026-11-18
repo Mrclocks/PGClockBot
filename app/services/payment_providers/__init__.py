@@ -5,7 +5,7 @@ from __future__ import annotations
 from app.services.payment_providers.base import PspAdapter
 from app.services.payment_providers.mock_psp import MockPspAdapter
 from app.services.payment_providers.sunpay import SunPayAdapter
-from app.services.payment_providers.tonpays import TonPaysAdapter
+from app.services.payment_providers.tonpays import TonPaysAdapter, verify_tonpays_webhook
 from app.services.payment_providers.zarinpal import ZarinpalAdapter
 
 

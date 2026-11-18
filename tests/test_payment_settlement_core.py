@@ -90,7 +90,7 @@ class SettlementWiringTests(unittest.TestCase):
         self.assertIn("kind == 'password'", field)
         self.assertIn('type="password"', field)
         users = (ROOT / "app/services/users.py").read_text(encoding="utf-8")
-        self.assertIn('"psp_provider": "tonpays"', users)
+        self.assertIn('"psp_provider": "zarinpal"', users)
         self.assertIn("SECRET_KEYS", users)
         self.assertIn('"password"', users)
 

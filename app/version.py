@@ -3,7 +3,7 @@
 __version__ = "0.7.0"
 
 # GitHub repo used for update checks
-GITHUB_REPO = "bluedock/Gozargah"
+GITHUB_REPO = "Mrclocks/PGClockBot"
 # Defaults point at main (stable). Channel-aware callers use
 # ``app.services.update_channel.github_version_url`` / ``github_release_notes_url``.
 GITHUB_VERSION_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/VERSION"
