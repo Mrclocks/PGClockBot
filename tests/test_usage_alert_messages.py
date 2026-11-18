@@ -1,4 +1,4 @@
-"""Low-time alerts by days as well as percent, alert texts with the expiry date, and the dashboard reminder."""
+"""Low-time alert re-arming by days, alert texts with the expiry date, and the dashboard reminder."""
 
 from __future__ import annotations
 
@@ -10,12 +10,11 @@ from types import SimpleNamespace
 from aiogram.exceptions import TelegramBadRequest
 
 from app.services.alert_rearm import _rearm_one
+from app.services.alert_thresholds import AlertThreshold, time_threshold
+from app.services.users import apply_legacy_alert_days
 from app.services.usage_alert_messages import (
     alerts_off_settings_page,
-    clamp_alert_setting,
     send_alert_with_default_fallback,
-    should_rearm_time,
-    time_alert_due,
     time_alert_text,
     traffic_alert_text,
 )
@@ -25,32 +24,36 @@ GB = 1024**3
 
 
 class DueTests(unittest.TestCase):
-    def test_days_threshold_catches_a_long_service_the_percent_misses(self) -> None:
-        # Percent says «plenty left» (60%), but only 2.5 days remain: the days threshold catches it.
-        self.assertTrue(time_alert_due(60.0, 2.5, time_pct=20, days=3))
-        self.assertFalse(time_alert_due(60.0, 2.5, time_pct=20, days=0))
-
-    def test_percent_still_works_alone(self) -> None:
-        self.assertTrue(time_alert_due(10.0, 30.0, time_pct=20, days=3))
-        self.assertFalse(time_alert_due(None, None, time_pct=20, days=3))
-
-    def test_rearm_waits_until_both_thresholds_are_clear(self) -> None:
-        self.assertFalse(should_rearm_time(90.0, 2.0, time_pct=20, days=3, margin_pct=5))
-        self.assertFalse(should_rearm_time(90.0, 3.5, time_pct=20, days=3, margin_pct=5))
-        self.assertTrue(should_rearm_time(90.0, 30.0, time_pct=20, days=3, margin_pct=5))
-        self.assertTrue(should_rearm_time(90.0, 2.0, time_pct=20, days=0, margin_pct=5))
-
     def test_a_days_alert_is_not_rearmed_by_the_sweep_while_days_are_short(self) -> None:
         service = SimpleNamespace(notified_expire=True, notified_traffic=False, created_at=NOW - timedelta(days=363))
         info = {"expire": (NOW + timedelta(days=2)).timestamp()}
-        self.assertFalse(_rearm_one(service, info, now=NOW, plan_days=365, time_pct=20, traffic_pct=20, days=3))
+        self.assertFalse(
+            _rearm_one(service, info, now=NOW, plan_days=365, time_limit=AlertThreshold(3, "day"), traffic_limit=AlertThreshold(20))
+        )
         self.assertTrue(service.notified_expire)
 
-    def test_settings_are_clamped(self) -> None:
-        self.assertEqual(clamp_alert_setting("user_alert_low_days", "99"), "60")
-        self.assertEqual(clamp_alert_setting("user_alert_low_days", "abc"), "0")
-        self.assertEqual(clamp_alert_setting("user_alert_low_time_pct", "0"), "1")
-        self.assertEqual(clamp_alert_setting("user_alert_low_traffic_pct", ""), "20")
+    def test_a_days_alert_is_rearmed_once_the_days_are_clearly_above_the_threshold(self) -> None:
+        service = SimpleNamespace(notified_expire=True, notified_traffic=False, created_at=NOW - timedelta(days=363))
+        info = {"expire": (NOW + timedelta(days=30)).timestamp()}
+        self.assertTrue(
+            _rearm_one(service, info, now=NOW, plan_days=365, time_limit=AlertThreshold(3, "day"), traffic_limit=AlertThreshold(20))
+        )
+        self.assertFalse(service.notified_expire)
+
+    def test_a_days_value_saved_before_the_unit_choice_becomes_the_time_threshold(self) -> None:
+        data = {"user_alert_low_time_unit": "", "user_alert_low_days": "3", "user_alert_low_time_pct": "20"}
+        apply_legacy_alert_days(data)
+        self.assertEqual(time_threshold(data), AlertThreshold(3, "day"))
+
+    def test_a_saved_unit_wins_over_the_old_days_value(self) -> None:
+        data = {"user_alert_low_time_unit": "pct", "user_alert_low_days": "3", "user_alert_low_time_pct": "20"}
+        apply_legacy_alert_days(data)
+        self.assertEqual(time_threshold(data), AlertThreshold(20, "pct"))
+
+    def test_no_old_days_value_keeps_percent(self) -> None:
+        data = {"user_alert_low_time_unit": "", "user_alert_low_days": "0", "user_alert_low_time_pct": "20"}
+        apply_legacy_alert_days(data)
+        self.assertEqual(time_threshold(data), AlertThreshold(20, "pct"))
 
 
 class TextTests(unittest.TestCase):

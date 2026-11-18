@@ -183,6 +183,10 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
         sync_conn.execute(
             sql_text("ALTER TABLE plans ADD COLUMN carry_remaining_quota BOOLEAN DEFAULT 1")
         )
+    for col in ("carry_remaining_volume", "carry_remaining_time"):
+        if col not in cols:
+            sync_conn.execute(sql_text(f"ALTER TABLE plans ADD COLUMN {col} BOOLEAN DEFAULT 1"))
+            sync_conn.execute(sql_text(f"UPDATE plans SET {col} = carry_remaining_quota"))
 
     if not insp.has_table("plan_categories"):
         sync_conn.execute(
@@ -353,6 +357,10 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                     "ALTER TABLE reseller_plans ADD COLUMN keep_extras_on_renew BOOLEAN DEFAULT 1"
                 )
             )
+        for col in ("keep_extra_gb_on_renew", "keep_extra_users_on_renew"):
+            if col not in pcols:
+                sync_conn.execute(sql_text(f"ALTER TABLE reseller_plans ADD COLUMN {col} BOOLEAN DEFAULT 1"))
+                sync_conn.execute(sql_text(f"UPDATE reseller_plans SET {col} = keep_extras_on_renew"))
         for col, typ in (
             ("payg_basis", "VARCHAR(16) DEFAULT 'traffic'"),
             ("payg_charge_upfront", "BOOLEAN DEFAULT 0"),
