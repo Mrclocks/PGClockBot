@@ -14,6 +14,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pg_read_resilience import outside_web_read_budget
 from app.services.catalog_pricing import annotate_prices, assert_expected_price, quote_product
 from app.db.models import (
     BotUser,
@@ -1225,6 +1226,7 @@ async def create_addon_order(
     return order
 
 
+@outside_web_read_budget
 async def apply_service_addon(
     session: AsyncSession, order: Order
 ) -> Order:
