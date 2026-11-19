@@ -2,19 +2,19 @@
 
 Everything printed to the terminal is English. An SSH session often has no Persian font and no
 right-to-left support, so Persian text there is unreadable; shared services still return Persian
-messages for the bot and the web panel, and ``terminal_text`` keeps them off the terminal.
+messages for the bot and the web panel, and ``terminal_text`` (``services.terminal_text``) keeps
+them off the terminal.
 """
 
 from __future__ import annotations
 
-import re
 import sys
 from typing import Any
 
-# Arabic-script letters and digits, presentation forms, joiners and direction marks, «».
-_PERSIAN_RUN = re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u200c-\u200f«»]+")
-_LEFTOVER_PUNCTUATION = re.compile(r"(\s*[—:،؛.,()\-]\s*)+$|^(\s*[—:،؛.,()\-]\s*)+")
-NO_ENGLISH_DETAIL = "details are only in Persian; see the web panel or: journalctl -u pgclockbot -n 80"
+from app.services.terminal_text import NO_ENGLISH_DETAIL, terminal_text
+
+__all__ = ["NO_ENGLISH_DETAIL", "CliError", "err", "header", "human_size", "info", "kv", "ok", "terminal_text", "warn"]
+
 SIZE_UNITS = ("B", "KB", "MB", "GB", "TB")
 SIZE_STEP = 1024
 
@@ -23,18 +23,6 @@ class CliError(Exception):
     def __init__(self, message: str, *, code: int = 1) -> None:
         super().__init__(message)
         self.code = code
-
-
-def terminal_text(text: Any) -> str:
-    """``text`` without Persian runs; a short English note when nothing English is left."""
-    value = str(text)
-    if not _PERSIAN_RUN.search(value):
-        return value
-    cleaned = " ".join(_PERSIAN_RUN.sub(" ", value).split())
-    cleaned = _LEFTOVER_PUNCTUATION.sub("", cleaned).strip()
-    if not re.search(r"[A-Za-z0-9]", cleaned):
-        return NO_ENGLISH_DETAIL
-    return cleaned
 
 
 def human_size(num_bytes: int | float | None) -> str:

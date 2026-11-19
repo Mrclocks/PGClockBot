@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import importlib.util
+import logging
+import sys
+
 import io
 import re
 import unittest
@@ -13,6 +17,7 @@ from app.cli import backup_cmds, shop_review_cmds
 from app.cli.context import CliContext
 from app.cli.output import CliError, NO_ENGLISH_DETAIL, err, human_size, info, kv, terminal_text
 from app.services.service_shop_review import NOT_UNDER_REVIEW, SHOP_NOT_FOUND
+from app.services.terminal_text import NO_ENGLISH_LOG_DETAIL, EnglishLogFormatter, install_english_logging
 
 PERSIAN = re.compile(r"[؀-ۿ]")
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,6 +83,67 @@ class CommandTests(unittest.TestCase):
                     shop_review_cmds.cmd_shop_review_assign(self._ctx(), service_id=4, shop="9")
             self.assertIn(expected, str(caught.exception))
             self.assertFalse(PERSIAN.search(str(caught.exception)))
+
+
+class LogFormatterTests(unittest.TestCase):
+    def _format(self, msg: str, *args, exc: BaseException | None = None) -> str:
+        record = logging.LogRecord("app.services.backup", logging.WARNING, __file__, 1, msg, args, None)
+        if exc is not None:
+            try:
+                raise exc
+            except type(exc):
+                record.exc_info = sys.exc_info()
+        return EnglishLogFormatter("%(levelname)s %(name)s: %(message)s").format(record)
+
+    def test_persian_in_messages_and_arguments_never_reaches_the_journal(self) -> None:
+        line = self._format("restore failed for %s: %s", "b1", "ریستور ناموفق بود")
+        self.assertEqual(line, "WARNING app.services.backup: restore failed for b1")
+        self.assertEqual(
+            self._format("ریستور انجام شد"), f"WARNING app.services.backup: {NO_ENGLISH_LOG_DETAIL}"
+        )
+
+    def test_a_traceback_keeps_its_lines_and_loses_the_persian_text(self) -> None:
+        text = self._format("delivery failed", exc=ValueError("فروشگاه یافت نشد"))
+        self.assertFalse(PERSIAN.search(text))
+        self.assertIn("Traceback (most recent call last):", text)
+        self.assertIn("ValueError", text)
+
+    def test_the_service_logs_through_the_english_formatter(self) -> None:
+        root = logging.getLogger()
+        saved = (list(root.handlers), root.level)
+        try:
+            install_english_logging(fmt="%(message)s")
+            self.assertIsInstance(root.handlers[0].formatter, EnglishLogFormatter)
+        finally:
+            root.handlers[:] = saved[0]
+            root.setLevel(saved[1])
+
+
+class HelperScriptTests(unittest.TestCase):
+    def _script(self, name: str):
+        spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_a_weak_web_password_is_explained_in_english(self) -> None:
+        script = self._script("set_web_password")
+        passwords = iter(["short", "short", "Strong-Pass-123456", "Strong-Pass-123456"])
+        with patch("builtins.input", return_value="owner"), patch("getpass.getpass", side_effect=lambda _p: next(passwords)), \
+                patch.object(script, "save_web_admin", return_value=Path("data/web_admin.json")), \
+                patch.object(script, "_sync_env"):
+            text = _printed(script.main)
+        self.assertIn("Password rejected", text)
+        self.assertFalse(PERSIAN.search(text))
+
+    def test_the_panel_restart_reports_in_english(self) -> None:
+        script = self._script("panel_restart")
+        with patch("sys.argv", ["panel_restart.py", "--delay", "0"]), patch("time.sleep"), \
+                patch("app.services.service_control.ensure_restart_helper", return_value=(True, "helper آماده است")), \
+                patch("app.services.service_control.restart_panel_service", return_value=(True, "ریستارت زمان‌بندی شد")):
+            text = _printed(script.main)
+        self.assertIn("Panel restart scheduled", text)
+        self.assertFalse(PERSIAN.search(text))
 
 
 if __name__ == "__main__":

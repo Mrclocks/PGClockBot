@@ -26,10 +26,11 @@ def main() -> int:
     os.chdir(ROOT)
     from app.services.service_control import ensure_restart_helper, restart_panel_service
 
-    ok_h, msg_h = ensure_restart_helper()
-    print(msg_h)
-    ok, note = restart_panel_service(reason=args.reason, delay_sec=args.delay)
-    print(note)
+    # The services word these notes in Persian for the web panel; the terminal gets English.
+    ok_h, _helper_note = ensure_restart_helper()
+    print("Restart helper ready." if ok_h else "Restart helper is not ready (scripts/pgclockbot-ctl); restart may need sudo.")
+    ok, _restart_note = restart_panel_service(reason=args.reason, delay_sec=args.delay)
+    print("Panel restart scheduled; wait a few seconds." if ok else "Panel restart could not be scheduled.")
     # Keep process alive briefly so non-daemon restart threads can arm.
     time.sleep(min(2.0, max(0.5, args.delay)))
     return 0 if ok else 1
