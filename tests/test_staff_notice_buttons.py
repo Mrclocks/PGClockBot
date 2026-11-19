@@ -73,7 +73,7 @@ class SendPathTests(unittest.IsolatedAsyncioTestCase):
             up = _callbacks(bot.send_message.await_args.kwargs["reply_markup"])
         # Both open under the alert; the scenario only asks for confirmation there.
         self.assertEqual(down, ["nto:nv:adm:pg", "nto:cmd:sc:down"])
-        self.assertEqual(up, ["nto:nv:adm:pg", "nto:cmd:h"])
+        self.assertEqual(up, ["nto:nv:adm:pg", "nto:cmd:sc"])
 
     async def test_the_backup_problem_opens_the_backup_screen_under_the_notice(self) -> None:
         destination = backup_telegram.Destination("1:A", [7], custom=False)

@@ -15,6 +15,8 @@ QUICK_LINKS_CALLBACK = "qlk:v"
 COMMAND_CENTER_CALLBACK = "cmd:h"
 # The same search, opened from the settings hub: results start on the settings.
 COMMAND_CENTER_SETTINGS_CALLBACK = "cmd:hs"
+# «🔎 جستجو» beside the command center: the plain search, without the switches panel.
+COMMAND_SEARCH_CALLBACK = "cmd:s"
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,4 +39,6 @@ ADMIN_QUICK_LINKS = HubEntry("btn_adm_quick_links", QUICK_LINKS_CALLBACK, "🔗 
 SHOP_QUICK_LINKS = HubEntry("btn_res_quick_links", QUICK_LINKS_CALLBACK, "🔗 لینک‌های سریع")
 ADMIN_COMMAND_CENTER = HubEntry("btn_adm_command_center", COMMAND_CENTER_CALLBACK, "⚡ مرکز فرمان")
 SHOP_COMMAND_CENTER = HubEntry("btn_res_command_center", COMMAND_CENTER_CALLBACK, "⚡ مرکز فرمان")
+ADMIN_SEARCH = HubEntry("btn_adm_search", COMMAND_SEARCH_CALLBACK, "🔎 جستجو")
+SHOP_SEARCH = HubEntry("btn_res_search", COMMAND_SEARCH_CALLBACK, "🔎 جستجو")
 SERVICE_SHOP_REVIEW = HubEntry("btn_adm_service_shop_review", SERVICE_SHOP_REVIEW_CALLBACK, "🏷 تعیین فروشگاه سرویس")

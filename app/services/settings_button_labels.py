@@ -30,6 +30,7 @@ PLATFORM_ONLY_BTN_KEYS: frozenset[str] = frozenset(
         "btn_adm_edit_mode",
         "btn_adm_quick_links",
         "btn_adm_command_center",
+        "btn_adm_search",
         "btn_adm_hub_ops",
         "btn_adm_hub_people",
         "btn_adm_hub_product",
@@ -148,6 +149,7 @@ BTN_ADMIN_HUB_ITEMS: list[Field] = [
     ("btn_adm_loyalty", "باشگاه (ادمین)", "text"),
     ("btn_adm_backup", "بکاپ / ریستور", "text"),
     ("btn_adm_exit_preview", "خروج از پیش‌نمایش", "text"),
+    ("btn_adm_search", "جستجو", "text"),
 ]
 
 BTN_ADMIN_SERVICE_CARE: list[Field] = [
@@ -264,6 +266,7 @@ BTN_RESELLER_GROUPS: list[Field] = [
     ("btn_res_grp_account", "گروه حساب من", "text"),
     ("btn_res_quick_links", "لینک‌های سریع", "text"),
     ("btn_res_command_center", "مرکز فرمان", "text"),
+    ("btn_res_search", "جستجو", "text"),
 ]
 
 BTN_RESELLER_HUB: list[Field] = [

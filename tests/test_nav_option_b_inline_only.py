@@ -35,9 +35,9 @@ class TestAdminHubSettingsLabels(unittest.TestCase):
         labels = [
             b.text for row in admin_groups_hub_keyboard(ui).inline_keyboard for b in row
         ]
-        # The command center row comes first, then the five groups.
+        # The command center and search row comes first, then the five groups.
         self.assertEqual(
-            labels[1:6],
+            labels[2:7],
             ["AAA ops", "BBB people", "CCC product", "EEE marketing", "DDD system"],
         )
 

@@ -31,11 +31,12 @@ from app.bot.command_catalog import (
 from app.bot.handlers import admin_settings, reseller_settings
 from app.bot.handlers.reply_nav import open_admin_home, open_reseller_home
 from app.bot.handlers.reseller_hub import load_reseller_hub
-from app.bot.hub_entries import COMMAND_CENTER_CALLBACK, COMMAND_CENTER_SETTINGS_CALLBACK
+from app.bot.hub_entries import COMMAND_CENTER_SETTINGS_CALLBACK, COMMAND_SEARCH_CALLBACK
 from app.bot.list_pages import Page, page_line, page_number, page_of, pager_row
 from app.bot.nav_input import (
     CancelEntry,
     ask_text,
+    cancel_callback,
     delete_user_message,
     finish_text_step,
     register_cancel_code,
@@ -76,17 +77,15 @@ RECENT_KEY = "command_recent"
 RECENT_LIMIT = 5
 RECENT_PREFIX = "cmd:q:"
 RECENT_TEXT_MAX = 24
-TITLE = "⚡ مرکز فرمان"
 PROMPT = (
-    f"<b>{TITLE}</b>\n\n"
-    "نام هر منو، دکمه یا تنظیمی را بفرستید تا همان بخش را باز کنید.\n"
-    "مثلاً «کارت»، «تست»، «بکاپ» یا «رسید»."
+    "<b>🔎 جستجو</b>\n\n"
+    "نام هر منو، دکمه یا تنظیمی، یا نام، یوزرنیم یا آیدی یک کاربر را بفرستید تا همان را باز کنید.\n"
+    "مثلاً «کارت»، «تست»، «بکاپ» یا «@username»."
 )
 TOO_SHORT = "حداقل دو حرف بفرستید."
 NOTHING_FOUND = "چیزی پیدا نشد؛ کلمهٔ کوتاه‌تر یا نام دیگری را امتحان کنید، مثلاً «کارت» یا «تست»."
 RESULTS_HINT = "روی هر مورد بزنید تا همان بخش باز شود."
 SEARCH_AGAIN = "🔎 جستجوی دیگر"
-BACK = "⬅️ بازگشت"
 ALL_KINDS = "a"
 # Filter code in callback data → kind, chip label and the icon shown before results without one.
 KIND_CODES: dict[str, CommandKind] = {
@@ -124,6 +123,8 @@ class CommandViewer:
     # What records this viewer may find; None searches menus and settings only.
     data_scope: DataScope | None = None
     data_cards: dict[DataKind, str] = field(default_factory=dict)
+    # The viewer's settings, for button labels and colors (the back button follows «btn_back»).
+    ui: dict[str, str] = field(default_factory=dict)
 
 
 async def load_command_viewer(
@@ -139,12 +140,13 @@ async def load_command_viewer(
         scope = DataScope(
             shop_id=int(hub.profile.user_id), customers=has_bot_perm(hub.profile, CUSTOMER_PERMISSION)
         )
-        return CommandViewer(entries, RESELLER_HOME_CALLBACK, scope, SHOP_DATA_CARDS)
+        return CommandViewer(entries, RESELLER_HOME_CALLBACK, scope, SHOP_DATA_CARDS, hub.ui)
     if not await is_bot_owner_principal(session, db_user, is_reseller_bot=False):
         return None
     ui = await get_all_settings(session)
     scope = DataScope(shop_id=None, customers=True, resellers=True, orders=True)
-    return CommandViewer(admin_command_entries(ui, admin_settings.SECTIONS), ADMIN_HOME_CALLBACK, scope, OWNER_DATA_CARDS)
+    entries = admin_command_entries(ui, admin_settings.SECTIONS)
+    return CommandViewer(entries, ADMIN_HOME_CALLBACK, scope, OWNER_DATA_CARDS, ui)
 
 
 def data_entries(viewer: CommandViewer, hits: list[DataHit]) -> list[CommandEntry]:
@@ -182,7 +184,8 @@ def _kind_code(raw: str | None) -> str:
 def _stored_back(viewer: CommandViewer, data: dict) -> str:
     """The back target saved when the search was opened, if it is one this viewer may use."""
     back = data.get(BACK_KEY)
-    return back if back in {viewer.home_callback, _back_for(viewer, None)} else viewer.home_callback
+    allowed = {viewer.home_callback, _back_for(viewer, COMMAND_CENTER_SETTINGS_CALLBACK)}
+    return back if back in allowed else viewer.home_callback
 
 
 def results_callback(kind_code: str) -> str:
@@ -214,10 +217,10 @@ def _filter_rows(hits: list[CommandEntry], kind_code: str) -> list[list[InlineKe
     return [chips[i : i + CHIPS_PER_ROW] for i in range(0, len(chips), CHIPS_PER_ROW)]
 
 
-def _footer(home_callback: str) -> list[InlineKeyboardButton]:
+def _footer(ui: dict[str, str], back_callback: str) -> list[InlineKeyboardButton]:
     return [
-        InlineKeyboardButton(text=SEARCH_AGAIN, callback_data=COMMAND_CENTER_CALLBACK),
-        InlineKeyboardButton(text=BACK, callback_data=home_callback),
+        InlineKeyboardButton(text=SEARCH_AGAIN, callback_data=COMMAND_SEARCH_CALLBACK),
+        kb.back_button(ui, back_callback),
     ]
 
 
@@ -233,7 +236,7 @@ def results_panel(
     """One page of results (``records`` first) as an inline panel; the query is escaped, never trusted."""
     is_link = query == LINK_QUERY
     heading = LINK_HEADING if is_link else f"🔎 <b>«{html.escape(query[:SEARCH_QUERY_MAX_LEN])}»</b>"
-    footer = _footer(back_callback or viewer.home_callback)
+    footer = _footer(viewer.ui, back_callback or viewer.home_callback)
     searchable = not is_link and bool(query_words(query))
     hits = [*(records or []), *(search_commands(viewer.entries, query) if searchable else [])]
     if not hits:
@@ -253,9 +256,12 @@ def results_panel(
     return body, InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+SETTINGS_SEARCH_CALLBACKS = frozenset({COMMAND_CENTER_SETTINGS_CALLBACK, LEGACY_SETTINGS_SEARCH_CALLBACK})
+
+
 def _back_for(viewer: CommandViewer, opened_with: str | None) -> str:
     """Back leads where the search was opened: the owner's settings hub or the panel home."""
-    if opened_with != COMMAND_CENTER_CALLBACK and viewer.home_callback == ADMIN_HOME_CALLBACK:
+    if opened_with in SETTINGS_SEARCH_CALLBACKS and viewer.home_callback == ADMIN_HOME_CALLBACK:
         return ADMIN_SETTINGS_CALLBACK
     return viewer.home_callback
 
@@ -266,10 +272,15 @@ async def ask_command_query(
     *,
     kind_code: str,
     back_callback: str,
+    ui: dict[str, str],
     prompt: str = PROMPT,
     extra_inline: InlineKeyboardMarkup | None = None,
 ) -> None:
-    """Show ``prompt`` and read the next typed text as a search; «انصراف» goes to ``back_callback``."""
+    """Show ``prompt`` and read the next typed text as a search; «بازگشت» goes to ``back_callback``.
+
+    The way out is the usual back button (label and color from settings); it leaves the input step
+    like «انصراف» does elsewhere.
+    """
     await state.update_data(**{KIND_KEY: kind_code, BACK_KEY: back_callback})
     await ask_text(
         callback,
@@ -280,12 +291,14 @@ async def ask_command_query(
         extra_inline=extra_inline,
         edit=True,
         return_to=back_callback,
+        cancel_button=kb.back_button(ui, cancel_callback(CANCEL_CODE)),
     )
 
 
-# «⚡ مرکز فرمان» itself opens the status panel (``command_switches``); these open the plain search.
-@router.callback_query(F.data.in_({COMMAND_CENTER_SETTINGS_CALLBACK, LEGACY_SETTINGS_SEARCH_CALLBACK}))
-async def open_settings_search(
+# «⚡ مرکز فرمان» itself opens the status panel (``command_switches``); these open the plain search:
+# «🔎 جستجو» of the panel home, and the settings hub's search, which starts on the settings.
+@router.callback_query(F.data.in_({COMMAND_SEARCH_CALLBACK, *SETTINGS_SEARCH_CALLBACKS}))
+async def open_search(
     callback: CallbackQuery,
     session: AsyncSession,
     db_user: BotUser,
@@ -300,7 +313,10 @@ async def open_settings_search(
         await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
-    await ask_command_query(callback, state, kind_code="s", back_callback=_back_for(viewer, callback.data))
+    kind_code = "s" if callback.data in SETTINGS_SEARCH_CALLBACKS else ALL_KINDS
+    await ask_command_query(
+        callback, state, kind_code=kind_code, back_callback=_back_for(viewer, callback.data), ui=viewer.ui
+    )
 
 
 @router.message(CommandCenterStates.query)
@@ -421,7 +437,9 @@ async def turn_results_page(
     if not isinstance(query, str) or not query:
         # The stored query is gone (another screen cleared it): ask again instead of showing nothing.
         await callback.answer()
-        await ask_command_query(callback, state, kind_code=ALL_KINDS, back_callback=viewer.home_callback)
+        await ask_command_query(
+            callback, state, kind_code=ALL_KINDS, back_callback=viewer.home_callback, ui=viewer.ui
+        )
         return
     await callback.answer()
     raw = callback.data or ""
