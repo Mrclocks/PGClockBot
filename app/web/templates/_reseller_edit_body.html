@@ -1,7 +1,7 @@
 {% from "macros.html" import switch %}
 {% from "_ds.html" import ds_perm_groups %}
 {% from "_list_input.html" import list_input %}
-{% from "_user_identity.html" import user_identity, role_tag, bot_admin_role_lock %}
+{% from "_user_identity.html" import user_identity, role_tag, role_label, shows_bot_admin, bot_admin_role_lock %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
@@ -32,9 +32,9 @@
 <section class="edit-section edit-section--identity">
   <header class="edit-section-head">
     <h3>تغییر نقش کاربر</h3>
-    <p class="muted">نقش فعلی: {{ role_badge(user).label }}</p>
+    <p class="muted">نقش فعلی: {{ role_label(user) }}</p>
   </header>
-  {% if is_bot_admin(user) %}
+  {% if shows_bot_admin(user) | trim %}
   {{ bot_admin_role_lock() }}
   {% else %}
   <form method="post" action="/resellers/{{ user.id }}/role" class="form-stack user-edit-role-form"

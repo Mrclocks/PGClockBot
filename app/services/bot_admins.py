@@ -41,7 +41,7 @@ def is_bot_admin(user: BotUser | None) -> bool:
     if user is None:
         return False
     try:
-        telegram_id = int(user.telegram_id or 0)
+        telegram_id = int(getattr(user, "telegram_id", 0) or 0)
     except (TypeError, ValueError):
         return False
     return telegram_id > 0 and telegram_id in get_settings().admin_ids
@@ -55,7 +55,7 @@ def role_badge(user: BotUser) -> RoleBadge:
     """
     if is_bot_admin(user):
         return RoleBadge(BOT_ADMIN_LABEL, "role-admin")
-    if user.role == Role.RESELLER.value:
+    if getattr(user, "role", None) == Role.RESELLER.value:
         return RoleBadge("نماینده", "role-reseller")
     return RoleBadge("کاربر", "role-user")
 

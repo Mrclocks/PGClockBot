@@ -1,6 +1,6 @@
 {% from "macros.html" import num_stepper %}
 {% from "_ds.html" import ds_switch %}
-{% from "_user_identity.html" import user_identity, role_tag, bot_admin_role_lock %}
+{% from "_user_identity.html" import user_identity, role_tag, role_label, shows_bot_admin, bot_admin_role_lock %}
 {% set wallet_amt = display_wallet if display_wallet is defined else (user.wallet_balance or 0) %}
 {% set points_amt = display_points if display_points is defined else 0 %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
@@ -84,9 +84,9 @@
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>تغییر نقش</h3>
-    <p class="muted">نقش فعلی: {{ role_badge(user).label }}</p>
+    <p class="muted">نقش فعلی: {{ role_label(user) }}</p>
   </header>
-  {% if is_bot_admin(user) %}
+  {% if shows_bot_admin(user) | trim %}
   {{ bot_admin_role_lock() }}
   {% else %}
   <form method="post" action="/users/{{ user.id }}/role" class="form-stack user-edit-role-form"
