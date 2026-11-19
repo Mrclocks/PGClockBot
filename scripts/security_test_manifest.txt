@@ -30,6 +30,7 @@ tests/test_web_money_formatting.py
 tests/test_update_migration_metadata.py
 # --- ACL / RBAC / authz audits ---
 # --- Core authorization / role & tenant isolation phases ---
+tests/test_bot_admin_role.py
 # Every file listed here is executed by scripts/run_security_tests.sh (and by
 # full test suite, which also contains a long tail of unrelated pre-existing
 # it is never silently skipped by future patches. One path per line; lines
