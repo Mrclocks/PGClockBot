@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
-    "0.7.2": [
+    "0.7.3": [
         "دیتابیس: ربات فقط روی PostgreSQL اجرا می‌شود؛ SQLite، ابزار انتقال از SQLite و پشتیبان‌گیری SQLite حذف شد و DATABASE_URL دیگر مقدار پیش‌فرض ندارد (#1488)",
         "به‌روزرسانی: روی سروری که دیتابیس PostgreSQL ندارد، به‌روزرسانی از اسکریپت و از پنل پیش از هر تغییری متوقف می‌شود (#1488)",
         "کد هدیه: بازخرید هم‌زمان دیگر یک کد را چند بار برای یک مشتری اعمال نمی‌کند (#1488)",
