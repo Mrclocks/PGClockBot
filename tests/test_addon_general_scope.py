@@ -20,6 +20,7 @@ from app.services.service_addons import (
     update_pack,
 )
 from app.services.shop_scope import ShopScopeError
+from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
 from tests.postgres_support import add_rows, scoped_async_engine, scoped_sync_engine
 
@@ -233,7 +234,7 @@ class PlansPageTests(unittest.TestCase):
             "staff": OWNER, "plans": [], "plan_categories": [vip, eco], "plan_category_map": {1: vip, 2: eco},
             "service_addon_packs": [pack(1, "GeneralPack", None, True), pack(2, "VipPack", 1, False)],
             "category_linked_plans": {}, "values": {}, "templates": [], "groups": [], "reseller_plans": [],
-            "gift_codes": [], "is_platform_admin": True,
+            "gift_codes": [], "is_platform_admin": True, "trial_placement_labels": TRIAL_PLACEMENT_LABELS,
         }
         return render(request, "plans.html", ctx).body.decode("utf-8")
 

@@ -31,7 +31,7 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
         self.now = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
         self.sent: list[str] = []
 
-        async def fake_send(text: str) -> int:
+        async def fake_send(text: str, **_kwargs) -> int:
             self.sent.append(text)
             return 1
 
@@ -145,7 +145,7 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
     async def test_notify_failure_does_not_raise(self) -> None:
         self._send_patch.stop()
 
-        async def boom(_text: str) -> int:
+        async def boom(_text: str, **_kwargs) -> int:
             raise RuntimeError("telegram down")
 
         with patch.object(alerts, "_send_to_owners", side_effect=boom):
@@ -248,7 +248,7 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
         with patch("asyncio.sleep", new=AsyncMock()), \
              patch.object(alerts, "get_settings", return_value=MagicMock(admin_ids=[111])), \
              patch.dict(sys.modules, {"app.bot": bot_mod}):
-            delivered = await alerts._send_to_owners("hello")
+            delivered = await alerts._send_to_owners("hello", is_down=True)
         self.assertIs(alerts.get_settings(), real_settings)
         self.assertEqual(delivered, 1)
         self.assertEqual(calls["n"], 2)

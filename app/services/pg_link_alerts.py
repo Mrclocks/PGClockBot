@@ -26,7 +26,7 @@ from app.services import pg_link_health
 from app.services.formatting import format_message, info_block, kv_line
 from app.services.pg_link_watchdog import WATCHDOG_FAILURES_FOR_ALERT, consecutive_failures as watchdog_failure_streak
 from app.services.pg_read_resilience import circuit_status
-from app.services.staff_notice_buttons import pasarguard_markup
+from app.services.staff_notice_buttons import link_alert_markup
 from app.services.users import clear_settings_cache, get_setting, set_setting
 
 logger = logging.getLogger(__name__)
@@ -305,7 +305,7 @@ async def decide_link_alert(
     return LinkAlertDecision(ALERT_UP, compose_up_text(when=moment))
 
 
-async def _send_to_owners(text: str) -> int:
+async def _send_to_owners(text: str, *, is_down: bool) -> int:
     """Best-effort HTML message to ADMIN_IDS; honours TelegramRetryAfter."""
     from app.bot import create_bot
 
@@ -319,7 +319,7 @@ async def _send_to_owners(text: str) -> int:
             for attempt in range(2):
                 try:
                     await asyncio.wait_for(
-                        bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=pasarguard_markup()),
+                        bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=link_alert_markup(is_down=is_down)),
                         timeout=20,
                     )
                     delivered += 1
@@ -366,7 +366,7 @@ async def notify_link_health_change(
         if decision.text is None:
             return None
         # Claim already committed inside set_setting; send outside any open unit of work.
-        await _send_to_owners(decision.text)
+        await _send_to_owners(decision.text, is_down=decision.sent_type == ALERT_DOWN)
         return decision.sent_type
     except Exception:
         logger.warning("PasarGuard link alert notify failed", exc_info=True)

@@ -74,9 +74,9 @@ class QueueShortcutTests(unittest.TestCase):
         from app.bot.nav_inline import admin_groups_hub_keyboard
 
         kb = admin_groups_hub_keyboard({})
-        # First row should be hub groups, not shortcuts
+        # With no open work the panel starts with the command center, not a shortcut row
         cbs = [b.callback_data for b in kb.inline_keyboard[0]]
-        self.assertTrue(all(c.startswith("nv:adm:") for c in cbs))
+        self.assertEqual(cbs, ["cmd:h"])
 
 
 class TicketActionsMarkupTests(unittest.TestCase):

@@ -18,10 +18,13 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from app.bot.chat_cleanup import note_throwaway, sweep_above
 from app.bot.edit_mode import editable_screen
 from app.bot.hub_entries import (
+    ADMIN_COMMAND_CENTER,
     ADMIN_QUICK_LINKS,
     ADMIN_STAFF_AUDIT,
     ADMIN_TRIAL_USERS,
+    COMMAND_CENTER_SETTINGS_CALLBACK,
     SERVICE_SHOP_REVIEW,
+    SHOP_COMMAND_CENTER,
     SHOP_QUICK_LINKS,
     SHOP_STAFF_AUDIT,
     SHOP_TRIAL_USERS,
@@ -641,6 +644,8 @@ def admin_groups_hub_keyboard(
     )
     if shortcuts:
         rows.append(shortcuts)
+    # Open work first; then the command center, which opens any other screen by name.
+    rows.append([_hub_entry_button(ui, ADMIN_COMMAND_CENTER)])
     # Group messages and quick links share one row under the groups: the most used tools, one tap away.
     broadcast = [b for b in buttons if b.callback_data == "nv:adm:broadcast"]
     groups = [b for b in buttons if b.callback_data != "nv:adm:broadcast"]
@@ -1039,6 +1044,7 @@ def reseller_manage_hub_keyboard(
     )
     if shortcuts:
         rows.append(shortcuts)
+    rows.append([_hub_entry_button(ui, SHOP_COMMAND_CENTER)])
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i : i + 2])
     # Like the admin panel: group messages beside quick links in one row.
@@ -1246,7 +1252,7 @@ def admin_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     search_row = [
         _ikb(
             _t(ui, "btn_adm_st_find"),
-            callback_data="adm:st:find",
+            callback_data=COMMAND_CENTER_SETTINGS_CALLBACK,
             ui=ui,
             label_key="btn_adm_st_find",
             style_id="adm_st_find",

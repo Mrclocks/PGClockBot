@@ -15,6 +15,7 @@ from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
 from app.bot.handlers import reply_nav, start
 from app.bot.handlers.admin_settings import SettingsStates
+from app.bot.handlers.command_center import CommandCenterStates
 from app.bot.handlers.guide_editor import OwnerGuideInput, ShopGuideInput
 from app.bot.handlers.loyalty import LoyaltyManageStates
 from app.bot.handlers.payment_destinations_editor import OwnerDestinationInput, ShopDestinationInput
@@ -76,9 +77,9 @@ class SettingsValueIsNotMenuTapTests(unittest.TestCase):
         result = asyncio.run(_menu_filter(home, ResellerSettingsStates.edit_value))
         self.assertFalse(result)
 
-    def test_settings_search_for_a_label_is_not_a_menu_tap(self) -> None:
+    def test_command_center_search_for_a_label_is_not_a_menu_tap(self) -> None:
         label = default_ui()["btn_reseller_apply"]
-        result = asyncio.run(_menu_filter(label, SettingsStates.search_query))
+        result = asyncio.run(_menu_filter(label, CommandCenterStates.query))
         self.assertFalse(result)
 
     def test_same_label_still_navigates_outside_settings_prompt(self) -> None:
@@ -106,6 +107,7 @@ class VerbatimStateNamesTests(unittest.TestCase):
     def test_every_listed_state_exists(self) -> None:
         groups = (
             SettingsStates,
+            CommandCenterStates,
             ResellerSettingsStates,
             OwnerGuideInput,
             ShopGuideInput,
@@ -122,7 +124,7 @@ class VerbatimStateNamesTests(unittest.TestCase):
             SettingsStates.edit_value,
             SettingsStates.support_title,
             SettingsStates.trial_name,
-            SettingsStates.search_query,
+            CommandCenterStates.query,
             ResellerSettingsStates.edit_value,
             ResellerSettingsStates.support_title,
         ):

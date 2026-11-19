@@ -10,7 +10,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.bot.handlers import admin_settings
+from app.bot.command_catalog import admin_command_entries
+from app.bot.handlers import admin_settings, command_center
 from app.bot.nav_inline import admin_settings_hub_keyboard
 from app.bot.nav_input import PROMPT_CHAT_ID, PROMPT_MSG_ID
 from app.services.settings_button_labels import (
@@ -18,6 +19,7 @@ from app.services.settings_button_labels import (
     all_btn_field_keys,
     appearance_button_subs,
 )
+from app.services.command_search import search_commands
 from app.services.settings_search import (
     SettingsSearchEntry,
     normalize_search_text,
@@ -33,6 +35,10 @@ UNREACHABLE_BEFORE = {
 }
 
 
+def _owner_entries():
+    return admin_command_entries({}, admin_settings.SECTIONS)
+
+
 class SearchTests(unittest.TestCase):
     def test_arabic_letters_and_half_spaces_match(self):
         self.assertEqual(
@@ -40,9 +46,9 @@ class SearchTests(unittest.TestCase):
         )
 
     def test_search_finds_field_by_label_and_by_section(self):
-        by_label = search_settings(admin_settings._SEARCH_ENTRIES, "شماره کارت")
-        self.assertIn("card_number", [e.key for e in by_label])
-        by_section = search_settings(admin_settings._SEARCH_ENTRIES, "قوانین")
+        by_label = search_commands(_owner_entries(), "شماره کارت")
+        self.assertIn("card_number", [e.terms for e in by_label])
+        by_section = search_commands(_owner_entries(), "قوانین")
         self.assertTrue(by_section)
 
     def test_every_word_must_match_and_results_are_bounded(self):
@@ -53,7 +59,8 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(search_settings(many, "   "), [])
 
     def test_hostile_query_is_escaped_in_panel_text_and_ignored_in_callbacks(self):
-        body, markup = admin_settings._search_results_panel("<b>x</b>" * 20)
+        viewer = command_center.CommandViewer(_owner_entries(), "nv:adm:home")
+        body, markup = command_center.results_panel(viewer, "<b>x</b>" * 20)
         self.assertNotIn("<b>x", body)
         for row in markup.inline_keyboard:
             for button in row:
@@ -69,7 +76,7 @@ class AppearanceSectionTests(unittest.TestCase):
     def test_admin_label_keys_stay_hidden_from_shop_settings(self):
         keys = {f[0] for _, _, fields in appearance_button_subs() for f in fields}
         # «ادامه خرید» is a customer button a shop renames too, so it sits with the shop's labels.
-        self.assertEqual(keys, UNREACHABLE_BEFORE - {"btn_buy_continue"})
+        self.assertEqual(keys, (UNREACHABLE_BEFORE | {"btn_adm_command_center"}) - {"btn_buy_continue"})
         self.assertIn("btn_buy_continue", all_btn_field_keys(include_platform=False))
         admin_keys = {k for k in keys if k.startswith("btn_adm_")}
         self.assertTrue(admin_keys <= PLATFORM_ONLY_BTN_KEYS)
@@ -92,7 +99,7 @@ class AppearanceSectionTests(unittest.TestCase):
 
     def test_hub_has_search_row_and_all_section_buttons(self):
         rows = admin_settings_hub_keyboard({}).inline_keyboard
-        self.assertEqual(rows[0][0].callback_data, "adm:st:find")
+        self.assertEqual(rows[0][0].callback_data, "cmd:hs")
         callbacks = {b.callback_data for row in rows for b in row}
         for sec in admin_settings.HUB_ORDER:
             self.assertIn(f"adm:st:sec:{sec}", callbacks)
@@ -109,10 +116,9 @@ class SearchFlowTests(unittest.IsolatedAsyncioTestCase):
         message.answer = AsyncMock()
         message.delete = AsyncMock()
         user = SimpleNamespace(role="admin", telegram_id=1)
-        with patch.object(admin_settings, "_is_admin", return_value=True), patch.object(
-            admin_settings, "_ensure_settings_actor", AsyncMock(return_value=True)
-        ):
-            await admin_settings.settings_search_run(message, state, MagicMock(), user)
+        viewer = command_center.CommandViewer(_owner_entries(), "nv:adm:home")
+        with patch.object(command_center, "load_command_viewer", AsyncMock(return_value=viewer)):
+            await command_center.run_command_search(message, MagicMock(), user, state)
         message.answer.assert_not_awaited()
         self.assertEqual(message.bot.edit_message_text.await_args.kwargs["message_id"], 5)
 
@@ -123,7 +129,7 @@ if __name__ == "__main__":
 
 class FuzzySearchTests(unittest.TestCase):
     def _keys(self, query: str) -> list[str]:
-        return [e.key for e in search_settings(admin_settings._SEARCH_ENTRIES, query)]
+        return [e.terms for e in search_commands(_owner_entries(), query)]
 
     def test_one_typo_still_finds_the_field(self):
         self.assertIn("card_number", self._keys("شماره کارط"))

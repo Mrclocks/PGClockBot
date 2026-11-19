@@ -799,6 +799,7 @@ DEFAULT_SETTINGS = {
     # Where «دریافت تست» shows: offer (home message), keyboard (main menu) or both.
     "trial_button_placement": "offer",
     "trial_for_service_owners": "0",
+    "trial_show_claimed": "1",
     "trial_require_contact": "0",
     "purchase_require_contact": "0",
     "trial_require_iran_phone": "0",
@@ -1041,6 +1042,7 @@ DEFAULT_SETTINGS = {
     "btn_adm_broadcast_history": "📜 تاریخچهٔ ارسال‌ها",
     "btn_adm_staff_audit": "🧾 گزارش کارکنان",
     "btn_adm_quick_links": "🔗 لینک‌های سریع",
+    "btn_adm_command_center": "⚡ مرکز فرمان",
     "btn_adm_service_shop_review": "🏷 تعیین فروشگاه سرویس",
     "btn_pg_hosts": "🌐 هاست‌ها",
     "btn_pg_inbounds": "📡 اینباندها",
@@ -1048,6 +1050,7 @@ DEFAULT_SETTINGS = {
     "btn_res_trial_users": "🧪 کاربران تست",
     "btn_res_staff_audit": "🧾 گزارش کارکنان",
     "btn_res_quick_links": "🔗 لینک‌های سریع",
+    "btn_res_command_center": "⚡ مرکز فرمان",
     "btn_adm_discounts": "🏷 تخفیف‌ها",
     "btn_adm_funnel": "📊 رفتار کاربر",
     "btn_res_gift_codes": "🎁 کد هدیه",

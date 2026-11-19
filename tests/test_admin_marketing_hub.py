@@ -33,7 +33,7 @@ class MarketingHubKeyboardTests(unittest.TestCase):
         groups = _callbacks(admin_groups_hub_keyboard({}))
         self.assertEqual(
             groups,
-            ["nv:adm:ops", "nv:adm:people", "nv:adm:product", "nv:adm:marketing", "nv:adm:system", "cma:home:0",
+            ["cmd:h", "nv:adm:ops", "nv:adm:people", "nv:adm:product", "nv:adm:marketing", "nv:adm:system", "cma:home:0",
              "nv:adm:broadcast", "qlk:v", "ed:a:h", "menu:home"],
         )
 

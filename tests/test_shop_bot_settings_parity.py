@@ -21,7 +21,6 @@ NEW_SHOP_KEYS = (
     "user_alert_low_enabled",
     "user_alert_low_traffic_pct",
     "user_alert_low_time_pct",
-    "user_alert_low_days",
     "user_alert_time_text",
     "user_alert_traffic_text",
     "first_use_nudge_enabled",
@@ -80,6 +79,11 @@ class FieldTests(unittest.TestCase):
                 # The web shows the import cap as a number with an «unlimited» button, and an alert
                 # threshold as a number with a unit select; the bot edits the number.
                 self.assertEqual(kind, "number" if web in {"number_unlimited", "threshold"} else web)
+
+    def test_shop_bot_edits_the_alert_threshold_units_as_selects(self) -> None:
+        for key in ("user_alert_low_traffic_unit", "user_alert_low_time_unit"):
+            with self.subTest(key=key):
+                self.assertEqual(reseller_settings.FIELDS[key][2], "select")
 
     def test_shop_bot_never_offers_platform_settings(self) -> None:
         for key in OWNER_ONLY_KEYS:

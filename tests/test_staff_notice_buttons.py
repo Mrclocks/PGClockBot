@@ -61,14 +61,19 @@ class SendPathTests(unittest.IsolatedAsyncioTestCase):
             await send_replacing_report(MagicMock(), bot, [5], "report", replace_key=DAILY_REPORT_KEY, parse_mode="HTML")
         self.assertNotIn("reply_markup", bot.send_message.await_args.kwargs)
 
-    async def test_the_link_alert_opens_the_pasarguard_hub(self) -> None:
+    async def test_the_link_alert_opens_the_pasarguard_hub_and_the_outage_scenario(self) -> None:
         bot = MagicMock()
         bot.send_message = AsyncMock()
         bot.session.close = AsyncMock()
         settings = MagicMock(admin_ids=[7])
         with patch("app.bot.create_bot", return_value=bot), patch.object(pg_link_alerts, "get_settings", return_value=settings):
-            self.assertEqual(await pg_link_alerts._send_to_owners("down"), 1)
-        self.assertEqual(_callbacks(bot.send_message.await_args.kwargs["reply_markup"]), ["nto:nv:adm:pg"])
+            self.assertEqual(await pg_link_alerts._send_to_owners("down", is_down=True), 1)
+            down = _callbacks(bot.send_message.await_args.kwargs["reply_markup"])
+            await pg_link_alerts._send_to_owners("up", is_down=False)
+            up = _callbacks(bot.send_message.await_args.kwargs["reply_markup"])
+        # Both open under the alert; the scenario only asks for confirmation there.
+        self.assertEqual(down, ["nto:nv:adm:pg", "nto:cmd:sc:down"])
+        self.assertEqual(up, ["nto:nv:adm:pg", "nto:cmd:h"])
 
     async def test_the_backup_problem_opens_the_backup_screen_under_the_notice(self) -> None:
         destination = backup_telegram.Destination("1:A", [7], custom=False)

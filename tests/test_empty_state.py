@@ -7,6 +7,7 @@ import unittest
 from types import SimpleNamespace
 
 
+from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
 from tests.test_marketing_nav import OWNER, _page
 from tests.test_page_header import ENV
 
@@ -78,7 +79,9 @@ class PlansCountTests(unittest.TestCase):
     """The fixed-plan counter and the empty message come from the same list; the built-in rows are not counted."""
 
     def plans_page(self, plans: list) -> str:
-        return _page("plans.html", "/plans", OWNER, plans=plans, values={})
+        return _page(
+            "plans.html", "/plans", OWNER, plans=plans, values={}, trial_placement_labels=TRIAL_PLACEMENT_LABELS
+        )
 
     def test_no_fixed_plan_reads_zero_and_offers_to_add_one(self) -> None:
         html = self.plans_page([])
