@@ -19,13 +19,12 @@ from app.services.bot_updates import get_update_scheduler
 from app.jobs.scheduler import start_background_scheduler, start_scheduler, stop_scheduler
 from app.services.home_overview import close_bot_probe_client
 from app.services.pasarguard import get_pg
+from app.services.terminal_text import install_english_logging
 from app.services.users import ensure_default_settings
 from app.services.web_auth import load_web_admin
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+# The journal is read over SSH: every line is English (see services.terminal_text).
+install_english_logging(level=logging.INFO, fmt="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("pgclock")
 
 # httpx logs full request URLs at INFO — bot tokens in api.telegram.org/bot{token}/…
@@ -449,6 +448,8 @@ def main() -> None:
         host=settings.web_host,
         port=settings.web_port,
         log_level="info",
+        # uvicorn's own logging config would bypass the English formatter; its loggers propagate to root.
+        log_config=None,
         **ssl_kwargs,
     )
 

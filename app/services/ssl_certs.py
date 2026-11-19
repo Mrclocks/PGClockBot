@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.services.terminal_text import terminal_text
 from app.config import DATA_DIR, ROOT_DIR, get_settings
 from app.util_which import which
 
@@ -28,7 +29,7 @@ def _install_progress(message: str) -> None:
     try:
         import sys
 
-        print(f"  [ssl] {message}", file=sys.stderr, flush=True)
+        print(f"  [ssl] {terminal_text(message)}", file=sys.stderr, flush=True)
     except Exception:
         logger.debug("_install_progress: ignored failure", exc_info=True)
 
