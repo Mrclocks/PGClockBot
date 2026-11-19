@@ -28,6 +28,7 @@ ON_MARK = "✅"
 OFF_MARK = "⬜️"
 UNDO_TEXT = "↩️ برگرداندن آخرین تغییر"
 CARDS_TEXT = "💳 کارت‌های مقصد"
+CARDS_BESIDE_KEY = "pay_crypto_enabled"
 SCENARIOS_TEXT = "🎬 سناریوها"
 TIMED_TEXT = "⏱ تغییر موقت"
 SCENARIOS_CALLBACK = "cmd:sc"
@@ -112,6 +113,19 @@ def undoable_change(data: PanelData) -> SwitchChange | None:
     return latest if on(data.ui.get(latest.switch.key)) == latest.enabled else None
 
 
+def _switch_rows(
+    switches: tuple[QuickSwitch, ...], buttons: list[InlineKeyboardButton], cards: InlineKeyboardButton | None
+) -> list[list[InlineKeyboardButton]]:
+    """Two switches a row; the card list sits beside «رمزارز», the last way to pay, on a row of its own."""
+    beside = next((i for i, switch in enumerate(switches) if switch.key == CARDS_BESIDE_KEY), None)
+    if cards is None or beside is None:
+        rows = [buttons[i : i + SWITCHES_PER_ROW] for i in range(0, len(buttons), SWITCHES_PER_ROW)]
+        return [*rows, [cards]] if cards is not None else rows
+    others = [button for i, button in enumerate(buttons) if i != beside]
+    rows = [others[i : i + SWITCHES_PER_ROW] for i in range(0, len(others), SWITCHES_PER_ROW)]
+    return [*rows, [buttons[beside], cards]]
+
+
 def panel_rows(
     data: PanelData, switches: tuple[QuickSwitch, ...], *, cards_callback: str | None
 ) -> list[list[InlineKeyboardButton]]:
@@ -124,7 +138,8 @@ def panel_rows(
                 text=f"{ON_MARK if is_on else OFF_MARK} {switch.label}", callback_data=toggle_callback(switch, not is_on)
             )
         )
-    rows = [buttons[i : i + SWITCHES_PER_ROW] for i in range(0, len(buttons), SWITCHES_PER_ROW)]
+    cards = InlineKeyboardButton(text=CARDS_TEXT, callback_data=cards_callback) if cards_callback else None
+    rows = _switch_rows(switches, buttons, cards)
     if switches:
         rows.append(
             [
@@ -132,8 +147,6 @@ def panel_rows(
                 InlineKeyboardButton(text=TIMED_TEXT, callback_data=TIMED_CALLBACK),
             ]
         )
-    if cards_callback:
-        rows.append([InlineKeyboardButton(text=CARDS_TEXT, callback_data=cards_callback)])
     change = undoable_change(data)
     if change is not None and change.switch.key in {switch.key for switch in switches}:
         rows.append([InlineKeyboardButton(text=UNDO_TEXT, callback_data=f"{UNDO_PREFIX}{change.record_id}")])

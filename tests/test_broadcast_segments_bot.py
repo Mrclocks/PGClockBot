@@ -27,14 +27,14 @@ def _data(markup: InlineKeyboardMarkup) -> list[str]:
 
 class KeyboardTests(unittest.TestCase):
     def test_the_owner_list_has_every_narrow_segment_and_fits_telegram(self) -> None:
-        data = _data(targeted_keyboard(shop_id=None, pick_prefix=PLATFORM_PICK, back="nv:adm:broadcast"))
+        data = _data(targeted_keyboard(shop_id=None, pick_prefix=PLATFORM_PICK, back="nv:adm:broadcast", ui={}))
         picks = {d[len(PLATFORM_PICK):] for d in data if d.startswith(PLATFORM_PICK)}
         self.assertEqual(picks, set(SEGMENTS) - HUB_SEGMENTS)
         self.assertTrue(all(len(d.encode()) <= 64 for d in data))
         self.assertEqual(data[-1], "nv:adm:broadcast")
 
     def test_a_shop_list_never_offers_platform_segments(self) -> None:
-        data = _data(targeted_keyboard(shop_id=7, pick_prefix=SHOP_PICK, back="shp:bc:hub"))
+        data = _data(targeted_keyboard(shop_id=7, pick_prefix=SHOP_PICK, back="shp:bc:hub", ui={}))
         for key in ("users", "resellers", "admins", "all"):
             self.assertNotIn(f"{SHOP_PICK}{key}", data)
 

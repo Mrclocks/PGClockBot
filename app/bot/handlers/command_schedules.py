@@ -13,6 +13,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import keyboards as kb
 from app.bot.command_panel import SCENARIOS_CALLBACK, TIMED_CALLBACK, clock, needs_confirmation
 from app.bot.handlers.command_switches import (
     SwitchViewer,
@@ -44,14 +45,13 @@ TIMED_PREFIX = "cmd:tm:"
 SCENARIO_PREFIX = "cmd:sc:"
 END_PREFIX = "cmd:se:"
 REVERT_PREFIX = "cmd:rv:"
-BACK = "⬅️ بازگشت"
 DURATION_LABELS = {"1h": "۱ ساعت", "3h": "۳ ساعت", "am": "تا ۸ صبح"}
 TIMED_TITLE = "<b>⏱ تغییر موقت</b>\nکلیدی را انتخاب کنید؛ بعد از مدتی که تعیین می‌کنید خودش برمی‌گردد."
 SCENARIOS_TITLE = "<b>🎬 سناریوها</b>\nچند کلید را با یک لمس عوض می‌کند و حالت قبلی را نگه می‌دارد تا برگردانید."
 
 
-def _back_row(callback_data: str) -> list[InlineKeyboardButton]:
-    return [InlineKeyboardButton(text=BACK, callback_data=callback_data)]
+def _back_row(ui: dict[str, str], callback_data: str) -> list[InlineKeyboardButton]:
+    return [kb.back_button(ui, callback_data)]
 
 
 def _keys(viewer: SwitchViewer) -> frozenset[str]:
@@ -94,7 +94,7 @@ async def _timed_list(callback: CallbackQuery, session: AsyncSession, viewer: Sw
         if view.scenario_title is None:
             text = f"↩️ {view.switch.label}: همین حالا برگردان"
             rows.append([InlineKeyboardButton(text=text, callback_data=f"{REVERT_PREFIX}{view.revert_id}")])
-    rows.append(_back_row(COMMAND_CENTER_CALLBACK))
+    rows.append(_back_row(ui, COMMAND_CENTER_CALLBACK))
     await safe_edit_text(callback.message, TIMED_TITLE, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
@@ -114,7 +114,7 @@ async def _duration_choice(callback: CallbackQuery, session: AsyncSession, viewe
             InlineKeyboardButton(text=label, callback_data=f"{TIMED_PREFIX}{switch.code}:{duration}")
             for duration, label in DURATION_LABELS.items()
         ],
-        _back_row(TIMED_CALLBACK),
+        _back_row(ui, TIMED_CALLBACK),
     ]
     await callback.answer()
     await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
@@ -170,6 +170,7 @@ async def timed_switch(
 
 
 async def _scenario_list(callback: CallbackQuery, session: AsyncSession, viewer: SwitchViewer) -> None:
+    ui = await get_all_settings(session, reseller_id=viewer.shop_id)
     active = {view.scenario_title for view in await load_revert_views(session, viewer) if view.scenario_title}
     lines = [SCENARIOS_TITLE]
     rows = []
@@ -181,17 +182,19 @@ async def _scenario_list(callback: CallbackQuery, session: AsyncSession, viewer:
             rows.append([InlineKeyboardButton(text=f"↩️ پایان {scenario.title}", callback_data=f"{END_PREFIX}{scenario.code}")])
         else:
             rows.append([InlineKeyboardButton(text=scenario.title, callback_data=f"{SCENARIO_PREFIX}{scenario.code}")])
-    rows.append(_back_row(COMMAND_CENTER_CALLBACK))
+    rows.append(_back_row(ui, COMMAND_CENTER_CALLBACK))
     await safe_edit_text(callback.message, "\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
-async def _scenario_confirm(callback: CallbackQuery, viewer: SwitchViewer, scenario: Scenario) -> None:
+async def _scenario_confirm(
+    callback: CallbackQuery, ui: dict[str, str], viewer: SwitchViewer, scenario: Scenario
+) -> None:
     actions = "\n".join(f"• {viewer.switch(code).label}: {_state_word(enabled)}" for code, enabled in _allowed_actions(scenario, viewer))
     back = "تا ساعت ۸ صبح؛ بعد خودش برمی‌گردد." if scenario.until_morning else "تا وقتی «پایان» را بزنید."
     text = f"<b>{scenario.title}</b>\n{scenario.description}\n\n{actions}\n\n{back}"
     rows = [
         [InlineKeyboardButton(text="✅ اجرا", callback_data=f"{SCENARIO_PREFIX}{scenario.code}:y")],
-        _back_row(SCENARIOS_CALLBACK),
+        _back_row(ui, SCENARIOS_CALLBACK),
     ]
     await callback.answer()
     await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
@@ -220,7 +223,9 @@ async def scenario_screen(
         await callback.answer(feedback.INVALID, show_alert=True)
         return
     if len(parts) == 1:
-        await _scenario_confirm(callback, viewer, scenario)
+        await _scenario_confirm(
+            callback, await get_all_settings(session, reseller_id=viewer.shop_id), viewer, scenario
+        )
         return
     try:
         changed = await run_scenario(
