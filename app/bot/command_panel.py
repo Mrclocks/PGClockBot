@@ -7,8 +7,9 @@ Rendering only; the data is loaded by the handler and every change goes through
 from __future__ import annotations
 
 import html
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from aiogram.types import InlineKeyboardButton
 
@@ -27,6 +28,22 @@ ON_MARK = "✅"
 OFF_MARK = "⬜️"
 UNDO_TEXT = "↩️ برگرداندن آخرین تغییر"
 CARDS_TEXT = "💳 کارت‌های مقصد"
+SCENARIOS_TEXT = "🎬 سناریوها"
+TIMED_TEXT = "⏱ تغییر موقت"
+SCENARIOS_CALLBACK = "cmd:sc"
+TIMED_CALLBACK = "cmd:tm"
+DISPLAY_ZONE = ZoneInfo("Asia/Tehran")
+
+
+@dataclass(frozen=True, slots=True)
+class PendingRevertView:
+    """A switch that will be put back: shown on the panel so nobody is surprised by the change."""
+
+    revert_id: int
+    switch: QuickSwitch
+    revert_value: bool
+    revert_at: datetime | None
+    scenario_title: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +52,7 @@ class PanelData:
     queue: PendingCounts
     changes: list[SwitchChange]
     now: datetime
+    reverts: list[PendingRevertView] = field(default_factory=list)
 
 
 def toggle_callback(switch: QuickSwitch, enabled: bool, *, confirmed: bool = False) -> str:
@@ -69,8 +87,21 @@ def panel_text(data: PanelData, *, shop_id: int | None, can_switch: bool) -> str
         lines.extend(["", *alerts])
     if can_switch and data.changes:
         lines.extend(["", _change_line(data.changes[0], data.now)])
+    if data.reverts:
+        lines.extend(["", *(revert_line(view) for view in data.reverts)])
     lines.extend(["", SEARCH_HINT])
     return "\n".join(lines)
+
+
+def clock(at: datetime) -> str:
+    return to_fa_digits(at.astimezone(DISPLAY_ZONE).strftime("%H:%M"))
+
+
+def revert_line(view: PendingRevertView) -> str:
+    state = "روشن" if view.revert_value else "خاموش"
+    when = f"ساعت {clock(view.revert_at)}" if view.revert_at else "با پایان سناریو"
+    source = f" ({view.scenario_title})" if view.scenario_title else ""
+    return f"⏱ {view.switch.label}{source} {when} دوباره {state} می‌شود."
 
 
 def undoable_change(data: PanelData) -> SwitchChange | None:
@@ -94,6 +125,13 @@ def panel_rows(
             )
         )
     rows = [buttons[i : i + SWITCHES_PER_ROW] for i in range(0, len(buttons), SWITCHES_PER_ROW)]
+    if switches:
+        rows.append(
+            [
+                InlineKeyboardButton(text=SCENARIOS_TEXT, callback_data=SCENARIOS_CALLBACK),
+                InlineKeyboardButton(text=TIMED_TEXT, callback_data=TIMED_CALLBACK),
+            ]
+        )
     if cards_callback:
         rows.append([InlineKeyboardButton(text=CARDS_TEXT, callback_data=cards_callback)])
     change = undoable_change(data)

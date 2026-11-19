@@ -142,6 +142,7 @@ def bot_routers() -> list[Router]:
         cashback_tools,
         child_pricing_bot,
         command_center,
+        command_schedules,
         command_switches,
         shop_credit_bot,
         nav_marketing,
@@ -224,6 +225,7 @@ def bot_routers() -> list[Router]:
         # Its typed query is matched before other input steps; menu labels there are search words.
         command_center.router,
         command_switches.router,
+        command_schedules.router,
         connection_status_admin_input.router,
         purchase_contact.router,
         loyalty.router,

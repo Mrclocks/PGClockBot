@@ -2621,3 +2621,34 @@ class RandomDiscountReservation(Base):
     final_amount: Mapped[int] = mapped_column(Integer)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
     protected_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class SwitchRevert(Base):
+    """A quick switch changed for a while: the value to put back, and when (NULL = by hand).
+
+    ``shop_id`` is 0 for the platform shop so the partial unique index can allow at most one
+    pending revert per shop and setting. The revert is claimed and applied in one commit.
+    """
+
+    __tablename__ = "switch_reverts"
+    __table_args__ = (
+        Index("ix_switch_reverts_status_revert_at", "status", "revert_at"),
+        Index(
+            "uq_switch_reverts_pending",
+            "shop_id",
+            "setting_key",
+            unique=True,
+            sqlite_where=text("status = 'pending'"),
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer, server_default="0")
+    setting_key: Mapped[str] = mapped_column(String(64))
+    set_value: Mapped[bool] = mapped_column(Boolean)
+    revert_value: Mapped[bool] = mapped_column(Boolean)
+    revert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scenario: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), server_default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

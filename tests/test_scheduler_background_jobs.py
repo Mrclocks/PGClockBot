@@ -35,6 +35,8 @@ OPERATIONS = {
     "chat_message_purge",
     # Queues the warnings before an expired service is deleted; needs no running bot.
     "service_cleanup",
+    # Puts timed quick switches back when their time comes; needs no running bot.
+    "switch_reverts",
     # Approves card receipts nobody reviewed in time; opens the bot it needs only when a receipt is due.
     "scheduled_receipt_approval",
     # Reads each converting shop's API rate into memory; needs no running bot.
