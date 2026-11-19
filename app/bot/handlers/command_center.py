@@ -183,23 +183,32 @@ def _back_for(viewer: CommandViewer, opened_with: str | None) -> str:
     return viewer.home_callback
 
 
-async def _ask_query(
-    callback: CallbackQuery, state: FSMContext, viewer: CommandViewer, *, kind_code: str, back_callback: str
+async def ask_command_query(
+    callback: CallbackQuery,
+    state: FSMContext,
+    *,
+    kind_code: str,
+    back_callback: str,
+    prompt: str = PROMPT,
+    extra_inline: InlineKeyboardMarkup | None = None,
 ) -> None:
+    """Show ``prompt`` and read the next typed text as a search; «انصراف» goes to ``back_callback``."""
     await state.update_data(**{KIND_KEY: kind_code, BACK_KEY: back_callback})
     await ask_text(
         callback,
         state,
-        prompt=PROMPT,
+        prompt=prompt,
         cancel_code=CANCEL_CODE,
         fsm_state=CommandCenterStates.query,
+        extra_inline=extra_inline,
         edit=True,
         return_to=back_callback,
     )
 
 
-@router.callback_query(F.data.in_({COMMAND_CENTER_CALLBACK, COMMAND_CENTER_SETTINGS_CALLBACK, LEGACY_SETTINGS_SEARCH_CALLBACK}))
-async def open_command_center(
+# «⚡ مرکز فرمان» itself opens the status panel (``command_switches``); these open the plain search.
+@router.callback_query(F.data.in_({COMMAND_CENTER_SETTINGS_CALLBACK, LEGACY_SETTINGS_SEARCH_CALLBACK}))
+async def open_settings_search(
     callback: CallbackQuery,
     session: AsyncSession,
     db_user: BotUser,
@@ -214,10 +223,7 @@ async def open_command_center(
         await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
-    kind_code = ALL_KINDS if callback.data == COMMAND_CENTER_CALLBACK else "s"
-    await _ask_query(
-        callback, state, viewer, kind_code=kind_code, back_callback=_back_for(viewer, callback.data)
-    )
+    await ask_command_query(callback, state, kind_code="s", back_callback=_back_for(viewer, callback.data))
 
 
 @router.message(CommandCenterStates.query)
@@ -273,7 +279,7 @@ async def turn_results_page(
     if not isinstance(query, str) or not query:
         # The stored query is gone (another screen cleared it): ask again instead of showing nothing.
         await callback.answer()
-        await _ask_query(callback, state, viewer, kind_code=ALL_KINDS, back_callback=viewer.home_callback)
+        await ask_command_query(callback, state, kind_code=ALL_KINDS, back_callback=viewer.home_callback)
         return
     await callback.answer()
     raw = callback.data or ""

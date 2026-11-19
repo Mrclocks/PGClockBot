@@ -65,6 +65,8 @@ ACTION_LABELS = {
     "payment_approve": "تأیید رسید پرداخت",
     "payment_reject": "رد رسید پرداخت",
     "free_checkout": "تحویل رایگان سفارش",
+    "setting_on": "روشن کردن تنظیم",
+    "setting_off": "خاموش کردن تنظیم",
 }
 
 TARGET_LABELS = {
@@ -74,6 +76,7 @@ TARGET_LABELS = {
     "service": "سرویس",
     "payment": "پرداخت",
     "order": "سفارش",
+    "setting": "تنظیم",
 }
 
 
