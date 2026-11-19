@@ -43,6 +43,9 @@ NOTICE_SCREENS: frozenset[str] = frozenset({
     "nv:adm:pg",
     "nv:adm:resellers",
     "nv:res:home",
+    # The command center, and the confirmation of the «panel is down» scenario (it acts only on «اجرا»).
+    "cmd:h",
+    "cmd:sc:down",
     "nv:s:home",
     "nv:w:home",
     "nv:loy:home",

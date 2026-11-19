@@ -72,6 +72,10 @@ LINK_HEADING = "🔗 لینک اشتراک"
 # Shop staff need this feature to open a customer's card, so only they find customers.
 CUSTOMER_PERMISSION = "dashboard"
 CHIPS_PER_ROW = 3
+RECENT_KEY = "command_recent"
+RECENT_LIMIT = 5
+RECENT_PREFIX = "cmd:q:"
+RECENT_TEXT_MAX = 24
 TITLE = "⚡ مرکز فرمان"
 PROMPT = (
     f"<b>{TITLE}</b>\n\n"
@@ -320,24 +324,80 @@ async def run_command_search(
         await state.clear()
         await message.answer(feedback.NO_ACCESS_REPLY)
         return
+    body, markup = await _search_and_keep(session, state, viewer, text)
+    await finish_text_step(message, state, text=body, inline=markup)
+    if is_subscription_link(text):
+        await delete_user_message(message)
+
+
+def remembered(recent: list[str], query: str) -> list[str]:
+    """``recent`` with ``query`` first; a link (stored as a marker) or a too-short query is not kept."""
+    if query == LINK_QUERY or not query_words(query):
+        return recent
+    return [query, *(q for q in recent if q != query)][:RECENT_LIMIT]
+
+
+async def _search_and_keep(
+    session: AsyncSession, state: FSMContext, viewer: CommandViewer, text: str
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Search ``text`` and keep the query, the records and the recent list for the pages that follow."""
     # Checked on the whole text: a link is longer than a query and is matched in full.
     is_link = is_subscription_link(text)
     query = LINK_QUERY if is_link else text[:SEARCH_QUERY_MAX_LEN]
     records = await find_data_entries(session, viewer, text if is_link else query)
     data = await state.get_data()
+    recent = [q for q in data.get(RECENT_KEY) or [] if isinstance(q, str)]
     # Leave the input step but keep the query and the records found, so result pages can be turned.
     await state.set_state(None)
-    await state.update_data(**{QUERY_KEY: query, DATA_KEY: [[e.label, e.path, e.target] for e in records]})
-    body, markup = results_panel(
+    await state.update_data(
+        **{
+            QUERY_KEY: query,
+            DATA_KEY: [[e.label, e.path, e.target] for e in records],
+            RECENT_KEY: remembered(recent, query),
+        }
+    )
+    return results_panel(
         viewer,
         query,
         kind_code=_kind_code(data.get(KIND_KEY)),
         back_callback=_stored_back(viewer, data),
         records=records,
     )
-    await finish_text_step(message, state, text=body, inline=markup)
-    if is_link:
-        await delete_user_message(message)
+
+
+def recent_rows(data: dict) -> list[list[InlineKeyboardButton]]:
+    """One button per recent search, two per row, for the command center panel."""
+    recent = [q for q in data.get(RECENT_KEY) or [] if isinstance(q, str)][:RECENT_LIMIT]
+    buttons = [
+        InlineKeyboardButton(text=f"🕘 {query[:RECENT_TEXT_MAX]}", callback_data=f"{RECENT_PREFIX}{index}")
+        for index, query in enumerate(recent)
+    ]
+    return [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+
+
+@router.callback_query(F.data.startswith("cmd:q:"))
+async def repeat_recent_search(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
+    viewer = await load_command_viewer(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if viewer is None:
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
+        return
+    raw_index = (callback.data or "")[len(RECENT_PREFIX):]
+    recent = (await state.get_data()).get(RECENT_KEY) or []
+    if not raw_index.isdigit() or int(raw_index) >= len(recent) or not isinstance(recent[int(raw_index)], str):
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    await callback.answer()
+    body, markup = await _search_and_keep(session, state, viewer, recent[int(raw_index)])
+    await safe_edit_text(callback.message, body, reply_markup=markup)
 
 
 # A literal prefix keeps the handler visible to the callback contract check.

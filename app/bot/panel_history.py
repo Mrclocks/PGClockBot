@@ -45,6 +45,8 @@ VIEW_SCREENS: frozenset[str] = frozenset({
     "autorv:list", "payvoid:list",
     "res:dash", "res:orders", "res:tickets", "res:cancellations",
     "qlk:v",
+    # The command center panel and the «panel is down» scenario's confirmation: nothing changes before a tap.
+    "cmd:h", "cmd:sc:down",
     "shop:list",
     # Customer screens a group-message button opens (message_buttons.SCREENS): lists and texts only;
     # the trial and custom pickers and the top-up amounts only offer choices until the customer confirms.

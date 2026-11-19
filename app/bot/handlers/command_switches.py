@@ -32,7 +32,7 @@ from app.bot.command_panel import (
     toggle_callback,
 )
 from app.bot.feature_staff import resolve_feature_staff
-from app.bot.handlers.command_center import ALL_KINDS, ask_command_query
+from app.bot.handlers.command_center import ALL_KINDS, ask_command_query, recent_rows
 from app.bot.hub_entries import COMMAND_CENTER_CALLBACK
 from app.bot.reseller_hub_groups import RESELLER_HOME_CALLBACK
 from app.bot.tg_utils import safe_edit_text
@@ -153,7 +153,10 @@ async def show_command_panel(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext, viewer: SwitchViewer
 ) -> None:
     data = await load_panel_data(session, viewer)
-    rows = panel_rows(data, viewer.switches, cards_callback=viewer.cards_callback)
+    rows = [
+        *recent_rows(await state.get_data()),
+        *panel_rows(data, viewer.switches, cards_callback=viewer.cards_callback),
+    ]
     await ask_command_query(
         callback,
         state,
