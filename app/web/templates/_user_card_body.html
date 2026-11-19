@@ -1,12 +1,12 @@
 {# User card (modal fragment): one customer's account and services as the current shop sees them. #}
-{% from "_user_identity.html" import user_identity %}
+{% from "_user_identity.html" import user_identity, role_tag %}
 {% set u = card.user %}
 <div class="user-card">
   <section class="edit-section edit-section--identity">
     {% call(part) user_identity(u) %}
       {%- if part == 'badges' -%}
       {% if u.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
-      <span class="badge neutral">{% if u.role == 'admin' %}مدیر{% elif u.role == 'reseller' %}نماینده{% else %}کاربر{% endif %}</span>
+      {{ role_tag(u) }}
       {% if u.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
       {% if card.risk_tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ card.risk_tag.hex }}">{{ card.risk_tag.title_fa }}</span>{% endif %}
       {%- elif part == 'after' and (edit_target or can_message) -%}

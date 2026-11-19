@@ -3,6 +3,7 @@
 {% from "macros.html" import switch, oversell_create_switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, empty_state, search_submit %}
 {% from "_ds.html" import ds_perm_groups %}
 {% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
+{% from "_user_identity.html" import role_tag %}
 {% block title %}{% if owner_view %}نمایندگان{% else %}نمایندگان من{% endif %}{% endblock %}
 {% block content %}
 {% call(slot) page_header('resellers' if owner_view else 'users', 'نمایندگان' if owner_view else 'نمایندگان من', help='resellers') %}
@@ -179,9 +180,7 @@
         </td>
         <td class="mono col-hide-sm" data-sort-value="{{ u.telegram_id }}"><bdi dir="ltr">{{ u.telegram_id }}</bdi></td>
         <td class="col-hide-sm" data-sort-value="{{ u.role }}">
-          <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
-            {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
-          </span>
+          {{ role_tag(u) }}
         </td>
         <td class="li-sub" data-sort-value="{{ p.billing_mode or 'fixed' }}">
           {#- On phones line two: billing mode, the tags that matter, the bot and the users used. -#}

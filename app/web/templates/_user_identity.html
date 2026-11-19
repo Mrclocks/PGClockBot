@@ -35,3 +35,17 @@
   {%- if caller %}{{ caller('after') }}{% endif %}
 </div>
 {%- endmacro %}
+
+{# The role the bot applies to the person: «ادمین ربات» follows ADMIN_IDS, never the stored role alone. #}
+{% macro role_tag(user, class_name='') -%}
+{% set badge = role_badge(user) %}
+<span class="badge {{ badge.css_class }}{% if class_name %} {{ class_name }}{% endif %}">{{ badge.label }}</span>
+{%- endmacro %}
+
+{# Shown in place of the role form for a bot admin: the role comes from ADMIN_IDS, so the form would be undone. #}
+{% macro bot_admin_role_lock() -%}
+<div class="ds-note" role="note">{{ icon('info') }}<span>نقش «ادمین ربات» از «آیدی ادمین‌ها» در تنظیمات ربات می‌آید و از این فرم عوض نمی‌شود. برای برداشتن دسترسی، آیدی تلگرام این شخص را از همان‌جا پاک کنید.</span></div>
+<div class="actions">
+  <a class="btn btn-ghost" href="{{ bot_admin_settings_href }}">رفتن به تنظیمات ربات</a>
+</div>
+{%- endmacro %}

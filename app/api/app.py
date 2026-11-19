@@ -61,6 +61,14 @@ from app.services.miniapp_branding import ACCENT_PRESETS
 from app.services.miniapp_main_app import platform_main_app_guide
 from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 from app.services.payer_notify import notify_payer
+from app.services.bot_admins import (
+    BOT_ADMIN_SETTINGS_HREF,
+    WEB_ASSIGNABLE_ROLES,
+    BotAdminRoleLocked,
+    assert_role_change_allowed,
+    is_bot_admin,
+    role_badge,
+)
 from app.services.pg_panel_access import apply_pg_panel_access, is_pg_panel_blocked, pg_panel_allowed
 from app.services.resellers import (
     setup_is_complete,
@@ -214,6 +222,10 @@ templates.env.globals["brand_presets"] = BRAND_PRESETS
 templates.env.globals["message_button_dm_groups"] = message_button_target_groups(links=True, plans=False, renew=True)
 templates.env.globals["message_button_styles"] = STYLE_OPTIONS
 templates.env.globals["system_notify_keys"] = SYSTEM_NOTIFY_KEYS
+# Role badges and role forms follow ADMIN_IDS, the list the bot reads, not the stored role.
+templates.env.globals["role_badge"] = role_badge
+templates.env.globals["is_bot_admin"] = is_bot_admin
+templates.env.globals["bot_admin_settings_href"] = BOT_ADMIN_SETTINGS_HREF
 # Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).
 templates.env.globals["hub_sections"] = hub_sections
 templates.env.globals["settings_place"] = settings_place
@@ -3989,7 +4001,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             assert_bot_user_in_scope(staff, user)
         except ShopScopeError as e:
             return _redirect_msg("/users", err=e.message)
-        if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
+        try:
+            assert_role_change_allowed(user, role)
+        except BotAdminRoleLocked as exc:
+            return _redirect_msg("/users", err=str(exc))
+        if role not in WEB_ASSIGNABLE_ROLES:
             return _redirect_msg("/users", err="نقش نامعتبر")
 
         from app.services.notifications import actor_label_from_staff, notify_account_edit
@@ -4072,28 +4088,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                     from app.services.users import friendly_user_delete_error
 
                     return _redirect_msg("/users", err=friendly_user_delete_error(e))
-                if role == Role.ADMIN.value:
-                    user = await session.get(BotUser, user_id)
-                    if user and user.role != Role.ADMIN.value:
-                        user.role = Role.ADMIN.value
-                        await session.commit()
                 user = await session.get(BotUser, user_id)
-                if user and role == Role.USER.value:
+                if user:
                     await notify_reseller_revoked(
                         int(info.get("telegram_id") or user.telegram_id),
                         reason,
                         session=session,
                         user=user,
-                        actor=actor,
-                    )
-                elif user:
-                    await notify_account_edit(
-                        session,
-                        user=user,
-                        event="role",
-                        reason=reason,
-                        old_role=old_role,
-                        new_role=role,
                         actor=actor,
                     )
             else:

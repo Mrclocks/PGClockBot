@@ -1,6 +1,6 @@
 {% from "macros.html" import num_stepper %}
 {% from "_ds.html" import ds_switch %}
-{% from "_user_identity.html" import user_identity %}
+{% from "_user_identity.html" import user_identity, role_tag, bot_admin_role_lock %}
 {% set wallet_amt = display_wallet if display_wallet is defined else (user.wallet_balance or 0) %}
 {% set points_amt = display_points if display_points is defined else 0 %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
@@ -10,6 +10,7 @@
   {% call(part) user_identity(user) %}
     {%- if part == 'badges' -%}
     {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
+    {{ role_tag(user) }}
     {% if user.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
     {% set tag = color_tag_meta(marks.tag) if (color_tag_meta is defined and marks is defined) else none %}
     {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
@@ -83,10 +84,11 @@
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>تغییر نقش</h3>
-    <p class="muted">نقش فعلی:
-      {% if user.role=='admin' %}مدیر{% elif user.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
-    </p>
+    <p class="muted">نقش فعلی: {{ role_badge(user).label }}</p>
   </header>
+  {% if is_bot_admin(user) %}
+  {{ bot_admin_role_lock() }}
+  {% else %}
   <form method="post" action="/users/{{ user.id }}/role" class="form-stack user-edit-role-form"
         data-confirm="نقش این کاربر تغییر کند؟"
         data-confirm-title="تأیید تغییر نقش"
@@ -95,7 +97,6 @@
       <select name="role" id="user-{{ user.id }}-role" class="select-block">
         <option value="user" {% if user.role=='user' %}selected{% endif %}>کاربر</option>
         <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
-        <option value="admin" {% if user.role=='admin' %}selected{% endif %}>مدیر</option>
       </select>
     </label>
     {% if user.role != 'reseller' %}
@@ -114,6 +115,7 @@
       <button class="btn" type="submit">اعمال نقش</button>
     </div>
   </form>
+  {% endif %}
 </section>
 
 <section class="edit-section" id="user-wallet">

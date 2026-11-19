@@ -35,6 +35,7 @@ from app.api.pg_panel_access_pages import (
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
 from app.services.db_safe import rollback_quiet
+from app.services.bot_admins import WEB_ASSIGNABLE_ROLES, BotAdminRoleLocked, assert_role_change_allowed
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.reseller_capacity_view import allocation_view_for_shop
 from app.services.volume_allocation import apply_create_form_oversell, apply_oversell_switch, list_oversold_shop_ids
@@ -1156,7 +1157,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         ).scalar_one_or_none()
         if not user or not profile:
             return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
-        if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
+        try:
+            assert_role_change_allowed(user, role)
+        except BotAdminRoleLocked as exc:
+            return RedirectResponse(f"/resellers?err={_q(str(exc))}", status_code=303)
+        if role not in WEB_ASSIGNABLE_ROLES:
             return RedirectResponse(f"/resellers?err={_q('نقش نامعتبر')}", status_code=303)
 
         reason = str(form.get("reason") or "").strip()
@@ -1190,30 +1195,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 await notify_reseller_revoked(int(info["telegram_id"]), reason)
             return RedirectResponse(
                 f"/resellers?ok={_q('نقش به کاربر عادی تغییر کرد و اطلاع داده شد')}",
-                status_code=303,
-            )
-
-        if role == Role.ADMIN.value:
-            from app.services.notifications import actor_label_from_staff, notify_account_edit
-
-            old_role = user.role
-            profile.is_active = False
-            user.role = Role.ADMIN.value
-            await session.commit()
-            from app.services.reseller_bots import sync_reseller_bot_runtime
-
-            await sync_reseller_bot_runtime(profile)
-            await notify_account_edit(
-                session,
-                user=user,
-                event="role",
-                reason=reason,
-                old_role=old_role,
-                new_role=Role.ADMIN.value,
-                actor=actor_label_from_staff(staff),
-            )
-            return RedirectResponse(
-                f"/resellers?ok={_q('نقش به مدیر تغییر کرد (پروفایل نماینده غیرفعال شد)')}",
                 status_code=303,
             )
 
