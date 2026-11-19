@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
-from sqlalchemy import select, text, update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -165,13 +165,9 @@ async def _ensure_setting_row(session: AsyncSession, key: str, default: str = "0
 
 
 async def _begin_claim_transaction(session: AsyncSession, keys: tuple[str, ...]) -> None:
-    """Serialize claim writers: SQLite BEGIN IMMEDIATE; Postgres row locks."""
+    """Serialize claim writers with row locks on the claim settings."""
     if session.in_transaction():
         await session.rollback()
-    conn = await session.connection()
-    if conn.dialect.name == "sqlite":
-        await conn.execute(text("BEGIN IMMEDIATE"))
-        return
     await session.execute(
         select(Setting.id).where(Setting.key.in_(keys)).with_for_update()
     )

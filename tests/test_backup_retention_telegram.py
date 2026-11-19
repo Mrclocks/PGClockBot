@@ -10,11 +10,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("WEB_SECRET", "x" * 48)
 
 from aiogram.exceptions import TelegramAPIError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.services import backup as backup_mod
@@ -24,6 +23,7 @@ from app.services.backup_settings import (
 )
 from app.services.secret_box import reveal_bot_token
 from app.services.users import DEFAULT_SETTINGS, SETTING_GROUPS, TOGGLE_KEYS, get_setting, set_setting
+from tests.postgres_support import scoped_async_engine
 
 TOKEN = "123456789:" + "A" * 35
 
@@ -110,7 +110,7 @@ class SettingsTests(unittest.TestCase):
 class DeliveryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 't.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

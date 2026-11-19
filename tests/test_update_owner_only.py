@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from itsdangerous import URLSafeTimedSerializer
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.requests import Request
 
 from app.api import app as app_module
@@ -22,6 +18,7 @@ from app.db.models import BotUser, ResellerProfile
 from app.services import panel_update as pu
 from app.services.panel_inbox import build_inbox_context
 from app.services.setup_wizard import ensure_web_secret
+from tests.postgres_support import scoped_async_engine
 
 SESSION_VERSION = "session-version"
 PASSWORD_HASH = "h" * 40
@@ -52,8 +49,7 @@ UPDATE_AVAILABLE = {"update_available": True, "remote_version": "9.9.9", "versio
 
 class RoutesHarness(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'u.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -90,7 +86,6 @@ class RoutesHarness(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.client.aclose()
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def call(self, session_payload: dict, method: str, path: str) -> httpx.Response:
         cookie = f"session={self.signer.dumps(session_payload)}; csrf=token"

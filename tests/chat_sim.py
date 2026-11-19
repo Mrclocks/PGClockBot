@@ -9,10 +9,8 @@ from __future__ import annotations
 
 import itertools
 import os
-import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -41,7 +39,8 @@ from aiogram.types import (
     Update,
     User,
 )
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from tests.postgres_support import scoped_async_engine
 
 BOT_ID = 777000
 TOKEN = "123456:TEST"
@@ -209,8 +208,7 @@ class ChatSim:
         from app.db.models import Base
         from app.services.users import clear_settings_cache
 
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'sim.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -248,7 +246,6 @@ class ChatSim:
         get_settings.cache_clear()
         clear_settings_cache()
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _feed(self, update: Update) -> None:
         await self.dispatcher.feed_update(self.bot, update)

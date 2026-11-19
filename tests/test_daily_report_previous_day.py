@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, Order, OrderStatus, Plan, UserService
 from app.services.daily_report import (
@@ -19,6 +17,7 @@ from app.services.daily_report import (
     format_jalali_parts,
     previous_tehran_day_bounds,
 )
+from tests.postgres_support import scoped_async_engine
 
 _TEHRAN = ZoneInfo("Asia/Tehran")
 
@@ -36,8 +35,7 @@ class PreviousDayBoundsTests(unittest.TestCase):
 
 class PreviousDayActivityTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'd.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -47,7 +45,6 @@ class PreviousDayActivityTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def test_activity_counts_previous_day_not_partial_today(self) -> None:
         async with self.Session() as session:

@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot import marketing_panels as panels
 from app.bot.handlers import cashback_tools
 from app.db.models import BotUser, CashbackRule, Role
 from app.services.cashback_rules import CashbackSettings, list_rules, load_settings, set_rule_enabled
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 
 def _callbacks(markup) -> list[str]:
@@ -84,15 +81,14 @@ class CashbackDbCase(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'c.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, 5)
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
 
 class CashbackRuleServiceTests(CashbackDbCase):

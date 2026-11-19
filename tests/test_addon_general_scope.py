@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import importlib.util
-import os
-import tempfile
 import unittest
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import sqlalchemy as sa
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import BotUser, Plan, PlanCategory, ServiceAddonPack, UserService
 from app.services.plan_categories import delete_category
@@ -25,6 +22,7 @@ from app.services.service_addons import (
 from app.services.shop_scope import ShopScopeError
 from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import add_rows, scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = {
@@ -42,15 +40,14 @@ class AddonCase(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'a.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
         self._shop_token = set_shop_reseller_id(None)
         self.addCleanup(reset_shop_reseller_id, self._shop_token)
         async with self.Session() as session:
-            session.add_all([
+            await add_rows(session, [
                 BotUser(id=1, telegram_id=101, referral_code="u1", role="user"),
                 BotUser(id=2, telegram_id=102, referral_code="u2", role="user"),
                 BotUser(id=5, telegram_id=105, referral_code="shop5", role="reseller"),
@@ -75,7 +72,6 @@ class AddonCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def names(self, service_id: int, kind: str | None = None, shop_id: int | None = None):
         token = set_shop_reseller_id(shop_id)
@@ -273,7 +269,7 @@ class MigrationTests(unittest.TestCase):
         from alembic.operations import Operations
 
         migration = self._migration()
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text("CREATE TABLE service_addon_packs (id INTEGER PRIMARY KEY, name TEXT, category_id INTEGER)"))
             conn.execute(text("INSERT INTO service_addon_packs VALUES (1, 'plain', NULL), (2, 'vip', 7)"))
@@ -295,7 +291,7 @@ class MigrationTests(unittest.TestCase):
         from alembic.operations import Operations
 
         migration = self._migration()
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             migration.upgrade()
             migration.downgrade()

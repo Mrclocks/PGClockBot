@@ -11,15 +11,15 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("WEB_SECRET", "x" * 48)
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.services import backup_schedule as schedule
 from app.services import backup_telegram as tg
 from app.services.users import get_setting, set_setting
+from tests.postgres_support import scoped_async_engine
 
 AT_THREE = datetime(2026, 11, 2, 3, 5, tzinfo=timezone.utc)
 
@@ -27,7 +27,7 @@ AT_THREE = datetime(2026, 11, 2, 3, 5, tzinfo=timezone.utc)
 class _Case(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 't.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

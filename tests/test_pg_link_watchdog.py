@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services import pg_link_health as health
 from app.services import pg_link_watchdog as watchdog
 from app.services import pg_read_resilience as resilience
 from app.services.pasarguard import PasarGuardError
 from app.services.users import set_setting
+from tests.postgres_support import scoped_async_engine
 
 
 class WatchdogTests(unittest.IsolatedAsyncioTestCase):
@@ -22,8 +21,7 @@ class WatchdogTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'wd.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -49,7 +47,6 @@ class WatchdogTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.http.aclose()
         await self.engine.dispose()
-        self._tmpdir.cleanup()
         watchdog.reset_watchdog_state()
         resilience.reset_read_circuits()
         health.reset()

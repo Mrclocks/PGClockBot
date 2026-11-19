@@ -3,13 +3,11 @@ may only open one of the sender's own sellable plans."""
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from aiogram.types import InlineKeyboardMarkup
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.panel_history import panel_history
 from app.db.models import Base, BotUser, Plan
@@ -29,6 +27,7 @@ from app.services.message_buttons import (
 from app.services.notice_links import is_notice_screen
 from app.services.notifications import _send_to_chats
 from tests.chat_sim import ChatSim
+from tests.postgres_support import scoped_async_engine
 
 MESSAGE = "📢 پیام گروهی"
 
@@ -53,8 +52,7 @@ class TargetListTests(unittest.TestCase):
 
 class PlanButtonTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'plans.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -75,7 +73,6 @@ class PlanButtonTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def test_a_sender_may_offer_only_its_own_active_paid_plans(self) -> None:
         self.assertEqual(await sellable_plan_ids(self.session, 50), frozenset({2}))

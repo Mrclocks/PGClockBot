@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -63,6 +63,7 @@ from app.services.principal_web_identity import (
     resolve_principal_web_session,
 )
 from app.services.secret_box import encrypt_secret
+from tests.postgres_support import scoped_async_engine
 
 
 OWNER_TID = 88001
@@ -107,7 +108,7 @@ def _fake_msg():
 
 class Phase5EFinalHierarchyRedTeam(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import httpx
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 from app.services.update_channel import (
     clear_alembic_tree_cache,
@@ -20,6 +18,7 @@ from app.services.update_channel import (
     migration_preflight,
     parse_revision_assignment,
 )
+from tests.postgres_support import scoped_database_url, scoped_sync_engine
 
 
 def git_blob_sha(source: str) -> str:
@@ -156,21 +155,22 @@ class RemoteMigrationMetadataTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(peak, 6)
 
     async def test_installed_database_revision_is_compared_with_remote_metadata(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            database_url = f"sqlite:///{Path(directory) / 'installed.db'}"
-            engine = create_engine(database_url)
-            with engine.begin() as connection:
-                connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-                connection.execute(text("INSERT INTO alembic_version VALUES (:revision)"), {
-                    "revision": "0040_contacts_cancel_notices",
-                })
-            engine.dispose()
-            transport = httpx.MockTransport(self.respond)
-            with patch(
-                "app.services.update_channel.httpx.AsyncClient",
-                side_effect=lambda **kwargs: self.real_client(transport=transport, **kwargs),
-            ), patch("app.config.get_settings", return_value=SimpleNamespace(database_url=database_url)):
-                result = await migration_preflight("dev")
+        database_url = scoped_database_url(tables=False)
+        engine = scoped_sync_engine()
+        with engine.begin() as connection:
+            connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+            connection.execute(text("INSERT INTO alembic_version VALUES (:revision)"), {
+                "revision": "0040_contacts_cancel_notices",
+            })
+        engine.dispose()
+        transport = httpx.MockTransport(self.respond)
+        with patch(
+            "app.services.update_channel.httpx.AsyncClient",
+            side_effect=lambda **kwargs: self.real_client(transport=transport, **kwargs),
+        ), patch("app.config.get_settings", return_value=SimpleNamespace(database_url=database_url)), patch(
+            "app.services.update_channel.database_update_block", return_value=None
+        ):
+            result = await migration_preflight("dev")
         self.assertTrue(result["checked"])
         self.assertFalse(result["blocked"])
         self.assertEqual(result["db_revision"], "0040_contacts_cancel_notices")

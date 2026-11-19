@@ -114,7 +114,7 @@ class PackageOverview:
         expires = self.sub.expires_at if self.sub is not None else None
         if expires is None:
             return None
-        # SQLite returns naive datetimes for timezone-aware columns; they are stored as UTC.
+        # Stored timestamps are UTC; a naive value (from Python code or a test) is read as UTC.
         return (expires if expires.tzinfo else expires.replace(tzinfo=timezone.utc)).isoformat()
 
 

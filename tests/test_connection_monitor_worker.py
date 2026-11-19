@@ -25,9 +25,12 @@ from app.services.connection_monitor_accounts import MonitorAccountError
 from app.services.connection_monitor_claims import claim_monitor_cycle
 from app.services.connection_monitor_sync import reconcile_monitor_plans
 from app.services.connection_monitor_types import MonitorConfigError, MonitorEndpoint, MonitorConfigPlan, MonitorIssue
-from app.services.connection_monitor_worker import run_monitor_cycle
+from app.services.connection_monitor_worker import PROXY_CONCURRENCY, run_monitor_cycle
 from app.services.connection_status_types import ObservationKind, ProbeObservation
 from app.services.xray_probe_resources import XrayBinary, XrayProbeError
+
+
+OVERLAP_WAIT_SECONDS = 5
 
 
 class MonitorWorkerTests(MonitorDatabaseCase):
@@ -42,6 +45,10 @@ class MonitorWorkerTests(MonitorDatabaseCase):
         self.closed = 0
         self.active = 0
         self.peak = 0
+        # When set, each probe waits here until this many probes overlap, so the
+        # concurrency assertion does not depend on how fast the machine is.
+        self.overlap_target: int | None = None
+        self.overlap_reached = asyncio.Event()
 
         async def catalog(account: MonitorAccount) -> MonitorCatalog:
             self.assertFalse(self.open_connections, "Panel I/O must not hold DB connections")
@@ -65,6 +72,10 @@ class MonitorWorkerTests(MonitorDatabaseCase):
             self.active += 1
             self.peak = max(self.peak, self.active)
             try:
+                if self.overlap_target is not None:
+                    if self.active >= self.overlap_target:
+                        self.overlap_reached.set()
+                    await asyncio.wait_for(self.overlap_reached.wait(), timeout=OVERLAP_WAIT_SECONDS)
                 await asyncio.sleep(0.005)
                 return ProbeObservation(ObservationKind.SUCCESS, datetime.now(timezone.utc), "gstatic", 100)
             finally:
@@ -129,9 +140,10 @@ class MonitorWorkerTests(MonitorDatabaseCase):
             session.add_all(ConnectionMonitorTarget(subscription_key=entry.config_key, test_enabled=True, next_check_at=self.now)
                             for entry in subscription_entries(self.catalog["native_configs"]))
             await session.commit()
+        self.overlap_target = PROXY_CONCURRENCY
         result = await run_monitor_cycle(self.Session, self.binary)
         self.assertEqual(result.completed, 12)
-        self.assertEqual(self.peak, 4)
+        self.assertEqual(self.peak, PROXY_CONCURRENCY)
         self.assertEqual(self.active, 0)
 
     async def test_removed_host_is_paused_and_unpublished_without_starting_a_route_for_it(self) -> None:

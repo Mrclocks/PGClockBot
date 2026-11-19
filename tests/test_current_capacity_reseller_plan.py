@@ -298,10 +298,6 @@ class SurfaceWiringTests(unittest.TestCase):
         self.assertIn("ظرفیت فعلی", text)
         self.assertIn("default_plan_id", text)
 
-    def test_session_adds_is_system_column(self):
-        text = (ROOT / "app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn("is_system", text)
-
     def test_main_ensures_on_boot(self):
         text = (ROOT / "app/main.py").read_text(encoding="utf-8")
         self.assertIn("ensure_current_capacity_reseller_plan", text)

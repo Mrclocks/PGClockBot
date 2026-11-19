@@ -3,23 +3,21 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
 import unittest
-from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, LoyaltyReward, PointsTransaction, RewardRedemption, WalletTransaction
 from app.services.loyalty import redeem_reward
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 
 class RedeemRaceTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'race.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -35,7 +33,6 @@ class RedeemRaceTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         reset_shop_reseller_id(self.shop_token)
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def redeem_once(self) -> int | None:
         async with self.Session() as session:

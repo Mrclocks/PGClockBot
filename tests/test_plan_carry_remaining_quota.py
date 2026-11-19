@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,12 +10,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import sqlalchemy as sa
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import reseller_plans as reseller_plan_handlers
 from app.db.models import Base, BotUser, Plan, ResellerProfile
 from app.services.service_renewals import calculate_renewal, renewal_terms
 from app.services.ux20 import clone_plan
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 GB = 1024**3
@@ -62,7 +62,7 @@ class CarryRemainingArithmeticTests(unittest.TestCase):
 
 
 class CarryRemainingMigrationTests(unittest.TestCase):
-    def test_sqlite_upgrade_repeat_and_downgrade_keep_plans(self):
+    def test_upgrade_repeat_and_downgrade_keep_plans(self):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
@@ -72,7 +72,7 @@ class CarryRemainingMigrationTests(unittest.TestCase):
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             conn.execute(
                 sa.text(
@@ -97,8 +97,7 @@ class CarryRemainingMigrationTests(unittest.TestCase):
 
 class CarryRemainingCloneAndShopIsolationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'carry.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -141,7 +140,6 @@ class CarryRemainingCloneAndShopIsolationTests(unittest.IsolatedAsyncioTestCase)
     async def asyncTearDown(self):
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def test_clone_copies_carry_flag(self):
         copy = await clone_plan(self.session, 10, owner_reseller_id=2)

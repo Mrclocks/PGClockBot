@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.settlement_pages import register_settlement_pages
 from app.db import Base
@@ -39,6 +35,7 @@ from app.services.payment_settlement import (
 )
 from app.services.psp_settlement_review import REVIEW_IN_PROGRESS_MESSAGE, REVIEW_PREFIX
 from app.services.users import clear_settings_cache, set_setting
+from tests.postgres_support import scoped_async_engine
 
 PAY_URL = "https://pay.sunpay.test"
 API_KEY = "sunpay-test-key-abcdef"
@@ -53,8 +50,7 @@ class PspSettlementReviewTests(unittest.IsolatedAsyncioTestCase):
         get_settings.cache_clear()
         clear_settings_cache()
         await close_client()
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 't.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
@@ -83,7 +79,6 @@ class PspSettlementReviewTests(unittest.IsolatedAsyncioTestCase):
 
         await close_client()
         await self.engine.dispose()
-        self._tmp.cleanup()
         clear_settings_cache()
         get_settings.cache_clear()
 

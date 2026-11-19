@@ -12,8 +12,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+from tests.postgres_support import scoped_async_engine
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("WEB_SECRET", "test-web-secret-for-shop-wallet-32chars")
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,14 +21,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         from app.db.models import Base
         import app.db.models  # noqa: F401
 
         self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "shop_wallet.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

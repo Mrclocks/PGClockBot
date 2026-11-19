@@ -289,7 +289,7 @@ async def _recover_order(
 
 
 def _aware(moment: datetime | None) -> datetime | None:
-    # SQLite returns naive values for server-side timestamps; they are UTC.
+    # Stored timestamps are UTC; a naive value (from Python code or a test) is read as UTC.
     if moment is None or moment.tzinfo is not None:
         return moment
     return moment.replace(tzinfo=timezone.utc)

@@ -4,7 +4,6 @@ the broadcast worker and direct messages."""
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -14,7 +13,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.datastructures import FormData
 
 from app.bot import message_button_picker as picker
@@ -37,6 +36,7 @@ from app.services.message_buttons import (
 )
 from app.services.shop_broadcast import queue_shop_broadcast
 from app.services.users_quick import send_staff_dm
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 LINKS = ButtonRules(allow_links=True)
@@ -129,8 +129,7 @@ class ChecklistTests(unittest.TestCase):
 
 class DbCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'm.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -153,7 +152,6 @@ class DbCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self.tmp.cleanup()
 
 
 class PresetTests(DbCase):
@@ -269,7 +267,7 @@ class MigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("m0116", ROOT / "alembic/versions/0116_message_buttons.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE broadcast_logs (id INTEGER PRIMARY KEY, text TEXT)"))
             conn.execute(sa.text("INSERT INTO broadcast_logs VALUES (1, 'hi')"))

@@ -5,7 +5,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import staff_audit_view as audit
 from app.bot.handlers import trial_users_view as trial
@@ -13,6 +13,7 @@ from app.db.models import Base, BotUser, CampaignRecipient, MarketingPreference,
 from sqlalchemy import select
 from app.services import bot_feedback_texts as feedback
 from tests.test_update_owner_only import OWNER_SESSION
+from tests.postgres_support import scoped_async_engine
 
 SHOP_STAFF = {"role": "reseller", "bot_user_id": 5}
 CTX = {"is_reseller_bot": False, "reseller_owner_id": None}
@@ -24,7 +25,7 @@ def callbacks(markup) -> list[str]:
 
 class TrialMessageTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -129,7 +130,7 @@ class TrialMessageTests(unittest.IsolatedAsyncioTestCase):
 
 class StaffViewsTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

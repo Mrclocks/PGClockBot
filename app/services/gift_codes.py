@@ -290,7 +290,7 @@ async def claim_use(
     shop_id: int | None,
     kind: str,
 ) -> None:
-    """The code UPDATE serializes claims on both PostgreSQL and SQLite.
+    """The code UPDATE row lock serializes concurrent claims of one code.
 
     Caller must wrap the claim and entitlement in one savepoint/transaction.
     Check user counts AFTER taking the code lock, so parallel requests see

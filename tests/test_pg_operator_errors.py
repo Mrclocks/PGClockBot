@@ -122,7 +122,7 @@ class TemplateCreateErrorTests(unittest.TestCase):
 
 class RawExceptionHidingTests(unittest.TestCase):
     def test_unmapped_english_exception_is_not_echoed(self) -> None:
-        msg = user_safe_error(RuntimeError("sqlite3.OperationalError: no such table (failed)"))
+        msg = user_safe_error(RuntimeError('psycopg.errors.UndefinedTable: relation "orders" does not exist'))
         self.assertEqual(msg, "خطای داخلی. دوباره تلاش کنید.")
 
     def test_persian_domain_message_is_kept(self) -> None:

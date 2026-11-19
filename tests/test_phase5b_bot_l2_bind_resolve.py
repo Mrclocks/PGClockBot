@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -36,6 +36,7 @@ from app.services.org_scope import visible_principal_ids
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.principal_web_identity import attach_level2_web_identity
 from app.services.shop_scope import shop_owner_id
+from tests.postgres_support import scoped_async_engine
 
 
 def _owner_staff(owner: OrgPrincipal) -> dict:
@@ -58,7 +59,7 @@ def _l1_staff(principal: OrgPrincipal, user: BotUser, profile: ResellerProfile) 
 
 class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

@@ -185,16 +185,5 @@ class SchemaPresenceTests(unittest.TestCase):
         self.assertEqual(ResellerBillingTransaction.__tablename__, "reseller_billing_transactions")
         self.assertEqual(ResellerBillingRate.__tablename__, "reseller_billing_rates")
 
-    def test_migrate_adds_billing_columns(self):
-        from pathlib import Path
-
-        from app.db import session as sess
-
-        src = Path(sess.__file__).read_text(encoding="utf-8")
-        self.assertIn("billing_mode", src)
-        self.assertIn("billing_balance", src)
-        self.assertIn("billing_watermark_bytes", src)
-
-
 if __name__ == "__main__":
     unittest.main()

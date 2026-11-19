@@ -3,11 +3,9 @@
 
 from __future__ import annotations
 
-import os
 import re
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from starlette.requests import Request
 

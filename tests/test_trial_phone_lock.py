@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import shop
 from app.db import Base
@@ -20,6 +16,7 @@ from app.services.orders import create_order
 from app.services.purchase_contact import verified_contact_phone_hash
 from app.services.trial_contact import hash_trial_phone
 from app.services.users import set_setting
+from tests.postgres_support import scoped_async_engine
 
 SECRET = "test-secret-for-trial-phone-lock"
 IRAN_FORMATS = ("09121234567", "989121234567", "+98 912 123 4567", "00989121234567", "9121234567")
@@ -46,15 +43,13 @@ class PhoneHashTests(unittest.TestCase):
 
 class TrialLockTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'p.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _user(self, session, telegram_id: int, *, blocked: bool = False) -> BotUser:
         user = BotUser(

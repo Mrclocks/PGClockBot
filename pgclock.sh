@@ -961,7 +961,7 @@ ensure_pg_client_tools() {
 }
 
 # Start local PostgreSQL and ensure a DATABASE_URL for fresh installs.
-# Honors PGCLOCK_DATABASE_URL (external/managed Postgres). Never scaffolds SQLite.
+# Honors PGCLOCK_DATABASE_URL (external/managed Postgres).
 ensure_postgresql() {
   info "Preparing PostgreSQL..."
 
@@ -984,11 +984,6 @@ ensure_postgresql() {
       postgresql://*|postgresql+asyncpg://*|postgres://*)
         export PGCLOCK_DATABASE_URL="$existing"
         ok "Found PostgreSQL DATABASE_URL in existing .env"
-        ;;
-      sqlite*|*"sqlite"*)
-        err "Existing .env still points at SQLite. New installs require PostgreSQL."
-        err "Set DATABASE_URL to postgresql+asyncpg://… or remove .env and re-run install."
-        return 1
         ;;
       "")
         ;;
@@ -2115,6 +2110,21 @@ update_guard_end() {
   update_exit_cleanup
 }
 
+# True when .env's DATABASE_URL is PostgreSQL (the same prefixes the panel accepts).
+require_postgres_database_url() {
+  local db_url
+  db_url="$(env_get DATABASE_URL "")"
+  case "$db_url" in
+    postgresql://*|postgresql+asyncpg://*|postgres://*)
+      return 0
+      ;;
+  esac
+  err "Your database is not supported (دیتابیس شما پشتیبانی نمی‌شود): PGClockBot runs on PostgreSQL only."
+  warn "DATABASE_URL in .env must start with postgresql+asyncpg:// — the update was not started and nothing changed."
+  warn "To create a PostgreSQL database, run Install from this menu, then update again."
+  return 1
+}
+
 cmd_update() {
   acquire_update_lock || return 1
   if [[ "$(update_progress_state)" == "interrupted" ]]; then
@@ -2136,6 +2146,8 @@ run_update() {
     err ".env not found. Run Install first."
     return 1
   fi
+  # The new code runs on PostgreSQL only: refuse before backup, stop or download.
+  require_postgres_database_url || return 1
   ok "Keeping existing .env"
   cp -a .env ".env.bak.$(date +%Y%m%d%H%M%S)"
   ok ".env backup created"
@@ -2438,7 +2450,6 @@ cmd_status() {
     db_url="$(env_get DATABASE_URL "")"
     case "$db_url" in
       postgresql://*|postgresql+asyncpg://*|postgres://*) db_kind="PostgreSQL" ;;
-      sqlite*) db_kind="SQLite (unsupported for new installs)" ;;
       "") db_kind="missing DATABASE_URL" ;;
       *) db_kind="unknown" ;;
     esac

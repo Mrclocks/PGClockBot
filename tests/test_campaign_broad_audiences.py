@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import sqlalchemy as sa
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services.campaigns import BROAD_LIMIT_MESSAGE, audience_query, create_campaign
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP_A = 81
@@ -25,10 +25,7 @@ class BroadAudienceTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         from app.db.models import BotUser, BotUserShop, MarketingPreference, UserService
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'camp.db'}", connect_args={"timeout": 15}
-        )
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -58,7 +55,6 @@ class BroadAudienceTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _ids(self, shop_id, audience) -> set[int]:
         async with self.Session() as session:
@@ -115,7 +111,7 @@ class BroadCampaignMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("broad_days", ROOT / "alembic/versions/0082_shop_broad_campaign_days.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             migration.upgrade()
             migration.upgrade()

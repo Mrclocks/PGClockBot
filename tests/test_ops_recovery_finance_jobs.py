@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
+from tests.postgres_support import scoped_async_engine
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -60,14 +59,13 @@ class OpsRecoveryStaticContracts(unittest.TestCase):
 
 class StuckPaidListTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
         from app.db import Base
         import app.db.models  # noqa: F401
 
         self._tmp = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmp.name) / "ops.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(
@@ -93,11 +91,14 @@ class StuckPaidListTests(unittest.IsolatedAsyncioTestCase):
         return u
 
     async def test_list_and_count_stuck_paid(self):
-        from app.db.models import Order, OrderStatus
+        from app.db.models import Order, OrderStatus, UserService
         from app.services.ux20 import count_stuck_paid_orders, list_stuck_paid_orders
 
         async with self.Session() as session:
             u = await self._seed_user(session, 9001)
+            service = UserService(id=1, bot_user_id=u.id, pg_username="svc1")
+            session.add(service)
+            await session.flush()
             stuck = Order(
                 user_id=u.id,
                 amount=1000,
@@ -126,14 +127,13 @@ class StuckPaidListTests(unittest.IsolatedAsyncioTestCase):
 
 class TermsRaceTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
         from app.db import Base
         import app.db.models  # noqa: F401
 
         self._tmp = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmp.name) / "terms.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(
@@ -198,14 +198,13 @@ class TermsRaceTests(unittest.IsolatedAsyncioTestCase):
 
 class BroadcastChunkTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
         from app.db import Base
         import app.db.models  # noqa: F401
 
         self._tmp = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmp.name) / "bc.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

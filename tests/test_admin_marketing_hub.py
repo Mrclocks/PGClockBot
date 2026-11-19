@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot import keyboards as kb
 from app.bot import menu_nav as nav

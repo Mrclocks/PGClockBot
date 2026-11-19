@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot import keyboards as kb
 from app.bot.handlers.reply_nav import _nav_context
@@ -19,6 +15,7 @@ from app.bot.service_import_ui import ADD_CALLBACK, empty_services_keyboard
 from app.db import Base
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.services.users import clear_settings_cache, reset_shop_reseller_id, set_settings_bulk, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 SERVICES_ACTION = kb.REPLY_ACTION_SERVICES
 
@@ -30,8 +27,7 @@ def _button_texts(markup) -> list[str]:
 class MenuCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         clear_settings_cache()
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'm.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -51,7 +47,6 @@ class MenuCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
         clear_settings_cache()
 
     async def switch(self, on: bool, *, shop: int | None = None):

@@ -16,7 +16,6 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -123,10 +122,8 @@ async def _write(
             {"bot_id": b, "chat_id": c, "message_id": m, "kind": kind, "sent_at": at}
             for (b, c, m), (kind, at) in adds
         ]
-        dialect = session.get_bind().dialect.name
         # The same message noted twice keeps its first row.
-        insert = pg_insert if dialect == "postgresql" else sqlite_insert
-        await session.execute(insert(BotChatMessage).values(values).on_conflict_do_nothing())
+        await session.execute(pg_insert(BotChatMessage).values(values).on_conflict_do_nothing())
 
 
 async def load_chat(session: AsyncSession, key: ChatKey, *, now: datetime | None = None) -> list[StoredMessage]:

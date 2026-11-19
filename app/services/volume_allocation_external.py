@@ -40,7 +40,7 @@ MAX_PANEL_USERS = 50_000
 SHOP_TIMEOUT_SECONDS = 120.0
 CONCURRENCY = 3
 DUE_BATCH = 100
-# Keeps IN lists well under the asyncpg and SQLite bound-parameter limits.
+# Keeps IN lists well under the asyncpg bound-parameter limit.
 IN_CHUNK = 500
 
 

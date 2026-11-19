@@ -92,7 +92,7 @@ class SubscriptionOverview:
 
 
 def _aware(value: datetime | None) -> datetime | None:
-    # SQLite returns naive datetimes for timezone-aware columns; they are stored as UTC.
+    # Stored timestamps are UTC; a naive value (from Python code or a test) is read as UTC.
     return value if value is None or value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 

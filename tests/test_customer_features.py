@@ -3,7 +3,6 @@ import asyncio
 import importlib.util
 import os
 import secrets
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -25,6 +24,7 @@ from app.services.service_cancellations import approve_cancellation, cancellatio
 from app.services.service_renewals import assert_service_quota_available
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
 from app.services.numbers import to_fa_digits
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
@@ -54,7 +54,6 @@ class FakePanel:
 
 class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
         pg_url = os.environ.get("PGCLOCKBOT_CUSTOMER_TEST_URL")
         self.admin_engine = None
         if pg_url:
@@ -64,7 +63,7 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
                 await conn.execute(text(f'CREATE SCHEMA "{self.schema}"'))
             self.engine = create_async_engine(pg_url, connect_args={"server_settings": {"search_path": self.schema}})
         else:
-            self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'features.db'}")
+            self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -111,7 +110,6 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
             await self.admin_engine.dispose()
         reset_shop_reseller_id(self.token)
         _SETTINGS_CACHE.clear()
-        self.tmp.cleanup()
 
     async def request(self, service_id=11, shop_id=None):
         return await request_cancellation(self.session, self.user, service_id, shop_id=shop_id, reason="دیگر نیاز ندارم")
@@ -499,14 +497,14 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CustomerFeatureMigrationTests(unittest.TestCase):
-    def test_sqlite_upgrade_repeat_and_downgrade_preserve_existing_service(self):
+    def test_upgrade_repeat_and_downgrade_preserve_existing_service(self):
         import sqlalchemy as sa
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
         spec = importlib.util.spec_from_file_location("customer_migration", ROOT / "alembic/versions/0039_customer_features.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))
             conn.execute(text("CREATE TABLE user_services (id INTEGER PRIMARY KEY, pg_username TEXT)"))

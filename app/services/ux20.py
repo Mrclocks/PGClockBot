@@ -708,6 +708,9 @@ async def redeem_charge_code(
     user_rid = int(shop_rid) if shop_rid is not None else None
     code_rid = int(row.reseller_id) if row.reseller_id else None
     async with session.begin_nested():
+        # claim_use locks the code row first; counting earlier uses only after that
+        # lock makes a concurrent redeem of the same code wait and then see this one.
+        await claim_use(session, row, user_id=user.id, shop_id=user_rid, kind="wallet")
         # Default once-per-user when no explicit per-user cap (limits hardening).
         if row.max_uses_per_user is None:
             prior = (
@@ -721,7 +724,6 @@ async def redeem_charge_code(
             ).scalar_one()
             if int(prior or 0) >= 1:
                 raise ValueError("این کد را قبلاً استفاده کرده‌اید")
-        await claim_use(session, row, user_id=user.id, shop_id=user_rid, kind="wallet")
         amount = int(row.amount or 0)
         if amount <= 0:
             raise ValueError("مبلغ کد نامعتبر است")

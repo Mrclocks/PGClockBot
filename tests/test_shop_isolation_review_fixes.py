@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, BotUserShop, LoyaltyReward, Order, OrderStatus, ResellerProfile, ShopPoints
 from app.services.broadcast import list_broadcast_targets
 from app.services.loyalty import list_active_rewards, redeem_reward
 from app.services.users import get_or_create_user, reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 SHOP_ID, CUSTOMER, HISTORY, SHOP_ONLY = 5, 7, 8, 9
 PLATFORM_REWARD, SHOP_REWARD = 1, 2
@@ -24,8 +21,7 @@ PLATFORM_REWARD, SHOP_REWARD = 1, 2
 
 class ReviewFixTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'f.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -51,7 +47,6 @@ class ReviewFixTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def test_a_shop_without_rewards_shows_none_and_a_platform_reward_cannot_be_redeemed_there(self):
         async with self.Session() as session:

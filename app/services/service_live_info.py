@@ -183,7 +183,7 @@ def with_stored_quota(info: dict[str, Any], service: Any) -> dict[str, Any]:
 
 
 def _as_utc(moment: datetime) -> datetime:
-    # SQLite returns naive values for columns the app writes in UTC.
+    # Stored timestamps are UTC; a naive value (from Python code or a test) is read as UTC.
     return moment if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)
 
 

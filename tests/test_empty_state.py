@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import re
 import unittest
 from types import SimpleNamespace
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
 from tests.test_marketing_nav import OWNER, _page

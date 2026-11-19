@@ -132,7 +132,7 @@ async def load_revert_views(session: AsyncSession, viewer: SwitchViewer) -> list
         scenario = scenario_by_code(row.scenario) if row.scenario else None
         revert_at = row.revert_at
         if revert_at is not None and revert_at.tzinfo is None:
-            revert_at = revert_at.replace(tzinfo=timezone.utc)  # SQLite returns stored UTC without a zone
+            revert_at = revert_at.replace(tzinfo=timezone.utc)  # stored timestamps are UTC
         views.append(
             PendingRevertView(int(row.id), switch, row.revert_value, revert_at, scenario.title if scenario else None)
         )

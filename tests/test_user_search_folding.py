@@ -5,13 +5,14 @@ from __future__ import annotations
 import unittest
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Role, UserService
 from app.services.list_query import fold_search_text, text_matches
 from app.services.user_search import search_bot_users, service_owner_clause
 from app.services.users_ops import scoped_users_where
+from tests.postgres_support import scoped_async_engine
 
 
 class FoldTests(unittest.TestCase):
@@ -28,7 +29,7 @@ class FoldTests(unittest.TestCase):
 
 class SearchTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from datetime import datetime, timedelta, timezone
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.app import templates
 from app.api.billing_report_pages import register_billing_report_pages
@@ -25,6 +23,7 @@ from app.db.models import (
     ShopCreditAccount,
 )
 from app.services.billing_reports import rows_csv, shop_finance_rows
+from tests.postgres_support import scoped_async_engine
 
 MONTH = datetime(2026, 11, 1, tzinfo=timezone.utc)
 
@@ -38,7 +37,7 @@ class ReportCase(unittest.IsolatedAsyncioTestCase):
     owner = True
 
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

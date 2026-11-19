@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -11,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import (
     Base,
@@ -40,6 +39,7 @@ from app.services.payg_gate import PARENT_OVERDUE_MESSAGE, assert_shop_can_affor
 from app.services.payg_pricing import GB, ChargeEvent, ServiceChange
 from app.services.provision_gate import ProvisionError
 from app.services.shop_credit import CreditLimitChange, child_shop_ids, set_credit_limit, shop_credit_limit
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = "/resellers/children-pricing"
@@ -59,8 +59,7 @@ def request(gb: int, key: str) -> ChargeRequest:
 
 class CascadeCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'c.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -74,6 +73,11 @@ class CascadeCase(unittest.IsolatedAsyncioTestCase):
                 ResellerProfile(id=2, user_id=L2, billing_mode="fixed", payg_wallet_linked=True),
                 ResellerProfile(id=3, user_id=OTHER_L1, plan_id=1, billing_mode="payg", payg_wallet_linked=True),
                 ResellerProfile(id=4, user_id=OTHER_L2, billing_mode="fixed", payg_wallet_linked=True),
+            ])
+            # bot_users, reseller_profiles and org_principals reference each other, so the
+            # unit of work cannot order them in one flush: parents go first.
+            await session.flush()
+            session.add_all([
                 OrgPrincipal(id=11, depth=1, status="active", reseller_profile_id=1),
                 OrgPrincipal(id=12, depth=2, parent_id=11, status="active", reseller_profile_id=2),
                 OrgPrincipal(id=13, depth=1, status="active", reseller_profile_id=3),
@@ -85,7 +89,6 @@ class CascadeCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def wallets(self) -> tuple[int, int]:
         async with self.Session() as session:
@@ -259,7 +262,7 @@ class MigrationTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(module)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         self.addCleanup(engine.dispose)
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))

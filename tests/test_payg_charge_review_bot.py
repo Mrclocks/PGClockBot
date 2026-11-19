@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import payg_charge_review as view
 from app.bot.nav_inline import admin_ops_hub_keyboard
@@ -21,6 +17,7 @@ from app.services import bot_feedback_texts as feedback
 from app.services.payg_charges import ChargeStatus, reserve_charge, send_to_review
 from app.services.users import DEFAULT_SETTINGS
 from tests.test_payg_charges import create
+from tests.postgres_support import scoped_async_engine
 
 HANDLERS = {
     "l": view.show_list,
@@ -38,8 +35,7 @@ def callbacks(markup) -> list[str]:
 
 class PaygReviewBotTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'r.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -59,7 +55,6 @@ class PaygReviewBotTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def press(self, data: str, *, owner: bool = True, reseller_bot: bool = False):
         callback = AsyncMock()

@@ -6,16 +6,12 @@ reseller from the users page passes neither a plan nor a role.
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, ResellerPlan, ResellerProfile
@@ -28,6 +24,7 @@ from app.services.pg_admin_roles import (
     resolve_new_admin_role_id,
 )
 from app.services.resellers import grantable_reseller_plan, provision_reseller, reseller_plan_from_form
+from tests.postgres_support import scoped_async_engine
 
 OWNER_ROLE = {"id": 1, "name": "owner", "is_owner": True}
 SHOP_ROLE = {"id": 4, "name": "shop", "is_owner": False}
@@ -109,8 +106,7 @@ class ResolveRoleTests(unittest.IsolatedAsyncioTestCase):
 
 class ProvisionWithoutPlanTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'r.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -120,7 +116,6 @@ class ProvisionWithoutPlanTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _provision(self, pg: FakeRoleClient) -> dict:
         async with self.Session() as session:

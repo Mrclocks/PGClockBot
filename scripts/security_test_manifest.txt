@@ -180,7 +180,6 @@ tests/test_service_automation.py
 tests/test_psp_stuck_settling_recovery.py
 tests/test_customer_features.py
 tests/test_scheduler_background_jobs.py
-tests/test_sqlite_db_file_permissions.py
 tests/test_template_variable_validation.py
 tests/test_nav_tenancy_context_0_2_47.py
 tests/test_service_card_parity_0_2_47.py
@@ -552,6 +551,16 @@ tests/test_bot_profile_texts.py
 tests/test_bot_crypto_rate_settings.py
 tests/test_bot_topup_presets.py
 tests/test_bot_payment_destinations.py
+# PostgreSQL test isolation (one schema or database per test) and the PostgreSQL-only check.
+tests/test_postgres_support.py
+tests/test_postgres_only_check.py
+# Operator CLI: PostgreSQL only, never prints DATABASE_URL.
+tests/test_cli_postgres_only.py
+# PostgreSQL backups: all-or-nothing restore, refused archives, .env and secrets kept safe.
+tests/test_backup_postgres_restore.py
+tests/test_backup_env_restore.py
+# Startup: PostgreSQL DATABASE_URL only; a refused URL is never echoed.
+tests/test_database_url_startup.py
 tests/test_command_center.py
 tests/test_quick_switches.py
 tests/test_command_data_search.py
@@ -562,4 +571,6 @@ tests/test_command_center_recent.py
 tests/test_panel_read_budget_paths.py
 # Payment and delivery never run under a web page panel read deadline; no second attempt on a running delivery.
 tests/test_payment_read_budget.py
+# Updates are refused (web panel and pgclock.sh) when the database is not PostgreSQL.
+tests/test_update_database_guard.py
 tests/test_command_center_navigation.py

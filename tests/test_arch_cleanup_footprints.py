@@ -1,11 +1,10 @@
-"""Architecture cleanup contracts — authz aliases, login_guard, SQLite ETL clarity."""
+"""Architecture cleanup contracts — authz aliases and login_guard."""
 
 from __future__ import annotations
 
 import ast
 from pathlib import Path
 
-import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -85,16 +84,3 @@ def test_login_guard_extracted_from_app():
     assert login_blocked(ip) is True
     login_success(ip)
     assert login_blocked(ip) is False
-
-
-def test_sqlite_etl_documented_as_offline_not_dual_runtime():
-    etl_doc = (ROOT / "app" / "db" / "sqlite_to_pg.py").read_text(encoding="utf-8")
-    assert "offline" in etl_doc.lower() or "one-shot" in etl_doc.lower()
-    assert "dual-runtime" in etl_doc or "dual runtime" in etl_doc.lower()
-
-    phase_a = (ROOT / "docs" / "PHASE_A_DATABASE.md").read_text(encoding="utf-8")
-    assert "Runtime model" in phase_a
-    assert "dual-write" in phase_a or "dual-runtime" in phase_a
-
-    env_ex = (ROOT / ".env.example").read_text(encoding="utf-8")
-    assert "Single runtime" in env_ex or "not dual-path" in env_ex

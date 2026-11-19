@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
 from app.services.gift_codes import gift_code_scope
+from tests.postgres_support import scoped_async_engine
 
 OWNER = {
     "role": "admin",
@@ -86,16 +84,22 @@ class GiftCodeHarness(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         from app.db import Base
-        from app.db.models import ChargeCode
+        from app.db.models import BotUser, ChargeCode
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'g.db'}")
+        engine = scoped_async_engine()
         self.engine = engine
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(engine, expire_on_commit=False)
         async with self.Session() as session:
+            session.add_all(
+                [
+                    BotUser(id=5, telegram_id=1005, referral_code="shop5", role="reseller"),
+                    BotUser(id=6, telegram_id=1006, referral_code="shop6", role="reseller"),
+                ]
+            )
+            await session.flush()
             session.add_all(
                 [
                     ChargeCode(code="PLATFORMCODE", amount=1000, reseller_id=None, note="<script>x</script>"),
@@ -122,7 +126,6 @@ class GiftCodeHarness(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.client.aclose()
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _get(self, staff: dict, url: str = "/gift-codes"):
         self.staff.clear()
@@ -219,7 +222,11 @@ class GiftCodeRedirectTests(GiftCodeHarness):
         self.assertTrue(created.headers["location"].startswith("/gift-codes?ok="))
         failed = await self.post_client.post("/plans/gift-codes", data={"kind": "discount", "percent": "101"})
         self.assertTrue(failed.headers["location"].startswith("/gift-codes?err="))
-        toggled = await self.post_client.post("/plans/gift-codes/1/toggle")
+        from app.db.models import ChargeCode
+
+        async with self.Session() as session:
+            code_id = await session.scalar(select(ChargeCode.id).where(ChargeCode.code == "PLATFORMCODE"))
+        toggled = await self.post_client.post(f"/plans/gift-codes/{code_id}/toggle")
         self.assertEqual(toggled.headers["location"], "/gift-codes?ok=1")
 
 

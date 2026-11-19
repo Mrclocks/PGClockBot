@@ -29,7 +29,7 @@ CHECK_INTERVAL = timedelta(seconds=60)
 
 
 def stored_utc(value: datetime | None) -> datetime | None:
-    # SQLite drops timezone metadata even for DateTime(timezone=True) columns.
+    # Stored timestamps are UTC; a naive value (from Python code or a test) is read as UTC.
     return value.replace(tzinfo=timezone.utc) if value is not None and value.tzinfo is None else value
 
 

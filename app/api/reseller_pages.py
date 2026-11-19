@@ -592,9 +592,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                     depth=form.get("depth"),
                 ),
             )
+            # The panel admin already exists; without this the new principal was rolled back.
+            await session.commit()
         except ChildProvisionError as exc:
+            await rollback_quiet(session)
             return RedirectResponse(f"/resellers?err={_q(exc.message)}", status_code=303)
         except Exception:
+            logger.exception("reseller create-child failed")
+            await rollback_quiet(session)
             return RedirectResponse(
                 f"/resellers?err={_q('ساخت نماینده ناموفق بود')}",
                 status_code=303,

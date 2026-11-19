@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import reseller_customer_tools as tools
 from app.services.customer_marks import marks_for
+from tests.postgres_support import scoped_async_engine
 
 SHOP_A = 81
 SHOP_B = 82
@@ -36,8 +35,7 @@ class ShopBotToolsHarness(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         from app.db.models import BotUser, ResellerProfile
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'tools.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -59,7 +57,6 @@ class ShopBotToolsHarness(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _actor(self, session, user_id: int = SHOP_A):
         from app.db.models import BotUser

@@ -7,11 +7,9 @@ panel.css and sales-chart.js. Skipped when Playwright is not installed.
 from __future__ import annotations
 
 import json
-import os
 import re
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.api.app import templates
 from app.services.dashboard_trend import empty_trend

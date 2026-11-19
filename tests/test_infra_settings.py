@@ -6,7 +6,6 @@ import os
 import unittest
 from unittest.mock import patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from starlette.middleware.gzip import GZipMiddleware
 

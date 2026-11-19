@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import FastAPI
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.settlement_pages import register_settlement_pages
 from app.db import Base
@@ -28,6 +25,7 @@ from app.db.models import (
 )
 from app.services.payment_settlement import CHANNEL_PSP, public_checkout_button_url
 from app.services.users import clear_settings_cache
+from tests.postgres_support import scoped_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -170,10 +168,7 @@ class BotTgResolveLinkTests(unittest.TestCase):
 class PublicCheckoutButtonUrlTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'ux.db'}"
-        )
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(
@@ -182,7 +177,6 @@ class PublicCheckoutButtonUrlTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def test_button_defaults_to_direct_psp_checkout_url(self) -> None:
         async with self.Session() as session:
@@ -253,10 +247,7 @@ class SettlementGoEndpointTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'go.db'}"
-        )
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(
@@ -279,7 +270,6 @@ class SettlementGoEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.client.aclose()
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _seed(
         self,
@@ -367,10 +357,7 @@ class PspReturnMethodTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'ret.db'}"
-        )
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(
@@ -391,7 +378,6 @@ class PspReturnMethodTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.client.aclose()
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def test_post_return_is_not_method_not_allowed(self) -> None:
         resp = await self.client.post(

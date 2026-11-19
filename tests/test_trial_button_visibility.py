@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import unittest
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers.shop import _shop_kind_flags
 from app.db.models import Base, BotUser, Plan, TrialClaim
 from app.services.users import clear_settings_cache, set_settings_bulk
+from tests.postgres_support import scoped_async_engine
 
 
 class TrialButtonVisibilityTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -45,7 +47,8 @@ class TrialButtonVisibilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await self.trial_shown(trial_show_claimed="0"))
 
     async def test_eligible_customer_sees_trial_when_switched_off(self) -> None:
-        await self.session.delete(await self.session.get(TrialClaim, 1))
+        claim = await self.session.scalar(select(TrialClaim).where(TrialClaim.user_id == 1))
+        await self.session.delete(claim)
         await self.session.commit()
         self.assertTrue(await self.trial_shown(trial_show_claimed="0"))
 

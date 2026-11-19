@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -46,6 +46,7 @@ from app.services.resource_principal import (
     resource_in_principal_scope,
 )
 from app.services.secret_box import encrypt_secret
+from tests.postgres_support import scoped_async_engine
 
 
 def _role_matrix(*, name: str, role_id: int, permissions: dict, is_owner: bool = False) -> dict:
@@ -369,7 +370,7 @@ class Phase3DLevel2ParityTests(unittest.TestCase):
 
 class Phase3DProvisionAndCacheTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

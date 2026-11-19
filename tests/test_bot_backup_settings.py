@@ -7,12 +7,10 @@ secrets. A retention change applies at the next backup and never deletes files f
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot.backup_entry import BACKUP_PANEL_CALLBACK, BACKUP_SETTINGS_CALLBACK
 from app.bot.handlers import admin_backup, admin_settings, reseller_settings

@@ -9,7 +9,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -73,6 +73,7 @@ from app.services.resource_principal import (
 )
 from app.services.secret_box import encrypt_secret
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+from tests.postgres_support import scoped_async_engine
 
 
 _WEB = "WebRed12!@Ab"
@@ -114,7 +115,7 @@ def _owner_staff(owner) -> dict:
 
 class Phase3ERedTeamTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

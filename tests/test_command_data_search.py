@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import command_center
 from app.db import Base
 from app.db.models import BotUser, Order, Role, UserService
 from app.services.command_data_search import DataHit, DataKind, DataScope, search_data
 from app.services.command_search import CommandKind
+from tests.postgres_support import scoped_async_engine
 
 SHOP = 2
 OTHER_SHOP = 3
@@ -32,8 +31,7 @@ class DataDb(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         import app.db.models  # noqa: F401  (registers every table)
 
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'data.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -59,7 +57,6 @@ class DataDb(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _search(self, query: str, scope: DataScope) -> list[DataHit]:
         async with self.Session() as session:

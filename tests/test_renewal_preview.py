@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
-import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -15,7 +14,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from fastapi import FastAPI
 from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_pages import register_miniapp_pages
 from app.db.models import Base, BotUser, Order, Payment, Plan, ServiceAddonPack, UserService, WalletTransaction
@@ -25,6 +24,7 @@ from app.services.service_renewals import (
     RenewalPendingReview, calculate_renewal, preview_renewal, renewal_terms,
 )
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 GB = 1024**3
 DAY = 86400
@@ -177,8 +177,7 @@ class RenewalPG:
 
 class RenewalFixture(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'renewal.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -206,7 +205,6 @@ class RenewalFixture(unittest.IsolatedAsyncioTestCase):
         reset_shop_reseller_id(self.shop_token)
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def create(self):
         return await renew_service_with_plan(self.session, user_id=1, service=self.service, plan=self.plan)
@@ -582,7 +580,7 @@ class RenewalMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("renewal_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text("CREATE TABLE orders (id INTEGER PRIMARY KEY, service_id INTEGER, amount INTEGER, status TEXT, note TEXT)"))
             conn.execute(text("INSERT INTO orders VALUES (1, 1, 200, 'paid', 'renew:1')"))

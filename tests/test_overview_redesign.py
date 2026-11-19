@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest import mock
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Order
@@ -22,6 +20,7 @@ from app.services.bot_overview import (
     PeriodFigures, PeriodKpis, Viewer, change_pct, parse_period, period_kpis, viewer_of,
 )
 from app.services.pg_overview_view import overview_view, owned_user_counts, owner_user_counts, segments
+from tests.postgres_support import scoped_async_engine
 
 NOW = datetime(2026, 10, 17, 9, 0, tzinfo=timezone.utc)
 SHOP = 5
@@ -38,7 +37,7 @@ def order(user_id: int, amount: int, days_ago: int, *, shop: int | None = None, 
 
 class PeriodKpiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

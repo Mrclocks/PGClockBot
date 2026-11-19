@@ -7,9 +7,7 @@ nothing while looking like it does.
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker

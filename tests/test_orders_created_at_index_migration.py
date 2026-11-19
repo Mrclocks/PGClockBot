@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 import importlib.util
-import os
 import unittest
-import uuid
 from pathlib import Path
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from tests.postgres_support import scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
-# A disposable PostgreSQL database, e.g. postgresql+psycopg://postgres@127.0.0.1:5432/scratch.
-POSTGRES_URL = os.environ.get("PGCLOCK_TEST_POSTGRES_URL", "")
 
 
 def load_migration():
@@ -27,29 +24,20 @@ def load_migration():
 class OrdersCreatedAtIndexMigrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.migration = load_migration()
-        self.engine = sa.create_engine("sqlite://")
-        with self.engine.begin() as conn:
-            conn.execute(sa.text("CREATE TABLE orders (id INTEGER PRIMARY KEY, created_at DATETIME)"))
 
-    def run_step(self, conn: sa.Connection, *, down: bool = False) -> None:
-        with Operations.context(MigrationContext.configure(conn)):
-            (self.migration.downgrade if down else self.migration.upgrade)()
-
-    def names(self, conn: sa.Connection) -> set[str]:
-        return {index["name"] for index in sa.inspect(conn).get_indexes("orders")}
-
-    def test_upgrade_twice_then_downgrade(self) -> None:
-        with self.engine.begin() as conn:
-            self.run_step(conn)
-            self.run_step(conn)
-            self.assertIn("ix_orders_created_at", self.names(conn))
-            self.run_step(conn, down=True)
-            self.assertNotIn("ix_orders_created_at", self.names(conn))
+    def run_step(self, engine: sa.Engine, *, down: bool = False) -> None:
+        with engine.connect() as conn:
+            context = MigrationContext.configure(conn)
+            with Operations.context(context), context.begin_transaction():
+                (self.migration.downgrade if down else self.migration.upgrade)()
 
     def test_a_database_without_the_table_is_left_alone(self) -> None:
-        with sa.create_engine("sqlite://").begin() as conn:
-            self.run_step(conn)
-            self.run_step(conn, down=True)
+        engine = scoped_sync_engine()
+        self.run_step(engine)
+        self.run_step(engine, down=True)
+        with engine.connect() as conn:
+            self.assertFalse(sa.inspect(conn).has_table("orders"))
+        engine.dispose()
 
     def test_there_is_a_single_migration_head(self) -> None:
         from alembic.config import Config
@@ -60,25 +48,17 @@ class OrdersCreatedAtIndexMigrationTests(unittest.TestCase):
         self.assertEqual(len(ScriptDirectory.from_config(config).get_heads()), 1)
 
 
-@unittest.skipUnless(POSTGRES_URL, "set PGCLOCK_TEST_POSTGRES_URL to a disposable PostgreSQL database")
-class OrdersCreatedAtIndexPostgresTests(unittest.TestCase):
-    """Runs the migration the way Alembic does: inside a migration transaction, in its own schema."""
+class OrdersCreatedAtIndexConcurrentBuildTests(unittest.TestCase):
+    """Runs the migration the way Alembic does: inside a migration transaction, on a filled table."""
 
     def setUp(self) -> None:
         self.migration = load_migration()
-        self.schema = f"mig_{uuid.uuid4().hex[:12]}"
-        admin = sa.create_engine(POSTGRES_URL)
-        with admin.begin() as conn:
-            conn.execute(sa.text(f'CREATE SCHEMA "{self.schema}"'))
-        admin.dispose()
-        self.engine = sa.create_engine(POSTGRES_URL, connect_args={"options": f"-c search_path={self.schema}"})
+        self.engine = scoped_sync_engine()
         with self.engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE orders (id SERIAL PRIMARY KEY, created_at TIMESTAMPTZ)"))
             conn.execute(sa.text("INSERT INTO orders (created_at) SELECT now() - g * interval '1 hour' FROM generate_series(1, 500) g"))
 
     def tearDown(self) -> None:
-        with self.engine.begin() as conn:
-            conn.execute(sa.text(f'DROP SCHEMA "{self.schema}" CASCADE'))
         self.engine.dispose()
 
     def run_step(self, *, down: bool = False) -> None:
@@ -92,8 +72,8 @@ class OrdersCreatedAtIndexPostgresTests(unittest.TestCase):
         with self.engine.connect() as conn:
             row = conn.execute(sa.text(
                 "SELECT i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
-                "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = 'ix_orders_created_at' AND n.nspname = :s"
-            ), {"s": self.schema}).first()
+                "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = 'ix_orders_created_at' AND n.nspname = 'public'"
+            )).first()
         return None if row is None else bool(row[0])
 
     def test_concurrent_build_is_idempotent_and_downgrades(self) -> None:

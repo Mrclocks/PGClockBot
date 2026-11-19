@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, CustomerNotice, Order, ServiceAutomation, ShopStaffAction, UserService
@@ -20,6 +16,7 @@ from app.services import service_cleanup_delete as delete
 from app.services.pasarguard import PasarGuardError
 from app.services.service_cleanup import KIND_TIME, KIND_VOLUME, CleanupPolicy
 from app.services.users import clear_settings_cache
+from tests.postgres_support import scoped_async_engine
 
 NOW = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)
 SHOP = 5
@@ -71,8 +68,7 @@ def expired(expire: datetime = OLD) -> dict:
 
 class DeleteCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'd.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -88,7 +84,6 @@ class DeleteCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
         clear_settings_cache()
 
     async def add(self, service_id: int, owner: int = 20, shop: int | None = SHOP, **fields) -> None:

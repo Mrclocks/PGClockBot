@@ -39,7 +39,7 @@ class DeleteCascadeSourceTests(unittest.TestCase):
         from app.services.users import friendly_user_delete_error
 
         msg = friendly_user_delete_error(
-            Exception("FOREIGN KEY constraint failed (sqlite3.IntegrityError)")
+            Exception('insert or update on table "orders" violates foreign key constraint "orders_user_id_fkey"')
         )
         self.assertIn("کلید خارجی", msg)
         self.assertNotIn("SQL:", msg)

@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, BotUserShop, LoyaltyReward, ResellerProfile, ShopPoints, UserService
@@ -18,6 +14,7 @@ from app.services.campaigns import audience_query
 from app.services.loyalty import points_balance, redeem_reward
 from app.services.lucky_wheel import shop_prize_scope
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 SHOP_ID = 5
 CUSTOMER = 7
@@ -32,8 +29,7 @@ def _active_quota(now: datetime, *, days: int = 3) -> dict:
 
 class RewardAndCampaignScopeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'r.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -64,7 +60,6 @@ class RewardAndCampaignScopeTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def audience(self, shop: int | None, audience: str = "expiring", days: int = 7) -> set[int]:
         async with self.Session() as session:

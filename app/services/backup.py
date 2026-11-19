@@ -2,14 +2,14 @@
 
 Archive format (ZIP):
   manifest.json
-  data/bot.db                  (SQLite engine)
-  data/postgres.dump           (PostgreSQL engine — pg_dump -Fc)
+  data/postgres.dump           (pg_dump -Fc)
   data/web_admin.json          (if present)
   data/uploads/**              (if present)
   data/setup_complete.flag     (if present)
   env/.env                     (optional; included by default for full restore)
 
-Manifest includes db_engine: sqlite | postgresql. Restore refuses engine mismatch.
+The manifest records db_engine: postgresql. An archive without a PostgreSQL dump
+(made by an install that did not run PostgreSQL) is refused.
 """
 
 from __future__ import annotations
@@ -17,10 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
-import re
 import shutil
-import sqlite3
 import tempfile
 import threading
 import zipfile
@@ -29,9 +26,10 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from sqlalchemy import make_url
+
 from app.config import DATA_DIR, ROOT_DIR, get_settings
 from app.db.alembic_runner import alembic_config, current_revision
-from app.db.engine_url import parse_engine
 from app.services.backup_env import (
     UNREADABLE_SECRETS_WARNING,
     env_value,
@@ -74,8 +72,9 @@ _RESTORE_THREAD: threading.Thread | None = None
 _STATUS_LOCK = threading.RLock()
 AWAITING_RESTART_TIMEOUT_SEC = 12 * 60
 STALE_RUNNING_TIMEOUT_SEC = 20 * 60
-SQLITE_DB_MEMBER = "data/bot.db"
 POSTGRES_DUMP_MEMBER = "data/postgres.dump"
+DB_ENGINE = "postgresql"
+NOT_POSTGRES_BACKUP_MESSAGE = "این بکاپ دیتابیس PostgreSQL ندارد و قابل ریستور نیست."
 
 # RLock: restore creates a safety backup while already holding the lock.
 _lock = threading.RLock()
@@ -89,31 +88,14 @@ def _utcnow_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
 
-def sqlite_db_path() -> Path:
-    """Resolve on-disk SQLite path from DATABASE_URL (best-effort)."""
-    url = (get_settings().database_url or "").strip()
-    if "sqlite" in url:
-        try:
-            info = parse_engine(url)
-            if info.sqlite_path:
-                return info.sqlite_path
-        except Exception:
-            log.debug("sqlite_db_path: ignored failure", exc_info=True)
-        m = re.search(r":///(.+)$", url)
-        if m:
-            raw = m.group(1)
-            if raw.startswith("/"):
-                return Path(raw)
-            return (ROOT_DIR / raw).resolve()
-    return DATA_DIR / "bot.db"
-
-
-def current_db_engine() -> str:
-    """Return 'sqlite' or 'postgresql' for the configured DATABASE_URL."""
+def database_label() -> str:
+    """Name the configured database for the settings page, without the password."""
     try:
-        return parse_engine(get_settings().database_url).dialect
-    except Exception:
-        return "sqlite"
+        url = make_url(get_settings().database_url)
+    except Exception:  # noqa: BLE001 - a malformed URL is shown as unknown, never echoed
+        log.debug("database_label: unreadable DATABASE_URL", exc_info=True)
+        return "نامشخص"
+    return f"PostgreSQL · {url.database or '—'}@{url.host or 'localhost'}"
 
 
 def _sha256_file(path: Path, *, chunk: int = 1024 * 1024) -> str:
@@ -134,25 +116,6 @@ def _sha256_member(zf: zipfile.ZipFile, name: str, *, chunk: int = 1024 * 1024) 
         while block := member.read(chunk):
             h.update(block)
     return h.hexdigest()
-
-
-def _safe_copy_sqlite(src: Path, dest: Path) -> None:
-    """Online-safe SQLite backup using the backup API."""
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists():
-        dest.unlink()
-    if not src.exists():
-        raise FileNotFoundError(f"دیتابیس یافت نشد: {src}")
-    src_conn = sqlite3.connect(str(src))
-    try:
-        dst_conn = sqlite3.connect(str(dest))
-        try:
-            src_conn.backup(dst_conn)
-            dst_conn.commit()
-        finally:
-            dst_conn.close()
-    finally:
-        src_conn.close()
 
 
 NEWER_BACKUP_MESSAGE = (
@@ -292,22 +255,10 @@ def validate_backup_archive(zip_path: Path) -> tuple[bool, str, dict[str, Any] |
             manifest = json.loads(zf.read(MANIFEST_NAME).decode("utf-8"))
             if not isinstance(manifest, dict) or manifest.get("magic") != MAGIC:
                 return False, "فرمت بکاپ نامعتبر است", None
-            db_engine = str(manifest.get("db_engine") or "").strip().lower()
-            has_sqlite = SQLITE_DB_MEMBER in names
-            has_pg = POSTGRES_DUMP_MEMBER in names
-            if not has_sqlite and not has_pg:
-                return False, "دیتابیس داخل بکاپ نیست", None
-            if not db_engine:
-                db_engine = "postgresql" if has_pg and not has_sqlite else "sqlite"
-                manifest["db_engine"] = db_engine
-            if db_engine == "sqlite" and not has_sqlite:
-                return False, "بکاپ SQLite بدون data/bot.db", None
-            if db_engine == "postgresql" and not has_pg:
-                # Allow legacy archives that only had bot.db while claiming nothing
-                if has_sqlite:
-                    manifest["db_engine"] = "sqlite"
-                else:
-                    return False, "بکاپ PostgreSQL بدون data/postgres.dump", None
+            db_engine = str(manifest.get("db_engine") or DB_ENGINE).strip().lower()
+            if db_engine != DB_ENGINE or POSTGRES_DUMP_MEMBER not in names:
+                return False, NOT_POSTGRES_BACKUP_MESSAGE, None
+            manifest["db_engine"] = DB_ENGINE
             # Verify declared file hashes when present (newer backups)
             files_meta = manifest.get("files")
             if isinstance(files_meta, list):
@@ -348,38 +299,23 @@ def create_backup(
         stamp = _utcnow_stamp()
         backup_id = f"{stamp}-{uuid4().hex[:8]}"
         out_path = BACKUP_DIR / f"{BACKUP_PREFIX}{backup_id}.zip"
-        db_engine = current_db_engine()
+        db_engine = DB_ENGINE
 
         with tempfile.TemporaryDirectory(prefix="pgclock-bak-") as tmp:
             tmp_root = Path(tmp)
             data_tmp = tmp_root / "data"
             data_tmp.mkdir(parents=True, exist_ok=True)
 
-            files_meta: list[dict[str, Any]] = []
-            db_member = SQLITE_DB_MEMBER
-
-            if db_engine == "postgresql":
-                dump_copy = data_tmp / "postgres.dump"
-                dump_database(dump_copy)
-                db_member = POSTGRES_DUMP_MEMBER
-                files_meta.append(
-                    {
-                        "path": POSTGRES_DUMP_MEMBER,
-                        "sha256": _sha256_file(dump_copy),
-                        "size": dump_copy.stat().st_size,
-                    }
-                )
-            else:
-                db_src = sqlite_db_path()
-                db_copy = data_tmp / "bot.db"
-                _safe_copy_sqlite(db_src, db_copy)
-                files_meta.append(
-                    {
-                        "path": SQLITE_DB_MEMBER,
-                        "sha256": _sha256_file(db_copy),
-                        "size": db_copy.stat().st_size,
-                    }
-                )
+            dump_copy = data_tmp / "postgres.dump"
+            dump_database(dump_copy)
+            db_member = POSTGRES_DUMP_MEMBER
+            files_meta: list[dict[str, Any]] = [
+                {
+                    "path": POSTGRES_DUMP_MEMBER,
+                    "sha256": _sha256_file(dump_copy),
+                    "size": dump_copy.stat().st_size,
+                }
+            ]
 
             # web_admin.json
             auth = DATA_DIR / "web_admin.json"
@@ -848,33 +784,6 @@ def start_restore_async(
     return {"ok": True, "status": read_restore_status()}
 
 
-SQLITE_SIDE_FILES = ("-wal", "-shm", "-journal")
-
-
-def _remove_sqlite_side_files(db_path: Path) -> None:
-    for suffix in SQLITE_SIDE_FILES:
-        Path(f"{db_path}{suffix}").unlink(missing_ok=True)
-
-
-def _replace_sqlite_database(restored_db: Path, live_db: Path) -> None:
-    """Swap in the restored database file atomically.
-
-    The live database runs in WAL mode: a ``-wal`` file left from it would be replayed
-    onto the restored file at the next open and corrupt it, so it is removed with the swap.
-    """
-    live_db.parent.mkdir(parents=True, exist_ok=True)
-    tmp_db = live_db.with_suffix(".db.restoring")
-    shutil.copy2(restored_db, tmp_db)
-    _remove_sqlite_side_files(live_db)
-    os.replace(tmp_db, live_db)
-    # A connection still open on the old file may have written a new WAL meanwhile.
-    _remove_sqlite_side_files(live_db)
-    try:
-        live_db.chmod(0o600)
-    except OSError:
-        log.debug("could not restrict permissions of %s", live_db.name, exc_info=True)
-
-
 def _restore_env_file(env_src: Path) -> None:
     """Install the backed-up .env but keep this server's database and listen settings."""
     env_dest = ROOT_DIR / ".env"
@@ -920,8 +829,8 @@ def _secrets_warnings() -> list[str]:
     return [UNREADABLE_SECRETS_WARNING] if readable is False else []
 
 
-def _prepare_archive(source_copy: Path, extract_root: Path, manifest: dict[str, Any]) -> str:
-    """Extract the archive and check it matches this install; returns its database engine."""
+def _prepare_archive(source_copy: Path, extract_root: Path, manifest: dict[str, Any]) -> None:
+    """Extract the archive and check its PostgreSQL dump can be restored here."""
     extract_root.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(source_copy, "r") as zf:
         for info in zf.infolist():
@@ -929,24 +838,11 @@ def _prepare_archive(source_copy: Path, extract_root: Path, manifest: dict[str, 
             if name.startswith("/") or ".." in Path(name).parts:
                 raise BackupRestoreRefused("مسیر نامعتبر داخل بکاپ")
         zf.extractall(extract_root)
-    extracted_db = extract_root / "data" / "bot.db"
     extracted_pg = extract_root / "data" / "postgres.dump"
-    archive_engine = str(manifest.get("db_engine") or "").strip().lower()
-    if not archive_engine:
-        archive_engine = "postgresql" if extracted_pg.is_file() and not extracted_db.is_file() else "sqlite"
-    live_engine = current_db_engine()
-    if archive_engine != live_engine:
-        raise BackupRestoreRefused(
-            f"بکاپ مربوط به موتور {archive_engine} است ولی DATABASE_URL فعلی {live_engine} است. "
-            "قبل از ریستور DATABASE_URL را هم‌خوان کنید."
-        )
-    if archive_engine == "sqlite" and not extracted_db.is_file():
-        raise BackupRestoreRefused("bot.db در بکاپ نیست")
-    if archive_engine == "postgresql":
-        if not extracted_pg.is_file():
-            raise BackupRestoreRefused("postgres.dump در بکاپ نیست")
-        check_dump_readable(extracted_pg)
-    return archive_engine
+    archive_engine = str(manifest.get("db_engine") or DB_ENGINE).strip().lower()
+    if archive_engine != DB_ENGINE or not extracted_pg.is_file():
+        raise BackupRestoreRefused(NOT_POSTGRES_BACKUP_MESSAGE)
+    check_dump_readable(extracted_pg)
 
 
 def restore_backup(
@@ -992,8 +888,7 @@ def restore_backup(
                 # Extract and check everything before the safety backup and before
                 # any live data is touched, so a bad archive changes nothing.
                 tmp_root = tmp_root / "extract"
-                archive_engine = _prepare_archive(source_copy, tmp_root, manifest)
-                extracted_db = tmp_root / "data" / "bot.db"
+                _prepare_archive(source_copy, tmp_root, manifest)
                 extracted_pg = tmp_root / "data" / "postgres.dump"
 
                 if safety_backup:
@@ -1014,13 +909,10 @@ def restore_backup(
                     "بازیابی دیتابیس…",
                     actor=actor,
                     safety_id=safety_id,
-                    db_engine=archive_engine,
+                    db_engine=DB_ENGINE,
                 )
                 DATA_DIR.mkdir(parents=True, exist_ok=True)
-                if archive_engine == "postgresql":
-                    restore_database(extracted_pg)
-                else:
-                    _replace_sqlite_database(extracted_db, sqlite_db_path())
+                restore_database(extracted_pg)
 
                 # web_admin.json
                 auth_src = tmp_root / "data" / "web_admin.json"

@@ -72,11 +72,6 @@ class TicketShopScopeTests(unittest.TestCase):
 
         self.assertTrue(hasattr(Ticket, "reseller_id"))
 
-    def test_migration_adds_column(self):
-        src = (ROOT / "app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn('ADD COLUMN reseller_id INTEGER', src)
-        self.assertIn('has_table("tickets")', src)
-
     def test_create_ticket_uses_shop_context(self):
         src = (ROOT / "app/services/tickets.py").read_text(encoding="utf-8")
         self.assertIn("current_shop_reseller_id", src)

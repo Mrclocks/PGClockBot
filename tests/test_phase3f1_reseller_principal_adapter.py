@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -33,6 +33,7 @@ from app.services.shop_scope import (
     is_platform_admin,
     shop_owner_id,
 )
+from tests.postgres_support import scoped_async_engine
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -44,7 +45,7 @@ _STAFF_FN = APP_PY[
 
 class Phase3F1ResellerAdapterTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

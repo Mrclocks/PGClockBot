@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import app.db.models  # noqa: F401
 from app.db import Base
@@ -25,6 +25,7 @@ from app.services.billing_alerts import (
     report_tick_issue,
 )
 from app.services.resellers import make_reseller
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 PLATFORM_ADMIN_ID = 9001
 MIGRATION_PATH = Path(__file__).resolve().parents[1] / "alembic/versions/0049_payg_tick_issue.py"
@@ -41,7 +42,7 @@ class FakePanel:
 
 class TickIssueTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(
@@ -182,7 +183,7 @@ class TickIssueMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("tick_issue_migration", MIGRATION_PATH)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE reseller_profiles (id INTEGER PRIMARY KEY, user_id INTEGER)"))
             conn.execute(sa.text("INSERT INTO reseller_profiles VALUES (1, 42)"))

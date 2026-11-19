@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import os
-import tempfile
 import unittest
-from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("WEB_SECRET", "x" * 48)
 
-from sqlalchemy import event, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Order, Plan
 from app.services.users import get_setting, set_setting
 from app.services.ux20 import export_shop_bundle, import_shop_bundle
+from tests.postgres_support import scoped_async_engine
 
 
 def _bundle(*plans: dict, **settings: str) -> dict:
@@ -25,13 +23,8 @@ def _bundle(*plans: dict, **settings: str) -> dict:
 
 class ShopBundleImportTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 't.db'}")
+        self.engine = scoped_async_engine()
 
-        @event.listens_for(self.engine.sync_engine, "connect")
-        def _foreign_keys(dbapi_conn, _record) -> None:
-            # Same enforcement as the production session.
-            dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -49,7 +42,6 @@ class ShopBundleImportTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _plans(self) -> dict[str, Plan]:
         async with self.Session() as session:

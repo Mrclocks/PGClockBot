@@ -6,12 +6,10 @@ an unknown placeholder or a text Telegram refuses falls back to the built-in mes
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from aiogram.exceptions import TelegramBadRequest
 from sqlalchemy import select
@@ -24,6 +22,7 @@ from app.services.customer_action_notices import ACTION_NOTICE_TITLES, CLEANUP_N
 from app.services.customer_notice_queue import OUTCOME_FAILED, OUTCOME_SENT
 from app.services.customer_notice_texts import NOTICE_TEXT_KEYS, notice_text_key
 from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, clear_settings_cache, keys_for_tab
+from tests.postgres_support import add_shop_users
 from tests.test_customer_services_web_permission import CUSTOMER_ID, SHOP_ID, CustomerServicesWebPermissionTests
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarness
 
@@ -78,6 +77,8 @@ class RenderTests(unittest.TestCase):
 class DeliveryTests(CustomerServicesWebPermissionTests):
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
+        # A second shop, for its own notice text.
+        await add_shop_users(async_sessionmaker(self.engine), SHOP_ID + 1)
         clear_settings_cache()
         self.addCleanup(clear_settings_cache)
 

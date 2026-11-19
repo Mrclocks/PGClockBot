@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -12,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import sqlalchemy as sa
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import (
     Base,
@@ -29,6 +28,7 @@ from app.services.daily_report import previous_tehran_day_bounds
 from app.services.daily_report_delivery import deliver_daily_reports
 from app.services.users import clear_settings_cache
 from app.services.ux20 import funnel_summary
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 # 02:00 UTC on 10 Nov 2026 is 05:30 in Tehran: past the default 04:00 send hour.
@@ -37,8 +37,7 @@ RUN_AT = datetime(2026, 11, 10, 2, 0, tzinfo=timezone.utc)
 
 class DbCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'r.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -47,7 +46,6 @@ class DbCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def add_user(self, session, user_id: int, *, role: str = "user") -> BotUser:
         user = BotUser(id=user_id, telegram_id=9000 + user_id, referral_code=f"u{user_id}", role=role)
@@ -148,12 +146,12 @@ class MigrationTests(unittest.TestCase):
         from alembic.operations import Operations
 
         migration = self.load()
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
-            conn.execute(sa.text("CREATE TABLE orders (id INTEGER PRIMARY KEY, reseller_id INTEGER, status TEXT, updated_at TEXT)"))
-            conn.execute(sa.text("CREATE TABLE settings (id INTEGER PRIMARY KEY, key TEXT, value TEXT)"))
-            conn.execute(sa.text("CREATE TABLE reseller_settings (id INTEGER PRIMARY KEY, reseller_user_id INTEGER, key TEXT, value TEXT)"))
-            conn.execute(sa.text("INSERT INTO orders VALUES (1, NULL, 'delivered', '2026-01-02 10:00:00'), (2, NULL, 'paid', '2026-01-03')"))
+            conn.execute(sa.text("CREATE TABLE orders (id INTEGER PRIMARY KEY, reseller_id INTEGER, status TEXT, updated_at TIMESTAMPTZ)"))
+            conn.execute(sa.text("CREATE TABLE settings (id SERIAL PRIMARY KEY, key TEXT, value TEXT)"))
+            conn.execute(sa.text("CREATE TABLE reseller_settings (id SERIAL PRIMARY KEY, reseller_user_id INTEGER, key TEXT, value TEXT)"))
+            conn.execute(sa.text("INSERT INTO orders VALUES (1, NULL, 'delivered', '2026-01-02 10:00:00+00'), (2, NULL, 'paid', '2026-01-03 00:00:00+00')"))
             conn.execute(sa.text("INSERT INTO settings (key, value) VALUES ('admin_daily_report_hour', '0')"))
             conn.execute(sa.text("INSERT INTO reseller_settings (reseller_user_id, key, value) VALUES (5, 'admin_daily_report_hour', '22')"))
             with Operations.context(MigrationContext.configure(conn)):
@@ -161,7 +159,7 @@ class MigrationTests(unittest.TestCase):
                 migration.upgrade()
                 self.assertEqual(
                     conn.execute(sa.text("SELECT id, delivered_at FROM orders ORDER BY id")).all(),
-                    [(1, "2026-01-02 10:00:00"), (2, None)],
+                    [(1, datetime(2026, 1, 2, 10, tzinfo=timezone.utc)), (2, None)],
                 )
                 hours = lambda: (  # noqa: E731 - small local reader
                     conn.execute(sa.text("SELECT value FROM settings WHERE key = 'admin_daily_report_hour'")).scalar(),

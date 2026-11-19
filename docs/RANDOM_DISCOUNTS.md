@@ -93,10 +93,8 @@ wholesale tier reductions remain eligible for the subsequent random reduction.
 
 Migration `0112_random_discounts` follows `0111_referral_shop`. It adds policy,
 draw and amount-reservation tables, `orders.random_discount_amount` (default 0),
-`orders.random_discount_id`, and indexed amount lookups. The additive legacy
-SQLite startup helper runs before stamping the current migration head. Upgrade
-and downgrade support SQLite and PostgreSQL and preserve existing order rows and
-payable amounts.
+`orders.random_discount_id`, and indexed amount lookups. Upgrade and downgrade
+are idempotent and preserve existing order rows and payable amounts.
 
 Behavior tests cover concurrent allocation, range exhaustion, exact monetary
 steps, code checkout, payment retries, recent and pending payment amounts,

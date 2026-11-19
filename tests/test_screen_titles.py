@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import tempfile
 import time
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.fsm.context import FSMContext
@@ -13,7 +11,7 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import MessageEntity
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import screen_editor as ui_module
 from app.bot.screen_registry import SCREENS
@@ -35,6 +33,7 @@ from app.services.screen_titles import (
     with_caption,
 )
 from app.services.users import DEFAULT_SETTINGS, clear_settings_cache
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 # What the menus rendered before titles became settings; the defaults must keep them byte-for-byte.
 OLD_HEADINGS = {
@@ -264,11 +263,11 @@ class TitleEditorFlowTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401  (registers every table on Base)
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'titles.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, SHOP_A)
         self.state = FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=1, user_id=1))
         clear_settings_cache()
 
@@ -277,7 +276,6 @@ class TitleEditorFlowTests(unittest.IsolatedAsyncioTestCase):
         edit_mode_store.deactivate(SHOP_OWNER)
         clear_settings_cache()
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _owner(self, data: str) -> MagicMock:
         callback = _callback(data)

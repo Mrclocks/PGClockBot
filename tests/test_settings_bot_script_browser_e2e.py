@@ -8,12 +8,10 @@ flow.
 
 from __future__ import annotations
 
-import os
 import tempfile
 import unittest
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from tests.test_delete_reason_browser_e2e import _launch
 from tests.test_message_variables_entry import OWNER, _page

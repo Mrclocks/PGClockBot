@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, CashbackGrant
 from app.services.cashback import credited_text, mature_grants
 from app.services.checkout_summary import _cashback_line
 from app.services.credit_statements import ladder_days
 from app.services.users import set_setting
+from tests.postgres_support import scoped_async_engine
 
 NOW = datetime(2026, 11, 8, tzinfo=timezone.utc)
 
@@ -40,7 +39,7 @@ class PreviewTests(unittest.IsolatedAsyncioTestCase):
 
 class NoticeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -79,7 +78,7 @@ class NoticeTests(unittest.IsolatedAsyncioTestCase):
 
 class LadderSettingTests(unittest.IsolatedAsyncioTestCase):
     async def test_owner_settings_drive_the_ladder_and_bad_values_fall_back(self) -> None:
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         self.addAsyncCleanup(engine.dispose)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

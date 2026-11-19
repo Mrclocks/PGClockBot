@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,7 +14,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import command_schedules, command_switches
 from app.db import Base
@@ -36,6 +35,7 @@ from app.services.switch_schedule import (
     undo_by_hand,
 )
 from app.services.users import clear_settings_cache, get_setting, set_setting
+from tests.postgres_support import add_shop_users, scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP = 21
@@ -53,17 +53,16 @@ class ScheduleDb(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         import app.db.models  # noqa: F401  (registers every table)
 
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'schedule.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, SHOP, OTHER_SHOP)
         clear_settings_cache()
 
     async def asyncTearDown(self) -> None:
         clear_settings_cache()
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _card(self, shop_id: int | None) -> str:
         clear_settings_cache()
@@ -249,7 +248,7 @@ class MigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("switch_reverts", ROOT / "alembic/versions/0122_switch_reverts.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)"))
             conn.execute(sa.text("INSERT INTO settings VALUES ('pay_card_enabled', '1')"))

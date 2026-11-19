@@ -1,13 +1,11 @@
 """Low-time and low-volume alerts: add-on pack, one-tap renewal and wallet top-up offers, per shop."""
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import (
     Base,
@@ -28,6 +26,7 @@ from app.services.usage_alerts import TOPUP_CALLBACK, AlertExtras, alert_extras,
 # Every alert ends with the customer's services and support (customer_notice_buttons.help_row).
 HELP = ["nto:svc:list", SUPPORT_NOTICE_CALLBACK]
 from app.services.users import _SETTINGS_CACHE, clear_settings_cache, set_setting
+from tests.postgres_support import scoped_async_engine
 
 
 def buttons(markup) -> list[str]:
@@ -36,8 +35,7 @@ def buttons(markup) -> list[str]:
 
 class AlertCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'alerts.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -78,7 +76,6 @@ class AlertCase(unittest.IsolatedAsyncioTestCase):
         await self.session.close()
         await self.engine.dispose()
         clear_settings_cache()
-        self.tmp.cleanup()
 
     async def service(self, service_id):
         return await self.session.get(UserService, service_id)

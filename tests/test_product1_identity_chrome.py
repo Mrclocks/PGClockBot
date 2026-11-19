@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -29,6 +29,7 @@ from app.services.principal_lifecycle import (
     enable_level1_principal,
 )
 from app.services.secret_box import encrypt_secret
+from tests.postgres_support import scoped_async_engine
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -294,7 +295,7 @@ class PrincipalPageSourceContracts(unittest.TestCase):
 
 class PrincipalManagementHttpTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

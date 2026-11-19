@@ -6,12 +6,10 @@ must have the shape the rate job accepts, and a shop changes only its own copy.
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot.handlers import admin_settings, reseller_settings
 from app.services.bot_setting_values import NUMBER_BOUNDS, SELECT_OPTIONS

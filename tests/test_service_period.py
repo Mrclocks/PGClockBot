@@ -8,7 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-import sqlalchemy as sa
 from sqlalchemy import text
 
 from app.api.miniapp_pages import _serialize_service
@@ -21,6 +20,7 @@ from app.services.service_renewals import RenewalPendingReview
 from app.services.usage_alerts import traffic_remaining_pct
 from tests.test_admin_renew_respects_carry import AdminRenewFreshStartTests
 from tests.test_renewal_preview import RenewalFixture
+from tests.postgres_support import scoped_sync_engine
 
 GB = 1024**3
 ROOT = Path(__file__).resolve().parents[1]
@@ -140,7 +140,7 @@ class PeriodMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("period_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text("CREATE TABLE user_services (id INTEGER PRIMARY KEY, pg_username TEXT)"))
             conn.execute(text("INSERT INTO user_services VALUES (1, 'svc')"))

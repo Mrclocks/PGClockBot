@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 def _sql_substr(col, pat: str):
-    """Case-insensitive substring match (SQLite + Postgres)."""
+    """Case-insensitive substring match."""
     return func.lower(cast(col, String)).like(pat, escape="\\")
 
 

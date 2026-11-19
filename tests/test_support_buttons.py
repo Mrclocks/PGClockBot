@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, Order, Payment, PaymentStatus
 from app.services import payment_voids
@@ -14,6 +14,7 @@ from app.services.delivery import build_delivery_content
 from app.services.payer_notify import notify_payer
 from app.services.notice_links import opened_screen
 from app.services.support_button import SUPPORT_HOME_CALLBACK, SUPPORT_NOTICE_CALLBACK, support_markup, with_support_row
+from tests.postgres_support import scoped_async_engine
 
 
 def callbacks(markup) -> list[str]:
@@ -92,7 +93,7 @@ class BotRejectionTests(unittest.IsolatedAsyncioTestCase):
 
 class UndeliveredNoticeTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_paid_order_without_a_service_asks_to_use_support(self) -> None:
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         session = async_sessionmaker(engine, expire_on_commit=False)()

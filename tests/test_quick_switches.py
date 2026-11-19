@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,7 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.command_panel import PanelData, needs_confirmation, panel_rows, panel_text
 from app.bot.handlers import admin_settings, command_switches, reseller_settings
@@ -33,6 +31,7 @@ from app.services.quick_switches import (
 )
 from app.services.staff_audit import StaffActor
 from app.services.users import clear_settings_cache, get_setting, set_setting
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 SHOP = 21
 OTHER_SHOP = 22
@@ -51,17 +50,16 @@ class SwitchDb(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         import app.db.models  # noqa: F401  (registers every table)
 
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'switches.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, SHOP, OTHER_SHOP)
         clear_settings_cache()
 
     async def asyncTearDown(self) -> None:
         clear_settings_cache()
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _records(self, session) -> int:
         return int(await session.scalar(select(func.count()).select_from(ShopStaffAction)))

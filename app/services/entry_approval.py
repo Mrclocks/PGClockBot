@@ -180,8 +180,8 @@ async def _joined_before(session: AsyncSession, user: BotUser, shop_key: int, si
     candidates = [as_utc(seen) for seen in (first_seen, first_order) if seen]
     if shop_key_of(user.reseller_id) == shop_key and user.created_at:
         candidates.append(as_utc(user.created_at))
-    # SQLite keeps whole seconds, so someone who joined in the second the gate was switched on
-    # would read as earlier than the switch; compare whole seconds and count that second as after.
+    # Join times can be recorded in whole seconds, so someone who joined in the second the gate was
+    # switched on would read as earlier than the switch; compare whole seconds and count that second as after.
     return bool(candidates) and min(candidates) < since.replace(microsecond=0)
 
 

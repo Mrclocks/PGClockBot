@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.exceptions import TelegramAPIError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import shop
 from app.db.models import Base, BotUser, Order, OrderStatus, Plan, ResellerProfile
@@ -15,6 +15,7 @@ from app.services.notifications import PLATFORM_NOTIFY_PREFS, shop_notify_catalo
 from app.services.trial_notify import NOTIFY_KEY, notify_trial_claimed, notify_trial_claimed_outside_bot
 from app.services.users import clear_settings_cache, set_settings_bulk
 from tests.test_trial_claim_unknown_delivery import BUYER, TRIAL_PLAN, TrialDeliveryTestCase
+from tests.postgres_support import scoped_async_engine
 
 PLATFORM_ADMINS = [7001, 7002]
 SHOP_STAFF = [9001]
@@ -26,7 +27,7 @@ SHOP_TRIAL_PLAN = 3
 class TrialNoticeCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

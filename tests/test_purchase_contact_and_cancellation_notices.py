@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,7 +21,7 @@ from alembic.operations import Operations
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.miniapp_pages import register_miniapp_pages
 from app.api.customer_features import register_customer_features
@@ -35,12 +34,12 @@ from app.services.orders import create_custom_order, create_order, create_wholes
 from app.services.purchase_contact import purchase_contact_needed, verify_purchase_contact
 from app.services.service_cancellations import request_cancellation
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_setting, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 
 class ContactAndNoticeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'contacts.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -82,7 +81,6 @@ class ContactAndNoticeTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
         reset_shop_reseller_id(self.scope)
         _SETTINGS_CACHE.clear()
-        self.tmp.cleanup()
 
     async def verify(self, user: BotUser | None = None) -> None:
         user = user or self.user
@@ -441,7 +439,7 @@ class ContactNoticeMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("contact_notice_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as connection:
             connection.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))
             connection.execute(sa.text("CREATE TABLE service_cancellations (id INTEGER PRIMARY KEY, reason TEXT)"))

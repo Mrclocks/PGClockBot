@@ -6,14 +6,12 @@ duplicates are refused, and each shop changes only its own list.
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import payment_destinations_editor as editor
 from app.bot.handlers import admin_settings, reseller_settings
@@ -22,6 +20,8 @@ from app.services import bot_feedback_texts as feedback
 from app.services import payment_destination_edits as edits
 from app.services.payment_destinations import MAX_ITEMS, get_payment_cards
 from app.services.users import clear_settings_cache, get_setting
+from tests.dispatcher_support import create_isolated_dispatcher
+from tests.postgres_support import scoped_async_engine
 
 SHOP_A, SHOP_B = 51, 52
 CARD = "6037997512345678"
@@ -53,7 +53,7 @@ class CleanFieldTests(unittest.TestCase):
 
 class ListEditTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -179,9 +179,7 @@ if __name__ == "__main__":
 
 class WiringTests(unittest.TestCase):
     def test_owner_editor_is_behind_the_owner_gate_and_blocked_on_shop_bots(self) -> None:
-        from app.bot import create_dispatcher
-
-        dp = create_dispatcher()
+        dp = create_isolated_dispatcher(self)
         names = {type(m).__name__ for m in editor.owner_router.callback_query.middleware}
         self.assertIn("_RequireBotOwnerPrincipal", names)
         self.assertIn("_BlockPlatformAdminOnResellerBot", names)
