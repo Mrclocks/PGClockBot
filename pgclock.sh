@@ -444,6 +444,7 @@ apply_install_ssl() {
     PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" \
     "$py" - <<'PY' 2>/dev/tty
 import json, os, sys
+from app.cli.output import terminal_text
 from app.services.ssl_certs import configure_for_install, verify_tls_material
 
 mode = (os.environ.get("PGCLOCK_INSTALL_SSL_MODE") or "none").strip()
@@ -458,10 +459,13 @@ if result.get("ok") and mode not in ("", "none", "off", "http", "3"):
     check = verify_tls_material()
     if not check.get("ok"):
         result = {"ok": False, "error": check.get("error") or "TLS material check failed"}
-        print(f"  [ssl] TLS verify FAILED · {result['error'][:300]}", file=sys.stderr, flush=True)
+        print(f"  [ssl] TLS verify FAILED · {terminal_text(result['error'])[:300]}", file=sys.stderr, flush=True)
     else:
         result["tls_ok"] = True
         print("  [ssl] TLS material verified (cert+key load OK)", file=sys.stderr, flush=True)
+# The certificate service words its errors in Persian for the web panel; the terminal gets English.
+if result.get("error"):
+    result["error"] = terminal_text(result["error"])
 print(json.dumps(result, ensure_ascii=False))
 sys.exit(0 if result.get("ok") else 1)
 PY

@@ -50,9 +50,13 @@ def cmd_shop_review_list(ctx: CliContext) -> int:
 
 
 def cmd_shop_review_assign(ctx: CliContext, *, service_id: int, shop: str) -> int:
+    # Deferred like the other service imports here: loading the app is only needed to run a command.
+    from app.services.service_shop_review import NOT_UNDER_REVIEW, SHOP_NOT_FOUND
+
+    english = {SHOP_NOT_FOUND: f"shop {shop} not found", NOT_UNDER_REVIEW: f"service {service_id} is not waiting for a shop"}
     try:
         asyncio.run(_assign(service_id, _parse_shop(shop)))
     except ValueError as exc:
-        raise CliError(str(exc)) from exc
+        raise CliError(english.get(str(exc), str(exc))) from exc
     ok(f"service {service_id} assigned to {shop}")
     return 0
