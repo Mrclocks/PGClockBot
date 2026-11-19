@@ -18,6 +18,7 @@ from app.services.plans_catalog import (
     plan_groups_denial,
     plan_template_denial,
 )
+from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
 
 OWNER_PRINCIPAL = {
     "role": "admin",
@@ -111,7 +112,7 @@ class PlansPageTemplateOnlyTests(unittest.TestCase):
             "staff": OWNER_PRINCIPAL, "plans": [], "plan_categories": [], "plan_category_map": {},
             "service_addon_packs": [], "category_linked_plans": {}, "values": {}, "reseller_plans": [],
             "templates": [{"id": 10, "name": "Monthly"}], "groups": [{"id": 1, "name": "<b>Main</b>"}],
-            "gift_codes": [], "is_platform_admin": True,
+            "gift_codes": [], "is_platform_admin": True, "trial_placement_labels": TRIAL_PLACEMENT_LABELS,
             "pg_template_only": template_only, "role_blocked_plans": blocked,
         }
         return render(request, "plans.html", ctx).body.decode("utf-8")
