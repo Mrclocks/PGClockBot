@@ -39,6 +39,8 @@ from app.db.models import (
 )
 from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
 from app.services.payment_decision_audit import ACTION_APPROVE, ACTION_REJECT, record_payment_decision
+from app.services.delivery_recovery_policy import DELIVERING_STALE_AFTER, DELIVERY_IN_PROGRESS
+from app.services.pg_read_resilience import outside_web_read_budget
 from app.services.pasarguard import (
     PasarGuardError,
     extract_sub_token,
@@ -105,6 +107,7 @@ def is_addon_order_note(note: str | None) -> bool:
     return (note or "").strip().startswith("svc_addon:")
 
 
+@outside_web_read_budget
 async def fulfill_paid_order(
     session: AsyncSession, order: Order, *, attempt: DeliveryAttempt | None = None
 ) -> Order:
@@ -1394,6 +1397,7 @@ async def _resume_unfinished_wallet_order(session: AsyncSession, order: Order, u
     return resumed
 
 
+@outside_web_read_budget
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     if order.status == OrderStatus.DELIVERED.value:
         return order
@@ -1932,22 +1936,26 @@ async def _resume_approved_payment(
         # Truly complete — do not re-run delivery / notifications as a new approve.
         raise ValueError("این پرداخت قبلاً تأیید شده")
 
-    # Heal mid-flight / crashed delivery back to PAID so fulfill can claim again.
+    # Heal a crashed delivery back to PAID so fulfill can claim again. A fresh DELIVERING
+    # order may be mid-write in another worker: reopening it would run a second attempt.
     if order.status == OrderStatus.DELIVERING.value and not (
         bool(order.service_id) and not is_mutation
     ):
         with session.no_autoflush:
-            await session.execute(
+            healed = await session.execute(
                 update(Order)
                 .where(
                     Order.id == int(order.id),
                     Order.status == OrderStatus.DELIVERING.value,
+                    Order.updated_at <= datetime.now(timezone.utc) - DELIVERING_STALE_AFTER,
                 )
                 .values(status=OrderStatus.PAID.value)
                 .execution_options(synchronize_session=False)
             )
         await session.commit()
         await session.refresh(order)
+        if healed.rowcount != 1 and order.status == OrderStatus.DELIVERING.value:
+            raise ValueError(DELIVERY_IN_PROGRESS)
 
     if order.status in {
         OrderStatus.PENDING.value,
@@ -2013,6 +2021,7 @@ async def _sync_payment_review_messages(
         logger.warning("payment review sync failed payment=%s", payment_id, exc_info=True)
 
 
+@outside_web_read_budget
 async def approve_payment(
     session: AsyncSession,
     payment: Payment,
@@ -2346,6 +2355,7 @@ async def reject_order(session: AsyncSession, order: Order, *, note: str = "") -
     return order
 
 
+@outside_web_read_budget
 async def deliver_order(
     session: AsyncSession, order: Order, *, attempt: DeliveryAttempt | None = None
 ) -> Order:
@@ -3080,6 +3090,7 @@ async def _charge_renewal(
         raise ValueError(SHORTFALL_FOR_CUSTOMER) from e
 
 
+@outside_web_read_budget
 async def apply_renewal(
     session: AsyncSession, order: Order, service: UserService, plan: Plan,
     *, reset_traffic: bool = False,
