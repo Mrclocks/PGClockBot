@@ -167,7 +167,9 @@ class RemoteMigrationMetadataTests(unittest.IsolatedAsyncioTestCase):
         with patch(
             "app.services.update_channel.httpx.AsyncClient",
             side_effect=lambda **kwargs: self.real_client(transport=transport, **kwargs),
-        ), patch("app.config.get_settings", return_value=SimpleNamespace(database_url=database_url)):
+        ), patch("app.config.get_settings", return_value=SimpleNamespace(database_url=database_url)), patch(
+            "app.services.update_channel.database_update_block", return_value=None
+        ):
             result = await migration_preflight("dev")
         self.assertTrue(result["checked"])
         self.assertFalse(result["blocked"])

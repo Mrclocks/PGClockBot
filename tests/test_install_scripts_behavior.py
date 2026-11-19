@@ -192,7 +192,10 @@ class SafeUpdateTests(PgclockShellHarness):
         super().setUp()
         self.old = self.publish("old")
         self.install = self.clone_install()
-        (self.install / ".env").write_text('DEPLOYED_CHANNEL="main"\n', encoding="utf-8")
+        (self.install / ".env").write_text(
+            'DEPLOYED_CHANNEL="main"\nDATABASE_URL="postgresql+asyncpg://pgclock:pw@127.0.0.1:5432/pgclock"\n',
+            encoding="utf-8",
+        )
         self.new = self.publish("new")
         (self.tmp / "schema.txt").write_text("0100\n", encoding="utf-8")
 
@@ -217,6 +220,15 @@ class SafeUpdateTests(PgclockShellHarness):
         self.assertEqual(calls[:2], ["backup", "stop"])
         self.assertIn(f"restart {self.new[:7]}", calls)
         self.assertEqual(self.head(), self.new)
+
+    def test_a_database_that_is_not_postgres_stops_the_update_before_anything_runs(self) -> None:
+        (self.install / ".env").write_text(
+            'DEPLOYED_CHANNEL="main"\nDATABASE_URL="mysql://root:pw@db/pgclock"\n', encoding="utf-8"
+        )
+        rc, calls = self.update()
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, [], "no backup, stop, download or restart")
+        self.assertEqual(self.head(), self.old)
 
     def test_failed_backup_leaves_running_panel_untouched(self) -> None:
         rc, calls = self.update(FAIL_AT="backup")

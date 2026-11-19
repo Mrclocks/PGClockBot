@@ -2110,6 +2110,21 @@ update_guard_end() {
   update_exit_cleanup
 }
 
+# True when .env's DATABASE_URL is PostgreSQL (the same prefixes the panel accepts).
+require_postgres_database_url() {
+  local db_url
+  db_url="$(env_get DATABASE_URL "")"
+  case "$db_url" in
+    postgresql://*|postgresql+asyncpg://*|postgres://*)
+      return 0
+      ;;
+  esac
+  err "Your database is not supported (دیتابیس شما پشتیبانی نمی‌شود): PGClockBot runs on PostgreSQL only."
+  warn "DATABASE_URL in .env must start with postgresql+asyncpg:// — the update was not started and nothing changed."
+  warn "To create a PostgreSQL database, run Install from this menu, then update again."
+  return 1
+}
+
 cmd_update() {
   acquire_update_lock || return 1
   if [[ "$(update_progress_state)" == "interrupted" ]]; then
@@ -2131,6 +2146,8 @@ run_update() {
     err ".env not found. Run Install first."
     return 1
   fi
+  # The new code runs on PostgreSQL only: refuse before backup, stop or download.
+  require_postgres_database_url || return 1
   ok "Keeping existing .env"
   cp -a .env ".env.bak.$(date +%Y%m%d%H%M%S)"
   ok ".env backup created"
