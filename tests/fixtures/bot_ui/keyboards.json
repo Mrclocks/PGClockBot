@@ -87,6 +87,11 @@
           "callback_data": "cmd:h",
           "style": "primary",
           "text": "⚡ مرکز فرمان"
+        },
+        {
+          "callback_data": "cmd:s",
+          "style": "primary",
+          "text": "🔎 جستجو"
         }
       ],
       [
@@ -173,6 +178,11 @@
           "callback_data": "cmd:h",
           "style": "primary",
           "text": "⚡ مرکز فرمان"
+        },
+        {
+          "callback_data": "cmd:s",
+          "style": "primary",
+          "text": "🔎 جستجو"
         }
       ],
       [
@@ -998,6 +1008,11 @@
           "callback_data": "cmd:h",
           "style": "primary",
           "text": "⚡ مرکز فرمان"
+        },
+        {
+          "callback_data": "cmd:s",
+          "style": "primary",
+          "text": "🔎 جستجو"
         }
       ],
       [
@@ -1051,6 +1066,11 @@
           "callback_data": "cmd:h",
           "style": "primary",
           "text": "⚡ مرکز فرمان"
+        },
+        {
+          "callback_data": "cmd:s",
+          "style": "primary",
+          "text": "🔎 جستجو"
         }
       ],
       [

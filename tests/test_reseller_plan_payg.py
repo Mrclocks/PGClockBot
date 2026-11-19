@@ -71,8 +71,8 @@ class PlanEditTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             payg, fixed = await session.get(ResellerPlan, 1), await session.get(ResellerPlan, 2)
         self.assertNotIn("<i>payg</i>", screen_text(payg))
-        payg_data = [b.callback_data for row in screen_keyboard(payg).inline_keyboard for b in row]
-        fixed_data = [b.callback_data for row in screen_keyboard(fixed).inline_keyboard for b in row]
+        payg_data = [b.callback_data for row in screen_keyboard(payg, {}).inline_keyboard for b in row]
+        fixed_data = [b.callback_data for row in screen_keyboard(fixed, {}).inline_keyboard for b in row]
         self.assertIn("adm:rpg:b:user_traffic:1", payg_data)
         self.assertEqual(fixed_data, ["adm:rpg:f:acc:2", "adm:resplan:view:2"])
         self.assertTrue(all(len(d.encode()) <= 64 for d in payg_data))

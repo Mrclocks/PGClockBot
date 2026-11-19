@@ -258,7 +258,9 @@ async def cb_segments(
         return
     await callback.answer()
     if callback.message:
-        markup = targeted_keyboard(shop_id=shop_id, pick_prefix=SHOP_PICK, back=CB_HUB)
+        markup = targeted_keyboard(
+            shop_id=shop_id, pick_prefix=SHOP_PICK, back=CB_HUB, ui=await get_all_settings(session)
+        )
         await safe_edit_text(callback.message, TITLE, reply_markup=markup)
 
 

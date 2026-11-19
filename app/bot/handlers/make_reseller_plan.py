@@ -15,6 +15,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import keyboards as kb
+from app.services.users import get_all_settings
 from app.bot.auth import is_platform_admin, require_bot_owner_handler, require_platform_rep_mgmt
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
@@ -42,7 +44,7 @@ class MakeResellerPlan(StatesGroup):
     choosing = State()
 
 
-def _plan_keyboard(plans: list) -> InlineKeyboardMarkup:
+def _plan_keyboard(plans: list, ui: dict[str, str]) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(
             text=f"{'[PAYG]' if (p.billing_mode or 'fixed') == 'payg' else '[ثابت]'} {p.name}"[:64],
@@ -51,7 +53,7 @@ def _plan_keyboard(plans: list) -> InlineKeyboardMarkup:
         for p in plans[:PLAN_BUTTON_LIMIT]
     ]
     rows.append([InlineKeyboardButton(text="بدون پلن", callback_data=f"{CALLBACK_PREFIX}{NO_PLAN}")])
-    rows.append([InlineKeyboardButton(text="بازگشت", callback_data="adm:resellers")])
+    rows.append([kb.back_button(ui, "adm:resellers")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -71,7 +73,7 @@ async def ask_reseller_plan(
         "پلن نمایندگی را انتخاب کنید.\n"
         "نقش پاسارگارد، سقف‌ها و دسترسی‌ها از همین پلن گرفته می‌شود. "
         "اگر پنل چند نقش دارد، انتخاب پلن لازم است.",
-        reply_markup=_plan_keyboard(plans),
+        reply_markup=_plan_keyboard(plans, await get_all_settings(session)),
     )
 
 

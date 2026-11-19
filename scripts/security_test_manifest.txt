@@ -573,3 +573,4 @@ tests/test_panel_read_budget_paths.py
 tests/test_payment_read_budget.py
 # Updates are refused (web panel and pgclock.sh) when the database is not PostgreSQL.
 tests/test_update_database_guard.py
+tests/test_command_center_navigation.py

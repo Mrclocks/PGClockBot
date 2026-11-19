@@ -14,6 +14,8 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import keyboards as kb
+from app.services.users import get_all_settings
 from app.bot.auth import require_bot_owner_handler
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
@@ -50,7 +52,9 @@ def segment_label(segment: Segment) -> str:
     return f"{SEGMENT_EMOJI.get(segment.key, '•')} {segment.label}{days}"
 
 
-def targeted_keyboard(*, shop_id: int | None, pick_prefix: str, back: str) -> InlineKeyboardMarkup:
+def targeted_keyboard(
+    *, shop_id: int | None, pick_prefix: str, back: str, ui: dict[str, str]
+) -> InlineKeyboardMarkup:
     """The narrower segments of this tenant, two to a row, then «بازگشت» to the hub."""
     buttons = [
         InlineKeyboardButton(text=segment_label(s), callback_data=f"{pick_prefix}{s.key}")
@@ -58,7 +62,7 @@ def targeted_keyboard(*, shop_id: int | None, pick_prefix: str, back: str) -> In
         if s.key not in HUB_SEGMENTS
     ]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton(text="بازگشت", callback_data=back)])
+    rows.append([kb.back_button(ui, back)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -67,5 +71,7 @@ def targeted_keyboard(*, shop_id: int | None, pick_prefix: str, back: str) -> In
 async def platform_segments(callback: CallbackQuery, session: AsyncSession, db_user: BotUser) -> None:
     await callback.answer()
     if callback.message:
-        markup = targeted_keyboard(shop_id=None, pick_prefix=PLATFORM_PICK, back=PLATFORM_HUB)
+        markup = targeted_keyboard(
+            shop_id=None, pick_prefix=PLATFORM_PICK, back=PLATFORM_HUB, ui=await get_all_settings(session)
+        )
         await safe_edit_text(callback.message, TITLE, reply_markup=markup)

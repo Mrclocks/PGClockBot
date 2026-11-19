@@ -162,6 +162,7 @@ async def show_command_panel(
         state,
         kind_code=ALL_KINDS,
         back_callback=viewer.home_callback,
+        ui=data.ui,
         prompt=panel_text(data, shop_id=viewer.shop_id, can_switch=bool(viewer.switches)),
         extra_inline=InlineKeyboardMarkup(inline_keyboard=rows),
     )

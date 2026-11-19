@@ -76,7 +76,7 @@ class AppearanceSectionTests(unittest.TestCase):
     def test_admin_label_keys_stay_hidden_from_shop_settings(self):
         keys = {f[0] for _, _, fields in appearance_button_subs() for f in fields}
         # «ادامه خرید» is a customer button a shop renames too, so it sits with the shop's labels.
-        self.assertEqual(keys, (UNREACHABLE_BEFORE | {"btn_adm_command_center"}) - {"btn_buy_continue"})
+        self.assertEqual(keys, (UNREACHABLE_BEFORE | {"btn_adm_command_center", "btn_adm_search"}) - {"btn_buy_continue"})
         self.assertIn("btn_buy_continue", all_btn_field_keys(include_platform=False))
         admin_keys = {k for k in keys if k.startswith("btn_adm_")}
         self.assertTrue(admin_keys <= PLATFORM_ONLY_BTN_KEYS)
