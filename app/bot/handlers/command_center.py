@@ -8,12 +8,14 @@ result is the same callback as the real button: its handler checks access again 
 from __future__ import annotations
 
 import html
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, field
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
@@ -31,16 +33,27 @@ from app.bot.handlers.reply_nav import open_admin_home, open_reseller_home
 from app.bot.handlers.reseller_hub import load_reseller_hub
 from app.bot.hub_entries import COMMAND_CENTER_CALLBACK, COMMAND_CENTER_SETTINGS_CALLBACK
 from app.bot.list_pages import Page, page_line, page_number, page_of, pager_row
-from app.bot.nav_input import CancelEntry, ask_text, finish_text_step, register_cancel_code, try_legacy_cancel
+from app.bot.nav_input import (
+    CancelEntry,
+    ask_text,
+    delete_user_message,
+    finish_text_step,
+    register_cancel_code,
+    try_legacy_cancel,
+)
 from app.bot.reseller_hub_groups import RESELLER_HOME_CALLBACK
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
+from app.services.command_data_search import DataHit, DataKind, DataScope, is_subscription_link, search_data
 from app.services.command_search import CommandEntry, CommandKind, filter_kind, query_words, search_commands
+from app.services.db_safe import rollback_quiet
 from app.services.numbers import to_fa_digits
+from app.services.resellers import has_bot_perm
 from app.services.settings_search import SEARCH_QUERY_MAX_LEN
 from app.services.users import get_all_settings
 
+logger = logging.getLogger(__name__)
 router = Router(name="command_center")
 
 CANCEL_CODE = "cmd"
@@ -52,6 +65,13 @@ BUTTON_TEXT_MAX = 60
 QUERY_KEY = "command_query"
 KIND_KEY = "command_kind"
 BACK_KEY = "command_back"
+DATA_KEY = "command_data"
+# Stored instead of a subscription link: the link is a secret and is never kept or shown again.
+LINK_QUERY = "\x00link"
+LINK_HEADING = "🔗 لینک اشتراک"
+# Shop staff need this feature to open a customer's card, so only they find customers.
+CUSTOMER_PERMISSION = "dashboard"
+CHIPS_PER_ROW = 3
 TITLE = "⚡ مرکز فرمان"
 PROMPT = (
     f"<b>{TITLE}</b>\n\n"
@@ -65,8 +85,27 @@ SEARCH_AGAIN = "🔎 جستجوی دیگر"
 BACK = "⬅️ بازگشت"
 ALL_KINDS = "a"
 # Filter code in callback data → kind, chip label and the icon shown before results without one.
-KIND_CODES: dict[str, CommandKind] = {"m": CommandKind.MENU, "s": CommandKind.SETTING, "l": CommandKind.LABEL}
-KIND_CHIPS: dict[str, str] = {ALL_KINDS: "همه", "m": "📋 منو", "s": "⚙️ تنظیم", "l": "✏️ متن دکمه"}
+KIND_CODES: dict[str, CommandKind] = {
+    "d": CommandKind.DATA,
+    "m": CommandKind.MENU,
+    "s": CommandKind.SETTING,
+    "l": CommandKind.LABEL,
+}
+KIND_CHIPS: dict[str, str] = {ALL_KINDS: "همه", "d": "🗂 رکورد", "m": "📋 منو", "s": "⚙️ تنظیم", "l": "✏️ متن دکمه"}
+DATA_ICONS: dict[DataKind, str] = {
+    DataKind.CUSTOMER: "👤",
+    DataKind.RESELLER: "🤝",
+    DataKind.LINK_OWNER: "🔗",
+    DataKind.ORDER: "🧾",
+}
+# Card callbacks: the platform owner's and a shop's; a kind missing here is not offered to that viewer.
+OWNER_DATA_CARDS: dict[DataKind, str] = {
+    DataKind.CUSTOMER: "adm:users:view:{}",
+    DataKind.LINK_OWNER: "adm:users:view:{}",
+    DataKind.RESELLER: "adm:resellers:view:{}",
+    DataKind.ORDER: "adm:order:{}",
+}
+SHOP_DATA_CARDS: dict[DataKind, str] = {DataKind.CUSTOMER: "res:user:{}", DataKind.LINK_OWNER: "res:user:{}"}
 KIND_ICONS: dict[CommandKind, str] = {CommandKind.SETTING: "⚙️", CommandKind.LABEL: "✏️"}
 
 
@@ -78,6 +117,9 @@ class CommandCenterStates(StatesGroup):
 class CommandViewer:
     entries: list[CommandEntry]
     home_callback: str
+    # What records this viewer may find; None searches menus and settings only.
+    data_scope: DataScope | None = None
+    data_cards: dict[DataKind, str] = field(default_factory=dict)
 
 
 async def load_command_viewer(
@@ -90,11 +132,43 @@ async def load_command_viewer(
             return None
         viewer = ShopViewer(hub.profile, hub.ui, hub.can_add_representative, hub.show_owner_creds)
         entries = shop_command_entries(viewer, reseller_settings.SECTIONS, reseller_settings.SUB_PERMISSIONS)
-        return CommandViewer(entries, RESELLER_HOME_CALLBACK)
+        scope = DataScope(
+            shop_id=int(hub.profile.user_id), customers=has_bot_perm(hub.profile, CUSTOMER_PERMISSION)
+        )
+        return CommandViewer(entries, RESELLER_HOME_CALLBACK, scope, SHOP_DATA_CARDS)
     if not await is_bot_owner_principal(session, db_user, is_reseller_bot=False):
         return None
     ui = await get_all_settings(session)
-    return CommandViewer(admin_command_entries(ui, admin_settings.SECTIONS), ADMIN_HOME_CALLBACK)
+    scope = DataScope(shop_id=None, customers=True, resellers=True, orders=True)
+    return CommandViewer(admin_command_entries(ui, admin_settings.SECTIONS), ADMIN_HOME_CALLBACK, scope, OWNER_DATA_CARDS)
+
+
+def data_entries(viewer: CommandViewer, hits: list[DataHit]) -> list[CommandEntry]:
+    """Found records as results that open their existing cards; kinds without a card are dropped."""
+    entries = []
+    for hit in hits:
+        card = viewer.data_cards.get(hit.kind)
+        if card is not None:
+            label = f"{DATA_ICONS[hit.kind]} {hit.label}"
+            entries.append(CommandEntry(label, hit.detail, card.format(hit.entity_id), CommandKind.DATA))
+    return entries
+
+
+async def find_data_entries(session: AsyncSession, viewer: CommandViewer, query: str) -> list[CommandEntry]:
+    if viewer.data_scope is None:
+        return []
+    try:
+        hits = await search_data(session, query, viewer.data_scope)
+    except SQLAlchemyError:  # records are a bonus; menus and settings are still found
+        logger.warning("command center data search failed", exc_info=True)
+        await rollback_quiet(session)
+        return []
+    return data_entries(viewer, hits)
+
+
+def _stored_entries(data: dict) -> list[CommandEntry]:
+    rows = data.get(DATA_KEY) or []
+    return [CommandEntry(label, path, target, CommandKind.DATA) for label, path, target in rows]
 
 
 def _kind_code(raw: str | None) -> str:
@@ -118,22 +192,22 @@ def _result_text(entry: CommandEntry) -> str:
     return text if len(text) <= BUTTON_TEXT_MAX else text[: BUTTON_TEXT_MAX - 1] + "…"
 
 
-def _filter_row(hits: list[CommandEntry], kind_code: str) -> list[InlineKeyboardButton]:
+def _filter_rows(hits: list[CommandEntry], kind_code: str) -> list[list[InlineKeyboardButton]]:
     """«همه» and one chip per kind found; none when every result is of one kind."""
     counts = {code: len(filter_kind(hits, kind)) for code, kind in KIND_CODES.items()}
     present = [code for code, count in counts.items() if count]
     if len(present) < 2:
         return []
     counts[ALL_KINDS] = len(hits)
-    row = []
+    chips = []
     for code in (ALL_KINDS, *present):
         mark = "• " if code == kind_code else ""
-        row.append(
+        chips.append(
             InlineKeyboardButton(
                 text=f"{mark}{KIND_CHIPS[code]} {to_fa_digits(counts[code])}", callback_data=results_callback(code)
             )
         )
-    return row
+    return [chips[i : i + CHIPS_PER_ROW] for i in range(0, len(chips), CHIPS_PER_ROW)]
 
 
 def _footer(home_callback: str) -> list[InlineKeyboardButton]:
@@ -150,23 +224,22 @@ def results_panel(
     kind_code: str = ALL_KINDS,
     page_index: int = 0,
     back_callback: str | None = None,
+    records: list[CommandEntry] | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
-    """One page of results as an inline panel; the query is escaped, never trusted."""
-    shown_query = html.escape(query[:SEARCH_QUERY_MAX_LEN])
-    heading = f"🔎 <b>«{shown_query}»</b>"
+    """One page of results (``records`` first) as an inline panel; the query is escaped, never trusted."""
+    is_link = query == LINK_QUERY
+    heading = LINK_HEADING if is_link else f"🔎 <b>«{html.escape(query[:SEARCH_QUERY_MAX_LEN])}»</b>"
     footer = _footer(back_callback or viewer.home_callback)
-    if not query_words(query):
-        return f"{heading}\n\n{TOO_SHORT}", InlineKeyboardMarkup(inline_keyboard=[footer])
-    hits = search_commands(viewer.entries, query)
+    searchable = not is_link and bool(query_words(query))
+    hits = [*(records or []), *(search_commands(viewer.entries, query) if searchable else [])]
     if not hits:
-        return f"{heading}\n\n{NOTHING_FOUND}", InlineKeyboardMarkup(inline_keyboard=[footer])
+        reason = NOTHING_FOUND if searchable or is_link or records else TOO_SHORT
+        return f"{heading}\n\n{reason}", InlineKeyboardMarkup(inline_keyboard=[footer])
     kind = KIND_CODES.get(kind_code)
     shown = filter_kind(hits, kind) or hits
     page: Page[CommandEntry] = page_of(shown, page_index, PAGE_SIZE)
     rows: list[list[InlineKeyboardButton]] = []
-    chips = _filter_row(hits, kind_code if kind else ALL_KINDS)
-    if chips:
-        rows.append(chips)
+    rows.extend(_filter_rows(hits, kind_code if kind else ALL_KINDS))
     rows.extend([InlineKeyboardButton(text=_result_text(entry), callback_data=entry.target)] for entry in page.items)
     pager = pager_row(page, results_callback(kind_code))
     if pager:
@@ -247,15 +320,24 @@ async def run_command_search(
         await state.clear()
         await message.answer(feedback.NO_ACCESS_REPLY)
         return
-    query = text[:SEARCH_QUERY_MAX_LEN]
+    # Checked on the whole text: a link is longer than a query and is matched in full.
+    is_link = is_subscription_link(text)
+    query = LINK_QUERY if is_link else text[:SEARCH_QUERY_MAX_LEN]
+    records = await find_data_entries(session, viewer, text if is_link else query)
     data = await state.get_data()
-    # Leave the input step but keep the query, so the result pages can be turned.
+    # Leave the input step but keep the query and the records found, so result pages can be turned.
     await state.set_state(None)
-    await state.update_data(**{QUERY_KEY: query})
+    await state.update_data(**{QUERY_KEY: query, DATA_KEY: [[e.label, e.path, e.target] for e in records]})
     body, markup = results_panel(
-        viewer, query, kind_code=_kind_code(data.get(KIND_KEY)), back_callback=_stored_back(viewer, data)
+        viewer,
+        query,
+        kind_code=_kind_code(data.get(KIND_KEY)),
+        back_callback=_stored_back(viewer, data),
+        records=records,
     )
     await finish_text_step(message, state, text=body, inline=markup)
+    if is_link:
+        await delete_user_message(message)
 
 
 # A literal prefix keeps the handler visible to the callback contract check.
@@ -289,6 +371,7 @@ async def turn_results_page(
         kind_code=_kind_code(raw[len(RESULTS_PREFIX):].split(":", 1)[0]),
         page_index=page_number(raw),
         back_callback=_stored_back(viewer, data),
+        records=_stored_entries(data),
     )
     await safe_edit_text(callback.message, body, reply_markup=markup)
 

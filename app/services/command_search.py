@@ -22,9 +22,11 @@ class CommandKind(StrEnum):
     SETTING = "setting"
     # The text of a button, edited in settings; listed after the menus and settings themselves.
     LABEL = "label"
+    # A customer, reseller or order found in the database (``command_data_search``); listed first.
+    DATA = "data"
 
 
-_KIND_ORDER = {CommandKind.MENU: 0, CommandKind.SETTING: 1, CommandKind.LABEL: 2}
+_KIND_ORDER = {CommandKind.DATA: 0, CommandKind.MENU: 1, CommandKind.SETTING: 2, CommandKind.LABEL: 3}
 
 
 @dataclass(frozen=True, slots=True)
