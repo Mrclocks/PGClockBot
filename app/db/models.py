@@ -810,6 +810,8 @@ class ServiceAutomation(Base):
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set once when the customer is offered automatic renewal (auto_renew_offer); never offered again.
+    renew_offered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Ticket(Base):
@@ -1187,15 +1189,24 @@ class CashbackRule(Base):
 
 
 class CashbackGrant(Base):
-    """Cashback of one delivered order: pending, then credited to the buyer's shop wallet.
+    """Cashback of one delivered order or approved wallet top-up: pending, then credited to the
+    buyer's shop wallet.
 
-    One per order (unique ``order_id``). The rule's numbers are stored, so a later rule
+    One per order (unique ``order_id``) and one per top-up payment (unique ``payment_id``). The rule's numbers are stored, so a later rule
     edit never changes a grant.
     """
 
     __tablename__ = "cashback_grants"
     __table_args__ = (
         UniqueConstraint("order_id", name="uq_cashback_grant_order"),
+        # A wallet top-up earns at most one grant; order grants leave payment_id NULL.
+        Index(
+            "uq_cashback_grant_payment",
+            "payment_id",
+            unique=True,
+            sqlite_where=text("payment_id IS NOT NULL"),
+            postgresql_where=text("payment_id IS NOT NULL"),
+        ),
         Index("ix_cashback_grants_status_available", "status", "available_at"),
         Index("ix_cashback_grants_shop_user_created", "shop_id", "user_id", "created_at"),
     )
@@ -1203,7 +1214,9 @@ class CashbackGrant(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
-    order_id: Mapped[int] = mapped_column(Integer)
+    # Exactly one of order_id (a delivered purchase) and payment_id (an approved wallet top-up).
+    order_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    payment_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     rule_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     base_amount: Mapped[int] = mapped_column(Integer)
     amount: Mapped[int] = mapped_column(Integer)

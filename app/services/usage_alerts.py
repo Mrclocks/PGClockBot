@@ -7,6 +7,7 @@ cannot pay it, and always the way to their services and to support.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -20,7 +21,6 @@ from app.services.catalog_pricing import annotate_prices, sale_price
 from app.services.customer_notice_buttons import help_row, renew_button, volume_pack_button
 from app.services.formatting import format_toman
 from app.services.replaceable_notices import replace_notices
-from app.services.service_automation import TOPUP_CALLBACK
 from app.services.users import on
 from app.services.wallet import wallet_balances_for_scope
 
@@ -45,17 +45,53 @@ async def replace_previous_alerts(session: AsyncSession, sent: list[SentAlert]) 
         await replace_notices(session, bot, key, [message])
 
 
+PRICE_PREVIEW_KEY = "user_alert_price_preview_enabled"
+# The wallet's preset-amount callback; the top-up flow validates the amount again.
+TOPUP_AMOUNT_PREFIX = "nv:w:amt:"
+# The smallest top-up the wallet accepts (orders.MIN_TOPUP_AMOUNT); a smaller shortfall rounds up to it.
+TOPUP_STEP = 1000
+
+
+@dataclass(frozen=True, slots=True)
+class RenewQuote:
+    """What renewing a service onto its own plan costs, and the wallet that would pay (None: wallet off)."""
+
+    price: int
+    balance: int | None
+
+    @property
+    def shortfall(self) -> int:
+        return 0 if self.balance is None else max(0, self.price - max(0, self.balance))
+
+
 @dataclass(slots=True)
 class AlertExtras:
-    """What a shop's alerts may offer: pack availability and the services whose auto-renewal is short."""
+    """What a shop's alerts may offer: packs, the price of renewing, and short auto-renewal wallets."""
 
     sells_volume_packs: bool = False
     renew_shortfalls: dict[int, int] = field(default_factory=dict)
+    renew_quotes: dict[int, RenewQuote] = field(default_factory=dict)
+    wallet_balances: dict[int, int] = field(default_factory=dict)
 
     def note_for(self, service_id: int) -> str:
-        """The wallet warning to append to an alert of this service, or an empty string."""
+        """The renewal price or the wallet warning to append to an alert of this service, or ``""``."""
         price = self.renew_shortfalls.get(service_id)
-        return shortfall_note(price) if price is not None else ""
+        if price is not None:
+            return shortfall_note(price)
+        quote = self.renew_quotes.get(service_id)
+        return quote_note(quote) if quote is not None else ""
+
+    def topup_amount(self, service_id: int) -> int | None:
+        """The exact top-up the alert offers, or None when the wallet can already pay."""
+        price = self.renew_shortfalls.get(service_id)
+        if price is not None:
+            return rounded_topup(price - max(0, self.wallet_balances.get(service_id, 0)))
+        quote = self.renew_quotes.get(service_id)
+        return rounded_topup(quote.shortfall) if quote is not None and quote.shortfall else None
+
+
+def rounded_topup(shortfall: int) -> int:
+    return max(TOPUP_STEP, math.ceil(max(0, shortfall) / TOPUP_STEP) * TOPUP_STEP)
 
 
 async def sells_volume_packs(session: AsyncSession, shop_id: int | None) -> bool:
@@ -69,41 +105,65 @@ async def sells_volume_packs(session: AsyncSession, shop_id: int | None) -> bool
     return found is not None
 
 
-async def _renew_shortfalls(session: AsyncSession, services: list[UserService], shop_id: int | None) -> dict[int, int]:
-    """service id -> renewal price, for services with automatic renewal on whose wallet cannot pay it."""
-    by_id = {int(service.id): service for service in services}
-    rows = (
-        await session.execute(
-            select(ServiceAutomation.service_id, ServiceAutomation.renew_plan_id).where(
-                ServiceAutomation.service_id.in_(list(by_id)),
-                ServiceAutomation.renew_enabled.is_(True),
-                ServiceAutomation.needs_review.is_(False),
-                ServiceAutomation.renew_plan_id.is_not(None),
-            )
+async def _auto_renew_plans(session: AsyncSession, service_ids: list[int]) -> dict[int, int]:
+    """service id -> chosen plan, for services whose automatic renewal can run."""
+    rows = await session.execute(
+        select(ServiceAutomation.service_id, ServiceAutomation.renew_plan_id).where(
+            ServiceAutomation.service_id.in_(service_ids),
+            ServiceAutomation.renew_enabled.is_(True),
+            ServiceAutomation.needs_review.is_(False),
+            ServiceAutomation.renew_plan_id.is_not(None),
         )
-    ).all()
-    if not rows:
+    )
+    return {int(sid): int(plan_id) for sid, plan_id in rows.all()}
+
+
+async def _sale_prices(session: AsyncSession, plan_ids: set[int], shop_id: int | None) -> dict[int, int]:
+    """plan id -> sale price, for the shop's own active, non-trial plans among ``plan_ids``."""
+    if not plan_ids:
         return {}
-    # Only the shop's own plans can be bought by its automation; a stale choice from another catalog is ignored.
+    # Only the shop's own plans can be bought there; a stale choice from another catalog is ignored.
     owner = Plan.owner_reseller_id.is_(None) if shop_id is None else Plan.owner_reseller_id == int(shop_id)
-    plans = list(await session.scalars(select(Plan).where(Plan.id.in_({plan_id for _, plan_id in rows}), owner)))
+    plans = list(await session.scalars(select(Plan).where(Plan.id.in_(plan_ids), owner)))
     await annotate_prices(session, plans, shop_id=shop_id)
-    prices = {int(plan.id): sale_price(plan) for plan in plans if plan.is_active and not plan.is_trial}
-    balances = await wallet_balances_for_scope(session, [by_id[sid].bot_user_id for sid, _ in rows], shop_id=shop_id)
-    return {
-        int(sid): prices[plan_id]
-        for sid, plan_id in rows
-        if plan_id in prices and balances.get(int(by_id[sid].bot_user_id), 0) < prices[plan_id]
-    }
+    return {int(plan.id): sale_price(plan) for plan in plans if plan.is_active and not plan.is_trial}
 
 
-async def alert_extras(session: AsyncSession, services: list[UserService], *, shop_id: int | None) -> AlertExtras:
-    """Extras for one shop's batch of services: two or three queries whatever the batch size."""
+def _renewable_plan(service: UserService) -> int | None:
+    # A linked service is renewed on its own panel, not from this bot.
+    if not service.plan_id or (service.remark or "").strip() == "linked":
+        return None
+    return int(service.plan_id)
+
+
+async def alert_extras(
+    session: AsyncSession, services: list[UserService], *, shop_id: int | None, ui: dict | None = None
+) -> AlertExtras:
+    """Extras for one shop's batch of services: a fixed number of queries whatever the batch size."""
     if not services:
         return AlertExtras()
+    ui = ui or {}
+    by_id = {int(service.id): service for service in services}
+    auto_plans = await _auto_renew_plans(session, list(by_id))
+    current = {sid: plan_id for sid, svc in by_id.items() if (plan_id := _renewable_plan(svc)) is not None}
+    if not on(ui.get(PRICE_PREVIEW_KEY, "1")):
+        current = {}
+    prices = await _sale_prices(session, set(auto_plans.values()) | set(current.values()), shop_id)
+    payers = {by_id[sid].bot_user_id for sid in set(auto_plans) | set(current)}
+    balances = await wallet_balances_for_scope(session, list(payers), shop_id=shop_id) if payers else {}
+    balance_of = {sid: int(balances.get(int(svc.bot_user_id), 0)) for sid, svc in by_id.items()}
+    wallet_on = on(ui.get("pay_wallet_enabled", "1"))
     return AlertExtras(
         sells_volume_packs=await sells_volume_packs(session, shop_id),
-        renew_shortfalls=await _renew_shortfalls(session, services, shop_id),
+        renew_shortfalls={
+            sid: prices[plan_id] for sid, plan_id in auto_plans.items()
+            if plan_id in prices and balance_of[sid] < prices[plan_id]
+        },
+        renew_quotes={
+            sid: RenewQuote(price=prices[plan_id], balance=balance_of[sid] if wallet_on else None)
+            for sid, plan_id in current.items() if prices.get(plan_id, 0) > 0
+        },
+        wallet_balances=balance_of,
     )
 
 
@@ -114,10 +174,21 @@ def shortfall_note(price: int) -> str:
     )
 
 
+def quote_note(quote: RenewQuote) -> str:
+    line = f"\n💳 تمدید همین پلن: <b>{format_toman(quote.price)}</b>"
+    if quote.balance is None:
+        return line
+    line += f" · کیف پول شما: {format_toman(max(0, quote.balance))}"
+    if quote.shortfall:
+        line += f"\nبرای تمدید با کیف پول {format_toman(quote.shortfall)} کم دارید."
+    return line
+
+
 def _topup_row(extras: AlertExtras, service_id: int) -> list[list[InlineKeyboardButton]]:
-    if service_id not in extras.renew_shortfalls:
+    amount = extras.topup_amount(service_id)
+    if amount is None:
         return []
-    return [[InlineKeyboardButton(text="➕ شارژ کیف پول", callback_data=TOPUP_CALLBACK)]]
+    return [[InlineKeyboardButton(text=f"➕ شارژ {format_toman(amount)}", callback_data=f"{TOPUP_AMOUNT_PREFIX}{amount}")]]
 
 
 def _renew_rows(ui: dict, service_id: int) -> list[list[InlineKeyboardButton]]:

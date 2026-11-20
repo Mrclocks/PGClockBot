@@ -13,12 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.db import Base
 import app.db.models  # noqa: F401
 from app.db.models import BotUser, ResellerProfile, Role
-from app.services.bot_pg_object_pilot import (
+from app.services.bot_pg_object_authz import (
     authorize_bot_pg_object_op,
     list_scoped_pg_objects,
     sanitize_pg_object_write_payload,
 )
-from app.services.bot_pg_user_pilot import authorize_bot_pg_user_op
+from app.services.bot_pg_user_authz import authorize_bot_pg_user_op
 from app.services.org_principals import (
     bind_reseller_profile_principal,
     create_principal,

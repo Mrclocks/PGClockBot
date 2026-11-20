@@ -30,6 +30,7 @@ from app.db.models import (
 )
 from app.services.formatting import format_toman
 from app.services.cashback import reverse_after_refund
+from app.services.cashback_topup import reverse_after_topup_void
 from app.services.loyalty import reverse_order_points
 from app.services.orders import _order_note, _wallet_topup_already_credited, is_mutation_order_note
 from app.services.pasarguard import get_pg, get_pg_for_reseller, is_pg_not_found
@@ -200,6 +201,7 @@ async def _void_topup(session: AsyncSession, plan: VoidPlan, *, actor: str, reas
         await session.rollback()
         raise ValueError("موجودی کیف پول مشتری کمتر از مبلغ شارژ است؛ پیش از ابطال، اعتبار را دستی تعدیل کنید") from None
     await session.commit()
+    await reverse_after_topup_void(session, int(payment.id), reason=f"ابطال شارژ #{int(payment.id)}")
     return row
 
 

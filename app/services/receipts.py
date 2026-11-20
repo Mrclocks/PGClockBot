@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Order, Payment
+from app.services.db_safe import rollback_quiet
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
 from app.services.notifications import (
@@ -19,6 +20,13 @@ from app.services.notifications import (
 from app.services.delivery_recovery_policy import PENDING_STAFF_NOTE, is_delivered, pending_buyer_note
 from app.services.orders import DeliveryAttempt, approve_payment, attach_receipt, hold_unknown_delivery_for_review
 from app.services.pasarguard import failure_text
+from app.services.receipt_risk import (
+    ENABLED_KEY as RISK_ENABLED_KEY,
+    HOLD_KEY as RISK_HOLD_KEY,
+    ReceiptRisk,
+    assess_receipt,
+    risk_note,
+)
 from app.services.receipt_fingerprints import (
     download_receipt_sha256,
     find_duplicate_receipts,
@@ -80,26 +88,49 @@ async def submit_receipt(
         )
 
     await attach_receipt(session, payment, file_id, first_only=first_only)
+    payment_id = int(payment.id)
     try:
         await store_receipt_fingerprint(
             session,
-            payment_id=int(payment.id),
+            payment_id=payment_id,
             file_unique_id=file_unique_id,
             sha256=sha,
             commit=True,
         )
-    except Exception:
-        # Fingerprint is best-effort; payment attachment must stay durable.
-        pass
+    except SQLAlchemyError:
+        # Best effort: the receipt is already attached and committed. Roll the failed flush back,
+        # or the review below would run on a session that refuses every query.
+        logger.warning("receipt fingerprint not stored payment=%s", payment_id, exc_info=True)
+        await rollback_quiet(session)
+        # The rollback expired the payment; reload the committed row before reviewing it.
+        await session.refresh(payment)
 
     dup_note = format_dup_warning(matches) if matches else None
+    risk = await _assess_risk(session, payment, shop_id=shop_rid, duplicates=len(matches or []))
+    notes = [note for note in (dup_note, risk_note(risk) if risk else None) if note]
     return await process_receipt(
         session,
         payment,
         bot=bot,
         user_tg_id=user_tg_id,
-        reviewer_note=dup_note,
+        reviewer_note="\n\n".join(notes) or None,
+        risk=risk,
     )
+
+
+async def _assess_risk(
+    session: AsyncSession, payment: Payment, *, shop_id: int | None, duplicates: int
+) -> ReceiptRisk | None:
+    """The receipt's risk label when the shop shows it; a failed check only drops the label."""
+    if not on(await get_setting(session, RISK_ENABLED_KEY, "1", reseller_id=shop_id)):
+        return None
+    try:
+        return await assess_receipt(session, payment, shop_id=shop_id, duplicates=duplicates)
+    except SQLAlchemyError:
+        logger.warning("receipt risk not assessed payment=%s", payment.id, exc_info=True)
+        await rollback_quiet(session)
+        await session.refresh(payment)
+        return None
 
 
 async def auto_approve_receipt(
@@ -205,6 +236,13 @@ async def _waits_for_schedule(session: AsyncSession, payment: Payment, shop_rid:
     return rule_from_settings(await get_all_settings(session, reseller_id=shop_rid)) is not None
 
 
+async def _risk_holds(session: AsyncSession, risk: ReceiptRisk | None, shop_id: int | None) -> bool:
+    """A «بررسی دقیق» receipt waits for a person when the shop asks for it."""
+    if risk is None or not risk.needs_review:
+        return False
+    return on(await get_setting(session, RISK_HOLD_KEY, "0", reseller_id=shop_id))
+
+
 async def process_receipt(
     session: AsyncSession,
     payment: Payment,
@@ -212,6 +250,7 @@ async def process_receipt(
     bot: Bot,
     user_tg_id: int | None,
     reviewer_note: str | None = None,
+    risk: ReceiptRisk | None = None,
 ) -> str | None:
     """
     After receipt is attached:
@@ -248,6 +287,8 @@ async def process_receipt(
         if topup_shop != shop_rid:
             auto = False
     if auto and await _waits_for_schedule(session, payment, shop_rid):
+        auto = False
+    if auto and await _risk_holds(session, risk, shop_rid):
         auto = False
     if auto:
         return await auto_approve_receipt(

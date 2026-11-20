@@ -27,6 +27,7 @@ from app.db.models import (
     ServiceAutomation,
     UserService,
 )
+from app.services import auto_renew_timing as timing
 from app.services.catalog_pricing import annotate_prices, displayed_quote, sale_price
 from app.services.service_scope import service_shop_id
 from app.services.notice_links import notice_open_data
@@ -43,6 +44,8 @@ from app.services.chat_records import keeps_sent
 
 log = logging.getLogger(__name__)
 TOPUP_CALLBACK = "nv:w:topup"
+# The wallet's preset-amount callback; the handler validates the amount again.
+TOPUP_AMOUNT_PREFIX = "nv:w:amt:"
 ACTIONS = ("renew", "duration", "volume")
 LABELS = {
     "renew": "تمدید خودکار",
@@ -296,6 +299,8 @@ async def notify_once(
     action: str,
     code: str,
     body: str,
+    *,
+    topup_amount: int | None = None,
 ) -> bool:
     if getattr(row, f"{action}_notice") == code:
         return True
@@ -306,7 +311,7 @@ async def notify_once(
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    *([[InlineKeyboardButton(text="➕ شارژ کیف پول", callback_data=TOPUP_CALLBACK)]] if code == "low_wallet" else []),
+                    *_topup_rows(code, topup_amount),
                     [
                         InlineKeyboardButton(
                             text="⚙️ تنظیمات خودکار سرویس",
@@ -325,6 +330,78 @@ async def notify_once(
     setattr(row, f"{action}_notice", code)
     await session.commit()
     return True
+
+
+def _topup_rows(code: str, amount: int | None) -> list[list[InlineKeyboardButton]]:
+    """A top-up of exactly ``amount`` when it is known, else the plain top-up on a short-wallet notice."""
+    if amount:
+        return [[InlineKeyboardButton(text=f"➕ شارژ {format_toman(amount)}", callback_data=f"{TOPUP_AMOUNT_PREFIX}{amount}")]]
+    if code == "low_wallet":
+        return [[InlineKeyboardButton(text="➕ شارژ کیف پول", callback_data=TOPUP_CALLBACK)]]
+    return []
+
+
+async def _clear_short_wallet_notices(session: AsyncSession, row: ServiceAutomation) -> None:
+    """Forget a short-wallet notice once nothing is due, so the next period can send it again."""
+    stale = [a for a in ACTIONS if getattr(row, f"{a}_notice") == "low_wallet"]
+    for action in stale:
+        setattr(row, f"{action}_notice", None)
+    if stale:
+        await session.commit()
+
+
+async def _remind_short_wallet(
+    session: AsyncSession, row: ServiceAutomation, service: UserService, user: BotUser, bot,
+    *, choices: dict, expire: datetime | None, now: datetime, schedule: timing.RenewTiming,
+) -> None:
+    """One reminder per stage before the expiry when the wallet cannot pay the time purchase."""
+    # Deferred: wallet imports the order services that import this module.
+    from app.services.wallet import get_wallet_balance
+
+    action = timing.time_action(
+        renew_enabled=bool(row.renew_enabled), duration_enabled=bool(row.duration_enabled), choices=choices
+    )
+    if action is None or expire is None or expire <= now:
+        return
+    stage = timing.reminder_stage(expire=expire, now=now, timing=schedule)
+    if stage is None:
+        return
+    price = sale_price(choices[action])
+    balance = await get_wallet_balance(session, user, shop_id=row.shop_id)
+    if balance >= price:
+        return
+    body = timing.reminder_text(
+        label=LABELS[action], hours_left=(expire - now).total_seconds() / 3600, price=price, balance=balance
+    )
+    await notify_once(
+        session, row, service, user, bot, action, timing.reminder_code(stage, expire), body,
+        topup_amount=timing.topup_amount(price=price, balance=balance),
+    )
+
+
+async def _due_dimensions(
+    session: AsyncSession, row: ServiceAutomation, service: UserService, user: BotUser, bot,
+    *, choices: dict, info: dict, ui: dict,
+) -> tuple[bool, bool]:
+    """Which quotas are due now: run out, or time within the shop's renew-ahead window."""
+    now = datetime.now(timezone.utc)
+    time_done, volume_done = exhausted_dimensions(info, now)
+    if time_done or not timing.is_active(info):
+        return time_done, volume_done
+    schedule = timing.renew_timing(ui)
+    expire = parse_expire(info.get("expire") or info.get("expire_date"))
+    action = timing.time_action(
+        renew_enabled=bool(row.renew_enabled), duration_enabled=bool(row.duration_enabled), choices=choices
+    )
+    choice = choices.get(action) if action else None
+    if timing.is_due_ahead(action=action, choice=choice, expire=expire, now=now, timing=schedule):
+        return True, volume_done
+    if not volume_done:
+        await _clear_short_wallet_notices(session, row)
+    await _remind_short_wallet(
+        session, row, service, user, bot, choices=choices, expire=expire, now=now, schedule=schedule
+    )
+    return False, volume_done
 
 
 async def _finish_order(session, row, service, user, bot, order) -> None:
@@ -475,8 +552,10 @@ async def _process_locked(session, row, service, user, bot) -> None:
 
     sync_service_quota_cache(service, info)
     await session.commit()
-    time_done, volume_done = exhausted_dimensions(info, datetime.now(timezone.utc))
     await annotate_prices(session, list(choices.values()), shop_id=row.shop_id)
+    time_done, volume_done = await _due_dimensions(
+        session, row, service, user, bot, choices=choices, info=info, ui=ui
+    )
     for action in actions_for_exhaustion(row, time_done, volume_done):
         choice = choices.get(action)
         if choice is None:
@@ -485,7 +564,8 @@ async def _process_locked(session, row, service, user, bot) -> None:
         await session.refresh(user)
         if user.is_blocked:
             return
-        if await get_wallet_balance(session, user, shop_id=row.shop_id) < sale_price(choice):
+        balance = await get_wallet_balance(session, user, shop_id=row.shop_id)
+        if balance < sale_price(choice):
             await notify_once(
                 session,
                 row,
@@ -496,6 +576,7 @@ async def _process_locked(session, row, service, user, bot) -> None:
                 "low_wallet",
                 f"موجودی کیف پول کافی نیست. هزینه فعلی: <b>{format_toman(sale_price(choice))}</b>. "
                 "کیف پول همین فروشگاه را شارژ کنید؛ اجرای خودکار دوباره تلاش می‌کند.",
+                topup_amount=timing.topup_amount(price=sale_price(choice), balance=balance),
             )
             continue
         # Revalidate immediately before taking money (catalog may change during PG read).
