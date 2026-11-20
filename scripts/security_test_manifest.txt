@@ -576,3 +576,4 @@ tests/test_payment_read_budget.py
 tests/test_update_database_guard.py
 tests/test_command_center_navigation.py
 tests/test_cli_english_output.py
+tests/test_receipt_risk.py

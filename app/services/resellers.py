@@ -1759,6 +1759,8 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
         "purchase_require_contact",
         "trial_require_iran_phone",
         "receipt_dup_policy",
+        "receipt_risk_enabled",
+        "receipt_risk_hold_auto_approve",
         "connection_guides",
         "btn_guides",
         "btn_guide_open_link",
