@@ -914,6 +914,8 @@ DEFAULT_SETTINGS = {
     "user_alert_time_text": "",
     "user_alert_traffic_text": "",
     "first_use_nudge_enabled": "0",
+    # Renewal price (and the wallet's shortfall) under the low-time and low-volume alerts.
+    "user_alert_price_preview_enabled": "1",
     # Expired / volume-finished service cleanup (service_cleanup.py keeps the same defaults).
     "expired_cleanup_enabled": "0",
     "expired_cleanup_days": "7",
@@ -1649,6 +1651,12 @@ SETTING_GROUPS = {
             "متن هشدار کمبود حجم",
             "textarea",
             "خالی = متن پیش‌فرض. متغیرها: {service_name} {traffic_used} {shop_title}",
+        ),
+        (
+            "user_alert_price_preview_enabled",
+            "نمایش قیمت تمدید در هشدار",
+            "toggle",
+            "زیر هشدار کمبود زمان و حجم، قیمت تمدید همین پلن و موجودی کیف پول نوشته می‌شود؛ اگر کیف پول کم باشد، دکمهٔ شارژ همان مبلغ کسری هم می‌آید.",
         ),
         (
             "first_use_nudge_enabled",
