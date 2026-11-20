@@ -151,6 +151,9 @@ async def rearm_flagged_alerts(
     if not services:
         return SweepResult(0, 0)
     plans = await plan_durations(session, services)
+    # No connection waits idle in a transaction on the panel; loaded rows stay usable because the
+    # app's sessions do not expire on commit, and the changes below get their own commit.
+    await session.commit()
     gate = asyncio.Semaphore(FETCH_CONCURRENCY)
     infos = await asyncio.gather(*(_fetch(pg, gate, s.subscription_token) for s in services))
     rearmed = 0

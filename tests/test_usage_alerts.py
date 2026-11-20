@@ -259,6 +259,46 @@ class AlertJobTests(AlertCase):
             await jobs.check_expiring_services(bot)
         return [c.args[1] for c in bot.send_message.await_args_list if c.args[0] == 1001]
 
+    async def test_no_database_connection_is_held_while_the_panel_and_telegram_are_called(self):
+        async with self.Session() as session:
+            await set_setting(session, "user_alert_low_enabled", "1")
+        clear_settings_cache()
+        held = {"connections": 0}
+        pool = self.engine.sync_engine.pool
+
+        def checked_out(*_args) -> None:
+            held["connections"] += 1
+
+        def checked_in(*_args) -> None:
+            held["connections"] -= 1
+
+        event.listen(pool, "checkout", checked_out)
+        event.listen(pool, "checkin", checked_in)
+        self.addCleanup(event.remove, pool, "checkout", checked_out)
+        self.addCleanup(event.remove, pool, "checkin", checked_in)
+        seen: dict[str, list[int]] = {"panel": [], "telegram": []}
+
+        async def subscription_info(token):
+            seen["panel"].append(held["connections"])
+            return self.info(traffic_low=True)
+
+        async def send_message(*args, **kwargs):
+            seen["telegram"].append(held["connections"])
+            return SimpleNamespace(message_id=len(seen["telegram"]))
+
+        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=subscription_info))
+        bot = AsyncMock()
+        bot.send_message.side_effect = send_message
+        await self.session.close()  # the fixture's own session must not count as held by the job
+        with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg):
+            await jobs.check_expiring_services(bot)
+        self.assertTrue(seen["panel"])
+        self.assertTrue(seen["telegram"])
+        self.assertEqual((set(seen["panel"]), set(seen["telegram"])), ({0}, {0}))
+        async with self.Session() as session:
+            service = await session.get(UserService, 10)
+            self.assertTrue(service.notified_traffic)
+
     async def test_gigabyte_and_day_thresholds_alert_on_what_is_left_not_on_the_share(self):
         gb = 1024**3
         info = {"status": "active", "expire": (self.now + timedelta(days=2)).isoformat(),

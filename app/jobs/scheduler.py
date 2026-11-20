@@ -230,6 +230,10 @@ async def check_expiring_services(bot: Bot) -> None:
                         logger.debug("subscription_info failed for service fetch", exc_info=True)
                         return None
 
+            # End the read transaction: no connection waits idle in a transaction on the panel or
+            # Telegram. Loaded rows stay usable (expire_on_commit=False); the flags set below are
+            # written by the commit after the batch.
+            await session.commit()
             infos = await asyncio.gather(
                 *[_fetch_info(svc.subscription_token) for svc, *_rest in eligible]
             )
