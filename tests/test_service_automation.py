@@ -609,6 +609,141 @@ class AutomationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.snapshot())[0].wallet_balance, 1000)
 
 
+    def timing_settings(self, **values):
+        ui = {"pay_wallet_enabled": "1", **{key: str(value) for key, value in values.items()}}
+        return patch("app.services.service_automation.get_all_settings", new=AsyncMock(return_value=ui))
+
+    def expire_in(self, hours: float) -> int:
+        return int(datetime.now(timezone.utc).timestamp() + hours * 3600)
+
+    async def set_wallet(self, amount: int) -> None:
+        async with self.Session() as session:
+            (await session.get(BotUser, self.user_id)).wallet_balance = amount
+            await session.commit()
+
+    def sent_buttons(self) -> list[str]:
+        markup = self.bot.send_message.await_args.kwargs["reply_markup"]
+        return [button.callback_data for row in markup.inline_keyboard for button in row]
+
+    async def test_renews_ahead_of_expiry_without_losing_remaining_time(self):
+        await self.enable()
+        old_expire = self.expire_in(3)
+        self.pg.info.update(expire=old_expire, used_traffic=2 * GB)
+        with self.timing_settings(auto_renew_ahead_hours=6):
+            await self.tick()
+        user, row, orders, _ = await self.snapshot()
+        self.assertEqual([order.status for order in orders], ["delivered"])
+        self.assertEqual(user.wallet_balance, 800)
+        self.assertAlmostEqual(self.pg.info["expire"], old_expire + 30 * 86400, delta=120)
+        self.assertEqual(self.pg.info["data_limit"], 2 * GB + 8 * GB + 10 * GB)
+
+    async def test_renew_ahead_is_off_by_default_and_outside_the_window(self):
+        await self.enable()
+        self.pg.info.update(expire=self.expire_in(3), used_traffic=0)
+        await self.tick()
+        with self.timing_settings(auto_renew_ahead_hours=2):
+            await self.tick()
+        self.assertEqual((await self.snapshot())[2], [])
+
+    async def test_plan_that_drops_remaining_time_waits_for_the_expiry(self):
+        async with self.Session() as session:
+            (await session.get(Plan, self.plan_id)).carry_remaining_time = False
+            await session.commit()
+        await self.enable()
+        self.pg.info.update(expire=self.expire_in(3), used_traffic=0)
+        with self.timing_settings(auto_renew_ahead_hours=6):
+            await self.tick()
+        self.assertEqual((await self.snapshot())[2], [])
+
+    async def test_duration_pack_runs_ahead_and_extends_the_current_expiry(self):
+        await self.enable("duration")
+        old_expire = self.expire_in(2)
+        self.pg.info.update(expire=old_expire, used_traffic=0)
+        with self.timing_settings(auto_renew_ahead_hours=6):
+            await self.tick()
+        user, _, orders, _ = await self.snapshot()
+        self.assertEqual([order.status for order in orders], ["delivered"])
+        self.assertEqual(user.wallet_balance, 950)
+        self.assertAlmostEqual(self.pg.info["expire"], old_expire + 7 * 86400, delta=120)
+
+    async def test_short_wallet_is_reminded_once_per_stage_with_the_exact_top_up(self):
+        await self.enable()
+        await self.set_wallet(100)
+        self.pg.info.update(expire=self.expire_in(20), used_traffic=0)
+        with self.timing_settings():
+            await self.tick()
+            await self.tick()
+            self.assertEqual(self.bot.send_message.await_count, 1)
+            self.assertIn("nv:w:amt:1000", self.sent_buttons())
+            self.pg.info.update(expire=self.pg.info["expire"] - 15 * 3600)
+            await self.tick()
+            await self.tick()
+        self.assertEqual(self.bot.send_message.await_count, 2)
+        self.assertEqual((await self.snapshot())[2], [])
+
+    async def test_enough_wallet_or_reminders_off_sends_nothing(self):
+        await self.enable()
+        self.pg.info.update(expire=self.expire_in(5), used_traffic=0)
+        with self.timing_settings():
+            await self.tick()
+        await self.set_wallet(100)
+        with self.timing_settings(auto_renew_reminder_first_hours=0, auto_renew_reminder_last_hours=0):
+            await self.tick()
+        self.bot.send_message.assert_not_awaited()
+
+    async def test_reminder_is_sent_again_in_the_next_period(self):
+        await self.enable()
+        await self.set_wallet(100)
+        self.pg.info.update(expire=self.expire_in(5), used_traffic=0)
+        with self.timing_settings():
+            await self.tick()
+            self.pg.info.update(expire=self.pg.info["expire"] + 30 * 86400)
+            await self.tick()
+            # The renewed period is near its own end: a different expiry, so a new reminder.
+            self.pg.info.update(expire=self.expire_in(4))
+            await self.tick()
+        self.assertEqual(self.bot.send_message.await_count, 2)
+
+    async def test_short_wallet_notice_returns_after_a_manual_renewal(self):
+        await self.enable()
+        await self.set_wallet(100)
+        await self.tick()
+        self.assertEqual(self.bot.send_message.await_count, 1)
+        self.pg.info.update(expire=self.expire_in(30 * 24), used_traffic=0)
+        await self.tick()
+        self.pg.info.update(expire=self.expire_in(-0.1), used_traffic=10 * GB)
+        await self.tick()
+        self.assertEqual(self.bot.send_message.await_count, 2)
+        self.assertIn("nv:w:amt:1000", self.sent_buttons())
+
+    async def test_shop_wallet_reminder_counts_only_that_shop(self):
+        from app.services.wallet import credit_wallet
+
+        async with self.Session() as session:
+            owner = BotUser(telegram_id=301, referral_code="SHOP301")
+            session.add(owner)
+            await session.flush()
+            user = await session.get(BotUser, self.user_id)
+            user.reseller_id = owner.id
+            (await session.get(Plan, self.plan_id)).owner_reseller_id = owner.id
+            (await session.get(UserService, self.service_id)).shop_id = owner.id
+            await session.commit()
+            owner_id = owner.id
+        token = set_shop_reseller_id(owner_id)
+        try:
+            await self.enable()
+        finally:
+            reset_shop_reseller_id(token)
+        async with self.Session() as session:
+            await credit_wallet(session, await session.get(BotUser, self.user_id), 50, "seed", shop_id=owner_id)
+        self.pg.info.update(expire=self.expire_in(5), used_traffic=0)
+        with self.timing_settings():
+            await self.tick()
+        # The platform wallet holds 1000, but only the shop's 50 can pay this renewal.
+        self.assertEqual(self.bot.send_message.await_count, 1)
+        self.assertIn("nv:w:amt:1000", self.sent_buttons())
+
+
 class ExhaustionTests(unittest.TestCase):
     def test_actual_finite_quota_required(self):
         now = datetime.now(timezone.utc)
