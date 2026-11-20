@@ -90,6 +90,13 @@ from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
 from app.bot.handlers.guide_editor import GUIDES_SECTION
 from app.bot.handlers.payment_destinations_editor import destination_list_rows
+from app.bot.plan_scope_picker import (
+    FIELD_KIND as PLAN_SCOPE_KIND,
+    picker_markup as plan_picker_markup,
+    picker_text as plan_picker_text,
+    scope_button as plan_scope_button,
+)
+from app.services.plan_scope import plan_choices, toggle_plan_scope
 from app.bot.handlers.settings_labels import (
     LABELS_SECTION,
     labels_audience_panel,
@@ -702,7 +709,9 @@ async def _sub_panel(session: AsyncSession, sec_id: str, sub_id: str, reseller_i
         rows = []
         for key, label, kind in fields:
             cur = await get_setting(session, key, reseller_id=reseller_id)
-            if kind == "toggle":
+            if kind == PLAN_SCOPE_KIND:
+                rows.append([plan_scope_button("res:st", key, label, cur)])
+            elif kind == "toggle":
                 mark = "✅" if on(cur) else "❌"
                 rows.append([InlineKeyboardButton(text=f"{mark} {label}", callback_data=f"res:st:tog:{key}")])
             elif kind == "select":
@@ -889,6 +898,56 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
     loc = _owner_screen_for_key(key)
     if loc:
         await _render_sub(callback, session, loc[0], loc[1], profile.user_id)
+
+
+async def _show_plan_picker(callback: CallbackQuery, session: AsyncSession, key: str, shop_id: int) -> None:
+    loc = _owner_screen_for_key(key)
+    back = f"res:st:sub:{loc[0]}:{loc[1]}" if loc else "res:st:hub"
+    with _Scoped(shop_id):
+        raw = await get_setting(session, key, reseller_id=shop_id)
+    markup = plan_picker_markup("res:st", key, raw, await plan_choices(session, shop_id), back)
+    if callback.message:
+        await safe_edit_text(callback.message, plan_picker_text(FIELDS[key][1]), reply_markup=markup)
+
+
+def _is_plan_scope_key(key: str) -> bool:
+    meta = FIELDS.get(key)
+    return bool(meta and meta[2] == PLAN_SCOPE_KIND)
+
+
+@router.callback_query(F.data.startswith("res:st:plo:"))
+async def settings_plan_scope_open(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    key = (callback.data or "").split(":", 3)[-1]
+    if err or not _is_plan_scope_key(key):
+        await callback.answer(err or feedback.INVALID, show_alert=True)
+        return
+    await callback.answer()
+    await _show_plan_picker(callback, session, key, profile.user_id)
+
+
+@router.callback_query(F.data.regexp(r"^res:st:pls:[a-z_]{1,48}:(all|\d{1,10})$"))
+async def settings_plan_scope_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    _, _, _, key, choice = (callback.data or "").split(":")
+    if err or not _is_plan_scope_key(key):
+        await callback.answer(err or feedback.INVALID, show_alert=True)
+        return
+    # Only this shop's own plans can be chosen; the scope is saved on this shop only.
+    own = [c.plan_id for c in await plan_choices(session, profile.user_id)]
+    with _Scoped(profile.user_id):
+        try:
+            value = toggle_plan_scope(await get_setting(session, key, reseller_id=profile.user_id), choice, own)
+        except ValueError as exc:
+            await callback.answer(str(exc), show_alert=True)
+            return
+        await set_setting(session, key, value, reseller_id=profile.user_id)
+    await callback.answer(feedback.SAVED)
+    await _show_plan_picker(callback, session, key, profile.user_id)
 
 
 @router.callback_query(F.data.startswith("res:st:sel:"))

@@ -3,8 +3,8 @@
 Revision ID: 0125_service_freezes
 Revises: 0124_cashback_topup_grants
 
-Adds ``service_freezes``: one row per pause, with the time left saved before the panel call and
-the target expiry saved before the resume call. A partial unique index allows one open freeze per
+Adds ``service_freezes``: one row per pause, with the time left and the panel expiry saved before
+the panel call, and the target expiry saved before the resume call. A partial unique index allows one open freeze per
 service. Idempotent; the downgrade drops the table (past freezes are history only; a service that
 is still frozen stays disabled on the panel and is resumed by staff).
 """
@@ -36,6 +36,7 @@ def upgrade() -> None:
             sa.Column("user_id", sa.Integer(), sa.ForeignKey("bot_users.id"), nullable=False),
             sa.Column("status", sa.String(16), nullable=False, server_default="pausing"),
             sa.Column("remaining_seconds", sa.Integer(), nullable=False),
+            sa.Column("frozen_expire", sa.BigInteger(), nullable=True),
             sa.Column("resume_by", sa.DateTime(timezone=True), nullable=False),
             sa.Column("target_expire", sa.BigInteger(), nullable=True),
             sa.Column("resumed_by", sa.String(16), nullable=True),

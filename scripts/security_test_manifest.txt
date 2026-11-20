@@ -584,3 +584,4 @@ tests/test_receipt_risk.py
 tests/test_auto_renew_offer.py
 tests/test_cashback_topup.py
 tests/test_service_freeze.py
+tests/test_plan_scope.py

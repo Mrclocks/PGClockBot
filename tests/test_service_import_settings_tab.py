@@ -129,6 +129,29 @@ class FreezeSettingsPageTests(TabHarness):
         self.assertEqual(owner["service_freeze_enabled"], "0")
 
 
+    async def test_the_plan_list_shows_and_keeps_only_the_shops_own_plans(self):
+        from app.db.models import Plan
+
+        async with self._session_factory()() as session:
+            session.add_all([
+                Plan(id=71, name="پلن پلتفرم", price=1),
+                Plan(id=72, name="پلن شاپ", price=1, owner_reseller_id=5),
+            ])
+            await session.commit()
+        page = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_actions")
+        self.assertIn('name="s_service_freeze_plans" value="72"', page.text)
+        self.assertNotIn('value="71"', page.text)
+        self.assertIn('data-show-when="s_service_freeze_enabled:1"', page.text)
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
+            "s_service_freeze_enabled": "1", "s_service_freeze_plans": ["72", "71"],
+        })
+        self.assertEqual((await self.stored(5))["service_freeze_plans"], "72")
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {"s_service_freeze_enabled": "1"})
+        self.assertEqual((await self.stored(5))["service_freeze_plans"], "")
+        await self.form(OWNER_SESSION, "/settings?tab=service_actions", {"s_service_freeze_plans": ["all"]})
+        self.assertEqual((await self.stored(None))["service_freeze_plans"], "all")
+
+
 class SavePlumbingTests(TabHarness):
     async def test_the_owner_saves_normalised_values(self):
         response = await self.form(OWNER_SESSION, "/settings?tab=service_import", {

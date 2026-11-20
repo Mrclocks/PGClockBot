@@ -103,6 +103,13 @@ from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
 from app.bot.handlers.guide_editor import GUIDES_SECTION
 from app.bot.handlers.payment_destinations_editor import destination_list_rows
+from app.bot.plan_scope_picker import (
+    FIELD_KIND as PLAN_SCOPE_KIND,
+    picker_markup as plan_picker_markup,
+    picker_text as plan_picker_text,
+    scope_button as plan_scope_button,
+)
+from app.services.plan_scope import plan_choices, toggle_plan_scope
 from app.bot.handlers.settings_labels import (
     LABELS_SECTION,
     labels_audience_panel,
@@ -702,6 +709,8 @@ _select_label = select_label
 
 
 def _field_button(ui: dict, key: str, label: str, kind: str) -> InlineKeyboardButton:
+    if kind == PLAN_SCOPE_KIND:
+        return plan_scope_button("adm:st", key, label, ui.get(key))
     if kind == "toggle":
         mark = "✅" if on(ui.get(key)) else "⬜️"
         return InlineKeyboardButton(text=f"{mark} {label}", callback_data=f"adm:st:tog:{key}")
@@ -1235,6 +1244,48 @@ async def _flip_setting(session: AsyncSession, key: str) -> str | None:
             trial.is_active = new_on
             await session.commit()
     return None
+
+
+def _plan_scope_meta(key: str) -> tuple | None:
+    meta = FIELDS.get(key)
+    return meta if meta is not None and meta[2] == PLAN_SCOPE_KIND else None
+
+
+async def _show_plan_picker(callback: CallbackQuery, session: AsyncSession, key: str) -> None:
+    loc = _owner_screen_for_key(key)
+    back = f"adm:st:sub:{loc[0]}:{loc[1]}" if loc else "adm:st:hub"
+    markup = plan_picker_markup("adm:st", key, await get_setting(session, key), await plan_choices(session, None), back)
+    if callback.message:
+        await safe_edit_text(callback.message, plan_picker_text(FIELDS[key][1]), reply_markup=markup)
+
+
+@settings_actor_required
+@router.callback_query(F.data.startswith("adm:st:plo:"))
+async def settings_plan_scope_open(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    key = callback.data.split(":", 3)[-1]
+    if not _is_admin(db_user) or _plan_scope_meta(key) is None:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    await callback.answer()
+    await _show_plan_picker(callback, session, key)
+
+
+@settings_actor_required
+@router.callback_query(F.data.regexp(r"^adm:st:pls:[a-z_]{1,48}:(all|\d{1,10})$"))
+async def settings_plan_scope_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    _, _, _, key, choice = callback.data.split(":")
+    if not _is_admin(db_user) or _plan_scope_meta(key) is None:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    own = [c.plan_id for c in await plan_choices(session, None)]
+    try:
+        value = toggle_plan_scope(await get_setting(session, key), choice, own)
+    except ValueError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await set_setting(session, key, value)
+    await callback.answer(feedback.SAVED)
+    await _show_plan_picker(callback, session, key)
 
 
 @settings_actor_required

@@ -45,6 +45,7 @@ from app.services.auto_renew_timing import (
 )
 from app.services.service_freeze_settings import (
     FREEZE_DEFAULTS,
+    FREEZE_VISIBILITY,
     GROUP_TITLE as SERVICE_FREEZE_GROUP,
     WEB_FIELDS as SERVICE_FREEZE_FIELDS,
 )
@@ -1362,6 +1363,7 @@ SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
     "crypto_rate_api_divisor": ("crypto_rate_mode", ("api",)),
     "backup_telegram_allow_env": ("backup_telegram_enabled", ("1",)),
     **entry_approval_visibility(),
+    **FREEZE_VISIBILITY,
 }
 
 # Switches whose "on" accepts a security risk: the warning is shown under the switch in danger tone.
@@ -2239,6 +2241,11 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "bot": [],
     "appearance": [],
 }
+
+# Fields that hold a plan scope (plan_scope.py): saved from a list of checkboxes, not one value.
+PLAN_SCOPE_KEYS = frozenset(
+    item[0] for fields in SETTING_GROUPS.values() for item in fields if len(item) >= 3 and item[2] == "plans"
+)
 
 TOGGLE_KEYS = {
     item[0]

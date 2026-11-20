@@ -16,9 +16,10 @@ from alembic.operations import Operations
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.db.models import Base, BotUser, CustomerNotice, ServiceFreeze, UserService
+from app.db.models import Base, BotUser, CustomerNotice, Order, Plan, ServiceAutomation, ServiceFreeze, UserService
 from app.jobs.service_freezes import _queue_resumed_notices
 from app.services import service_freeze as freeze
+from app.services.pasarguard import PasarGuardError
 from app.services.service_freeze_settings import freeze_policy
 from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
@@ -32,9 +33,12 @@ class FakePG:
         self.info = {"status": "active", "expire": int(time.time()) + 10 * DAY, "data_limit": 0, "used_traffic": 0}
         self.fail_disable = False
         self.fail_modify = False
+        self.missing = False
         self.modifies: list[dict] = []
 
     async def get_user_by_id(self, user_id: int) -> dict:
+        if self.missing:
+            raise PasarGuardError("not found", status_code=404)
         return dict(self.info)
 
     async def set_disabled_by_id(self, user_id: int, disabled: bool) -> dict:
@@ -67,8 +71,10 @@ class FreezeTests(unittest.IsolatedAsyncioTestCase):
                 BotUser(id=7, telegram_id=1007, referral_code="shop", role="reseller"),
             ])
             await session.flush()
+            session.add_all([Plan(id=1, name="month", price=100), Plan(id=2, name="other", price=100)])
+            await session.flush()
             session.add_all([
-                UserService(id=10, bot_user_id=1, pg_user_id=500, pg_username="svc"),
+                UserService(id=10, bot_user_id=1, plan_id=1, pg_user_id=500, pg_username="svc"),
                 UserService(id=11, bot_user_id=1, pg_user_id=501, pg_username="shop-svc", shop_id=7),
             ])
             await session.commit()
@@ -183,6 +189,78 @@ class FreezeTests(unittest.IsolatedAsyncioTestCase):
         await self.start()
         async with self.Session() as session:
             self.assertEqual(await freeze.freeze_button(session, await session.get(UserService, 10), {}), "resume")
+
+    async def test_only_services_on_chosen_plans_can_be_frozen(self) -> None:
+        only_other = {**UI, "service_freeze_plans": "2"}
+        with self.assertRaisesRegex(ValueError, "پلن"):
+            await self.start(ui=only_other)
+        async with self.Session() as session:
+            self.assertIsNone(await freeze.freeze_button(session, await session.get(UserService, 10), only_other))
+        self.assertEqual(await self.rows(), [])
+        self.assertEqual((await self.start(ui={**UI, "service_freeze_plans": "1,2"})).status, "frozen")
+
+    async def test_every_plan_is_allowed_by_default_and_none_when_the_list_is_empty(self) -> None:
+        with self.assertRaises(ValueError):
+            await self.start(ui={**UI, "service_freeze_plans": ""})
+        self.assertEqual((await self.start(ui={k: v for k, v in UI.items() if k != "service_freeze_plans"})).status, "frozen")
+
+    async def test_a_late_disable_does_not_give_back_the_time_used_meanwhile(self) -> None:
+        self.pg.fail_disable = True
+        row = await self.start()
+        async with self.Session() as session:
+            await session.execute(sa.update(ServiceFreeze).values(created_at=sa.func.now() - sa.text("interval '2 hours'")))
+            await session.commit()
+        self.pg.fail_disable = False
+        await self.job()
+        self.assertAlmostEqual((await self.rows())[0].remaining_seconds, row.remaining_seconds - 7200, delta=5)
+
+    async def test_days_staff_add_while_frozen_are_kept_on_resume(self) -> None:
+        left = (await self.start()).remaining_seconds
+        self.pg.info["expire"] += 3 * DAY
+        await self.resume()
+        self.assertAlmostEqual(self.pg.info["expire"], int(time.time()) + left + 3 * DAY, delta=5)
+
+    async def test_a_service_cancelled_while_frozen_is_never_enabled_again(self) -> None:
+        await self.start(days=3)
+        async with self.Session() as session:
+            (await session.get(UserService, 10)).is_cancelled = True
+            await session.commit()
+        await self.job(now=datetime.now(timezone.utc) + timedelta(days=4))
+        self.assertEqual([r.status for r in await self.rows()], ["closed"])
+        self.assertEqual((self.pg.info["status"], self.pg.modifies), ("disabled", []))
+
+    async def test_a_service_removed_from_the_panel_closes_its_freeze(self) -> None:
+        await self.start(days=3)
+        self.pg.missing = True
+        await self.job(now=datetime.now(timezone.utc) + timedelta(days=4))
+        self.assertEqual([r.status for r in await self.rows()], ["closed"])
+
+    async def test_renewal_add_on_and_cancellation_wait_until_the_service_is_resumed(self) -> None:
+        from app.services.service_cancellations import request_cancellation
+        from app.services.service_renewals import validate_renewal_selection
+
+        await self.start()
+        async with self.Session() as session:
+            user, service = await session.get(BotUser, 1), await session.get(UserService, 10)
+            with self.assertRaisesRegex(ValueError, "متوقف"):
+                await validate_renewal_selection(session, user_id=1, service=service, plan=await session.get(Plan, 1), shop_id=None)
+            with self.assertRaisesRegex(ValueError, "متوقف"):
+                await request_cancellation(session, user, 10, shop_id=None, reason="x")
+
+    async def test_an_open_order_or_a_running_automation_blocks_the_freeze(self) -> None:
+        async with self.Session() as session:
+            session.add(Order(id=50, user_id=1, plan_id=1, amount=100, status="awaiting_receipt", service_id=10))
+            await session.commit()
+        with self.assertRaisesRegex(ValueError, "سفارش"):
+            await self.start()
+        async with self.Session() as session:
+            (await session.get(Order, 50)).status = "cancelled"
+            session.add(ServiceAutomation(service_id=10, lock_token="x" * 32,
+                                          locked_until=datetime.now(timezone.utc) + timedelta(minutes=5)))
+            await session.commit()
+        with self.assertRaisesRegex(ValueError, "خودکار"):
+            await self.start()
+        self.assertEqual(await self.rows(), [])
 
     def test_the_more_keyboard_carries_the_freeze_button(self) -> None:
         from app.bot.nav_inline import service_more_keyboard
