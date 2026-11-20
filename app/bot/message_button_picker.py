@@ -1,10 +1,11 @@
-"""The bot step that adds buttons under a staff message: a question, then a checklist of one to four.
+"""The bot step that adds buttons under a staff message: a question, a checklist of one to four, colours.
 
 After the text, the bot asks «دکمه پایین پیام باشه؟». «ارسال بدون دکمه» continues at once; «بله» shows
-the checklist (bot screens, and «تمدید سرویس» in a direct message) and the shop's saved sets. A saved
-set (made on the web, where links and colours are set) is taken as it is. The flow that asked
-continues through the finisher it registered, with the chosen buttons; the buttons are validated
-there, against the sender's shop and permissions, before anything is sent.
+the checklist (bot screens, and «تمدید سرویس» in a direct message) and the shop's saved sets. After
+«ادامه» each chosen button is shown in its colour and a tap gives it the next one, the same four
+colours the web form offers. A saved set (made on the web, where links and colours are set) is taken
+as it is. The flow that asked continues through the finisher it registered, with the chosen buttons;
+the buttons are validated there, against the sender's shop and permissions, before anything is sent.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.nav_input import finish_text_step
 from app.db.models import BotUser
+from app.services.button_styles import STYLE_OPTIONS, normalize_style
 from app.services.message_buttons import (
     BUTTONS_MAX,
     ButtonInput,
@@ -35,11 +37,17 @@ CB_NO = "mbp:n"
 CB_DONE = "mbp:ok"
 CB_TOGGLE = "mbp:t:"
 CB_PRESET = "mbp:p:"
+CB_COLOR = "mbp:c:"
+CB_SEND = "mbp:s"
 QUESTION = "دکمه پایین پیام باشه؟"
 CHECKLIST = f"دکمه‌های زیر پیام را انتخاب کنید (۱ تا {BUTTONS_MAX})؛ قالب‌های ذخیره‌شده پایین فهرست‌اند."
 TOO_MANY = f"حداکثر {BUTTONS_MAX} دکمه"
 NONE_CHOSEN = "دست‌کم یک دکمه انتخاب کنید یا «بدون دکمه» را بزنید"
 EXPIRED = "این انتخاب منقضی شده؛ دوباره پیام را بفرستید"
+COLORS = "رنگ دکمه‌ها: روی هر دکمه بزنید تا رنگ بعدی را بگیرد (سفید، آبی، سبز، قرمز). پیام با همین رنگ‌ها ارسال می‌شود."
+# The web form's colours, in the order a tap walks through them ("" is Telegram's default white).
+STYLE_CYCLE: tuple[str, ...] = tuple(value for value, _label, _css in STYLE_OPTIONS)
+STYLE_NAMES: dict[str, str] = {value: label for value, label, _css in STYLE_OPTIONS}
 
 # finisher(callback, state, session, db_user, buttons, **middleware data)
 Finisher = Callable[..., Awaitable[None]]
@@ -77,6 +85,28 @@ def checklist_markup(selected: list[str], *, renew: bool, presets: list[tuple[in
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def next_style(style: str) -> str:
+    """The colour after ``style`` in the web form's order; an unknown value starts over at white."""
+    current = normalize_style(style)
+    return STYLE_CYCLE[(STYLE_CYCLE.index(current) + 1) % len(STYLE_CYCLE)]
+
+
+def colors_markup(selected: list[str], styles: dict[str, str], *, renew: bool) -> InlineKeyboardMarkup:
+    """Each chosen button drawn in its colour (a tap changes it), then «ارسال» and «بازگشت»."""
+    labels = dict(target_options(renew=renew, links=False))
+    rows = []
+    for key in selected:
+        style = normalize_style(styles.get(key))
+        extra = {"style": style} if style else {}
+        text = f"{labels.get(key, key)} · {STYLE_NAMES[style]}"
+        rows.append([InlineKeyboardButton(text=text, callback_data=f"{CB_COLOR}{key}", **extra)])
+    rows.append([
+        InlineKeyboardButton(text="✅ ارسال", callback_data=CB_SEND),
+        InlineKeyboardButton(text="⬅️ بازگشت", callback_data=CB_YES),
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def toggle(selected: list[str], key: str) -> list[str]:
     """``selected`` with ``key`` switched; ``ValueError`` past the limit. Order is the order tapped."""
     if key in selected:
@@ -92,7 +122,7 @@ async def ask_for_buttons(
     """Ask the question in place of the text prompt (the same panel); the flow's own data stays in ``state``."""
     await finish_text_step(message, state, text=QUESTION, inline=question_markup())
     await state.set_state(PickerStates.picking)
-    await state.update_data(mbp_flow=flow, mbp_shop=shop_id, mbp_renew=renew, mbp_selected=[])
+    await state.update_data(mbp_flow=flow, mbp_shop=shop_id, mbp_renew=renew, mbp_selected=[], mbp_styles={})
 
 
 async def _show_checklist(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
@@ -147,13 +177,49 @@ async def on_toggle(callback: CallbackQuery, state: FSMContext, session: AsyncSe
     await _show_checklist(callback, state, session)
 
 
+async def _show_colors(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    markup = colors_markup(
+        list(data.get("mbp_selected") or []), dict(data.get("mbp_styles") or {}), renew=bool(data.get("mbp_renew"))
+    )
+    if isinstance(callback.message, Message):
+        await callback.message.edit_text(COLORS, reply_markup=markup)
+
+
 @router.callback_query(F.data == CB_DONE, PickerStates.picking)
-async def on_done(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser, **kwargs) -> None:
-    selected = list((await state.get_data()).get("mbp_selected") or [])
+async def on_done(callback: CallbackQuery, state: FSMContext) -> None:
+    """«ادامه» on the checklist opens the colour step."""
+    if not (await state.get_data()).get("mbp_selected"):
+        await callback.answer(NONE_CHOSEN, show_alert=True)
+        return
+    await callback.answer()
+    await _show_colors(callback, state)
+
+
+@router.callback_query(F.data.startswith(CB_COLOR), PickerStates.picking)
+async def on_color(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    key = (callback.data or "")[len(CB_COLOR):]
+    if key not in (data.get("mbp_selected") or []):
+        await callback.answer(EXPIRED, show_alert=True)
+        return
+    styles = dict(data.get("mbp_styles") or {})
+    styles[key] = next_style(styles.get(key, ""))
+    await state.update_data(mbp_styles=styles)
+    await callback.answer(STYLE_NAMES[styles[key]])
+    await _show_colors(callback, state)
+
+
+@router.callback_query(F.data == CB_SEND, PickerStates.picking)
+async def on_send(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser, **kwargs) -> None:
+    data = await state.get_data()
+    selected = list(data.get("mbp_selected") or [])
     if not selected:
         await callback.answer(NONE_CHOSEN, show_alert=True)
         return
-    await _finish(callback, state, session, db_user, [ButtonInput(key) for key in selected], _extra(kwargs))
+    styles = dict(data.get("mbp_styles") or {})
+    buttons = [ButtonInput(key, style=normalize_style(styles.get(key))) for key in selected]
+    await _finish(callback, state, session, db_user, buttons, _extra(kwargs))
 
 
 @router.callback_query(F.data == CB_NO, PickerStates.picking)
