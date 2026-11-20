@@ -5,6 +5,13 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot
+from apscheduler.events import (
+    EVENT_JOB_ERROR,
+    EVENT_JOB_EXECUTED,
+    EVENT_JOB_MAX_INSTANCES,
+    EVENT_JOB_SUBMITTED,
+    JobEvent,
+)
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import or_, select
 
@@ -33,6 +40,7 @@ from app.services.alert_thresholds import (
 from app.services.daily_report_delivery import deliver_daily_reports
 from app.services.service_period import period_usage
 from app.services.formatting import parse_expire
+from app.services.job_metrics import job_metrics
 from app.services.pasarguard import get_pg
 from app.services.usage_alert_messages import (
     send_alert_with_default_fallback,
@@ -54,6 +62,23 @@ from app.services.usage_alerts import (
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
+
+
+def record_job_event(event: JobEvent) -> None:
+    """Feed run time, failures and overlapping runs of every job into ``job_metrics``."""
+    if event.code == EVENT_JOB_SUBMITTED:
+        job_metrics.mark_started(event.job_id)
+    elif event.code == EVENT_JOB_EXECUTED:
+        job_metrics.mark_finished(event.job_id, succeeded=True)
+    elif event.code == EVENT_JOB_ERROR:
+        job_metrics.mark_finished(event.job_id, succeeded=False)
+    elif event.code == EVENT_JOB_MAX_INSTANCES:
+        job_metrics.mark_overlap(event.job_id)
+
+
+scheduler.add_listener(
+    record_job_event, EVENT_JOB_SUBMITTED | EVENT_JOB_EXECUTED | EVENT_JOB_ERROR | EVENT_JOB_MAX_INSTANCES
+)
 
 # Bound concurrent PG subscription lookups during expiry scan
 _PG_FETCH_CONCURRENCY = 8
