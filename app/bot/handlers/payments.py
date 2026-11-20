@@ -6,6 +6,7 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pasarguard import failure_text
 from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
 from app.services.chat_records import keep_sent
 from app.services.delivery import send_delivery_to_user
@@ -64,7 +65,7 @@ async def _hold_stars_for_review(
     )
     order = await session.get(Order, payment.order_id) if payment.order_id else None
     if order is not None:
-        await hold_unknown_delivery_for_review(session, order, error=str(error))
+        await hold_unknown_delivery_for_review(session, order, error=failure_text(error))
     with keep_sent():  # the buyer must be able to find this notice again
         await message.answer(
             "پرداخت استارز دریافت شد اما نتیجه تحویل سرویس نیاز به بررسی پشتیبانی دارد.\n"
@@ -74,7 +75,7 @@ async def _hold_stars_for_review(
     try:
         await notify_stars_delivery_failed(
             message.bot, session, payment, telegram_id=int(db_user.telegram_id),
-            charge_id=charge_id, refunded=False, held=True, error=str(error),
+            charge_id=charge_id, refunded=False, held=True, error=failure_text(error),
         )
     except Exception:
         # Best-effort staff alert: the order is already listed under failed deliveries.
@@ -235,7 +236,7 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
         try:
             await notify_stars_delivery_failed(
                 message.bot, session, payment, telegram_id=int(db_user.telegram_id),
-                charge_id=charge_id, refunded=refunded, error=str(e),
+                charge_id=charge_id, refunded=refunded, error=failure_text(e),
             )
         except Exception:
             # Best-effort staff alert: the failure is logged above and stamped on the payment.

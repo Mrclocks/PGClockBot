@@ -19,6 +19,7 @@ from app.services.notifications import (
 )
 from app.services.delivery_recovery_policy import PENDING_STAFF_NOTE, is_delivered, pending_buyer_note
 from app.services.orders import DeliveryAttempt, approve_payment, attach_receipt, hold_unknown_delivery_for_review
+from app.services.pasarguard import failure_text
 from app.services.receipt_risk import (
     ENABLED_KEY as RISK_ENABLED_KEY,
     HOLD_KEY as RISK_HOLD_KEY,
@@ -189,9 +190,9 @@ async def auto_approve_receipt(
 
                 stuck_order = await session.get(Order, payment.order_id)
             if stuck_order is not None:
-                await _queue_undelivered(session, stuck_order, payment, error=str(e), attempt=attempt)
+                await _queue_undelivered(session, stuck_order, payment, error=failure_text(e), attempt=attempt)
             await notify_approved_delivery_stuck(
-                bot, session, payment, user_tg_id, error=str(e)
+                bot, session, payment, user_tg_id, error=failure_text(e)
             )
             if stuck_order is None:
                 return format_message("⚠️ رسید ثبت شد", PENDING_STAFF_NOTE)

@@ -12,6 +12,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pasarguard import failure_text
 from app.db.models import BotUser, Order, Payment
 from app.services.delivery import send_delivery_to_user
 from app.services.orders import approve_payment
@@ -77,7 +78,7 @@ async def _report_failed_delivery(
     from app.services.notifications import notify_approved_delivery_stuck
     from app.services.ux20 import note_delivery_send_failure
 
-    recorded = redact(str(exc), limit=FAILURE_DETAIL_LIMIT)
+    recorded = redact(failure_text(exc), limit=FAILURE_DETAIL_LIMIT)
     logger.warning("approved payment left undelivered payment=%s: %s", payment.id, recorded)
     await note_delivery_send_failure(session, order=order, payment=payment, error=recorded)
     buyer = await session.get(BotUser, int(payment.user_id)) if payment.user_id else None
