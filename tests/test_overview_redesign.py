@@ -273,7 +273,8 @@ class BackgroundJobCardTests(DashboardRenderTests):
         self.assertIn("کارهای پس‌زمینه", html)
         self.assertLess(html.index("تست اتصال سرویس"), html.index("صورت‌حساب"))
         self.assertIn("۱٬۲۳۴", html)
-        self.assertEqual(html.count("پر مصرف"), 1)
+        # One heavy row: the tag once for the desktop table and once for the phone list.
+        self.assertEqual(html.count("پر مصرف"), 2)
 
     def test_shop_staff_never_see_the_server_jobs(self):
         viewer = Viewer(shop_id=SHOP, has_shop=True, can_payments=True, can_orders=True, can_tickets=True,
