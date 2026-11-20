@@ -817,6 +817,8 @@ class ServiceAutomation(Base):
 class ServiceFreeze(Base):
     """A customer's pause of one service: ``pausing`` -> ``frozen`` -> ``resuming`` -> ``done``.
 
+    ``closed`` ends a freeze whose service was cancelled or removed meanwhile (never re-enabled).
+
     The time left is saved before the panel is told to disable the user, and the target expiry is
     saved before the resume call, so a retry after a timeout reuses the same numbers. At most one
     open freeze per service (partial unique index).
@@ -840,6 +842,8 @@ class ServiceFreeze(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
     status: Mapped[str] = mapped_column(String(16), default="pausing", server_default="pausing")
     remaining_seconds: Mapped[int] = mapped_column(Integer)
+    # The panel expiry when the service was paused: a change staff make while it is frozen is kept.
+    frozen_expire: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     resume_by: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     target_expire: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     resumed_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)

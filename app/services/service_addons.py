@@ -34,6 +34,7 @@ from app.services.formatting import (
     parse_expire,
 )
 from app.services.numbers import to_fa_digits
+from app.services.service_freeze_guard import assert_not_frozen
 from app.services.plans_catalog import require_catalog_owner_id
 from app.services.cashback import grant_after_delivery
 from app.services.payg_charges import new_request_key
@@ -1172,6 +1173,7 @@ async def create_addon_order(
     await validate_addon_selection(
         session, user_id=user_id, service=service, pack=pack, shop_id=shop_rid,
     )
+    await assert_not_frozen(session, service.id)
     await _assert_pack_affordable(session, shop_rid, service, pack)
 
     quote = await quote_product(session, pack, shop_id=shop_rid)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -30,6 +31,7 @@ from app.services.service_freeze_settings import (
     JOB_BATCH,
     OPEN_STATUSES,
     PERIOD,
+    STATUS_CLOSED,
     STATUS_DONE,
     STATUS_FROZEN,
     STATUS_PAUSING,
@@ -75,7 +77,7 @@ async def freeze_button(session: AsyncSession, service: UserService, ui: Mapping
     row = await open_freeze(session, int(service.id))
     if row is not None:
         return BUTTON_RESUME if row.status == STATUS_FROZEN else None
-    return BUTTON_PAUSE if freeze_policy(ui).enabled else None
+    return BUTTON_PAUSE if freeze_policy(ui).allows_plan(service.plan_id) else None
 
 
 async def _owned_service(session: AsyncSession, user: BotUser, service_id: int, shop_id: int | None) -> UserService:
@@ -99,17 +101,29 @@ async def _freezes_in_period(session: AsyncSession, service: UserService) -> int
     return int(used or 0)
 
 
-async def _has_paid_mutation(session: AsyncSession, service_id: int) -> bool:
+# An order still in flight would apply to the service after the freeze computed its time.
+OPEN_ORDER_STATUSES = (
+    OrderStatus.PENDING.value, OrderStatus.AWAITING_RECEIPT.value, OrderStatus.AWAITING_APPROVAL.value,
+    OrderStatus.PAID.value, OrderStatus.DELIVERING.value,
+)
+
+
+async def _has_open_order(session: AsyncSession, service_id: int) -> bool:
     found = await session.scalar(
-        select(Order.id).where(
-            Order.service_id == int(service_id),
-            Order.status.in_([OrderStatus.PAID.value, OrderStatus.DELIVERING.value]),
-        ).limit(1)
+        select(Order.id).where(Order.service_id == int(service_id), Order.status.in_(OPEN_ORDER_STATUSES)).limit(1)
     )
     return found is not None
 
 
-def _seconds_left(info: Mapping[str, Any], now: datetime, policy: FreezePolicy) -> int:
+@dataclass(frozen=True, slots=True)
+class PanelTime:
+    """The panel's expiry (unix seconds, None = unlimited) and the seconds left at ``now``."""
+
+    expire_ts: int | None
+    left: int
+
+
+def _seconds_left(info: Mapping[str, Any], now: datetime, policy: FreezePolicy) -> PanelTime:
     """Time left on an active service, or a ValueError the customer can read."""
     if str(info.get("status") or "").lower() != "active":
         raise ValueError("فقط سرویس فعال را می‌توان متوقف کرد")
@@ -122,16 +136,17 @@ def _seconds_left(info: Mapping[str, Any], now: datetime, policy: FreezePolicy) 
     limit, used = int(info.get("data_limit") or 0), int(info.get("used_traffic") or 0)
     if limit > 0 and used >= limit:
         raise ValueError("حجم این سرویس تمام شده است")
-    return left
+    return PanelTime(int(expire.timestamp()), left)
 
 
 async def _claim_freeze(
-    session: AsyncSession, service: UserService, user: BotUser, *, shop_id: int | None, left: int, days: int, now: datetime
+    session: AsyncSession, service: UserService, user: BotUser, *, shop_id: int | None, time_left: PanelTime,
+    days: int, now: datetime,
 ) -> ServiceFreeze:
     resume_by = now + timedelta(days=days)
     row = ServiceFreeze(
         service_id=int(service.id), shop_id=shop_id, user_id=int(user.id), status=STATUS_PAUSING,
-        remaining_seconds=left, resume_by=resume_by,
+        remaining_seconds=time_left.left, frozen_expire=time_left.expire_ts, resume_by=resume_by,
     )
     hold = resume_by + CLEANUP_HOLD_MARGIN
     if service.cleanup_hold_until is None or service.cleanup_hold_until < hold:
@@ -146,52 +161,132 @@ async def _claim_freeze(
     return row
 
 
+def _left_after_delay(row: ServiceFreeze, now: datetime) -> int:
+    """Seconds left once disabled: a disable that came late does not give back the time used meanwhile."""
+    created = row.created_at if row.created_at.tzinfo else row.created_at.replace(tzinfo=timezone.utc)
+    used = max(0, int((now - created).total_seconds()))
+    return max(0, int(row.remaining_seconds) - used)
+
+
 async def _disable(session: AsyncSession, row: ServiceFreeze, service: UserService) -> None:
     """Disable on the panel; on success the freeze is ``frozen``, else the job retries."""
     pg = await _panel(session, row.shop_id)
     await pg.set_disabled_by_id(int(service.pg_user_id), True)
+    left = _left_after_delay(row, _now())
     result = await session.execute(
         update(ServiceFreeze).where(ServiceFreeze.id == int(row.id), ServiceFreeze.status == STATUS_PAUSING)
-        .values(status=STATUS_FROZEN).execution_options(synchronize_session=False)
+        .values(status=STATUS_FROZEN, remaining_seconds=left).execution_options(synchronize_session=False)
     )
     await session.commit()
     if result.rowcount == 1:
-        row.status = STATUS_FROZEN
+        row.status, row.remaining_seconds = STATUS_FROZEN, left
+
+
+async def _automation_lease(session: AsyncSession, service: UserService) -> str:
+    """Hold the service's automation lease so no automatic purchase runs while the freeze starts."""
+    # Deferred: service_automation imports the order services, which import the freeze guard.
+    from app.services.service_automation import claim_automation, get_automation
+
+    await get_automation(session, service)
+    await session.commit()
+    token = await claim_automation(session, int(service.id))
+    if token is None:
+        raise ValueError("یک کار خودکار روی این سرویس در حال انجام است؛ کمی بعد تلاش کنید")
+    return token
+
+
+async def _read_time_left(session: AsyncSession, service: UserService, shop_id: int | None, now: datetime,
+                          policy: FreezePolicy) -> PanelTime:
+    try:
+        info = await (await _panel(session, shop_id)).get_user_by_id(int(service.pg_user_id))
+    except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
+        raise ValueError(PANEL_DOWN) from exc
+    return _seconds_left(info if isinstance(info, dict) else {}, now, policy)
+
+
+async def _validate_start(
+    session: AsyncSession, user: BotUser, service_id: int, *, shop_id: int | None, days: int, policy: FreezePolicy
+) -> UserService:
+    if not policy.enabled:
+        raise ValueError("توقف موقت سرویس در این فروشگاه فعال نیست")
+    if isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= policy.max_days:
+        raise ValueError(f"مدت توقف باید بین ۱ و {policy.max_days} روز باشد")
+    service = await _owned_service(session, user, service_id, shop_id)
+    if not policy.plans.allows(service.plan_id):
+        raise ValueError("توقف موقت برای پلن این سرویس فعال نیست")
+    if await _freezes_in_period(session, service) >= policy.per_period:
+        raise ValueError("سقف توقف این سرویس در ۳۰ روز گذشته پر شده است")
+    if await _has_open_order(session, int(service.id)):
+        raise ValueError("یک سفارش روی این سرویس در حال انجام است؛ کمی بعد تلاش کنید")
+    return service
 
 
 async def start_freeze(
     session: AsyncSession, user: BotUser, service_id: int, *, shop_id: int | None, days: int, ui: Mapping[str, Any]
 ) -> ServiceFreeze:
     """Pause the customer's service for ``days``; raises ValueError with a message to show."""
+    # Deferred like _automation_lease: the lease release lives with the automation service.
+    from app.services.service_automation import release_automation
+
     policy = freeze_policy(ui)
-    if not policy.enabled:
-        raise ValueError("توقف موقت سرویس در این فروشگاه فعال نیست")
-    if isinstance(days, bool) or not 1 <= int(days) <= policy.max_days:
-        raise ValueError(f"مدت توقف باید بین ۱ و {policy.max_days} روز باشد")
-    service = await _owned_service(session, user, service_id, shop_id)
-    if await _freezes_in_period(session, service) >= policy.per_period:
-        raise ValueError("سقف توقف این سرویس در ۳۰ روز گذشته پر شده است")
-    if await _has_paid_mutation(session, int(service.id)):
-        raise ValueError("یک سفارش روی این سرویس در حال انجام است؛ کمی بعد تلاش کنید")
-    now = _now()
+    service = await _validate_start(session, user, service_id, shop_id=shop_id, days=days, policy=policy)
+    token = await _automation_lease(session, service)
     try:
-        info = await (await _panel(session, shop_id)).get_user_by_id(int(service.pg_user_id))
-    except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
-        raise ValueError(PANEL_DOWN) from exc
-    left = _seconds_left(info if isinstance(info, dict) else {}, now, policy)
-    row = await _claim_freeze(session, service, user, shop_id=shop_id, left=left, days=int(days), now=now)
-    try:
-        await _disable(session, row, service)
-    except Exception:  # noqa: BLE001 - the claim is saved; disabling is idempotent and the job retries it
-        logger.warning("freeze disable failed freeze=%s; the job retries", row.id, exc_info=True)
-        await session.rollback()
-        # The rollback expired the row; reload the committed claim so the caller can read it.
-        await session.refresh(row)
-    return row
+        now = _now()
+        time_left = await _read_time_left(session, service, shop_id, now, policy)
+        row = await _claim_freeze(session, service, user, shop_id=shop_id, time_left=time_left, days=days, now=now)
+        try:
+            await _disable(session, row, service)
+        except Exception:  # noqa: BLE001 - the claim is saved; disabling is idempotent and the job retries it
+            logger.warning("freeze disable failed freeze=%s; the job retries", row.id, exc_info=True)
+            await session.rollback()
+            # The rollback expired the row; reload the committed claim so the caller can read it.
+            await session.refresh(row)
+        return row
+    finally:
+        await release_automation(session, int(service.id), token)
+
+
+def _resume_target(row: ServiceFreeze, info: Mapping[str, Any], now: datetime) -> int:
+    """The expiry to write: now plus the time held, plus any change staff made on the panel meanwhile.
+
+    0 means unlimited (staff made the service unlimited while it was frozen).
+    """
+    expire = parse_expire(info.get("expire") or info.get("expire_date"))
+    if expire is None:
+        return 0
+    staff_change = int(expire.timestamp()) - int(row.frozen_expire) if row.frozen_expire else 0
+    return max(int(now.timestamp()), int(now.timestamp()) + int(row.remaining_seconds) + staff_change)
+
+
+async def _close(session: AsyncSession, row: ServiceFreeze, *, expected: str) -> None:
+    """End a freeze whose service is gone or cancelled, without re-enabling anything."""
+    await session.execute(
+        update(ServiceFreeze).where(ServiceFreeze.id == int(row.id), ServiceFreeze.status == expected)
+        .values(status=STATUS_CLOSED, resumed_at=_now()).execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    row.status = STATUS_CLOSED
+
+
+def _service_is_gone(service: UserService | None) -> bool:
+    return service is None or not service.pg_user_id or bool(service.is_cancelled)
 
 
 async def _claim_resume(session: AsyncSession, row: ServiceFreeze, *, by: str, now: datetime) -> bool:
-    target = int(now.timestamp()) + int(row.remaining_seconds)
+    """Save the target expiry before the panel write, so a retry writes the same one."""
+    service = await session.get(UserService, int(row.service_id))
+    if _service_is_gone(service):
+        await _close(session, row, expected=STATUS_FROZEN)
+        return False
+    try:
+        info = await (await _panel(session, row.shop_id)).get_user_by_id(int(service.pg_user_id))
+    except PasarGuardError as exc:
+        if exc.status_code == 404:
+            await _close(session, row, expected=STATUS_FROZEN)
+            return False
+        raise
+    target = _resume_target(row, info if isinstance(info, dict) else {}, now)
     result = await session.execute(
         update(ServiceFreeze).where(ServiceFreeze.id == int(row.id), ServiceFreeze.status == STATUS_FROZEN)
         .values(status=STATUS_RESUMING, target_expire=target, resumed_by=by)
@@ -207,15 +302,23 @@ async def _claim_resume(session: AsyncSession, row: ServiceFreeze, *, by: str, n
 async def _apply_resume(session: AsyncSession, row: ServiceFreeze) -> bool:
     """Write the saved expiry and enable the user; True once the freeze is done."""
     service = await session.get(UserService, int(row.service_id))
-    if service is None or not service.pg_user_id:
+    if _service_is_gone(service):
+        await _close(session, row, expected=STATUS_RESUMING)
         return False
     pg = await _panel(session, row.shop_id)
-    await pg.modify_user_by_id(int(service.pg_user_id), {"expire": int(row.target_expire), "status": "active"})
+    try:
+        await pg.modify_user_by_id(int(service.pg_user_id), {"expire": int(row.target_expire), "status": "active"})
+    except PasarGuardError as exc:
+        if exc.status_code != 404:
+            raise
+        await _close(session, row, expected=STATUS_RESUMING)
+        return False
     result = await session.execute(
         update(ServiceFreeze).where(ServiceFreeze.id == int(row.id), ServiceFreeze.status == STATUS_RESUMING)
         .values(status=STATUS_DONE, resumed_at=_now()).execution_options(synchronize_session=False)
     )
-    service.quota_expire_at = datetime.fromtimestamp(int(row.target_expire), tz=timezone.utc)
+    target = int(row.target_expire)
+    service.quota_expire_at = datetime.fromtimestamp(target, tz=timezone.utc) if target else None
     await session.commit()
     return result.rowcount == 1
 
@@ -228,8 +331,12 @@ async def resume_freeze(session: AsyncSession, user: BotUser, service_id: int, *
     row = await open_freeze(session, int(service.id))
     if row is None or row.status != STATUS_FROZEN:
         raise ValueError("این سرویس متوقف نیست یا در حال اعمال تغییر است")
-    if not await _claim_resume(session, row, by=BY_CUSTOMER, now=_now()):
-        raise ValueError("این سرویس در حال فعال شدن است")
+    try:
+        claimed = await _claim_resume(session, row, by=BY_CUSTOMER, now=_now())
+    except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
+        raise ValueError(PANEL_DOWN) from exc
+    if not claimed:
+        raise ValueError("این سرویس در حال فعال شدن است یا دیگر وجود ندارد")
     try:
         if await _apply_resume(session, row):
             row.status = STATUS_DONE
@@ -255,7 +362,9 @@ async def _advance(session: AsyncSession, row: ServiceFreeze, now: datetime) -> 
     """One step of a due freeze; returns ``deadline`` when it was resumed at the deadline."""
     if row.status == STATUS_PAUSING:
         service = await session.get(UserService, int(row.service_id))
-        if service is not None and service.pg_user_id:
+        if _service_is_gone(service):
+            await _close(session, row, expected=STATUS_PAUSING)
+        else:
             await _disable(session, row, service)
         return None
     if row.status == STATUS_FROZEN and not await _claim_resume(session, row, by=BY_DEADLINE, now=now):
