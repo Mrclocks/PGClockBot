@@ -387,7 +387,8 @@ async def _insert_settlement_race_safe(
                 require_checkout_url=False,
             )
         if raced is None:
-            raise ValueError("ساخت تسویه همزمان ناموفق بود — دوباره تلاش کنید")
+            # The unique-key conflict is the expected race; the customer gets the retry message only.
+            raise ValueError("ساخت تسویه همزمان ناموفق بود — دوباره تلاش کنید") from None
         return raced
 
 

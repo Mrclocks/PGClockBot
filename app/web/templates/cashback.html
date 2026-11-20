@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, page_header, act_label, empty_state %}
 {% from "_ds.html" import ds_switch, ds_sec, ds_head_switch, ds_modal_head, ds_foot %}
-{% set event_labels = {'new': 'تازه', 'renew': 'تمدید', 'addon': 'اضافه'} %}
+{% set event_labels = {'new': 'تازه', 'renew': 'تمدید', 'addon': 'اضافه', 'topup': 'شارژ کیف پول'} %}
 
 {# Rule form body; key makes the ids unique when several rule modals share the page. #}
 {% macro rule_fields(r, key) %}
@@ -52,6 +52,7 @@
     {{ ds_switch('event_new', 'خرید تازه', '', ('new' in events) if r else true) }}
     {{ ds_switch('event_renew', 'تمدید', '', ('renew' in events) if r else true) }}
     {{ ds_switch('event_addon', 'حجم یا زمان اضافه', '', ('addon' in events) if r else true) }}
+    {{ ds_switch('event_topup', 'شارژ کیف پول', 'برای پاداش پلکانی شارژ، چند قانون با «حداقل مبلغ» متفاوت بسازید؛ در حالت «بهترین قانون» بزرگ‌ترین پاداش اعمال می‌شود', ('topup' in events) if r else false) }}
     {{ ds_switch('first_purchase_only', 'فقط اولین خرید مشتری', '', r.first_purchase_only if r else false) }}
     {{ ds_switch('allow_with_discount', 'همراه با کد تخفیف هم بدهد', 'مبنای محاسبه مبلغ بعد از تخفیف است', r.allow_with_discount if r else true) }}
   </div>

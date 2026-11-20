@@ -14,7 +14,7 @@ from tests.reason_support import ReasonedState
 from app.db import Base
 import app.db.models  # noqa: F401
 from app.db.models import BotUser, ResellerProfile, Role
-from app.services.bot_pg_user_pilot import (
+from app.services.bot_pg_user_authz import (
     authorize_bot_pg_user_op,
     callback_carries_identity_tamper,
     parse_pg_user_callback_id,

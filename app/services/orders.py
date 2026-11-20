@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.auto_renew_offer import queue_auto_renew_offer
 from app.services.custom_plans import discard_unsold_custom_plan
 from app.services.panel_user_note import build_panel_user_note
 from app.services.funnel_events import STEP_DELIVERED, STEP_RECEIPT, record_order_funnel
@@ -53,6 +54,7 @@ from app.services.random_discounts import apply_random_discount
 from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
 from app.services.cashback import grant_after_delivery
+from app.services.cashback_topup import grant_after_topup
 from app.services.payg_gate import (
     SHORTFALL_FOR_CUSTOMER,
     assert_shop_can_afford,
@@ -1885,7 +1887,10 @@ async def _resume_approved_payment(
     - APPROVED + incomplete work is retriable; APPROVED + complete is terminal.
     """
     if payment.is_wallet_topup:
+        topup_payment_id = int(payment.id)
         if await _wallet_topup_already_credited(session, payment):
+            # A crash may have come between the credit and its bonus; granting is idempotent.
+            await grant_after_topup(session, topup_payment_id)
             return None
         user = await session.get(BotUser, payment.user_id)
         if not user:
@@ -1920,6 +1925,7 @@ async def _resume_approved_payment(
             )
             await session.commit()
             raise
+        await grant_after_topup(session, topup_payment_id)
         return None
 
     if not payment.order_id:
@@ -2099,6 +2105,7 @@ async def approve_payment(
             raise
         await record_payment_decision(session, payment, None, action=ACTION_APPROVE, reviewer_tg=reviewer_tg, actor=actor)
         await session.commit()
+        await grant_after_topup(session, payment_id)
         await _sync_payment_review_messages(session, payment_id, bot=bot)
         return None
     order = await session.get(Order, payment.order_id)
@@ -3013,6 +3020,7 @@ async def _notify_renewal_delivered(session: AsyncSession, order: Order) -> None
     except Exception:
         logger.warning("loyalty on_order_delivered renew failed order=%s", order.id, exc_info=True)
     await grant_after_delivery(session, order)
+    await queue_auto_renew_offer(session, order)
 
 
 async def _release_failed_renewal(session: AsyncSession, order: Order, run: _RenewalRun, exc: Exception) -> bool:

@@ -85,6 +85,7 @@ from app.services.bot_setting_values import (
 from app.services.receipt_risk import BOT_FIELDS as RECEIPT_RISK_BOT_FIELDS
 from app.services.settings_operation_fields import (
     AUTO_APPROVE_AFTER_FIELDS,
+    AUTO_RENEW_FIELDS,
     CRYPTO_RATE_FIELDS,
     OPERATIONS_FIELDS,
     PG_LINK_HEALTH_FIELDS,
@@ -480,6 +481,7 @@ SECTIONS: dict[str, dict] = {
                 ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، به وقت تهران)", "number"),
             ]),
             ("usage_alerts", "هشدار سرویس کاربر", USAGE_ALERT_FIELDS),
+            ("auto_renew", "تمدید خودکار سرویس", AUTO_RENEW_FIELDS),
             ("operations", "گزارش و عملیات", OPERATIONS_FIELDS),
             ("pg_link", "سلامت ارتباط پاسارگارد", PG_LINK_HEALTH_FIELDS),
             ("staff_notices", "متن اعلان کار روی سرویس", STAFF_ACTION_BOT_FIELDS),

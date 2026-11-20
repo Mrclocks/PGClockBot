@@ -87,17 +87,22 @@ async def submit_receipt(
         )
 
     await attach_receipt(session, payment, file_id, first_only=first_only)
+    payment_id = int(payment.id)
     try:
         await store_receipt_fingerprint(
             session,
-            payment_id=int(payment.id),
+            payment_id=payment_id,
             file_unique_id=file_unique_id,
             sha256=sha,
             commit=True,
         )
-    except Exception:
-        # Fingerprint is best-effort; payment attachment must stay durable.
-        pass
+    except SQLAlchemyError:
+        # Best effort: the receipt is already attached and committed. Roll the failed flush back,
+        # or the review below would run on a session that refuses every query.
+        logger.warning("receipt fingerprint not stored payment=%s", payment_id, exc_info=True)
+        await rollback_quiet(session)
+        # The rollback expired the payment; reload the committed row before reviewing it.
+        await session.refresh(payment)
 
     dup_note = format_dup_warning(matches) if matches else None
     risk = await _assess_risk(session, payment, shop_id=shop_rid, duplicates=len(matches or []))
