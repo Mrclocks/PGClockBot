@@ -862,7 +862,6 @@ class ServiceTransfer(Base):
             "uq_service_transfers_open",
             "service_id",
             unique=True,
-            sqlite_where=text("status = 'open'"),
             postgresql_where=text("status = 'open'"),
         ),
     )

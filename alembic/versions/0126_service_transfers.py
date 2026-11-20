@@ -47,7 +47,7 @@ def upgrade() -> None:
         op.create_index("ix_service_transfers_service_created", TABLE, ["service_id", "created_at"])
     if "uq_service_transfers_open" not in existing:
         op.create_index(
-            "uq_service_transfers_open", TABLE, ["service_id"], unique=True, sqlite_where=OPEN, postgresql_where=OPEN
+            "uq_service_transfers_open", TABLE, ["service_id"], unique=True, postgresql_where=OPEN
         )
 
 
