@@ -328,6 +328,7 @@ tests/test_broadcast_queue.py
 tests/test_shop_broadcast.py
 # Buttons under staff messages: link permission per shop, presets per shop, renewal of own services only.
 tests/test_message_buttons.py
+tests/test_message_button_colors.py
 # Group-message audiences, pages and buttons: tenant scope, opt-out, plan buttons, forged segments.
 tests/test_broadcast_audience.py
 tests/test_broadcast_pages.py
