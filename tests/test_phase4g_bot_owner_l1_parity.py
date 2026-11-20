@@ -19,9 +19,9 @@ from app.bot.auth import (
     is_migrated_pg_soft_callback,
     require_bot_owner,
 )
-from app.services.bot_pg_catalog_pilot import authorize_bot_pg_catalog_op
-from app.services.bot_pg_object_pilot import authorize_bot_pg_object_op
-from app.services.bot_pg_user_pilot import authorize_bot_pg_user_op
+from app.services.bot_pg_catalog_authz import authorize_bot_pg_catalog_op
+from app.services.bot_pg_object_authz import authorize_bot_pg_object_op
+from app.services.bot_pg_user_authz import authorize_bot_pg_user_op
 from app.services.bot_principal_identity import bot_pg_client_for_resolution
 from app.services.org_principals import (
     bind_reseller_profile_principal,
