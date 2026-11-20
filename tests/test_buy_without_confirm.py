@@ -125,8 +125,7 @@ class PlanPickTests(_Fixture):
         self.session.add(order)
         await self.session.commit()
         show = AsyncMock()
-        with self.patches(create_order=AsyncMock(return_value=order), _show_order_pay=show,
-                          _notify_new_order=AsyncMock()):
+        with self.patches(create_order=AsyncMock(return_value=order), _show_order_pay=show):
             await shop._complete_shop_buy(
                 callback=self.callback("shop:buy:1"), message=None, session=self.session,
                 db_user=SimpleNamespace(id=1, reseller_id=None), state=AsyncMock(), ui={},

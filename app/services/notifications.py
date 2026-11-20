@@ -125,7 +125,7 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     (
         "notify_new_order",
         "سفارش جدید",
-        "وقتی کاربر سفارش می‌سازد و روش پرداخت را انتخاب می‌کند",
+        "وقتی کاربر برای سفارشی که تأیید دستی دارد رسید می‌فرستد؛ خرید با پرداخت خودکار در «اشتراک جدید» می‌آید",
         "0",
     ),
     (
@@ -1106,11 +1106,9 @@ async def notify_new_order(
     order: Order,
     user_tg_id: int | None,
     plan_name: str | None = None,
-    user_name: str | None = None,
 ) -> None:
     settings = get_settings()
     user = await session.get(BotUser, order.user_id) if order.user_id else None
-    _ = user_name  # kept for callers; the report is built from the user row
     lines = [
         kv_line("🧾", "سفارش", f"#{order.id}"),
         *_buyer_lines(user, user_tg_id),

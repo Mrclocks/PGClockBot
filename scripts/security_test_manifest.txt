@@ -299,6 +299,7 @@ tests/test_miniapp_shop_topup.py
 tests/test_legacy_discount_shop_scope.py
 tests/test_miniapp_shop_extras.py
 tests/test_shop_notify_isolation.py
+tests/test_new_order_report.py
 tests/test_user_search.py
 tests/test_psp_gateways.py
 tests/test_user_card.py
