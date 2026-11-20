@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
 import secrets
 import string
 import time
@@ -281,6 +282,12 @@ def chosen_name_variant(name: str) -> str:
 PG_USERNAME_MIN_LENGTH = 3
 PG_USERNAME_MAX_LENGTH = 32
 _PG_USERNAME_ALLOWED = frozenset(string.ascii_letters + string.digits + "_")
+# PasarGuard refuses two special characters in a row («a__b») with HTTP 422.
+_REPEATED_SEPARATORS = re.compile(r"_{2,}")
+
+
+def _single_separators(name: str) -> str:
+    return _REPEATED_SEPARATORS.sub("_", name).strip("_")
 
 
 def _sanitize_naming_username(raw: str | None, *, fallback: str) -> str:
@@ -292,7 +299,7 @@ def _sanitize_naming_username(raw: str | None, *, fallback: str) -> str:
 
 
 def _fit_panel_username(built: str, *, keep_unique: bool) -> str:
-    """Coerce a rendered pattern into the panel's ``[A-Za-z0-9_]{3,32}`` format.
+    """Coerce a rendered pattern into the panel's ``[A-Za-z0-9_]{3,32}`` format, one «_» at a time.
 
     Admin patterns can contain ``.``/``-``/spaces or a fractional ``{plan_volume}``
     (``0.5``), and ``{username}`` alone can be too short; the panel rejects those
@@ -300,13 +307,15 @@ def _fit_panel_username(built: str, *, keep_unique: bool) -> str:
     per-purchase variable.
     """
     name = "".join(ch if ch in _PG_USERNAME_ALLOWED else "_" for ch in built.strip())
-    # An empty {prefix}/{suffix} leaves a dangling separator ("_a8k2x9q1").
-    name = name.strip("_")
+    # Replaced characters next to a separator, a Telegram username such as «ali__x» or an empty
+    # {prefix}/{suffix} leave «__» or a dangling «_»; the panel refuses the first.
+    name = _single_separators(name)
     if keep_unique:
         name = f"{name}_{_random_alnum(4)}" if name else _random_alnum(8)
     if len(name) > PG_USERNAME_MAX_LENGTH:
         tail = name[-8:]
-        name = name[: PG_USERNAME_MAX_LENGTH - len(tail)] + tail
+        # The cut can put a separator on both sides of the join.
+        name = _single_separators(name[: PG_USERNAME_MAX_LENGTH - len(tail)] + tail)
     if not name:
         name = _random_alnum(8)
     elif len(name) < PG_USERNAME_MIN_LENGTH:
