@@ -1768,6 +1768,8 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
         "service_transfer_link_hours",
         "service_transfer_per_period",
         "service_transfer_new_link",
+        "service_transfer_plans",
+        "service_freeze_plans",
         "receipt_risk_enabled",
         "receipt_risk_hold_auto_approve",
         "connection_guides",

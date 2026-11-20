@@ -15,7 +15,7 @@ from alembic.operations import Operations
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.db.models import Base, BotUser, CustomerNotice, ServiceAutomation, ServiceTransfer, UserService
+from app.db.models import Base, BotUser, CustomerNotice, Order, Plan, ServiceAutomation, ServiceTransfer, UserService
 from app.services import service_transfer as transfer
 from app.services.customer_action_notices import notice_text
 from tests.postgres_support import scoped_async_engine, scoped_sync_engine
@@ -54,8 +54,10 @@ class TransferTests(unittest.IsolatedAsyncioTestCase):
                 BotUser(id=SHOP, telegram_id=1007, referral_code="s", role="reseller"),
             ])
             await session.flush()
+            session.add_all([Plan(id=1, name="month", price=100), Plan(id=2, name="other", price=100)])
+            await session.flush()
             session.add_all([
-                UserService(id=10, bot_user_id=OWNER, pg_user_id=500, pg_username="svc<b>", subscription_url="https://sub.example/sub/OLD"),
+                UserService(id=10, bot_user_id=OWNER, plan_id=1, pg_user_id=500, pg_username="svc<b>", subscription_url="https://sub.example/sub/OLD"),
                 UserService(id=11, bot_user_id=OWNER, pg_user_id=501, pg_username="shop", shop_id=SHOP),
             ])
             await session.flush()
@@ -73,9 +75,11 @@ class TransferTests(unittest.IsolatedAsyncioTestCase):
             )
             return token
 
-    async def accept(self, token: str, *, user_id: int = FRIEND, shop_id: int | None = None) -> UserService:
+    async def accept(self, token: str, *, user_id: int = FRIEND, shop_id: int | None = None, ui: dict | None = None) -> UserService:
         async with self.Session() as session:
-            return await transfer.accept_transfer(session, await session.get(BotUser, user_id), token, shop_id=shop_id, ui=UI)
+            return await transfer.accept_transfer(
+                session, await session.get(BotUser, user_id), token, shop_id=shop_id, ui=ui or UI
+            )
 
     async def service(self, service_id: int = 10) -> UserService:
         async with self.Session() as session:
@@ -163,6 +167,48 @@ class TransferTests(unittest.IsolatedAsyncioTestCase):
         await self.accept(await self.make())
         service = await self.service()
         self.assertEqual((service.bot_user_id, service.subscription_url), (FRIEND, "https://sub.example/sub/OLD"))
+
+    async def test_only_services_on_chosen_plans_move_and_the_plan_is_checked_again_on_accept(self) -> None:
+        with self.assertRaisesRegex(ValueError, "پلن"):
+            await self.make(ui={**UI, "service_transfer_plans": "2"})
+        async with self.Session() as session:
+            service = await session.get(UserService, 10)
+            self.assertIsNone(await transfer.transfer_button(session, service, {**UI, "service_transfer_plans": "2"}))
+        token = await self.make(ui={**UI, "service_transfer_plans": "1"})
+        for ui in ({**UI, "service_transfer_plans": "2"}, {**UI, "service_transfer_enabled": "0"}):
+            with self.subTest(ui=ui), self.assertRaises(ValueError):
+                await self.accept(token, ui=ui)
+        self.assertEqual((await self.service()).bot_user_id, OWNER)
+        await self.accept(token)
+        self.assertEqual((await self.service()).bot_user_id, FRIEND)
+
+    async def test_an_unpaid_order_on_the_service_blocks_the_link(self) -> None:
+        async with self.Session() as session:
+            session.add(Order(user_id=OWNER, plan_id=1, amount=100, status="awaiting_receipt", service_id=10))
+            await session.commit()
+        with self.assertRaisesRegex(ValueError, "سفارش"):
+            await self.make()
+
+    async def test_a_failed_link_rotation_is_retried_by_the_job(self) -> None:
+        self.pg.fail = True
+        await self.accept(await self.make())
+        async with self.Session() as session:
+            self.assertTrue((await session.scalars(select(ServiceTransfer))).one().link_rotation_pending)
+            self.assertEqual(await transfer.retry_link_rotations(session), 0)
+        self.pg.fail = False
+        async with self.Session() as session:
+            self.assertEqual(await transfer.retry_link_rotations(session), 1)
+            self.assertEqual(await transfer.retry_link_rotations(session), 0)
+            self.assertFalse((await session.scalars(select(ServiceTransfer))).one().link_rotation_pending)
+        self.assertEqual(((await self.service()).subscription_token, self.pg.revoked), ("NEWTOKEN123", [500]))
+
+    async def test_the_new_owner_cannot_cancel_for_a_refund_of_the_senders_payment(self) -> None:
+        from app.services.service_cancellations import request_cancellation
+
+        await self.accept(await self.make())
+        async with self.Session() as session:
+            with self.assertRaisesRegex(ValueError, "منتقل"):
+                await request_cancellation(session, await session.get(BotUser, FRIEND), 10, shop_id=None, reason="x")
 
     async def test_the_more_menu_offers_start_then_cancel(self) -> None:
         async with self.Session() as session:

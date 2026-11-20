@@ -862,6 +862,7 @@ class ServiceTransfer(Base):
     __table_args__ = (
         Index("uq_service_transfers_token", "token_hash", unique=True),
         Index("ix_service_transfers_service_created", "service_id", "created_at"),
+        Index("ix_service_transfers_rotation_pending", "id", postgresql_where=text("link_rotation_pending")),
         Index(
             "uq_service_transfers_open",
             "service_id",
@@ -879,6 +880,8 @@ class ServiceTransfer(Base):
     status: Mapped[str] = mapped_column(String(16), default="open", server_default="open")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set with the acceptance when the shop rotates links; cleared once the panel did it (job retries).
+    link_rotation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

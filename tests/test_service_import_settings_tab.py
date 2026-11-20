@@ -121,6 +121,7 @@ class FreezeSettingsPageTests(TabHarness):
             self.assertIn('name="s_service_freeze_enabled"', page.text)
             self.assertIn('name="s_service_freeze_max_days"', page.text)
             self.assertIn('name="s_service_transfer_enabled"', page.text)
+            self.assertIn('data-show-when="s_service_transfer_enabled:1"', page.text)
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
             "s_service_freeze_enabled": "1", "s_service_freeze_max_days": "7",
             "s_service_freeze_per_period": "2", "s_service_freeze_min_days_left": "1",
@@ -141,6 +142,7 @@ class FreezeSettingsPageTests(TabHarness):
             await session.commit()
         page = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_actions")
         self.assertIn('name="s_service_freeze_plans" value="72"', page.text)
+        self.assertIn('name="s_service_transfer_plans" value="72"', page.text)
         self.assertNotIn('value="71"', page.text)
         self.assertIn('data-show-when="s_service_freeze_enabled:1"', page.text)
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {

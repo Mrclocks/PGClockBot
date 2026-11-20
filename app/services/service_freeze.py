@@ -108,7 +108,7 @@ OPEN_ORDER_STATUSES = (
 )
 
 
-async def _has_open_order(session: AsyncSession, service_id: int) -> bool:
+async def has_open_order(session: AsyncSession, service_id: int) -> bool:
     found = await session.scalar(
         select(Order.id).where(Order.service_id == int(service_id), Order.status.in_(OPEN_ORDER_STATUSES)).limit(1)
     )
@@ -216,7 +216,7 @@ async def _validate_start(
         raise ValueError("توقف موقت برای پلن این سرویس فعال نیست")
     if await _freezes_in_period(session, service) >= policy.per_period:
         raise ValueError("سقف توقف این سرویس در ۳۰ روز گذشته پر شده است")
-    if await _has_open_order(session, int(service.id)):
+    if await has_open_order(session, int(service.id)):
         raise ValueError("یک سفارش روی این سرویس در حال انجام است؛ کمی بعد تلاش کنید")
     return service
 

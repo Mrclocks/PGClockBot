@@ -4,7 +4,8 @@ Revision ID: 0126_service_transfers
 Revises: 0125_service_freezes
 
 Adds ``service_transfers``: a one-time link (only the SHA-256 of its token is stored) with an
-expiry. A partial unique index allows one open transfer per service; the token hash is unique.
+expiry, and whether the subscription link still has to be rotated after acceptance. A partial
+unique index allows one open transfer per service; the token hash is unique.
 Idempotent; the downgrade drops the table (a transfer already accepted keeps its new owner).
 """
 
@@ -38,6 +39,7 @@ def upgrade() -> None:
             sa.Column("status", sa.String(16), nullable=False, server_default="open"),
             sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("accepted_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("link_rotation_pending", sa.Boolean(), nullable=False, server_default=sa.false()),
             sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         )
     existing = {index["name"] for index in sa.inspect(bind).get_indexes(TABLE)}
@@ -45,6 +47,10 @@ def upgrade() -> None:
         op.create_index("uq_service_transfers_token", TABLE, ["token_hash"], unique=True)
     if "ix_service_transfers_service_created" not in existing:
         op.create_index("ix_service_transfers_service_created", TABLE, ["service_id", "created_at"])
+    if "ix_service_transfers_rotation_pending" not in existing:
+        op.create_index(
+            "ix_service_transfers_rotation_pending", TABLE, ["id"], postgresql_where=sa.text("link_rotation_pending")
+        )
     if "uq_service_transfers_open" not in existing:
         op.create_index(
             "uq_service_transfers_open", TABLE, ["service_id"], unique=True, postgresql_where=OPEN

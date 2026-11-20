@@ -46,6 +46,7 @@ from app.services.auto_renew_timing import (
 from app.services.service_transfer_settings import (
     GROUP_TITLE as SERVICE_TRANSFER_GROUP,
     TRANSFER_DEFAULTS,
+    TRANSFER_VISIBILITY,
     WEB_FIELDS as SERVICE_TRANSFER_FIELDS,
 )
 from app.services.service_freeze_settings import (
@@ -1370,6 +1371,7 @@ SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
     "backup_telegram_allow_env": ("backup_telegram_enabled", ("1",)),
     **entry_approval_visibility(),
     **FREEZE_VISIBILITY,
+    **TRANSFER_VISIBILITY,
 }
 
 # Switches whose "on" accepts a security risk: the warning is shown under the switch in danger tone.

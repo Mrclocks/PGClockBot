@@ -25,7 +25,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, Order, OrderStatus, ServiceAutomation, ServiceTransfer, UserService
+from app.db.models import BotUser, ServiceAutomation, ServiceTransfer, UserService
 from app.services.customer_notice_queue import add_notice
 from app.services.pasarguard import (
     PasarGuardError,
@@ -34,7 +34,7 @@ from app.services.pasarguard import (
     get_pg_for_reseller,
     user_subscription_url,
 )
-from app.services.service_freeze import can_be_frozen as is_self_service, open_freeze
+from app.services.service_freeze import can_be_frozen as is_self_service, has_open_order, open_freeze
 from app.services.service_scope import service_shop_id
 from app.services.service_transfer_settings import (
     DONE_ACTION,
@@ -72,7 +72,7 @@ async def transfer_button(session: AsyncSession, service: UserService, ui: Mappi
     row = await open_transfer(session, int(service.id))
     if row is not None and row.expires_at > _now():
         return BUTTON_CANCEL
-    return BUTTON_START if transfer_policy(ui).enabled else None
+    return BUTTON_START if transfer_policy(ui).allows_plan(service.plan_id) else None
 
 
 def token_hash(token: str) -> str:
@@ -98,23 +98,14 @@ async def _expire_stale(session: AsyncSession, service_id: int, now: datetime) -
     )
 
 
-async def _has_paid_mutation(session: AsyncSession, service_id: int) -> bool:
-    found = await session.scalar(
-        select(Order.id).where(
-            Order.service_id == int(service_id),
-            Order.status.in_([OrderStatus.PAID.value, OrderStatus.DELIVERING.value]),
-        ).limit(1)
-    )
-    return found is not None
-
-
 async def _assert_transferable(session: AsyncSession, service: UserService) -> None:
     if not is_self_service(service):
         raise ValueError("این سرویس را نمی‌توان منتقل کرد")
     if await open_freeze(session, int(service.id)) is not None:
         raise ValueError("سرویس متوقف است؛ اول آن را از حالت توقف خارج کنید")
-    if await _has_paid_mutation(session, int(service.id)):
-        raise ValueError("یک سفارش روی این سرویس در حال انجام است؛ کمی بعد تلاش کنید")
+    # An unpaid or undelivered order would later charge the sender or apply to the new owner's service.
+    if await has_open_order(session, int(service.id)):
+        raise ValueError("یک سفارش باز روی این سرویس هست؛ بعد از پایان یا لغو آن دوباره تلاش کنید")
 
 
 async def _owned(session: AsyncSession, user: BotUser, service_id: int, shop_id: int | None) -> UserService:
@@ -144,6 +135,8 @@ async def create_transfer(
     if not policy.enabled:
         raise ValueError("انتقال سرویس در این فروشگاه فعال نیست")
     service = await _owned(session, user, service_id, shop_id)
+    if not policy.plans.allows(service.plan_id):
+        raise ValueError("انتقال برای پلن این سرویس فعال نیست")
     await _assert_transferable(session, service)
     now = _now()
     if await _accepted_in_period(session, int(service.id), now) >= policy.per_period:
@@ -197,11 +190,13 @@ async def preview_transfer(
     return TransferOffer(int(row.id), int(service.id), service.pg_username or f"#{service.id}", row.expires_at)
 
 
-async def _claim(session: AsyncSession, row: ServiceTransfer, recipient: BotUser, now: datetime) -> None:
+async def _claim(
+    session: AsyncSession, row: ServiceTransfer, recipient: BotUser, now: datetime, *, rotate: bool
+) -> None:
     claimed = await session.execute(
         update(ServiceTransfer).where(
             ServiceTransfer.id == int(row.id), ServiceTransfer.status == STATUS_OPEN, ServiceTransfer.expires_at > now,
-        ).values(status=STATUS_ACCEPTED, to_user_id=int(recipient.id), accepted_at=now)
+        ).values(status=STATUS_ACCEPTED, to_user_id=int(recipient.id), accepted_at=now, link_rotation_pending=rotate)
         .execution_options(synchronize_session=False)
     )
     moved = await session.execute(
@@ -243,29 +238,69 @@ async def accept_transfer(
     offer = await preview_transfer(session, recipient, token, shop_id=shop_id)
     row = await session.get(ServiceTransfer, offer.transfer_id)
     service = await session.get(UserService, offer.service_id)
+    policy = transfer_policy(ui)
+    # Re-checked here: the shop may have turned transfers off or removed the plan since the link was made.
+    if not policy.allows_plan(service.plan_id) or await service_shop_id(session, service) != row.shop_id:
+        raise ValueError(LINK_GONE)
     await _assert_transferable(session, service)
-    await _claim(session, row, recipient, _now())
+    await _claim(session, row, recipient, _now(), rotate=policy.new_link)
     await _stop_automation(session, offer.service_id)
     await _queue_sender_notice(session, row, offer.service_name)
     await session.commit()
     await session.refresh(service)
-    if transfer_policy(ui).new_link:
-        await rotate_subscription_link(session, service)
+    if policy.new_link:
+        await rotate_subscription_link(session, service, transfer_id=int(row.id))
     return service
 
 
-async def rotate_subscription_link(session: AsyncSession, service: UserService) -> bool:
-    """Revoke the old subscription link on the panel and store the new one; best effort."""
+async def rotate_subscription_link(session: AsyncSession, service: UserService, *, transfer_id: int) -> bool:
+    """Revoke the old subscription link on the panel and store the new one.
+
+    A failure leaves ``link_rotation_pending`` set and the job tries again, so the sender's old link
+    does not keep working. Revoking twice only issues another new link, which the new owner reads
+    from «سرویس‌های من».
+    """
     try:
         shop_id = await service_shop_id(session, service)
         pg = await get_pg_for_reseller(session, shop_id) if shop_id else get_pg()
         user = await pg.revoke_sub_by_id(int(service.pg_user_id))
     except (PasarGuardError, httpx.HTTPError, TimeoutError, ValueError):
-        logger.warning("subscription link not rotated after transfer service=%s", service.id, exc_info=True)
+        logger.warning("subscription link not rotated after transfer service=%s; the job retries", service.id, exc_info=True)
         return False
     url = user_subscription_url(user if isinstance(user, dict) else None)
     if url:
         service.subscription_url = url
         service.subscription_token = extract_sub_token(url) or service.subscription_token
-        await session.commit()
+    await session.execute(
+        update(ServiceTransfer).where(ServiceTransfer.id == int(transfer_id))
+        .values(link_rotation_pending=False).execution_options(synchronize_session=False)
+    )
+    await session.commit()
     return True
+
+
+ROTATION_BATCH = 50
+
+
+async def retry_link_rotations(session: AsyncSession) -> int:
+    """Rotate the links still pending after an accepted transfer; one bad row never stops the batch."""
+    rows = list(await session.scalars(
+        select(ServiceTransfer).where(ServiceTransfer.link_rotation_pending.is_(True))
+        .order_by(ServiceTransfer.id).limit(ROTATION_BATCH)
+    ))
+    services = {
+        s.id: s for s in await session.scalars(select(UserService).where(UserService.id.in_({r.service_id for r in rows})))
+    } if rows else {}
+    done = 0
+    for row in rows:
+        service = services.get(row.service_id)
+        if service is None or not service.pg_user_id:
+            # Nothing left to rotate: the service was removed after the transfer.
+            await session.execute(
+                update(ServiceTransfer).where(ServiceTransfer.id == int(row.id)).values(link_rotation_pending=False)
+                .execution_options(synchronize_session=False)
+            )
+            await session.commit()
+            continue
+        done += int(await rotate_subscription_link(session, service, transfer_id=int(row.id)))
+    return done
