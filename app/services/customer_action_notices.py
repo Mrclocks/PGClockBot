@@ -29,7 +29,9 @@ from app.services.customer_notice_queue import (
     NoticeOutcome,
     add_notice,
 )
+from app.services.auto_renew_offer import ACTION as AUTO_RENEW_OFFER, OFFER_TEXT as AUTO_RENEW_OFFER_TEXT
 from app.services.customer_notice_buttons import (
+    auto_renew_button,
     buy_new_button,
     help_row,
     renew_button,
@@ -118,6 +120,8 @@ SERVICES_ONLY_ACTIONS = frozenset({"pg_user_revoke_sub", "service_import_assign"
 
 def notice_text(action: str, *, service_name: str, reason: str) -> str:
     """The Persian message; every dynamic part is escaped for Telegram HTML."""
+    if action == AUTO_RENEW_OFFER:
+        return AUTO_RENEW_OFFER_TEXT.format(name=html.escape(service_name or "—"))
     template = CLEANUP_NOTICE_TEXTS.get(action)
     if template is not None:
         return template.format(name=html.escape(service_name or "—"), date=html.escape(reason or "—"))
@@ -233,6 +237,8 @@ def _way_out_rows(notice: CustomerNotice, *, sells_volume_packs: bool) -> list[l
         return [[buy_new_button()]]
     if not notice.service_id:
         return []
+    if notice.action == AUTO_RENEW_OFFER:
+        return [[auto_renew_button(int(notice.service_id))]]
     rows = []
     if notice.action in VOLUME_PACK_ACTIONS and sells_volume_packs:
         rows.append([volume_pack_button(int(notice.service_id))])

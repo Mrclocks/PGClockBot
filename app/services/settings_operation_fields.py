@@ -34,6 +34,7 @@ USAGE_ALERT_FIELDS: list[Field] = [
     ("user_alert_time_text", "متن هشدار کمبود زمان", "textarea"),
     ("user_alert_traffic_text", "متن هشدار کمبود حجم", "textarea"),
     ("first_use_nudge_enabled", "پیام کمکی سرویس بدون مصرف", "toggle"),
+    ("auto_renew_offer_enabled", "پیشنهاد تمدید خودکار", "toggle"),
 ]
 
 OPERATIONS_FIELDS: list[Field] = [
