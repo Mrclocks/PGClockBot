@@ -27,6 +27,32 @@
 {% set title = 'سرور ربات' %}
 {% set metrics_url = '/dashboard/metrics' %}
 {% include "_server_meters.html" %}
+<section class="card card-flush" aria-label="کارهای پس‌زمینه">
+  <header class="card-flush-head">
+    {{ card_title('activity', 'کارهای پس‌زمینه') }}
+  </header>
+  {% if job_usage %}
+  <div class="table-wrap">
+    <table class="table-compact">
+      <thead><tr><th>کار</th><th>اجرا</th><th>میانگین (میلی‌ثانیه)</th><th>بیشترین (میلی‌ثانیه)</th><th>خطا</th></tr></thead>
+      <tbody>
+      {% for job in job_usage %}
+        <tr>
+          <td>{{ job.label }}{% if job.is_heavy %} <span class="ds-badge" data-tone="warn">{{ heavy_label }}</span>{% endif %}</td>
+          <td class="mono">{{ job.runs | num }}</td>
+          <td class="mono">{{ job.average_ms | num }}</td>
+          <td class="mono">{{ job.max_ms | num }}</td>
+          <td class="mono">{{ job.failures | num }}{% if job.overlaps %} · {{ job.overlaps | num }} هم‌پوشانی{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted ov-empty">از آخرین راه‌اندازی ربات، پرکارترین‌ها بالاتر.</p>
+  {% else %}
+  <p class="muted ov-empty">هنوز کاری از آخرین راه‌اندازی اجرا نشده.</p>
+  {% endif %}
+</section>
 {% endif %}
 
 {% set bot_detail = ('@' ~ bot.username ~ ' · ' if bot.username else '') ~ (bot.detail or '') %}
