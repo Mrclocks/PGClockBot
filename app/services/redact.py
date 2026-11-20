@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 # Standalone tokens and Telegram API ``/bot<token>/`` URL forms.
@@ -18,6 +19,20 @@ _AUTH_HEADER_RE = re.compile(r"(?i)(authorization\s*[:=]\s*)([^\n]+)")
 _X_API_KEY_HEADER_RE = re.compile(r"(?i)(x-api-key\s*[:=]\s*)([^\n]+)")
 _BASIC_AUTH_RE = re.compile(r"(://)([^:/@\s]+):([^@/\s]+)(@)")
 _GATE_QS_RE = re.compile(r"(?i)([?&]gate=)([^&\s]+)")
+
+
+# Long enough to tell log lines of different payments apart, too short to be useful as a key.
+FINGERPRINT_LENGTH = 12
+
+
+def secret_fingerprint(value: str | None) -> str:
+    """A stable, non-reversible tag for correlating log lines about one secret (``-`` when empty).
+
+    A prefix of a checkout token or key is still part of the secret; its hash is not.
+    """
+    if not value:
+        return "-"
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:FINGERPRINT_LENGTH]
 
 
 def redact(text: object, *, limit: int = 400) -> str:
