@@ -26,6 +26,7 @@ from sqlalchemy import case, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pasarguard import failure_text
 from app.config import get_settings
 from app.services.pg_read_resilience import outside_web_read_budget
 from app.services.db_safe import rollback_quiet
@@ -958,7 +959,7 @@ async def settle_and_approve(
             await _finalize_settled(session, settlement)
             await session.commit()
             await _report_undelivered(
-                session, payment, str(exc), outcome_unknown=attempt.panel_may_hold_account
+                session, payment, failure_text(exc), outcome_unknown=attempt.panel_may_hold_account
             )
             return payment
         await _revert_claim_to_awaiting(session, settlement, error=str(exc))

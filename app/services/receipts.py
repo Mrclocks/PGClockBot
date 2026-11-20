@@ -6,6 +6,7 @@ from aiogram import Bot
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pasarguard import failure_text
 from app.db.models import Order, Payment
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
@@ -158,9 +159,9 @@ async def auto_approve_receipt(
 
                 stuck_order = await session.get(Order, payment.order_id)
             if stuck_order is not None:
-                await _queue_undelivered(session, stuck_order, payment, error=str(e), attempt=attempt)
+                await _queue_undelivered(session, stuck_order, payment, error=failure_text(e), attempt=attempt)
             await notify_approved_delivery_stuck(
-                bot, session, payment, user_tg_id, error=str(e)
+                bot, session, payment, user_tg_id, error=failure_text(e)
             )
             if stuck_order is None:
                 return format_message("⚠️ رسید ثبت شد", PENDING_STAFF_NOTE)

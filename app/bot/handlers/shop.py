@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pasarguard import failure_text
 from app.services.trial_offer import has_claimed_trial, may_offer_trial, trial_shown_to_claimed
 from app.services.catalog_descriptions import with_descriptions
 from app.services.chat_records import keep_sent
@@ -105,7 +106,7 @@ async def _deliver_free_order(
         delivered = await deliver_order(session, order, attempt=attempt)
     except Exception as exc:
         logger.warning("free delivery failed order=%s", order.id, exc_info=True)
-        error = str(exc)
+        error = failure_text(exc)
         failure = format_message("❌ خطا در تحویل", user_safe_error(exc))
     else:
         await notify_trial_claimed(bot, session, order=delivered, user=db_user)

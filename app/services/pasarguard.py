@@ -175,6 +175,33 @@ class PasarGuardError(Exception):
         return friendly_pg_error(base, status_code=self.status_code)[:500]
 
 
+def _panel_error(exc: BaseException) -> PasarGuardError | None:
+    """The PasarGuard error itself, or the one a service re-raised it from."""
+    for candidate in (exc, exc.__cause__):
+        if isinstance(candidate, PasarGuardError):
+            return candidate
+    return None
+
+
+def failure_text(exc: BaseException) -> str:
+    """``str(exc)`` plus the panel's own reason for a PasarGuard refusal, for staff failure records.
+
+    «POST /api/user/from_template failed (422)» alone does not say which field the panel refused.
+    """
+    text = str(exc)
+    panel = _panel_error(exc)
+    detail = panel.detail() if panel is not None else None
+    if detail and detail not in text:
+        return f"{text}: {detail}"
+    return text
+
+
+def is_panel_rejection(exc: BaseException) -> bool:
+    """True when PasarGuard refused the request body (HTTP 422): sending it again fails the same way."""
+    panel = _panel_error(exc)
+    return panel is not None and panel.status_code == 422
+
+
 def is_pg_not_found(exc: BaseException) -> bool:
     """True when PasarGuard reports the target resource is missing (HTTP 404).
 

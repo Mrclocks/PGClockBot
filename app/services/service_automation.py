@@ -14,6 +14,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pasarguard import failure_text
 from app.db.models import (
     BotUser,
     Order,
@@ -565,7 +566,7 @@ async def _process_locked(session, row, service, user, bot) -> None:
                 service.id,
                 order.id,
             )
-            delivery_error = str(exc)
+            delivery_error = failure_text(exc)
             await session.rollback()
             await session.refresh(row)
             await session.refresh(order)

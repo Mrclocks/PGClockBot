@@ -40,7 +40,7 @@ from app.services.delivery_recovery_policy import (
 )
 from app.services.renewal_carry import CARRY_TIME, CARRY_VOLUME, plan_carries, set_plan_carry
 from app.services.demo_users import non_demo_customer
-from app.services.pasarguard import is_pg_permission_denied
+from app.services.pasarguard import failure_text, is_pg_permission_denied
 from app.services.pg_read_resilience import PG_READ_UNAVAILABLE_MESSAGE, PgReadUnavailable
 from app.services.service_scope import shop_services_clause
 from app.services.staff_audit import StaffActor
@@ -638,7 +638,7 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
         await session.commit()
         return order
     except Exception as exc:
-        await record_delivery_failure(session, order=order, error=str(exc))
+        await record_delivery_failure(session, order=order, error=failure_text(exc))
         await session.commit()
         raise
 

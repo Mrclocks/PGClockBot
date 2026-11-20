@@ -23,6 +23,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pasarguard import failure_text, is_panel_rejection
 from app.db.models import DeliveryFailure, Order, OrderStatus, Payment, PaymentStatus, Plan
 from app.py_compat import StrEnum
 from app.services.db_safe import rollback_quiet
@@ -72,6 +73,7 @@ REASON_EXHAUSTED = "چند تلاش خودکار انجام شد ولی پاسا
 REASON_WINDOW = "در مهلت تلاش خودکار، پاسارگارد در دسترس نبود یا سفارش را اعمال نکرد"
 REASON_MAY_BE_APPLIED = "نتیجهٔ آخرین تلاش در پاسارگارد نامعلوم است؛ شاید تمدید اعمال شده باشد"
 REASON_CREATE_UNKNOWN = "پاسارگارد به ساخت سرویس پاسخ نداد؛ شاید سرویس ساخته شده باشد"
+REASON_REJECTED = "پاسارگارد درخواست را رد کرد (۴۲۲)؛ تکرار همان درخواست نتیجه‌ای ندارد"
 
 
 class Outcome(StrEnum):
@@ -208,7 +210,14 @@ async def _give_up(
 
 
 async def _after_failed_attempt(
-    session: AsyncSession, failure_id: int, order: Order, *, attempt: DeliveryAttempt, error: str, now: datetime
+    session: AsyncSession,
+    failure_id: int,
+    order: Order,
+    *,
+    attempt: DeliveryAttempt,
+    error: str,
+    now: datetime,
+    rejected: bool = False,
 ) -> RecoveryResult | None:
     await session.refresh(order)
     if is_new_purchase_order(order) and attempt.panel_may_hold_account:
@@ -218,6 +227,9 @@ async def _after_failed_attempt(
         return RecoveryResult(int(order.id), Outcome.STAFF, REASON_CREATE_UNKNOWN)
     await record_delivery_failure(session, order=order, error=error)
     await session.commit()
+    if rejected:
+        # The panel refused the request body; the same request would be refused again.
+        return await _give_up(session, failure_id, order, now=now, reason=REASON_REJECTED)
     failure = await session.get(DeliveryFailure, failure_id, populate_existing=True)
     attempts = int(failure.auto_attempts or 0) if failure else MAX_AUTO_ATTEMPTS
     if attempts >= MAX_AUTO_ATTEMPTS:
@@ -237,7 +249,15 @@ async def _attempt(session: AsyncSession, failure_id: int, order: Order, *, now:
     except Exception as exc:  # every failure is recorded and rescheduled or given up below
         logger.warning("auto delivery retry failed order=%s", order_id, exc_info=True)
         await rollback_quiet(session)
-        return await _after_failed_attempt(session, failure_id, order, attempt=attempt, error=str(exc), now=now)
+        return await _after_failed_attempt(
+            session,
+            failure_id,
+            order,
+            attempt=attempt,
+            error=failure_text(exc),
+            now=now,
+            rejected=is_panel_rejection(exc),
+        )
     if not is_delivered(order):
         await _reschedule(session, failure_id, now + retry_delay(1))
         return None
