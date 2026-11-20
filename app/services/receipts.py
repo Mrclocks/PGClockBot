@@ -6,12 +6,16 @@ from aiogram import Bot
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Order, Payment
+from aiogram.exceptions import TelegramAPIError
+
+from app.db.models import Order, Payment, Plan
+from app.services.db_safe import rollback_quiet
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
 from app.services.notifications import (
     notify_approved_delivery_stuck,
     notify_auto_approve,
+    notify_new_order,
     notify_new_subscription,
     notify_pending_approval,
     notify_wallet_topup_ok,
@@ -204,6 +208,26 @@ async def _waits_for_schedule(session: AsyncSession, payment: Payment, shop_rid:
     return rule_from_settings(await get_all_settings(session, reseller_id=shop_rid)) is not None
 
 
+async def report_new_order(session: AsyncSession, payment: Payment, *, bot: Bot, user_tg_id: int | None) -> None:
+    """«🛒 سفارش جدید» for an order whose receipt now waits for staff; nothing for a wallet top-up.
+
+    The report used to go out when the buyer only picked a plan, so staff saw every abandoned
+    checkout. Orders paid without a review are reported by «اشتراک جدید» after delivery.
+    """
+    order = await session.get(Order, payment.order_id) if payment.order_id and not payment.is_wallet_topup else None
+    if order is None:
+        return
+    plan = await session.get(Plan, order.plan_id) if order.plan_id else None
+    plan_name = plan.name if plan is not None else None
+    if plan_name and int(order.quantity or 1) > 1:
+        plan_name = f"{plan_name} ×{int(order.quantity)}"
+    try:
+        await notify_new_order(bot, session, order=order, user_tg_id=user_tg_id, plan_name=plan_name)
+    except (TelegramAPIError, SQLAlchemyError):  # the receipt is saved; the review notice still follows
+        logger.warning("new order report failed order=%s", order.id, exc_info=True)
+        await rollback_quiet(session)
+
+
 async def process_receipt(
     session: AsyncSession,
     payment: Payment,
@@ -252,6 +276,7 @@ async def process_receipt(
         return await auto_approve_receipt(
             session, payment, bot=bot, user_tg_id=user_tg_id, reviewer_note=reviewer_note
         )
+    await report_new_order(session, payment, bot=bot, user_tg_id=user_tg_id)
     await notify_pending_approval(
         bot, session, payment, user_tg_id, extra_note=reviewer_note
     )
