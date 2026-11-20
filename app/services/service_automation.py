@@ -448,7 +448,7 @@ async def _finish_order(session, row, service, user, bot, order) -> None:
 async def _queue_failed_order(session: AsyncSession, order: Order, user: BotUser, bot, *, error: str) -> None:
     """List the paid order for the retry job (which refunds it if it never applies) and alert its staff."""
     from app.services.notifications import notify_approved_delivery_stuck
-    from app.services.ux20 import note_delivery_send_failure
+    from app.services.delivery_failures import note_delivery_send_failure
 
     payment = await session.scalar(
         select(Payment)

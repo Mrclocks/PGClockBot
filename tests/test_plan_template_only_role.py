@@ -136,7 +136,7 @@ class PlansPageTemplateOnlyTests(unittest.TestCase):
 
 class PlanImportTemplateTests(unittest.IsolatedAsyncioTestCase):
     async def test_import_refuses_a_template_outside_the_allow_list(self):
-        from app.services.ux20 import _validate_import_plan
+        from app.services.shop_bundle import _validate_import_plan
 
         staff = _limited_owner(allowed_template_ids=[10])
         with self.assertRaises(ValueError) as ctx:

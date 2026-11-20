@@ -106,7 +106,7 @@ class SafeHelpersRollbackTests(unittest.IsolatedAsyncioTestCase):
 
         session = AsyncMock()
         with patch(
-            "app.services.ux20.funnel_summary",
+            "app.services.funnel_metrics.funnel_summary",
             new_callable=AsyncMock,
             side_effect=RuntimeError("missing table"),
         ):
@@ -144,7 +144,7 @@ class SafeHelpersRollbackTests(unittest.IsolatedAsyncioTestCase):
         client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
         self.addAsyncCleanup(client.aclose)
         with patch("app.services.db_safe.recover_session", AsyncMock()), patch(
-            "app.services.ux20.funnel_summary",
+            "app.services.funnel_metrics.funnel_summary",
             new_callable=AsyncMock,
             side_effect=RuntimeError("missing table"),
         ):

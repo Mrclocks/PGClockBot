@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.db.models import Base, BotUser, ChargeCode, Order, Plan
 from app.services.gift_codes import MAX_CODE_PLANS, describe_code, validate_rules
 from app.services.orders import apply_discount, apply_discount_to_order
-from app.services.ux20 import create_charge_code
+from app.services.charge_codes import create_charge_code
 from tests.test_gift_code_page import GiftCodeHarness, _reseller
 from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 

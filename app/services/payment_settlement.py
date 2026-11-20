@@ -857,7 +857,7 @@ async def _report_undelivered(
     from app.bot import create_bot
     from app.services.notifications import notify_approved_delivery_stuck
     from app.services.orders import hold_unknown_delivery_for_review
-    from app.services.ux20 import note_delivery_send_failure
+    from app.services.delivery_failures import note_delivery_send_failure
 
     order = await session.get(Order, int(payment.order_id)) if payment.order_id else None
     if outcome_unknown and order is not None:
@@ -1508,7 +1508,7 @@ async def notify_after_settlement(
         except Exception as send_exc:
             if order is not None:
                 try:
-                    from app.services.ux20 import note_delivery_send_failure
+                    from app.services.delivery_failures import note_delivery_send_failure
 
                     await note_delivery_send_failure(
                         session, order=order, payment=payment, error=str(send_exc)

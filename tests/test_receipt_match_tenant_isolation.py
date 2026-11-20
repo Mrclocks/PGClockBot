@@ -83,7 +83,7 @@ class ReceiptMatchTenantIsolationTests(unittest.IsolatedAsyncioTestCase):
         return p
 
     async def test_reseller_never_sees_other_shops_pending_payments(self):
-        from app.services.ux20 import suggest_receipt_matches
+        from app.services.receipt_matching import suggest_receipt_matches
 
         async with self.Session() as session:
             shop_a_owner = await self._make_user(session, tid=1001)
@@ -117,7 +117,7 @@ class ReceiptMatchTenantIsolationTests(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_reseller_sees_own_shop_matches(self):
-        from app.services.ux20 import suggest_receipt_matches
+        from app.services.receipt_matching import suggest_receipt_matches
 
         async with self.Session() as session:
             shop_owner = await self._make_user(session, tid=1003)
@@ -146,7 +146,7 @@ class ReceiptMatchTenantIsolationTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(same_shop_payment.id, matched_ids)
 
     async def test_platform_scope_excludes_reseller_shop_payments(self):
-        from app.services.ux20 import suggest_receipt_matches
+        from app.services.receipt_matching import suggest_receipt_matches
 
         async with self.Session() as session:
             shop_owner = await self._make_user(session, tid=1004)

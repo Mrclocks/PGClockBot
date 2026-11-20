@@ -20,13 +20,9 @@ from app.services.gift_codes import gift_code_scope, parse_expiry_days
 from app.services.staff_audit import actor_from_staff, add_staff_action
 from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope
 from app.services.users import set_setting
-from app.services.ux20 import (
-    create_charge_code,
-    export_shop_bundle,
-    import_shop_bundle,
-    retry_delivery,
-    shop_bundle_to_json,
-)
+from app.services.charge_codes import create_charge_code
+from app.services.delivery_failures import retry_delivery
+from app.services.shop_bundle import export_shop_bundle, import_shop_bundle, shop_bundle_to_json
 
 logger = logging.getLogger(__name__)
 # A settings + plans export is a few hundred kilobytes at most.
@@ -68,7 +64,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         authz = authz_from_staff(staff)
         if not (is_platform_admin(staff) or can_shop(authz, "plans")):
             return RedirectResponse("/home", status_code=303)
-        from app.services.ux20 import clone_plan
+        from app.services.plan_clone import clone_plan
 
         rid = None if is_platform_admin(staff) else shop_owner_id(staff)
         try:
@@ -142,7 +138,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.ux20 import parse_risk_flags, refresh_user_risk, serialize_risk_flags
+        from app.services.user_risk import parse_risk_flags, refresh_user_risk, serialize_risk_flags
 
         if not has_customer_notes_permission(staff):
             return RedirectResponse("/home", status_code=303)
@@ -347,7 +343,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.ux20 import check_pg_connection
+        from app.services.action_center import check_pg_connection
 
         rid = None if is_platform_admin(staff) else shop_owner_id(staff)
         if is_platform_admin(staff):

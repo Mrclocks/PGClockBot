@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.db import Base
 from app.db.models import BotUser, BotUserShop, Order, OrderStatus, Payment, PaymentStatus, Ticket, UserService
 from app.services.finance_reports import shop_ops_snapshot
-from app.services.ux20 import build_action_center
+from app.services.action_center import build_action_center
 from tests.postgres_support import scoped_async_engine
 
 SHOP_ID, CUSTOMER = 5, 7

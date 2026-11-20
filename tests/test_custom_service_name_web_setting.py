@@ -10,7 +10,7 @@ from app.services.custom_service_name import SETTING_KEY, name_step_enabled
 from app.services.panel_nav import NavViewer
 from app.services.panel_search import panel_search
 from app.services.users import clear_settings_cache, get_all_settings
-from app.services.ux20 import shop_bundle_allowed_setting_keys
+from app.services.shop_bundle import shop_bundle_allowed_setting_keys
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarness
 
 FIELD = f"s_{SETTING_KEY}"

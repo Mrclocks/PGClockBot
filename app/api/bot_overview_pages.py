@@ -14,7 +14,7 @@ from app.services.dashboard_trend import empty_trend, sales_trend
 from app.services.db_safe import rollback_quiet
 from app.services.host_gauges import empty_host_gauges, gauges_json, local_host_gauges
 from app.services.shop_scope import empty_shop_stats
-from app.services.ux20 import count_stuck_paid_orders
+from app.services.delivery_failures import count_stuck_paid_orders
 
 logger = logging.getLogger(__name__)
 
