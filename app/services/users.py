@@ -914,6 +914,8 @@ DEFAULT_SETTINGS = {
     "user_alert_time_text": "",
     "user_alert_traffic_text": "",
     "first_use_nudge_enabled": "0",
+    # One message after the second manual renewal of a service, pointing to automatic renewal.
+    "auto_renew_offer_enabled": "1",
     # Renewal price (and the wallet's shortfall) under the low-time and low-volume alerts.
     "user_alert_price_preview_enabled": "1",
     # Expired / volume-finished service cleanup (service_cleanup.py keeps the same defaults).
@@ -1663,6 +1665,12 @@ SETTING_GROUPS = {
             "پیام کمکی برای سرویس بدون مصرف",
             "toggle",
             "اگر ۲۴ ساعت پس از تحویل سرویس هنوز هیچ ترافیکی مصرف نشده باشد، یک بار پیام کمکی با دکمهٔ آموزش اتصال و پشتیبانی برای کاربر می‌رود.",
+        ),
+        (
+            "auto_renew_offer_enabled",
+            "پیشنهاد تمدید خودکار",
+            "toggle",
+            "بعد از دومین تمدید دستی یک سرویس، یک بار پیامی با دکمهٔ «روشن کردن تمدید خودکار» برای مشتری می‌رود. برای هر سرویس فقط یک بار؛ اگر پرداخت با کیف پول خاموش باشد فرستاده نمی‌شود.",
         ),
     ],
     "گزارش روزانه": [

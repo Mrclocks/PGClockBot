@@ -36,6 +36,7 @@ USAGE_ALERT_FIELDS: list[Field] = [
     ("user_alert_traffic_text", "متن هشدار کمبود حجم", "textarea"),
     ("user_alert_price_preview_enabled", "نمایش قیمت تمدید در هشدار", "toggle"),
     ("first_use_nudge_enabled", "پیام کمکی سرویس بدون مصرف", "toggle"),
+    ("auto_renew_offer_enabled", "پیشنهاد تمدید خودکار", "toggle"),
 ]
 
 # Same keys as the web «تمدید خودکار سرویس» group; a shop has its own copy.

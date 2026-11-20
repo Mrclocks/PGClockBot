@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.auto_renew_offer import queue_auto_renew_offer
 from app.services.custom_plans import discard_unsold_custom_plan
 from app.services.panel_user_note import build_panel_user_note
 from app.services.funnel_events import STEP_DELIVERED, STEP_RECEIPT, record_order_funnel
@@ -3013,6 +3014,7 @@ async def _notify_renewal_delivered(session: AsyncSession, order: Order) -> None
     except Exception:
         logger.warning("loyalty on_order_delivered renew failed order=%s", order.id, exc_info=True)
     await grant_after_delivery(session, order)
+    await queue_auto_renew_offer(session, order)
 
 
 async def _release_failed_renewal(session: AsyncSession, order: Order, run: _RenewalRun, exc: Exception) -> bool:

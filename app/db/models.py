@@ -810,6 +810,8 @@ class ServiceAutomation(Base):
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set once when the customer is offered automatic renewal (auto_renew_offer); never offered again.
+    renew_offered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Ticket(Base):

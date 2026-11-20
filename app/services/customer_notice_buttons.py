@@ -18,6 +18,7 @@ MY_SERVICES = ("📦 سرویس‌های من", "svc:list")
 BUY_NEW = ("🛒 خرید سرویس جدید", "shop:list")
 RENEW_LABEL = "🔄 تمدید سرویس"
 VOLUME_PACK_LABEL = "📦 خرید بستهٔ حجم"
+AUTO_RENEW_LABEL = "⚙️ روشن کردن تمدید خودکار"
 # Style id of the renew button in «رنگ دکمه‌ها»; the id stays so saved colours keep working.
 RENEW_STYLE_ID = "one_tap_renew"
 
@@ -33,6 +34,11 @@ def renew_button(service_id: int, ui: dict | None = None) -> InlineKeyboardButto
         callback_data=notice_open_data(f"svc:renew:{int(service_id)}"),
         **style_kwargs(ui, RENEW_STYLE_ID, fallback="primary"),
     )
+
+
+def auto_renew_button(service_id: int) -> InlineKeyboardButton:
+    """Opens the automatic-renewal settings of one service under the notice."""
+    return _open(AUTO_RENEW_LABEL, f"svc:auto:{int(service_id)}")
 
 
 def volume_pack_button(service_id: int) -> InlineKeyboardButton:
