@@ -17,6 +17,7 @@ from app.services.alert_thresholds import (
     UNIT_PERCENT,
     VALUE_LIMITS,
 )
+from app.services.auto_renew_timing import BOT_FIELDS as AUTO_RENEW_BOT_FIELDS, TIMING_BOUNDS
 from app.services.trial_guard import MAX_WAIT_MINUTES
 
 # (key, short label, kind) — the shape of every bot settings field.
@@ -35,6 +36,9 @@ USAGE_ALERT_FIELDS: list[Field] = [
     ("user_alert_traffic_text", "متن هشدار کمبود حجم", "textarea"),
     ("first_use_nudge_enabled", "پیام کمکی سرویس بدون مصرف", "toggle"),
 ]
+
+# Same keys as the web «تمدید خودکار سرویس» group; a shop has its own copy.
+AUTO_RENEW_FIELDS: list[Field] = list(AUTO_RENEW_BOT_FIELDS)
 
 OPERATIONS_FIELDS: list[Field] = [
     ("action_center_expire_days", "پنجرهٔ نزدیک انقضا (روز)", "number"),
@@ -99,6 +103,7 @@ OPERATION_NUMBER_BOUNDS: dict[str, tuple[int, int]] = {
     "capacity_warn_pct": (1, 100),
     "receipt_match_window_minutes": (1, MAX_RECEIPT_MATCH_MINUTES),
     "trial_min_account_minutes": (0, MAX_WAIT_MINUTES),
+    **TIMING_BOUNDS,
 }
 
 # The unit of each alert threshold, with the web's labels; only the chosen unit is compared.

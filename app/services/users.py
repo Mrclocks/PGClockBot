@@ -37,6 +37,11 @@ from app.services.entry_approval_config import (
     prepare_saved_values as prepare_entry_approval_values,
     touches_entry_approval,
 )
+from app.services.auto_renew_timing import (
+    GROUP_TITLE as AUTO_RENEW_GROUP,
+    TIMING_DEFAULTS as AUTO_RENEW_DEFAULTS,
+    WEB_FIELDS as AUTO_RENEW_FIELDS,
+)
 from app.services.psp_gateways import KEY_PSP_GATEWAYS, merge_submitted_psp_gateways
 from app.services.retired_text_defaults import refresh_retired_defaults
 from app.services.user_purge import purge_user_references
@@ -1272,6 +1277,7 @@ DEFAULT_SETTINGS.update(button_style_defaults())
 DEFAULT_SETTINGS.update(screen_text_defaults())
 DEFAULT_SETTINGS.update(MONITOR_TEXT_DEFAULTS)
 DEFAULT_SETTINGS.update(ENTRY_APPROVAL_DEFAULTS)
+DEFAULT_SETTINGS.update(AUTO_RENEW_DEFAULTS)
 DEFAULT_SETTINGS.update(notice_text_defaults())
 
 # field kinds: text | textarea | toggle | select | number | image
@@ -2125,6 +2131,7 @@ SETTING_GROUPS = {
 }
 SETTING_GROUPS.update(screen_text_setting_groups())
 SETTING_GROUPS[ENTRY_APPROVAL_GROUP] = entry_approval_setting_fields()
+SETTING_GROUPS[AUTO_RENEW_GROUP] = list(AUTO_RENEW_FIELDS)
 SETTING_GROUPS.update(notice_web_setting_groups())
 
 
@@ -2190,6 +2197,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "billing": ["مدیریت PAYG"],
     "notifications": [
         "هشدار سرویس کاربر",
+        AUTO_RENEW_GROUP,
         NOTICE_STAFF_ACTION_GROUP,
         NOTICE_CLEANUP_GROUP,
         OPERATIONS_GROUP,
