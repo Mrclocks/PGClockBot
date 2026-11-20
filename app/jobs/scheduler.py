@@ -188,7 +188,9 @@ async def check_expiring_services(bot: Bot) -> None:
                 continue
 
             extras_by_shop = {
-                shop: await alert_extras(session, [item[0] for item in eligible if item[5] == shop], shop_id=shop)
+                shop: await alert_extras(
+                    session, [item[0] for item in eligible if item[5] == shop], shop_id=shop, ui=await ui_for(shop)
+                )
                 for shop in {item[5] for item in eligible}
             }
             plan_days = await plan_durations(session, [item[0] for item in eligible])
