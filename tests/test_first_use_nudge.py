@@ -24,6 +24,10 @@ class FakePanel:
         self.infos = {}
         self.calls = []
 
+    async def list_users_by_ids(self, ids):
+        # A panel that finds none of them: every service is read by its subscription, as before.
+        return {"users": []}
+
     async def subscription_info(self, token):
         self.calls.append(token)
         info = self.infos.get(token, UNUSED)

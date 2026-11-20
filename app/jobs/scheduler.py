@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -41,6 +40,7 @@ from app.services.daily_report_delivery import deliver_daily_reports
 from app.services.service_period import period_usage
 from app.services.formatting import parse_expire
 from app.services.job_metrics import job_metrics
+from app.services.panel_user_batch import panel_infos
 from app.services.pasarguard import get_pg
 from app.services.usage_alert_messages import (
     send_alert_with_default_fallback,
@@ -80,8 +80,6 @@ scheduler.add_listener(
     record_job_event, EVENT_JOB_SUBMITTED | EVENT_JOB_EXECUTED | EVENT_JOB_ERROR | EVENT_JOB_MAX_INSTANCES
 )
 
-# Bound concurrent PG subscription lookups during expiry scan
-_PG_FETCH_CONCURRENCY = 8
 # Where the next alert re-arm sweep continues (in memory: a restart simply starts from the beginning).
 _rearm_after_id = 0
 
@@ -219,24 +217,13 @@ async def check_expiring_services(bot: Bot) -> None:
                 for shop in {item[5] for item in eligible}
             }
             plan_days = await plan_durations(session, [item[0] for item in eligible])
-            sem = asyncio.Semaphore(_PG_FETCH_CONCURRENCY)
             sent_alerts: list[SentAlert] = []
-
-            async def _fetch_info(token: str):
-                async with sem:
-                    try:
-                        return await asyncio.wait_for(pg.subscription_info(token), timeout=12)
-                    except Exception:
-                        logger.debug("subscription_info failed for service fetch", exc_info=True)
-                        return None
 
             # End the read transaction: no connection waits idle in a transaction on the panel or
             # Telegram. Loaded rows stay usable (expire_on_commit=False); the flags set below are
             # written by the commit after the batch.
             await session.commit()
-            infos = await asyncio.gather(
-                *[_fetch_info(svc.subscription_token) for svc, *_rest in eligible]
-            )
+            infos = await panel_infos(pg, [item[0] for item in eligible])
 
             for (svc, user, _ui, traffic_limit, time_limit, shop_rid), info in zip(eligible, infos):
                 if not info:

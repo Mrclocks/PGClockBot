@@ -238,7 +238,7 @@ class AlertJobTests(AlertCase):
             await set_setting(session, "user_alert_low_enabled", "1")
             await set_setting(session, "one_tap_renew_enabled", "1")
         clear_settings_cache()
-        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=lambda token: self.info(traffic_low=traffic_low)))
+        pg = SimpleNamespace(list_users_by_ids=AsyncMock(return_value={"users": []}), subscription_info=AsyncMock(side_effect=lambda token: self.info(traffic_low=traffic_low)))
         bot = AsyncMock()
         with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg):
             await jobs.check_expiring_services(bot)
@@ -253,11 +253,32 @@ class AlertJobTests(AlertCase):
             for key, value in settings.items():
                 await set_setting(session, key, value)
         clear_settings_cache()
-        pg = SimpleNamespace(subscription_info=AsyncMock(return_value=info))
+        pg = SimpleNamespace(list_users_by_ids=AsyncMock(return_value={"users": []}), subscription_info=AsyncMock(return_value=info))
         bot = AsyncMock()
         with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg):
             await jobs.check_expiring_services(bot)
         return [c.args[1] for c in bot.send_message.await_args_list if c.args[0] == 1001]
+
+    async def test_alerts_read_the_services_in_one_panel_list_call(self):
+        async with self.Session() as session:
+            await set_setting(session, "user_alert_low_enabled", "1")
+        clear_settings_cache()
+        names = {500: "plat", 501: "shop2svc", 502: "shop3svc"}
+
+        async def list_users_by_ids(ids):
+            return {"users": [{"id": i, "username": names[i], **self.info(traffic_low=True)} for i in ids if i in names]}
+
+        pg = SimpleNamespace(
+            list_users_by_ids=AsyncMock(side_effect=list_users_by_ids),
+            subscription_info=AsyncMock(side_effect=AssertionError("one lookup per service")),
+        )
+        bot = AsyncMock()
+        with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg):
+            await jobs.check_expiring_services(bot)
+        # One list call for the alert pass and one for the re-arm sweep that follows it.
+        self.assertEqual(pg.list_users_by_ids.await_count, 2)
+        self.assertEqual(pg.subscription_info.await_count, 0)
+        self.assertEqual(len([c for c in bot.send_message.await_args_list if c.args[0] == 1001]), 2)
 
     async def test_no_database_connection_is_held_while_the_panel_and_telegram_are_called(self):
         async with self.Session() as session:
@@ -286,7 +307,7 @@ class AlertJobTests(AlertCase):
             seen["telegram"].append(held["connections"])
             return SimpleNamespace(message_id=len(seen["telegram"]))
 
-        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=subscription_info))
+        pg = SimpleNamespace(list_users_by_ids=AsyncMock(return_value={"users": []}), subscription_info=AsyncMock(side_effect=subscription_info))
         bot = AsyncMock()
         bot.send_message.side_effect = send_message
         await self.session.close()  # the fixture's own session must not count as held by the job
@@ -356,7 +377,7 @@ class AlertJobTests(AlertCase):
             await session.commit()
         clear_settings_cache()
         shop_bot = AsyncMock()
-        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=lambda token: self.info(traffic_low=True)))
+        pg = SimpleNamespace(list_users_by_ids=AsyncMock(return_value={"users": []}), subscription_info=AsyncMock(side_effect=lambda token: self.info(traffic_low=True)))
         with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg), \
                 patch.object(jobs, "_resolve_send_bot", lambda main, rid, profiles: shop_bot if rid == 2 else None):
             await jobs.check_expiring_services(AsyncMock())
@@ -377,7 +398,7 @@ class AlertJobTests(AlertCase):
         return bot
 
     async def run_with(self, bot):
-        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=lambda token: self.info(traffic_low=True)))
+        pg = SimpleNamespace(list_users_by_ids=AsyncMock(return_value={"users": []}), subscription_info=AsyncMock(side_effect=lambda token: self.info(traffic_low=True)))
         with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg):
             await jobs.check_expiring_services(bot)
 
@@ -423,7 +444,7 @@ class AlertThresholdCorrectnessTests(AlertJobTests):
         async with self.Session() as session:
             await set_setting(session, "user_alert_low_enabled", "1")
         clear_settings_cache()
-        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=self.time_info(days_left)))
+        pg = SimpleNamespace(list_users_by_ids=AsyncMock(return_value={"users": []}), subscription_info=AsyncMock(side_effect=self.time_info(days_left)))
         bot = AsyncMock()
         with patch.object(jobs, "SessionLocal", self.Session), patch.object(jobs, "get_pg", return_value=pg):
             await jobs.check_expiring_services(bot)
@@ -475,7 +496,7 @@ class RearmSweepTests(AlertCase):
         async def thresholds(_shop):
             return (enabled, AlertThreshold(20), AlertThreshold(20))
 
-        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup))
+        pg = SimpleNamespace(list_users_by_ids=AsyncMock(return_value={"users": []}), subscription_info=AsyncMock(side_effect=lookup))
         result = await rearm_flagged_alerts(self.session, pg, thresholds, now=self.now, limit=limit)
         await self.session.commit()
         return result
@@ -535,7 +556,7 @@ class RearmSweepTests(AlertCase):
         async def thresholds(_shop):
             return (True, AlertThreshold(20), AlertThreshold(20))
 
-        pg = SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup))
+        pg = SimpleNamespace(list_users_by_ids=AsyncMock(return_value={"users": []}), subscription_info=AsyncMock(side_effect=lookup))
         first = await rearm_flagged_alerts(self.session, pg, thresholds, now=self.now, limit=2)
         second = await rearm_flagged_alerts(self.session, pg, thresholds, now=self.now, after_id=first.next_after_id, limit=2)
         self.assertEqual(await self.flags(12), (False, False))  # reached on the second step despite the failing rows before it
@@ -556,7 +577,7 @@ class RearmSweepTests(AlertCase):
         async def thresholds(_shop):
             return (True, AlertThreshold(20), AlertThreshold(20))
 
-        await rearm_flagged_alerts(self.session, SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup)), thresholds,
+        await rearm_flagged_alerts(self.session, SimpleNamespace(list_users_by_ids=AsyncMock(return_value={"users": []}), subscription_info=AsyncMock(side_effect=lookup)), thresholds,
                                    now=self.now, after_id=100, limit=2)
         self.assertEqual(seen, ["tokshop3"])  # nothing left after the cursor, the recent one still goes first
 
@@ -574,6 +595,6 @@ class RearmSweepTests(AlertCase):
         async def thresholds(shop):
             return (shop == 3, AlertThreshold(20), AlertThreshold(20))
 
-        await rearm_flagged_alerts(self.session, SimpleNamespace(subscription_info=AsyncMock(side_effect=lookup)), thresholds,
+        await rearm_flagged_alerts(self.session, SimpleNamespace(list_users_by_ids=AsyncMock(return_value={"users": []}), subscription_info=AsyncMock(side_effect=lookup)), thresholds,
                                    now=self.now, limit=2)
         self.assertEqual(seen, ["tokshop3"])

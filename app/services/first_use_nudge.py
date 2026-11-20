@@ -7,7 +7,6 @@ to reach support. The service is stamped before anything is sent, so the message
 """
 from __future__ import annotations
 
-import asyncio
 import html
 import logging
 from collections.abc import Callable
@@ -21,6 +20,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, UserService
+from app.services.panel_user_batch import panel_infos
 from app.services.users import get_setting, on
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,6 @@ MIN_AGE_HOURS = 24
 MAX_AGE_HOURS = 72
 BATCH_SIZE = 100
 MAX_BATCHES = 5
-FETCH_CONCURRENCY = 8
-FETCH_TIMEOUT_SECONDS = 12
 SETTING_KEY = "first_use_nudge_enabled"
 UNUSED_STATUSES = frozenset({"active", "on_hold"})
 GUIDE_CALLBACK = "guide:svc:{service_id}"
@@ -96,22 +94,6 @@ async def _stamp(session: AsyncSession, service_id: int, now: datetime) -> bool:
     return claim.rowcount == 1
 
 
-async def _fetch_all(pg, services: list[UserService]) -> list[dict[str, Any] | None]:
-    gate = asyncio.Semaphore(FETCH_CONCURRENCY)
-
-    async def fetch(token: str) -> dict[str, Any] | None:
-        async with gate:
-            try:
-                info = await asyncio.wait_for(pg.subscription_info(token), timeout=FETCH_TIMEOUT_SECONDS)
-            except Exception:
-                # Best effort: the panel being slow only delays the check to the next run.
-                logger.debug("first-use usage lookup failed", exc_info=True)
-                return None
-            return info if isinstance(info, dict) else None
-
-    return await asyncio.gather(*(fetch(service.subscription_token) for service in services))
-
-
 async def _eligible(
     session: AsyncSession, services: list[UserService], send_bot_for: Callable[[int | None], Bot | None]
 ) -> list[tuple[UserService, BotUser, Bot]]:
@@ -158,7 +140,7 @@ async def run_first_use_check(
         eligible = await _eligible(session, services, send_bot_for)
         # No connection waits idle in a transaction on the panel (sessions do not expire on commit).
         await session.commit()
-        infos = await _fetch_all(pg, [service for service, _, _ in eligible])
+        infos = await panel_infos(pg, [service for service, _, _ in eligible])
         for (service, user, bot), info in zip(eligible, infos, strict=True):
             if info is None or not await _stamp(session, int(service.id), now):
                 continue
