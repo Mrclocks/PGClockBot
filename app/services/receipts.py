@@ -6,7 +6,6 @@ from aiogram import Bot
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.pasarguard import failure_text
 from app.db.models import Order, Payment
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
@@ -19,6 +18,7 @@ from app.services.notifications import (
 )
 from app.services.delivery_recovery_policy import PENDING_STAFF_NOTE, is_delivered, pending_buyer_note
 from app.services.orders import DeliveryAttempt, approve_payment, attach_receipt, hold_unknown_delivery_for_review
+from app.services.pasarguard import failure_text
 from app.services.receipt_fingerprints import (
     download_receipt_sha256,
     find_duplicate_receipts,
