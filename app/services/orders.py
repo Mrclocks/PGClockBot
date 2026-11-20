@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
 import secrets
 import string
 import time
@@ -17,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.auto_renew_offer import queue_auto_renew_offer
 from app.services.custom_plans import discard_unsold_custom_plan
 from app.services.panel_user_note import build_panel_user_note
 from app.services.funnel_events import STEP_DELIVERED, STEP_RECEIPT, record_order_funnel
@@ -53,6 +55,7 @@ from app.services.random_discounts import apply_random_discount
 from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
 from app.services.cashback import grant_after_delivery
+from app.services.cashback_topup import grant_after_topup
 from app.services.payg_gate import (
     SHORTFALL_FOR_CUSTOMER,
     assert_shop_can_afford,
@@ -279,6 +282,12 @@ def chosen_name_variant(name: str) -> str:
 PG_USERNAME_MIN_LENGTH = 3
 PG_USERNAME_MAX_LENGTH = 32
 _PG_USERNAME_ALLOWED = frozenset(string.ascii_letters + string.digits + "_")
+# PasarGuard refuses two special characters in a row («a__b») with HTTP 422.
+_REPEATED_SEPARATORS = re.compile(r"_{2,}")
+
+
+def _single_separators(name: str) -> str:
+    return _REPEATED_SEPARATORS.sub("_", name).strip("_")
 
 
 def _sanitize_naming_username(raw: str | None, *, fallback: str) -> str:
@@ -290,7 +299,7 @@ def _sanitize_naming_username(raw: str | None, *, fallback: str) -> str:
 
 
 def _fit_panel_username(built: str, *, keep_unique: bool) -> str:
-    """Coerce a rendered pattern into the panel's ``[A-Za-z0-9_]{3,32}`` format.
+    """Coerce a rendered pattern into the panel's ``[A-Za-z0-9_]{3,32}`` format, one «_» at a time.
 
     Admin patterns can contain ``.``/``-``/spaces or a fractional ``{plan_volume}``
     (``0.5``), and ``{username}`` alone can be too short; the panel rejects those
@@ -298,13 +307,15 @@ def _fit_panel_username(built: str, *, keep_unique: bool) -> str:
     per-purchase variable.
     """
     name = "".join(ch if ch in _PG_USERNAME_ALLOWED else "_" for ch in built.strip())
-    # An empty {prefix}/{suffix} leaves a dangling separator ("_a8k2x9q1").
-    name = name.strip("_")
+    # Replaced characters next to a separator, a Telegram username such as «ali__x» or an empty
+    # {prefix}/{suffix} leave «__» or a dangling «_»; the panel refuses the first.
+    name = _single_separators(name)
     if keep_unique:
         name = f"{name}_{_random_alnum(4)}" if name else _random_alnum(8)
     if len(name) > PG_USERNAME_MAX_LENGTH:
         tail = name[-8:]
-        name = name[: PG_USERNAME_MAX_LENGTH - len(tail)] + tail
+        # The cut can put a separator on both sides of the join.
+        name = _single_separators(name[: PG_USERNAME_MAX_LENGTH - len(tail)] + tail)
     if not name:
         name = _random_alnum(8)
     elif len(name) < PG_USERNAME_MIN_LENGTH:
@@ -1885,7 +1896,10 @@ async def _resume_approved_payment(
     - APPROVED + incomplete work is retriable; APPROVED + complete is terminal.
     """
     if payment.is_wallet_topup:
+        topup_payment_id = int(payment.id)
         if await _wallet_topup_already_credited(session, payment):
+            # A crash may have come between the credit and its bonus; granting is idempotent.
+            await grant_after_topup(session, topup_payment_id)
             return None
         user = await session.get(BotUser, payment.user_id)
         if not user:
@@ -1920,6 +1934,7 @@ async def _resume_approved_payment(
             )
             await session.commit()
             raise
+        await grant_after_topup(session, topup_payment_id)
         return None
 
     if not payment.order_id:
@@ -2099,6 +2114,7 @@ async def approve_payment(
             raise
         await record_payment_decision(session, payment, None, action=ACTION_APPROVE, reviewer_tg=reviewer_tg, actor=actor)
         await session.commit()
+        await grant_after_topup(session, payment_id)
         await _sync_payment_review_messages(session, payment_id, bot=bot)
         return None
     order = await session.get(Order, payment.order_id)
@@ -3013,6 +3029,7 @@ async def _notify_renewal_delivered(session: AsyncSession, order: Order) -> None
     except Exception:
         logger.warning("loyalty on_order_delivered renew failed order=%s", order.id, exc_info=True)
     await grant_after_delivery(session, order)
+    await queue_auto_renew_offer(session, order)
 
 
 async def _release_failed_renewal(session: AsyncSession, order: Order, run: _RenewalRun, exc: Exception) -> bool:

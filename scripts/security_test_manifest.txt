@@ -540,6 +540,7 @@ tests/test_inbox_modal.py
 #
 # Paid orders the panel did not apply: retry, one wallet refund per order, shop purse isolation.
 tests/test_paid_order_recovery.py
+tests/test_panel_rejection_recovery.py
 tests/test_shop_settings_platform_only_groups.py
 tests/test_bot_settings_edit_path.py
 tests/test_bot_message_text_settings.py
@@ -577,3 +578,6 @@ tests/test_payment_read_budget.py
 tests/test_update_database_guard.py
 tests/test_command_center_navigation.py
 tests/test_cli_english_output.py
+tests/test_receipt_risk.py
+tests/test_auto_renew_offer.py
+tests/test_cashback_topup.py

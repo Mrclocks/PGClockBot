@@ -594,7 +594,7 @@ class Phase5BBotL2BindResolveTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_21_l2_not_exposed_to_migrated_pg_bot_handlers(self) -> None:
         from app.bot.auth import bot_migrated_pg_features, bot_pg_can_create_user
-        from app.services.bot_pg_user_pilot import authorize_bot_pg_user_op
+        from app.services.bot_pg_user_authz import authorize_bot_pg_user_op
 
         async with self.Session() as session:
             fx = await self._fixtures(session)

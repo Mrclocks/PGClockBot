@@ -58,7 +58,7 @@ class CommandTests(unittest.TestCase):
         return CliContext(root=ROOT)
 
     def test_the_pre_update_backup_prints_its_size_in_english(self) -> None:
-        result = {"ok": True, "filename": "b.zip", "id": "b1", "path": "/x/b.zip", "db_engine": "sqlite",
+        result = {"ok": True, "filename": "b.zip", "id": "b1", "path": "/x/b.zip", "db_engine": "postgresql",
                   "size": 5 * 1024 * 1024, "size_human": "۵ مگ", "sha256": "ab" * 32}
         with patch.object(backup_cmds, "_bind_paths"), patch("app.services.backup.create_backup", return_value=result):
             text = _printed(backup_cmds.cmd_backup, self._ctx(), note="pre-update")
