@@ -23,7 +23,7 @@ from app.services.authz import (
     is_explicit_org_owner,
 )
 from app.services.bot_l2_bind import L2BotBindError, bind_l2_bot_telegram
-from app.services.bot_pg_user_pilot import authorize_bot_pg_user_op
+from app.services.bot_pg_user_authz import authorize_bot_pg_user_op
 from app.services.bot_principal_identity import (
     bot_pg_client_for_resolution,
     resolve_bot_org_principal,

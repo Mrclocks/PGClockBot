@@ -21,7 +21,7 @@ from app.bot.auth import (
     is_migrated_pg_soft_callback,
 )
 from app.services.bot_l2_bind import bind_l2_bot_telegram
-from app.services.bot_pg_user_pilot import authorize_bot_pg_user_op
+from app.services.bot_pg_user_authz import authorize_bot_pg_user_op
 from app.services.bot_principal_identity import (
     bot_pg_client_for_resolution,
     callback_carries_principal_tamper,
