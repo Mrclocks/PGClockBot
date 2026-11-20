@@ -848,6 +848,38 @@ class ServiceFreeze(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ServiceTransfer(Base):
+    """A one-time link that hands a service to another customer of the same shop.
+
+    ``open`` -> ``accepted`` / ``cancelled`` / ``expired``. Only the SHA-256 of the token is kept.
+    At most one open transfer per service (partial unique index).
+    """
+
+    __tablename__ = "service_transfers"
+    __table_args__ = (
+        Index("uq_service_transfers_token", "token_hash", unique=True),
+        Index("ix_service_transfers_service_created", "service_id", "created_at"),
+        Index(
+            "uq_service_transfers_open",
+            "service_id",
+            unique=True,
+            sqlite_where=text("status = 'open'"),
+            postgresql_where=text("status = 'open'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_id: Mapped[int] = mapped_column(ForeignKey("user_services.id", ondelete="CASCADE"))
+    shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    from_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    to_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    token_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default="open", server_default="open")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Ticket(Base):
     __tablename__ = "tickets"
 

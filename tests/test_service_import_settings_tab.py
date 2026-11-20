@@ -120,6 +120,7 @@ class FreezeSettingsPageTests(TabHarness):
             page = await self.call(session, "GET", f"{base}?tab=service_actions")
             self.assertIn('name="s_service_freeze_enabled"', page.text)
             self.assertIn('name="s_service_freeze_max_days"', page.text)
+            self.assertIn('name="s_service_transfer_enabled"', page.text)
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
             "s_service_freeze_enabled": "1", "s_service_freeze_max_days": "7",
             "s_service_freeze_per_period": "2", "s_service_freeze_min_days_left": "1",
