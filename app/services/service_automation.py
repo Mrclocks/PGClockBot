@@ -27,6 +27,8 @@ from app.db.models import (
     UserService,
 )
 from app.services.catalog_pricing import annotate_prices, displayed_quote, sale_price
+from app.services.renewal_category import Leftover, offered_plans
+from app.services.service_renewals import current_plan_of
 from app.services.service_scope import service_shop_id
 from app.services.notice_links import notice_open_data
 from app.services.support_button import support_row
@@ -94,14 +96,21 @@ async def get_automation(
     return row
 
 
-async def automation_choices(session: AsyncSession) -> dict[str, list]:
+# Automatic renewal runs while volume or time may still be left: only plans that may take it.
+AUTO_RENEW_LEFTOVER = Leftover(volume=True, time=True)
+
+
+async def automation_choices(session: AsyncSession, service: UserService | None = None) -> dict[str, list]:
     from app.services.orders import list_active_plans
     from app.services.service_addons import list_shop_packs
 
-    plans = await list_active_plans(session, include_trial=False)
+    plans = [p for p in await list_active_plans(session, include_trial=False) if p.price >= 0]
+    if service is not None:
+        current = await current_plan_of(session, service)
+        plans = offered_plans(plans, current_plan=current, leftover=AUTO_RENEW_LEFTOVER)
     packs = await list_shop_packs(session)
     return {
-        "renew": [p for p in plans if p.price >= 0],
+        "renew": plans,
         "duration": [p for p in packs if p.kind == "duration" and valid_pack(p)],
         "volume": [p for p in packs if p.kind == "volume" and valid_pack(p)],
     }
@@ -112,7 +121,7 @@ async def automation_settings(
 ) -> dict:
     service = await owned_automation_service(session, user, service_id)
     row = await get_automation(session, service)
-    choices = await automation_choices(session)
+    choices = await automation_choices(session, service)
     result = {
         "service_id": service_id,
         "needs_review": row.needs_review,
@@ -167,8 +176,17 @@ async def selected_choice(session: AsyncSession, row: ServiceAutomation, action:
     if not choice or not choice.is_active or choice.owner_reseller_id != row.shop_id:
         return None
     if action == "renew":
-        return choice if not choice.is_trial and choice.price >= 0 else None
+        if choice.is_trial or choice.price < 0:
+            return None
+        return choice if await _renewal_allowed(session, row, choice) else None
     return choice if choice.kind == action and valid_pack(choice) else None
+
+
+async def _renewal_allowed(session: AsyncSession, row: ServiceAutomation, choice: Plan) -> bool:
+    """Another category's plan is valid only when it would carry nothing over (renewal_category)."""
+    service = await session.get(UserService, row.service_id)
+    current = await current_plan_of(session, service) if service is not None else None
+    return bool(offered_plans([choice], current_plan=current, leftover=AUTO_RENEW_LEFTOVER))
 
 
 async def claim_automation(session: AsyncSession, service_id: int) -> str | None:

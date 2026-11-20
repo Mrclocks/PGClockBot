@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -16,6 +17,10 @@ from tests.postgres_support import add_rows, scoped_async_engine
 
 SHOP = 900
 
+
+
+# A used-up service (expired, unlimited volume): nothing would carry over, so every category is offered.
+USED_UP = {"quota_synced_at": datetime.now(timezone.utc), "quota_status": "expired", "quota_data_limit_bytes": 0}
 
 class RenewalOptionsTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
@@ -42,7 +47,7 @@ class RenewalOptionsTests(unittest.IsolatedAsyncioTestCase):
         ])
         await self.session.flush()
         await add_rows(self.session, [
-            UserService(id=70, bot_user_id=1, plan_id=1, pg_username="me70"),
+            UserService(id=70, bot_user_id=1, plan_id=1, pg_username="me70", **USED_UP),
             UserService(id=71, bot_user_id=2, plan_id=1, pg_username="other71"),
             UserService(id=72, bot_user_id=1, plan_id=1, pg_username="linked72", remark="linked"),
             UserService(id=73, bot_user_id=1, plan_id=5, pg_username="shop73", shop_id=SHOP),

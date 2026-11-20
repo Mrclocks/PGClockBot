@@ -187,7 +187,7 @@ async def _show_automation(callback, session, db_user, service_id):
     )
     service = await owned_automation_service(session, db_user, service_id)
     row = await get_automation(session, service)
-    choices = await automation_choices(session)
+    choices = await automation_choices(session, service)
     await session.commit()
     lines = [
         f"سرویس: <b>{html.escape(service.pg_username)}</b>",
@@ -245,8 +245,8 @@ async def svc_auto_pick(callback: CallbackQuery, session: AsyncSession, db_user:
         category_raw = parts[4] if len(parts) > 4 else None
         if action not in ACTIONS:
             raise ValueError("تنظیم نامعتبر است")
-        await owned_automation_service(session, db_user, service_id)
-        choices = (await automation_choices(session))[action]
+        service = await owned_automation_service(session, db_user, service_id)
+        choices = (await automation_choices(session, service))[action]
         if not choices:
             raise ValueError("پلن یا بسته فعالی موجود نیست")
         category_id = None
