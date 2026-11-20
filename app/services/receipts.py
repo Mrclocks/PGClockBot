@@ -3,14 +3,13 @@ from __future__ import annotations
 """Receipt submission: manual admin approve or optional auto-approve."""
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aiogram.exceptions import TelegramAPIError
-
 from app.db.models import Order, Payment, Plan
-from app.services.db_safe import rollback_quiet
 from app.services.delivery import send_delivery_to_user
+from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_message
 from app.services.notifications import (
     notify_approved_delivery_stuck,
