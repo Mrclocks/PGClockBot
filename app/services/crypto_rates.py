@@ -21,10 +21,12 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 import httpx
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.sql.elements import ColumnElement
 
-from app.db.models import Payment, PaymentStatus
+from app.db.models import Payment, PaymentStatus, ResellerProfile, ResellerSetting, Setting
 from app.services.numbers import normalize_digits
 from app.services.url_safety import UnsafeUrlError, ensure_host_resolves_public, validate_public_https_url
 
@@ -332,6 +334,36 @@ def quote_lines(payment: Payment, *, now: datetime | None = None) -> tuple[str, 
 
 
 REFRESH_CONCURRENCY = 5
+
+
+def _is_api_mode(column: InstrumentedAttribute[str]) -> ColumnElement[bool]:
+    return func.lower(func.trim(column)) == MODE_API
+
+
+async def api_rate_scopes(session: AsyncSession) -> list[int | None]:
+    """The platform (``None``) and active shops whose saved mode is API: the only ones the job reads.
+
+    The default mode is off, so a scope without a saved ``api`` row never fetches a rate and its
+    settings need not be loaded at all.
+    """
+    scopes: list[int | None] = []
+    platform = await session.scalar(
+        select(Setting.id).where(Setting.key == MODE_KEY, _is_api_mode(Setting.value)).limit(1)
+    )
+    if platform is not None:
+        scopes.append(None)
+    shop_ids = await session.scalars(
+        select(ResellerSetting.reseller_user_id)
+        .join(ResellerProfile, ResellerProfile.user_id == ResellerSetting.reseller_user_id)
+        .where(
+            ResellerSetting.key == MODE_KEY,
+            _is_api_mode(ResellerSetting.value),
+            ResellerProfile.is_active.is_(True),
+        )
+        .order_by(ResellerSetting.reseller_user_id)
+    )
+    scopes.extend(int(shop_id) for shop_id in shop_ids)
+    return scopes
 
 
 async def refresh_api_rates(settings_for, shop_ids: list[int | None]) -> int:

@@ -16,7 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
-from app.db.models import BotUser, Order, Payment, Role
+from app.db.models import BotUser, Order, Payment, ResellerProfile, ResellerSetting, Role, Setting
 from app.services import crypto_rates as cr
 from app.services import url_safety
 from app.services.crypto_rates import (
@@ -274,6 +274,47 @@ class RefreshTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(current_rate(config, 3), Decimal("97000"))
         self.assertIsNone(current_rate(config, 1))
         self.assertIsNone(current_rate(config, 2))
+
+
+class ApiRateScopeTests(unittest.IsolatedAsyncioTestCase):
+    """The rate job only loads the settings of scopes that saved the API mode."""
+
+    async def asyncSetUp(self) -> None:
+        self.engine = scoped_async_engine()
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+
+    async def asyncTearDown(self) -> None:
+        await self.engine.dispose()
+
+    async def _shop(self, session, n: int, *, active: bool = True, mode: str | None = None) -> int:
+        owner = BotUser(telegram_id=1000 + n, username=f"s{n}", full_name="Shop", role=Role.RESELLER.value,
+                        referral_code=f"S{n}")
+        session.add(owner)
+        await session.flush()
+        session.add(ResellerProfile(user_id=owner.id, is_active=active))
+        if mode is not None:
+            session.add(ResellerSetting(reseller_user_id=owner.id, key="crypto_rate_mode", value=mode))
+        await session.flush()
+        return owner.id
+
+    async def test_only_active_api_mode_shops_and_platform_are_listed(self) -> None:
+        async with self.Session() as session:
+            api_shop = await self._shop(session, 1, mode=" API ")
+            await self._shop(session, 2, mode="manual")
+            await self._shop(session, 3)
+            await self._shop(session, 4, active=False, mode="api")
+            session.add(Setting(key="crypto_rate_mode", value="api"))
+            await session.commit()
+            self.assertEqual(await cr.api_rate_scopes(session), [None, api_shop])
+
+    async def test_nothing_is_listed_when_no_scope_uses_the_api(self) -> None:
+        async with self.Session() as session:
+            await self._shop(session, 1, mode="off")
+            session.add(Setting(key="crypto_rate_mode", value="manual"))
+            await session.commit()
+            self.assertEqual(await cr.api_rate_scopes(session), [])
 
 
 class PaymentQuoteTests(unittest.IsolatedAsyncioTestCase):

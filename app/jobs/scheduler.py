@@ -441,23 +441,19 @@ async def run_scheduled_receipt_approvals() -> None:
 
 async def run_crypto_rate_refresh() -> None:
     """Every minute: read the API rate of each shop that converts crypto amounts with one."""
+    from app.services.crypto_rates import api_rate_scopes, refresh_api_rates
+    from app.services.users import get_all_settings
+
     async with SessionLocal() as session:
         try:
-            from app.services.crypto_rates import refresh_api_rates
-            from app.services.users import get_all_settings
-
-            shop_ids = list(
-                (
-                    await session.execute(
-                        select(ResellerProfile.user_id).where(ResellerProfile.is_active.is_(True))
-                    )
-                ).scalars().all()
-            )
+            scopes = await api_rate_scopes(session)
+            if not scopes:
+                return
 
             async def settings_for(shop_id: int | None) -> dict[str, str]:
                 return await get_all_settings(session, reseller_id=shop_id)
 
-            await refresh_api_rates(settings_for, [None, *[int(rid) for rid in shop_ids]])
+            await refresh_api_rates(settings_for, scopes)
         except Exception:
             logger.exception("crypto rate refresh failed")
 
