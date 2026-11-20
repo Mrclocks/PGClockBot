@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -52,12 +52,6 @@ def same_category(current_plan: Any, target_plan: Any) -> bool:
     return _category(current_plan) == _category(target_plan)
 
 
-def _aware(moment: datetime | None) -> datetime | None:
-    if moment is not None and moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment
-
-
 def cached_leftover(service: Any, *, now: datetime) -> Leftover:
     """Leftover by the stored quota cache; without a synced cache both parts count as left."""
     if getattr(service, "quota_synced_at", None) is None:
@@ -65,7 +59,8 @@ def cached_leftover(service: Any, *, now: datetime) -> Leftover:
     status = str(getattr(service, "quota_status", None) or "")
     # A zero limit is unlimited volume: an unlimited quota carries nothing.
     volume = status != VOLUME_USED_UP and int(getattr(service, "quota_data_limit_bytes", 0) or 0) > 0
-    expire = _aware(getattr(service, "quota_expire_at", None))
+    # A timezone-aware column: PostgreSQL returns it with its zone.
+    expire = getattr(service, "quota_expire_at", None)
     time_left = status == ON_HOLD or (status != TIME_USED_UP and expire is not None and expire > now)
     return Leftover(volume=volume, time=time_left)
 
