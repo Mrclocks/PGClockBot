@@ -45,6 +45,8 @@ OPERATIONS = {
     "bot_profile_photo",
     # Removes cached customer profile photos for the user card; needs no running bot.
     "user_photo_prune",
+    # Resumes frozen services at their deadline; queues the notice, so it needs no running bot.
+    "service_freezes",
 }
 NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "broadcast", "first_use_nudge", "cancellation_notifications", "panel_alert_notifications", "customer_notices"}
 

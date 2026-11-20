@@ -103,11 +103,30 @@ class TabPageTests(TabHarness):
         shop = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_import")
         for response, base in ((owner, "/settings"), (shop, "/shop-settings")):
             head = response.text.split("settings-layout", 1)[0]
-            self.assertIn("<h1>افزودن سرویس قبلی</h1>", head)
+            # A section of the merged «سرویس‌های مشتری» tab, next to the customer's freeze settings.
+            self.assertIn("<h1>سرویس\u200cهای مشتری</h1>", head)
             self.assertIn(f'<a class="page-back" href="{base}"', head)
+            self.assertIn(f'href="{base}?tab=service_actions"', response.text)
         for base, session in (("/settings", OWNER_SESSION), ("/shop-settings", SHOP_SESSION)):
             listing = await self.call(session, "GET", base)
-            self.assertIn(f'href="{base}?tab=service_import"', listing.text)
+            self.assertIn(f'href="{base}?tab=customer_services"', listing.text)
+            merged = await self.call(session, "GET", f"{base}?tab=customer_services")
+            self.assertIn("<h1>سرویس\u200cهای مشتری</h1>", merged.text)
+
+
+class FreezeSettingsPageTests(TabHarness):
+    async def test_the_freeze_section_opens_and_each_side_saves_its_own_copy(self):
+        for session, base in ((OWNER_SESSION, "/settings"), (SHOP_SESSION, "/shop-settings")):
+            page = await self.call(session, "GET", f"{base}?tab=service_actions")
+            self.assertIn('name="s_service_freeze_enabled"', page.text)
+            self.assertIn('name="s_service_freeze_max_days"', page.text)
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
+            "s_service_freeze_enabled": "1", "s_service_freeze_max_days": "7",
+            "s_service_freeze_per_period": "2", "s_service_freeze_min_days_left": "1",
+        })
+        shop, owner = await self.stored(5), await self.stored(None)
+        self.assertEqual((shop["service_freeze_enabled"], shop["service_freeze_max_days"]), ("1", "7"))
+        self.assertEqual(owner["service_freeze_enabled"], "0")
 
 
 class SavePlumbingTests(TabHarness):
