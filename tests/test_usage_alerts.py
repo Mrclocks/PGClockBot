@@ -19,12 +19,14 @@ from app.db.models import (
 )
 from app.jobs import scheduler as jobs
 from app.services.alert_thresholds import AlertThreshold
-from app.services.service_automation import notify_once
+from app.services.service_automation import TOPUP_CALLBACK, notify_once
 from app.services.support_button import SUPPORT_NOTICE_CALLBACK
-from app.services.usage_alerts import TOPUP_CALLBACK, AlertExtras, alert_extras, time_alert_markup, traffic_alert_markup
+from app.services.usage_alerts import AlertExtras, RenewQuote, alert_extras, quote_note, time_alert_markup, traffic_alert_markup
 
 # Every alert ends with the customer's services and support (customer_notice_buttons.help_row).
 HELP = ["nto:svc:list", SUPPORT_NOTICE_CALLBACK]
+# A short wallet is offered exactly its shortfall, rounded up to the smallest top-up.
+TOPUP_1000 = "nv:w:amt:1000"
 from app.services.users import _SETTINGS_CACHE, clear_settings_cache, set_setting
 from tests.postgres_support import scoped_async_engine
 
@@ -138,19 +140,60 @@ class AlertExtrasTests(AlertCase):
         self.assertEqual(len(statements), small)
 
 
+class RenewQuoteTests(AlertCase):
+    async def test_the_quote_is_the_shop_price_and_the_shop_wallet(self):
+        extras = await alert_extras(self.session, [await self.service(11)], shop_id=2)
+        self.assertEqual(extras.renew_quotes, {11: RenewQuote(price=200, balance=50)})
+        # Automatic renewal is on and short, so the alert keeps its warning; the quote states the gap.
+        self.assertIn("کیف پول برای تمدید", extras.note_for(11))
+        self.assertIn("150", quote_note(extras.renew_quotes[11]))
+
+    async def test_a_customer_without_automation_still_sees_the_price_and_a_shortfall_top_up(self):
+        await self.session.execute(ServiceAutomation.__table__.update().values(renew_enabled=False))
+        await self.session.commit()
+        extras = await alert_extras(self.session, [await self.service(11)], shop_id=2)
+        self.assertIn("تمدید همین پلن", extras.note_for(11))
+        self.assertIn("کم دارید", extras.note_for(11))
+        self.assertEqual(extras.topup_amount(11), 1000)
+
+    async def test_enough_wallet_shows_the_price_without_a_top_up(self):
+        extras = await alert_extras(self.session, [await self.service(10)], shop_id=None)
+        self.assertEqual(extras.renew_quotes[10], RenewQuote(price=300, balance=5000))
+        self.assertNotIn("کم دارید", extras.note_for(10))
+        self.assertIsNone(extras.topup_amount(10))
+
+    async def test_preview_off_wallet_off_free_and_foreign_plans(self):
+        off = await alert_extras(self.session, [await self.service(10)], shop_id=None, ui={"user_alert_price_preview_enabled": "0"})
+        self.assertEqual((off.renew_quotes, off.note_for(10)), ({}, ""))
+        no_wallet = await alert_extras(self.session, [await self.service(10)], shop_id=None, ui={"pay_wallet_enabled": "0"})
+        self.assertEqual(no_wallet.renew_quotes[10].balance, None)
+        self.assertNotIn("کیف پول", no_wallet.note_for(10))
+        await self.session.execute(Plan.__table__.update().where(Plan.id == 1).values(price=0))
+        await self.session.execute(UserService.__table__.update().where(UserService.id == 11).values(plan_id=3))
+        await self.session.commit()
+        self.assertEqual((await alert_extras(self.session, [await self.service(10)], shop_id=None)).renew_quotes, {})
+        # Service 11 now points at shop 3's plan: shop 2 never quotes another catalog's price.
+        self.assertEqual((await alert_extras(self.session, [await self.service(11)], shop_id=2)).renew_quotes, {})
+
+    async def test_a_linked_service_gets_no_quote(self):
+        await self.session.execute(UserService.__table__.update().where(UserService.id == 10).values(remark="linked"))
+        await self.session.commit()
+        self.assertEqual((await alert_extras(self.session, [await self.service(10)], shop_id=None)).renew_quotes, {})
+
+
 class AlertMarkupTests(unittest.TestCase):
     UI = {"one_tap_renew_enabled": "1"}
 
     def test_time_alert_offers_renewal_and_topup_only_when_short(self):
         self.assertEqual(buttons(time_alert_markup(self.UI, 7, AlertExtras())), ["nto:svc:renew:7", *HELP])
         short = AlertExtras(renew_shortfalls={7: 100})
-        self.assertEqual(buttons(time_alert_markup(self.UI, 7, short)), ["nto:svc:renew:7", TOPUP_CALLBACK, *HELP])
+        self.assertEqual(buttons(time_alert_markup(self.UI, 7, short)), ["nto:svc:renew:7", TOPUP_1000, *HELP])
         self.assertEqual(buttons(time_alert_markup({"one_tap_renew_enabled": "0"}, 7, AlertExtras())), HELP)
 
     def test_traffic_alert_offers_the_pack_renewal_and_topup(self):
         extras = AlertExtras(sells_volume_packs=True, renew_shortfalls={7: 100})
         self.assertEqual(
-            buttons(traffic_alert_markup(self.UI, 7, extras)), ["nto:svc:addon:7:volume", "nto:svc:renew:7", TOPUP_CALLBACK, *HELP]
+            buttons(traffic_alert_markup(self.UI, 7, extras)), ["nto:svc:addon:7:volume", "nto:svc:renew:7", TOPUP_1000, *HELP]
         )
         self.assertEqual(buttons(traffic_alert_markup(self.UI, 7, AlertExtras())), ["nto:svc:renew:7", *HELP])
         self.assertEqual(
@@ -245,17 +288,17 @@ class AlertJobTests(AlertCase):
         self.assertEqual(len(calls), 2)
         time_call = next(c for c in calls if "⏰" in c.args[1])
         traffic_call = next(c for c in calls if "📉" in c.args[1])
-        self.assertEqual(buttons(time_call.kwargs["reply_markup"]), ["nto:svc:renew:10", TOPUP_CALLBACK, *HELP])
+        self.assertEqual(buttons(time_call.kwargs["reply_markup"]), ["nto:svc:renew:10", TOPUP_1000, *HELP])
         self.assertIn("کیف پول برای تمدید", time_call.args[1])
         self.assertEqual(
-            buttons(traffic_call.kwargs["reply_markup"]), ["nto:svc:addon:10:volume", "nto:svc:renew:10", TOPUP_CALLBACK, *HELP]
+            buttons(traffic_call.kwargs["reply_markup"]), ["nto:svc:addon:10:volume", "nto:svc:renew:10", TOPUP_1000, *HELP]
         )
         self.assertIn("کیف پول برای تمدید", traffic_call.args[1])
 
     async def test_a_customer_with_enough_wallet_gets_no_topup_offer(self):
         bot = await self.run_job()
         for call in (c for c in bot.send_message.await_args_list if c.args[0] == 1001):
-            self.assertNotIn(TOPUP_CALLBACK, buttons(call.kwargs["reply_markup"]))
+            self.assertFalse([b for b in buttons(call.kwargs["reply_markup"]) if b.startswith("nv:w:")])
             self.assertNotIn("کیف پول برای تمدید", call.args[1])
 
     async def test_a_shop_customer_is_not_alerted_from_the_platform_bot(self):
@@ -281,7 +324,7 @@ class AlertJobTests(AlertCase):
         self.assertEqual(set(calls), {1004})
         traffic = next(c for c in shop_bot.send_message.await_args_list if "📉" in c.args[1])
         self.assertEqual(
-            buttons(traffic.kwargs["reply_markup"]), ["nto:svc:addon:11:volume", "nto:svc:renew:11", TOPUP_CALLBACK, *HELP]
+            buttons(traffic.kwargs["reply_markup"]), ["nto:svc:addon:11:volume", "nto:svc:renew:11", TOPUP_1000, *HELP]
         )
 
     def numbered_bot(self) -> AsyncMock:

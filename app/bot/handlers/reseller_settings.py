@@ -73,6 +73,7 @@ from app.services.settings_message_texts import (
 )
 from app.services.settings_operation_fields import (
     AUTO_APPROVE_AFTER_FIELDS,
+    AUTO_RENEW_FIELDS,
     CRYPTO_RATE_FIELDS,
     RECEIPT_MATCH_FIELDS,
     SALES_STATE_FIELDS,
@@ -307,6 +308,7 @@ SECTIONS: dict[str, dict] = {
                 ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، به وقت تهران)", "number"),
             ]),
             ("usage_alerts", "هشدار سرویس کاربر", USAGE_ALERT_FIELDS),
+            ("auto_renew", "تمدید خودکار سرویس", AUTO_RENEW_FIELDS),
             ("staff_notices", "متن اعلان کار روی سرویس", STAFF_ACTION_BOT_FIELDS),
             ("cleanup_notices", "متن اعلان پاکسازی سرویس", CLEANUP_BOT_FIELDS),
         ],
