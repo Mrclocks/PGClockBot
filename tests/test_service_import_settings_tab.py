@@ -115,21 +115,31 @@ class TabPageTests(TabHarness):
 
 
 class FreezeSettingsPageTests(TabHarness):
-    async def test_the_freeze_section_opens_and_each_side_saves_its_own_copy(self):
+    async def test_the_freeze_card_opens_off_and_each_side_saves_its_own_copy(self):
         for session, base in ((OWNER_SESSION, "/settings"), (SHOP_SESSION, "/shop-settings")):
-            page = await self.call(session, "GET", f"{base}?tab=service_actions")
-            self.assertIn('name="s_service_freeze_enabled"', page.text)
-            self.assertIn('name="s_service_freeze_max_days"', page.text)
+            page = (await self.call(session, "GET", f"{base}?tab=service_actions")).text
+            self.assertIn('name="s_service_freeze_enabled" value="1" id="sf-enabled"', page)
+            self.assertNotIn('id="sf-enabled" aria-label="توقف موقت سرویس" data-ds-submit-on-change checked', page)
+            self.assertIn('data-ds-show-when="#sf-enabled:1" hidden', page)
+            self.assertIn('name="s_service_freeze_max_days" type="number" min="1" max="90"', page)
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
             "s_service_freeze_enabled": "1", "s_service_freeze_max_days": "7",
             "s_service_freeze_per_period": "2", "s_service_freeze_min_days_left": "1",
         })
         shop, owner = await self.stored(5), await self.stored(None)
         self.assertEqual((shop["service_freeze_enabled"], shop["service_freeze_max_days"]), ("1", "7"))
-        self.assertEqual(owner["service_freeze_enabled"], "0")
+        self.assertEqual((owner["service_freeze_enabled"], owner["service_freeze_plans"]), ("0", ""))
 
+    async def test_out_of_range_numbers_are_stored_as_the_limit(self):
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
+            "s_service_freeze_enabled": "1", "s_service_freeze_max_days": "900",
+            "s_service_freeze_per_period": "-3", "s_service_freeze_min_days_left": "abc",
+        })
+        shop = await self.stored(5)
+        self.assertEqual((shop["service_freeze_max_days"], shop["service_freeze_per_period"]), ("90", "1"))
+        self.assertEqual(shop["service_freeze_min_days_left"], "1")
 
-    async def test_the_plan_list_shows_and_keeps_only_the_shops_own_plans(self):
+    async def test_the_plan_chips_show_and_keep_only_the_shops_own_plans(self):
         from app.db.models import Plan
 
         async with self._session_factory()() as session:
@@ -138,18 +148,23 @@ class FreezeSettingsPageTests(TabHarness):
                 Plan(id=72, name="پلن شاپ", price=1, owner_reseller_id=5),
             ])
             await session.commit()
-        page = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_actions")
-        self.assertIn('name="s_service_freeze_plans" value="72"', page.text)
-        self.assertNotIn('value="71"', page.text)
-        self.assertIn('data-show-when="s_service_freeze_enabled:1"', page.text)
+        page = (await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_actions")).text
+        self.assertIn('<input type="checkbox" name="s_service_freeze_plans" value="72" />', page)
+        self.assertNotIn('value="71"', page)
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
-            "s_service_freeze_enabled": "1", "s_service_freeze_plans": ["72", "71"],
+            "s_service_freeze_enabled": "1", "s_service_freeze_plans_mode": "some", "s_service_freeze_plans": ["72", "71"],
         })
         self.assertEqual((await self.stored(5))["service_freeze_plans"], "72")
-        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {"s_service_freeze_enabled": "1"})
+        page = (await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_actions")).text
+        self.assertIn('name="s_service_freeze_plans" value="72" checked', page)
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
+            "s_service_freeze_enabled": "1", "s_service_freeze_plans_mode": "all", "s_service_freeze_plans": ["72"],
+        })
+        self.assertEqual((await self.stored(5))["service_freeze_plans"], "all")
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
+            "s_service_freeze_enabled": "1", "s_service_freeze_plans_mode": "some",
+        })
         self.assertEqual((await self.stored(5))["service_freeze_plans"], "")
-        await self.form(OWNER_SESSION, "/settings?tab=service_actions", {"s_service_freeze_plans": ["all"]})
-        self.assertEqual((await self.stored(None))["service_freeze_plans"], "all")
 
 
 class SavePlumbingTests(TabHarness):

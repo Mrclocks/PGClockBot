@@ -8,7 +8,7 @@
 {% set options = field[4] if field|length > 4 else [] %}
 {% set val = values.get(key, '') %}
 {# Full-span kinds + lone payment/text keys that look half-empty in a 2-col modal grid #}
-{% set full_kinds = ['textarea', 'image', 'toggle', 'plans', 'btn_color', 'force_channels', 'connection_guides', 'payment_cards', 'payment_gateways', 'payment_crypto_wallets', 'psp_gateways'] %}
+{% set full_kinds = ['textarea', 'image', 'toggle', 'btn_color', 'force_channels', 'connection_guides', 'payment_cards', 'payment_gateways', 'payment_crypto_wallets', 'psp_gateways'] %}
 {% set full_keys = [
   'referral_bonus',
   'btn_pay_card', 'btn_pay_gateway', 'btn_pay_crypto', 'btn_pay_stars',
@@ -147,34 +147,6 @@
     </div>
     <input type="hidden" name="s_payment_crypto_wallets" value="{{ values.get('payment_crypto_wallets', '[]') }}" data-pay-dest-json />
     <div class="pay-dest-rows" data-pay-dest-list></div>
-  </div>
-  {% elif kind == 'plans' %}
-  {# A plan scope: «همهٔ پلن‌ها», or the shop's plans one by one (plan_scope.parse_plan_scope). #}
-  {% set scope = (val or 'all')|string|lower %}
-  {% set chosen = scope.split(',') %}
-  <div class="ui-switch-copy">
-    <strong>{{ label }}</strong>
-    {{ setting_help(help) }}
-  </div>
-  <div class="ui-switch-list" role="group" aria-label="{{ label }}">
-    <label class="ui-switch-row">
-      <span class="ui-switch-copy"><strong>همهٔ پلن‌ها</strong></span>
-      <span class="ui-switch">
-        <input type="checkbox" name="s_{{ key }}" value="all" {% if scope == 'all' %}checked{% endif %} />
-        <span class="ui-switch-track" aria-hidden="true"></span>
-      </span>
-    </label>
-    {% for choice in plan_scope_choices|default([]) %}
-    <label class="ui-switch-row">
-      <span class="ui-switch-copy"><span>{{ choice.name }}</span></span>
-      <span class="ui-switch">
-        <input type="checkbox" name="s_{{ key }}" value="{{ choice.plan_id }}" {% if scope != 'all' and (choice.plan_id|string) in chosen %}checked{% endif %} />
-        <span class="ui-switch-track" aria-hidden="true"></span>
-      </span>
-    </label>
-    {% else %}
-    <p class="muted">هنوز پلنی برای فروش ساخته نشده است.</p>
-    {% endfor %}
   </div>
   {% elif kind == 'list' %}
   {{ list_input('s_' ~ key, label, val, kind='money' if key == 'wallet_topup_presets' else 'text', help=help, placeholder={'wallet_topup_presets': '50000', 'service_import_paths': '/sub', 'service_import_admins': 'admin'}.get(key, '')) }}

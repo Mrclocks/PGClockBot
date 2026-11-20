@@ -25,7 +25,7 @@ from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 DAY = 86400
-UI = {"service_freeze_enabled": "1", "service_freeze_max_days": "14", "service_freeze_per_period": "1"}
+UI = {"service_freeze_enabled": "1", "service_freeze_plans": "all", "service_freeze_max_days": "14", "service_freeze_per_period": "1"}
 
 
 class FakePG:
@@ -186,6 +186,7 @@ class FreezeTests(unittest.IsolatedAsyncioTestCase):
             service = await session.get(UserService, 10)
             self.assertEqual(await freeze.freeze_button(session, service, UI), "pause")
             self.assertIsNone(await freeze.freeze_button(session, service, {}))
+            self.assertIsNone(await freeze.freeze_button(session, service, {"service_freeze_enabled": "1"}))
         await self.start()
         async with self.Session() as session:
             self.assertEqual(await freeze.freeze_button(session, await session.get(UserService, 10), {}), "resume")
@@ -199,10 +200,11 @@ class FreezeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.rows(), [])
         self.assertEqual((await self.start(ui={**UI, "service_freeze_plans": "1,2"})).status, "frozen")
 
-    async def test_every_plan_is_allowed_by_default_and_none_when_the_list_is_empty(self) -> None:
-        with self.assertRaises(ValueError):
-            await self.start(ui={**UI, "service_freeze_plans": ""})
-        self.assertEqual((await self.start(ui={k: v for k, v in UI.items() if k != "service_freeze_plans"})).status, "frozen")
+    async def test_no_plan_is_allowed_until_plans_are_chosen(self) -> None:
+        for ui in ({**UI, "service_freeze_plans": ""}, {k: v for k, v in UI.items() if k != "service_freeze_plans"}):
+            with self.subTest(ui=ui), self.assertRaisesRegex(ValueError, "پلن"):
+                await self.start(ui=ui)
+        self.assertEqual((await self.start()).status, "frozen")
 
     async def test_a_late_disable_does_not_give_back_the_time_used_meanwhile(self) -> None:
         self.pg.fail_disable = True

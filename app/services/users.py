@@ -45,7 +45,6 @@ from app.services.auto_renew_timing import (
 )
 from app.services.service_freeze_settings import (
     FREEZE_DEFAULTS,
-    FREEZE_VISIBILITY,
     GROUP_TITLE as SERVICE_FREEZE_GROUP,
     WEB_FIELDS as SERVICE_FREEZE_FIELDS,
 )
@@ -1363,7 +1362,6 @@ SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
     "crypto_rate_api_divisor": ("crypto_rate_mode", ("api",)),
     "backup_telegram_allow_env": ("backup_telegram_enabled", ("1",)),
     **entry_approval_visibility(),
-    **FREEZE_VISIBILITY,
 }
 
 # Switches whose "on" accepts a security risk: the warning is shown under the switch in danger tone.

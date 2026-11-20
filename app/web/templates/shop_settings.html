@@ -146,6 +146,9 @@
     {% set reset_action = '/shop-settings?tab=colors' %}
     {% include "_settings_reset_defaults.html" %}
 
+  {% elif tab == 'service_actions' %}
+    {% set settings_action = '/shop-settings?tab=service_actions' %}
+    {% include "_settings_service_actions.html" %}
   {% else %}
     {% if tab == 'service_import' %}
       {% include "_settings_service_import.html" %}
