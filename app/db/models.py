@@ -830,7 +830,6 @@ class ServiceFreeze(Base):
             "uq_service_freezes_open",
             "service_id",
             unique=True,
-            sqlite_where=text("status IN ('pausing', 'frozen', 'resuming')"),
             postgresql_where=text("status IN ('pausing', 'frozen', 'resuming')"),
         ),
     )
