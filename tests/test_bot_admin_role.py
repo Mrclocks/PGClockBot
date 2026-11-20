@@ -6,7 +6,6 @@ panel wrote would be undone silently: an admin "demoted" here kept the admin men
 
 from __future__ import annotations
 
-import os
 import tempfile
 import unittest
 from collections.abc import AsyncIterator
@@ -15,10 +14,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from urllib.parse import parse_qs, urlsplit
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-
 import httpx
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.app import create_api_app, templates
 from app.db.models import Base, BotUser, ResellerProfile, Role
@@ -32,6 +29,7 @@ from app.services.bot_admins import (
     is_bot_admin,
     role_badge,
 )
+from tests.postgres_support import scoped_async_engine
 
 ADMIN_TID = 7001
 OTHER_TID = 7002
@@ -122,7 +120,7 @@ class RoleFormTemplateTests(unittest.TestCase):
 class RoleRouteTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="pgclock-bot-admin-role-")
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.temporary.name) / 'roles.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
