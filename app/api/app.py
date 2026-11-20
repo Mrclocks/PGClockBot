@@ -150,7 +150,8 @@ from app.services.users import (
     set_setting,
     set_settings_bulk,
 )
-from app.services.plan_scope import normalize_plan_scopes, plan_choices
+from app.services.plan_scope import normalize_plan_scopes, scope_selection
+from app.services.service_actions_page import clamp_service_action_numbers, service_actions_context
 from app.services.web_auth import (
     admin_session_version,
     load_web_admin,
@@ -4622,7 +4623,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 ),
             )
         elif tab == "service_actions":
-            ctx["plan_scope_choices"] = await plan_choices(session, None)
+            ctx.update(await service_actions_context(session, None))
         elif tab == "notifications":
             prefs = await get_notify_prefs(session)
             ctx["notify_prefs"] = prefs
@@ -5252,9 +5253,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         for key in TOGGLE_KEYS:
             if key in known:
                 payload[key] = "1" if form.get(f"s_{key}") else "0"
-        payload.update(await normalize_plan_scopes(
-            session, {key: form.getlist(f"s_{key}") for key in PLAN_SCOPE_KEYS & known}, shop_id=None
-        ))
+        payload.update(await normalize_plan_scopes(session, {
+            key: scope_selection(form.get(f"s_{key}_mode"), form.getlist(f"s_{key}"))
+            for key in PLAN_SCOPE_KEYS & known
+        }, shop_id=None))
         for key in known:
             if key in TOGGLE_KEYS or key in IMAGE_KEYS or key in PLAN_SCOPE_KEYS:
                 continue
@@ -5283,6 +5285,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     val = normalize_setting_value(key, val)
                 payload[key] = val
         normalize_threshold_form(payload)
+        clamp_service_action_numbers(payload)
         if tab == "daily_report":
             from app.services.daily_report import (
                 ACTOR_OWNER,

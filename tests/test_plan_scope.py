@@ -23,8 +23,9 @@ SHOP_A, SHOP_B = 5, 6
 
 
 class ParseTests(unittest.TestCase):
-    def test_all_is_the_default_and_a_list_allows_only_its_plans(self) -> None:
-        self.assertTrue(parse_plan_scope(None).allows(99))
+    def test_no_plan_is_the_default_and_a_list_allows_only_its_plans(self) -> None:
+        self.assertFalse(parse_plan_scope(None).allows(99))
+        self.assertTrue(parse_plan_scope(ALL).allows(99))
         scope = parse_plan_scope("1, 3,x,")
         self.assertEqual((scope.allows(3), scope.allows(2), scope.allows(None)), (True, False, False))
         self.assertFalse(parse_plan_scope("").allows(1))

@@ -1,7 +1,8 @@
 """Which of a shop's plans a customer feature applies to: all plans, or a chosen list.
 
-A scope is stored as one setting value: ``all``, or the chosen plan ids separated by commas
-(empty = no plan). Saving keeps only plans of the saving shop's own catalog, so a shop can
+A scope is stored as one setting value: ``all``, or the chosen plan ids separated by commas.
+Empty, also a value never saved, means no plan: a feature is off for every plan until a person
+chooses. Saving keeps only plans of the saving shop's own catalog, so a shop can
 never list another shop's plan; checking compares a service's plan id with the stored list.
 """
 
@@ -38,8 +39,8 @@ class PlanChoice:
 
 
 def parse_plan_scope(raw: str | None) -> PlanScope:
-    """``all`` (also the default for a value never saved), or the listed ids; junk ids are dropped."""
-    text = (raw if raw is not None else ALL).strip().lower()
+    """``all``, or the listed ids (none for an empty or missing value); junk ids are dropped."""
+    text = (raw or "").strip().lower()
     if text == ALL:
         return PlanScope(True, frozenset())
     ids = {int(part) for part in text.split(",") if part.strip().isdigit()}
@@ -71,6 +72,14 @@ async def normalize_plan_scope(session: AsyncSession, selected: Iterable[str], *
     wanted = {int(v) for v in values if v.isdigit()}
     own = {choice.plan_id for choice in await plan_choices(session, shop_id)}
     return serialize_plan_scope(PlanScope(False, frozenset(wanted & own)))
+
+
+MODE_ALL = "all"
+
+
+def scope_selection(mode: str | None, values: Iterable[str]) -> list[str]:
+    """The web form's two parts as one selection: «همهٔ پلن‌ها», or the checked plans."""
+    return [ALL] if (mode or "").strip().lower() == MODE_ALL else list(values)
 
 
 async def normalize_plan_scopes(

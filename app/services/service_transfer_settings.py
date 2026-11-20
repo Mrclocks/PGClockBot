@@ -10,14 +10,15 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
-from app.services.plan_scope import ALL, PlanScope, parse_plan_scope
+from app.services.plan_scope import PlanScope, parse_plan_scope
 
 ENABLED_KEY = "service_transfer_enabled"
 LINK_HOURS_KEY = "service_transfer_link_hours"
 PER_PERIOD_KEY = "service_transfer_per_period"
 NEW_LINK_KEY = "service_transfer_new_link"
 PLANS_KEY = "service_transfer_plans"
-TRANSFER_DEFAULTS = {ENABLED_KEY: "0", PLANS_KEY: ALL, LINK_HOURS_KEY: "24", PER_PERIOD_KEY: "1", NEW_LINK_KEY: "1"}
+# Off, and on no plan, until a person turns it on and chooses plans.
+TRANSFER_DEFAULTS = {ENABLED_KEY: "0", PLANS_KEY: "", LINK_HOURS_KEY: "24", PER_PERIOD_KEY: "1", NEW_LINK_KEY: "1"}
 TRANSFER_BOUNDS = {LINK_HOURS_KEY: (1, 168), PER_PERIOD_KEY: (1, 10)}
 PERIOD = timedelta(days=30)
 STATUS_OPEN = "open"
@@ -37,7 +38,7 @@ WEB_FIELDS: list[tuple[str, str, str, str]] = [
     (ENABLED_KEY, "انتقال سرویس به مشتری دیگر", "toggle",
      "مشتری از «⚙️ بیشتر» سرویس یک لینک یک‌بارمصرف می‌سازد؛ کسی که آن را در همین ربات باز کند و بپذیرد صاحب سرویس "
      "می‌شود. تمدید خودکار سرویس خاموش می‌شود تا از کیف پول کسی بدون رضایتش برداشت نشود."),
-    (PLANS_KEY, "پلن‌هایی که انتقال دارند", "plans",
+    (PLANS_KEY, "پلن‌ها", "plans",
      "فقط سرویس‌هایی که پلنشان این‌جا انتخاب شده منتقل می‌شوند؛ هنگام پذیرفتن لینک هم دوباره بررسی می‌شود. "
      "«همهٔ پلن‌ها» پلن‌هایی را هم که بعداً می‌سازید شامل می‌شود."),
     (LINK_HOURS_KEY, "اعتبار لینک انتقال (ساعت)", "number", "از ۱ تا ۱۶۸ ساعت؛ بعد از آن لینک کار نمی‌کند."),
@@ -46,8 +47,7 @@ WEB_FIELDS: list[tuple[str, str, str, str]] = [
      "پیشنهادی: روشن. لینک اشتراک قبلی از کار می‌افتد تا صاحب قبلی دیگر نتواند از سرویس استفاده کند."),
 ]
 BOT_FIELDS: list[tuple[str, str, str]] = [(key, label, kind) for key, label, kind, _help in WEB_FIELDS]
-# The other fields show only while the switch is on (users.SETTING_VISIBILITY).
-TRANSFER_VISIBILITY = {key: (ENABLED_KEY, ("1",)) for key, *_rest in WEB_FIELDS if key != ENABLED_KEY}
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +56,7 @@ class TransferPolicy:
     link_hours: int
     per_period: int
     new_link: bool
-    plans: PlanScope = PlanScope(True, frozenset())
+    plans: PlanScope = PlanScope(False, frozenset())
 
     def allows_plan(self, plan_id: int | None) -> bool:
         return self.enabled and self.plans.allows(plan_id)

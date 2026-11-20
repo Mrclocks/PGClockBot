@@ -21,7 +21,10 @@ from app.services.customer_action_notices import notice_text
 from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
-UI = {"service_transfer_enabled": "1", "service_transfer_link_hours": "24", "service_transfer_per_period": "1"}
+UI = {
+    "service_transfer_enabled": "1", "service_transfer_plans": "all",
+    "service_transfer_link_hours": "24", "service_transfer_per_period": "1",
+}
 OWNER, FRIEND, OTHER, SHOP = 1, 2, 3, 7
 
 
@@ -215,6 +218,7 @@ class TransferTests(unittest.IsolatedAsyncioTestCase):
             service = await session.get(UserService, 10)
             self.assertEqual(await transfer.transfer_button(session, service, UI), "start")
             self.assertIsNone(await transfer.transfer_button(session, service, {}))
+            self.assertIsNone(await transfer.transfer_button(session, service, {"service_transfer_enabled": "1"}))
         await self.make()
         async with self.Session() as session:
             self.assertEqual(await transfer.transfer_button(session, await session.get(UserService, 10), {}), "cancel")
