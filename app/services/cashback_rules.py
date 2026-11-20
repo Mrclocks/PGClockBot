@@ -22,7 +22,7 @@ from app.services.users import get_setting, set_setting
 CASHBACK_PERMISSION = "cashback"
 RULE_LIMIT = 50
 MAX_MONEY = 2_000_000_000
-EVENTS = ("new", "renew", "addon")
+EVENTS = ("new", "renew", "addon", "topup")
 COMBINE_MODES = ("best", "sum")
 
 
