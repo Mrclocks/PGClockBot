@@ -156,6 +156,8 @@ async def run_first_use_check(
             break
         after_id = int(services[-1].id)
         eligible = await _eligible(session, services, send_bot_for)
+        # No connection waits idle in a transaction on the panel (sessions do not expire on commit).
+        await session.commit()
         infos = await _fetch_all(pg, [service for service, _, _ in eligible])
         for (service, user, bot), info in zip(eligible, infos, strict=True):
             if info is None or not await _stamp(session, int(service.id), now):

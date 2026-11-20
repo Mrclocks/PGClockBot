@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.exceptions import TelegramForbiddenError
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, UserService
@@ -93,6 +93,33 @@ class NudgeCase(unittest.IsolatedAsyncioTestCase):
 
 
 class FirstUseNudgeTests(NudgeCase):
+    async def test_no_database_connection_is_held_while_the_panel_is_called(self):
+        held = {"connections": 0}
+        pool = self.engine.sync_engine.pool
+
+        def checked_out(*_args) -> None:
+            held["connections"] += 1
+
+        def checked_in(*_args) -> None:
+            held["connections"] -= 1
+
+        event.listen(pool, "checkout", checked_out)
+        event.listen(pool, "checkin", checked_in)
+        self.addCleanup(event.remove, pool, "checkout", checked_out)
+        self.addCleanup(event.remove, pool, "checkin", checked_in)
+        during_panel: list[int] = []
+        lookup = self.panel.subscription_info
+
+        async def counting_lookup(token):
+            during_panel.append(held["connections"])
+            return await lookup(token)
+
+        self.panel.subscription_info = counting_lookup
+        await self.session.close()  # the fixture's session is not the job's
+        self.assertEqual(await self.run_check(), 2)
+        self.assertTrue(during_panel)
+        self.assertEqual(set(during_panel), {0})
+
     async def test_only_unused_services_in_the_window_are_messaged_from_their_own_bot(self):
         self.assertEqual(await self.run_check(), 2)
         self.assertEqual([c.args[0] for c in self.platform_bot.send_message.await_args_list], [1001])
