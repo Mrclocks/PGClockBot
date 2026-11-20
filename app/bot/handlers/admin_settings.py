@@ -82,6 +82,7 @@ from app.services.bot_setting_values import (
     text_template_hint,
     wants_default_text,
 )
+from app.services.receipt_risk import BOT_FIELDS as RECEIPT_RISK_BOT_FIELDS
 from app.services.settings_operation_fields import (
     AUTO_APPROVE_AFTER_FIELDS,
     AUTO_RENEW_FIELDS,
@@ -415,6 +416,7 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("receipt_dup", "ضدتقلب رسید", [
                 ("receipt_dup_policy", "رسید تکراری (warn/block)", "text"),
+                *RECEIPT_RISK_BOT_FIELDS,
             ]),
             ("receipt_match", "تطبیق رسید", RECEIPT_MATCH_FIELDS),
             ("terms_buy", "قوانین خرید", [

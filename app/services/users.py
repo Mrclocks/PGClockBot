@@ -37,6 +37,7 @@ from app.services.entry_approval_config import (
     prepare_saved_values as prepare_entry_approval_values,
     touches_entry_approval,
 )
+from app.services.receipt_risk import RISK_DEFAULTS as RECEIPT_RISK_DEFAULTS, WEB_FIELDS as RECEIPT_RISK_FIELDS
 from app.services.auto_renew_timing import (
     GROUP_TITLE as AUTO_RENEW_GROUP,
     TIMING_DEFAULTS as AUTO_RENEW_DEFAULTS,
@@ -1281,6 +1282,7 @@ DEFAULT_SETTINGS.update(button_style_defaults())
 DEFAULT_SETTINGS.update(screen_text_defaults())
 DEFAULT_SETTINGS.update(MONITOR_TEXT_DEFAULTS)
 DEFAULT_SETTINGS.update(ENTRY_APPROVAL_DEFAULTS)
+DEFAULT_SETTINGS.update(RECEIPT_RISK_DEFAULTS)
 DEFAULT_SETTINGS.update(AUTO_RENEW_DEFAULTS)
 DEFAULT_SETTINGS.update(notice_text_defaults())
 
@@ -1460,6 +1462,7 @@ SETTING_GROUPS = {
             "اگر همان تصویر رسید برای پرداخت دیگری دیده شود",
             [("warn", "هشدار به بررسی‌کننده"), ("block", "رد کردن آپلود")],
         ),
+        *RECEIPT_RISK_FIELDS,
     ],
     "آموزش اتصال": [
         (
