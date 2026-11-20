@@ -124,6 +124,7 @@ from app.services.panel_brand import (
 )
 from app.services.notifications import SYSTEM_NOTIFY_KEYS
 from app.services.receipt_review import DEFAULT_REJECT_TEXT
+from app.services.resource_cost import CONNECTION_MONITOR_COST, HEAVY_LABEL, HEAVY_SETTINGS
 from app.services.support_button import support_markup
 from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
 from app.services.settings_hub import (
@@ -217,6 +218,10 @@ templates.env.globals["psp_gateways_form_json"] = psp_gateways_form_json
 templates.env.globals["miniapp_accent_presets"] = ACCENT_PRESETS
 templates.env.globals["setting_visibility"] = SETTING_VISIBILITY
 templates.env.globals["setting_risk_notes"] = SETTING_RISK_NOTES
+# Switches whose background work is heavy carry a «پر مصرف» tag (DESIGN_SYSTEM.md §6, heavy switch).
+templates.env.globals["setting_heavy_notes"] = HEAVY_SETTINGS
+templates.env.globals["heavy_label"] = HEAVY_LABEL
+templates.env.globals["connection_monitor_cost"] = CONNECTION_MONITOR_COST
 templates.env.globals["brand_presets"] = BRAND_PRESETS
 # The direct-message modal sits on many pages: its button targets and colours come from one place.
 templates.env.globals["message_button_dm_groups"] = message_button_target_groups(links=True, plans=False, renew=True)

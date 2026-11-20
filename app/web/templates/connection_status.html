@@ -36,9 +36,10 @@
 
   <section class="card" aria-labelledby="test-runtime-title">
     <div class="connection-card-head">
-      <h2 id="test-runtime-title">تست خودکار</h2>
+      <h2 id="test-runtime-title">تست خودکار <span class="ds-badge" data-tone="warn">{{ heavy_label }}</span></h2>
       <span class="badge {{ 'ok' if page.settings.enabled else 'neutral' }}">{{ 'روشن' if page.settings.enabled else 'خاموش' }}</span>
     </div>
+    <p class="muted">{{ connection_monitor_cost }}</p>
     <p class="muted">بعد از ثبت کاربر تست و انتخاب کانفیگ‌ها، تست‌ها را روشن کنید. بررسی تقریباً هر دقیقه انجام می‌شود و «تازه‌سازی» فقط آخرین نتیجه را نشان می‌دهد.</p>
     {% if page.stop_reason %}
     <div class="flash warn" role="status">
