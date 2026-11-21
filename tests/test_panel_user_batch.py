@@ -99,6 +99,15 @@ class PanelInfosTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats.single_calls, ID_CHUNK)
         self.assertEqual(infos[-1]["id"], rows[-1].pg_user_id)
 
+    async def test_an_unexpected_list_error_still_falls_back(self) -> None:
+        class Broken(FakePanel):
+            async def list_users_by_ids(self, ids: list[int]) -> dict:
+                raise RuntimeError("unexpected")
+
+        rows = services(3)
+        infos = await panel_infos(Broken({s.pg_user_id: s.pg_username for s in rows}), rows)
+        self.assertTrue(all(info["source"] == "subscription" for info in infos))
+
     async def test_services_without_a_valid_panel_id_or_token(self) -> None:
         rows = [Service(None, "a", "tok1"), Service(True, "user1", "tok1"), Service(-3, "x", None)]
         panel = FakePanel({1: "user1"})

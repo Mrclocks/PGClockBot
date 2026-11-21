@@ -19,17 +19,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-import httpx
-
-from app.services.pasarguard import PasarGuardError
-
 logger = logging.getLogger(__name__)
 
 ID_CHUNK = 100
 LIST_TIMEOUT_SECONDS = 30
 SINGLE_TIMEOUT_SECONDS = 12
 SINGLE_CONCURRENCY = 8
-_PANEL_ERRORS = (httpx.HTTPError, PasarGuardError, TimeoutError, ValueError)
 
 
 class PanelService(Protocol):
@@ -68,7 +63,7 @@ async def _list_chunk(pg: Any, ids: list[int], stats: BatchStats) -> dict[int, d
     stats.list_calls += 1
     try:
         data = await asyncio.wait_for(pg.list_users_by_ids(ids), timeout=LIST_TIMEOUT_SECONDS)
-    except _PANEL_ERRORS:
+    except Exception:  # a read with a fallback: no list error may stop the job that asked
         logger.warning("panel user list by ids failed; reading those services one by one", exc_info=True)
         return {}
     wanted = set(ids)
