@@ -25,9 +25,12 @@ const MAX_VIEWS = +(args.max || 300);
 const SEED = ['/home', '/dashboard', '/users', '/users/11/edit', '/plans', '/plans/1/edit', '/finance', '/tickets',
   '/inbox', '/resellers', '/resellers/2/edit', '/marketing', '/settings', '/connection-status', '/security', '/pg'];
 const SKIP = /logout|export|csv|download|delete|remove|purge|reset|restart|update\/|backup\/(create|restore)|\/run|setup/i;
-// Content that differs on every load by design: the live server meters are masked, the random
+// Content that differs on every load by design: live figures are masked, the random
 // example service name gets a fixed text (its length moves what sits next to it).
-const MASK = ['[data-server-meters]', '[data-live]'];
+const MASK = ['[data-server-meters]', '[data-live]',
+  // Figures measured by the running process: job run times, panel-link timings, the report's own clock.
+  'section[aria-label="کارهای پس‌زمینه"] .table-wrap', '.home-link-health .link-health-summary',
+  '.home-link-health .link-health-grid', '.finance-report-stamp'];
 const FIXED_TEXT = { '#naming-sample': 'clk_sample01', '[data-naming-sample]': 'clk_sample01' };
 // Chromium does not paint blurred backdrops and fading scrollbars the same way twice. Both runs
 // screenshot without them; everything else on the page is drawn as served.
