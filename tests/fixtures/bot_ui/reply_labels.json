@@ -10,6 +10,7 @@
   "admin.broadcast": {
     "⬅️ بازگشت": "back",
     "🏠 منوی اصلی": "home",
+    "👥 مشتریان (بدون ادمین)": "bc_aud_users",
     "👥 کاربران عادی": "bc_aud_users",
     "📢 همه": "bc_aud_all",
     "🛠 ادمین‌ها": "bc_aud_admins",
@@ -22,6 +23,7 @@
     "👤 افراد": "adm_hub_people",
     "📡 تست و وضعیت اتصال": "connection_status_admin",
     "📡 وضعیت اتصال": "connection_status_admin",
+    "📢 پیام گروهی": "adm_broadcast",
     "📦 محصول و PG": "adm_hub_product",
     "📦 محصول و پاسارگارد": "adm_hub_product",
     "🗓 عملیات روزانه": "adm_hub_ops",
