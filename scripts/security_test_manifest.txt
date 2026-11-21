@@ -563,6 +563,8 @@ tests/test_postgres_only_check.py
 tests/test_cli_postgres_only.py
 # PostgreSQL backups: all-or-nothing restore, refused archives, .env and secrets kept safe.
 tests/test_backup_postgres_restore.py
+tests/test_backup_tool_version.py
+tests/test_backup_restore_newer_client.py
 tests/test_backup_env_restore.py
 # Startup: PostgreSQL DATABASE_URL only; a refused URL is never echoed.
 tests/test_database_url_startup.py
