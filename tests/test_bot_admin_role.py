@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.app import create_api_app, templates
 from app.db.models import Base, BotUser, ResellerProfile, Role
-from tests.postgres_support import scoped_async_engine
 from app.services.bot_admins import (
     BOT_ADMIN_GRANT_REFUSED,
     BOT_ADMIN_LABEL,
