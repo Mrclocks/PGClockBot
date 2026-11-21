@@ -590,3 +590,4 @@ tests/test_service_freeze.py
 tests/test_service_transfer.py
 tests/test_plan_scope.py
 tests/test_error_handling_rules.py
+tests/test_delivery_rewards_after_db_error.py
