@@ -21,7 +21,7 @@ from app.services import home_overview
 from app.services.authz import authz_from_staff, can_shop
 from app.services.secret_box import reveal_bot_token
 from app.services.shop_scope import is_platform_admin, shop_owner_id
-from app.services.ux20 import bot_deep_link, normalize_bot_username
+from app.services.bot_links import bot_deep_link, normalize_bot_username
 
 # (payload, label) in the order the settings page and the bot list them.
 QUICK_LINKS: tuple[tuple[str, str], ...] = (

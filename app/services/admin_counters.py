@@ -15,7 +15,7 @@ from app.services.demo_users import non_demo_customer
 from app.services.numbers import to_fa_digits
 from app.services.ticket_scope import ticket_shop_clause
 from app.services.service_cancellations import pending_cancellation_count
-from app.services.ux20 import count_stuck_paid_orders
+from app.services.delivery_failures import count_stuck_paid_orders
 
 
 @dataclass(frozen=True, slots=True)

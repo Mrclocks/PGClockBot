@@ -23,6 +23,7 @@ from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.handlers.action_reason import ask_reason, take_reason
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import safe_edit_text
+from app.services.service_freeze_guard import close_freezes_of_pg_user
 from app.services.credential_policy import validate_pg_username
 from app.db.models import BotUser
 from app.services.action_reasons import bot_actor
@@ -913,6 +914,8 @@ async def pg_dis(
     targets = await _pg_notice_targets(session, reseller_owner_id, uid)
     try:
         user = await gate.pg_client.set_disabled_by_id(uid, True)
+        if session is not None:
+            await close_freezes_of_pg_user(session, uid)
         await _finish_reasoned_pg_action(
             session, db_user, owner_id=reseller_owner_id, uid=uid, action="pg_user_disable", reason=reason, targets=targets
         )

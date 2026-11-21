@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget
+from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, Setting
 from app.services.connection_monitor_claims import eligible_monitor_account
 from app.services.connection_monitor_settings import LOCAL_PROBE_ID
 from app.services.connection_monitor_snapshots import stored_utc
+from app.services.connection_monitor_timing import INTERVAL_SETTING_KEY, parse_interval, timing_for
 from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS
 from app.services.connection_monitor_views import PAGE_SIZE, target_health
 from app.services.connection_status_policy import is_fresh
-from app.services.connection_status_types import ConnectionStatus, require_aware
+from app.services.connection_status_types import FRESHNESS, ConnectionStatus, require_aware
 from app.services.users import current_shop_reseller_id
 
 
@@ -38,6 +39,8 @@ class PublicConnectionStatus:
 class PublicConnectionPage:
     entries: tuple[PublicConnectionStatus, ...]
     next_id: int | None = None
+    # How long a check stays current at the configured interval; renderers mark older results.
+    freshness: timedelta = FRESHNESS
 
 
 def _scope(column: InstrumentedAttribute[int | None], shop_id: int | None) -> ColumnElement[bool]:
@@ -52,8 +55,8 @@ def _published(shop_id: int | None) -> tuple[ColumnElement[bool], ...]:
 
 
 def _public_entry(target: ConnectionMonitorTarget, rows: tuple[ConnectionMonitorSnapshot, ...], *,
-                   ready: bool, now: datetime) -> PublicConnectionStatus:
-    health = target_health(target, rows, runtime_ready=ready, now=now)
+                   ready: bool, now: datetime, freshness: timedelta) -> PublicConnectionStatus:
+    health = target_health(target, rows, runtime_ready=ready, now=now, freshness=freshness)
     status = health.status if health.status in (ConnectionStatus.HEALTHY, ConnectionStatus.DEGRADED, ConnectionStatus.DOWN) else ConnectionStatus.UNKNOWN
     return PublicConnectionStatus(target.public_name, status, health.checked_at, is_catalog_stale=not ready)
 
@@ -65,7 +68,9 @@ async def public_connection_page(session: AsyncSession, *, now: datetime, after_
         raise ValueError(INVALID_PAGE)
     if type(after_id) is not int or not 0 <= after_id <= 2147483647:
         raise ValueError(INVALID_PAGE)
-    runtime = (await session.execute(select(ConnectionMonitorState.catalog_synced_at).where(
+    # The interval setting rides on the same query: a public read stays at three selects.
+    interval = select(Setting.value).where(Setting.key == INTERVAL_SETTING_KEY).limit(1).scalar_subquery()
+    runtime = (await session.execute(select(ConnectionMonitorState.catalog_synced_at, interval.label("interval")).where(
         _scope(ConnectionMonitorState.reseller_id, shop_id), ConnectionMonitorState.probe_id == LOCAL_PROBE_ID,
         ConnectionMonitorState.enabled.is_(True), ConnectionMonitorState.pg_user_id.is_not(None),
         ConnectionMonitorState.subscription_token_enc.is_not(None), ConnectionMonitorState.account_revision != "",
@@ -94,7 +99,11 @@ async def public_connection_page(session: AsyncSession, *, now: datetime, after_
     by_target: dict[int, list[ConnectionMonitorSnapshot]] = {}
     for row in rows:
         by_target.setdefault(row.target_id, []).append(row)
-    ready = is_fresh(stored_utc(runtime.catalog_synced_at), now=now)
-    entries = tuple(_public_entry(target, tuple(by_target.get(target.id, ())), ready=ready, now=now) for target in visible)
+    timing = timing_for(parse_interval(runtime.interval))
+    ready = is_fresh(stored_utc(runtime.catalog_synced_at), now=now, freshness=timing.freshness)
+    entries = tuple(
+        _public_entry(target, tuple(by_target.get(target.id, ())), ready=ready, now=now, freshness=timing.freshness)
+        for target in visible
+    )
     await session.commit()
-    return PublicConnectionPage(entries, visible[-1].id if len(targets) > PAGE_SIZE else None)
+    return PublicConnectionPage(entries, visible[-1].id if len(targets) > PAGE_SIZE else None, timing.freshness)

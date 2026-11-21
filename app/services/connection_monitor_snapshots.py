@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorTarget
 from app.services.connection_monitor_claims import MonitorCycleClaim, MonitorTargetClaim, current_monitor_cycle
 from app.services.connection_monitor_settings import LOCAL_PROBE_ID
+from app.services.connection_monitor_timing import DEFAULT_TIMING, MonitorTiming
 from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS
 from app.services.connection_status_policy import apply_observation, is_fresh
 from app.services.connection_status_types import (
@@ -25,7 +26,6 @@ from app.services.connection_status_types import (
 
 
 logger = logging.getLogger(__name__)
-CHECK_INTERVAL = timedelta(seconds=60)
 
 
 def stored_utc(value: datetime | None) -> datetime | None:
@@ -73,10 +73,11 @@ def _write_health(row: ConnectionMonitorSnapshot, state: EndpointHealth) -> None
 
 
 async def complete_monitor_target(session: AsyncSession, claim: MonitorTargetClaim,
-                                  observations: dict[str, ProbeObservation], *, now: datetime) -> bool:
+                                  observations: dict[str, ProbeObservation], *, now: datetime,
+                                  timing: MonitorTiming = DEFAULT_TIMING) -> bool:
     if not observations or len(observations) > MAX_MONITOR_ENDPOINTS:
         raise ValueError("Invalid monitoring endpoint coverage")
-    if any(not is_fresh(observation.checked_at, now=now) for observation in observations.values()):
+    if any(not is_fresh(observation.checked_at, now=now, freshness=timing.freshness) for observation in observations.values()):
         return False
     rows = (await session.scalars(select(ConnectionMonitorSnapshot).where(
         ConnectionMonitorSnapshot.reseller_id.is_(None), ConnectionMonitorSnapshot.target_id == claim.target_id,
@@ -90,12 +91,15 @@ async def complete_monitor_target(session: AsyncSession, claim: MonitorTargetCla
         ConnectionMonitorTarget.test_enabled.is_(True), ConnectionMonitorTarget.generation == claim.generation,
         ConnectionMonitorTarget.endpoint_count == len(observations), ConnectionMonitorTarget.claim_token == claim.token,
         ConnectionMonitorTarget.claim_until > now, current_monitor_cycle(claim.cycle, now=now),
-    ).values(claim_token=None, claim_until=None, manual_pending=False, next_check_at=now + CHECK_INTERVAL))
+    ).values(claim_token=None, claim_until=None, manual_pending=False, next_check_at=now + timing.interval))
     if result.rowcount != 1:
         await session.rollback()
         return False
     for row in rows:
-        state = apply_observation(EndpointIdentity(row.endpoint_key, claim.generation), observations[row.endpoint_key], previous=snapshot_health(row))
+        state = apply_observation(
+            EndpointIdentity(row.endpoint_key, claim.generation), observations[row.endpoint_key],
+            previous=snapshot_health(row), freshness=timing.freshness,
+        )
         _write_health(row, state)
     await session.commit()
     return True

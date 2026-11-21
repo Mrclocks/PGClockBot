@@ -281,7 +281,7 @@ def register_order_review_pages(  # noqa: C901 - counts the nested routes; each 
                         )
                     except Exception as send_exc:
                         if order is not None:
-                            from app.services.ux20 import note_delivery_send_failure
+                            from app.services.delivery_failures import note_delivery_send_failure
 
                             await note_delivery_send_failure(
                                 session, order=order, payment=payment, error=str(send_exc)

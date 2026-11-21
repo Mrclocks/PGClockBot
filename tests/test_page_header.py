@@ -101,9 +101,10 @@ class PageMoreMenuIconTests(unittest.TestCase):
     """Every «⋯» row on a phone starts with its own icon (DESIGN_SYSTEM.md §7, «منوی ⋯»)."""
 
     def test_the_plans_menu_row_carries_the_tag_icon(self) -> None:
+        from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
         from tests.test_marketing_nav import OWNER, _page
 
-        html = _page("plans.html", "/plans", OWNER, plans=[], values={})
+        html = _page("plans.html", "/plans", OWNER, plans=[], values={}, trial_placement_labels=TRIAL_PLACEMENT_LABELS)
         menu = html.split('id="page-more"', 1)[1].split("</div>", 1)[0]
         self.assertIn('class="more-ico"', menu)
         self.assertIn("برچسب دسته", menu)

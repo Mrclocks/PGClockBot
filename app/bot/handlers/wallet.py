@@ -27,7 +27,7 @@ from app.services.orders import create_wallet_topup
 from app.services.psp_gateways import gateway_choices
 from app.bot.nav_input import retire_prompt_buttons
 from app.services.receipts import submit_receipt
-from app.services.ux20 import payment_shop_clause
+from app.services.action_center import payment_shop_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import list_activity
 from app.services.wallet_topup import TOPUP_METHODS
@@ -125,7 +125,7 @@ async def redeem_gift_for_user(
     reseller_owner_id: int | None = None,
 ) -> bool:
     """Redeem a charge code; returns True on success."""
-    from app.services.ux20 import redeem_charge_code
+    from app.services.charge_codes import redeem_charge_code
 
     try:
         row, balance = await redeem_charge_code(session, user=db_user, code=code)

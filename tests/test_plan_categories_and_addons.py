@@ -492,7 +492,7 @@ class FulfillRoutesAddonTests(unittest.TestCase):
         bulk = Path("app/services/table_bulk.py").read_text(encoding="utf-8")
         self.assertIn("fulfill_paid_order", bulk)
         self.assertNotIn("await deliver_order(session, order)", bulk)
-        ux = Path("app/services/ux20.py").read_text(encoding="utf-8")
+        ux = Path("app/services/delivery_failures.py").read_text(encoding="utf-8")
         self.assertIn("fulfill_paid_order", ux)
         self.assertIn("open_notify_bot_for_user", ux)
         addons = Path("app/services/service_addons.py").read_text(encoding="utf-8")

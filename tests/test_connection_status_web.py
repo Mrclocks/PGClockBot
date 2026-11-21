@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.connection_monitor_timing import monitor_timing
 from connection_monitor_support import MonitorDatabaseCase, OWNER_STAFF, subscription_fixture_key
 
 from app.api.app import create_api_app, render
@@ -274,6 +275,7 @@ class MonitorWebTests(MonitorDatabaseCase):
             self.staff.update(staff)
             for path, data in (("/connection-status/account", {"username": "monitor-only"}),
                                ("/connection-status/runtime", {"enabled": "1"}), (f"/connection-status/configs/{subscription_fixture_key()}", {}),
+                               ("/connection-status/interval", {"seconds": "900"}),
                                ("/connection-status/targets/1/check", {}), ("/connection-status/targets/1/pause", {}),
                                ("/connection-status/targets/1/delete", {}),
                                ("/connection-status/targets/1", {"public_name": "x", "display_order": "0", "is_public": "0"})):
@@ -282,6 +284,17 @@ class MonitorWebTests(MonitorDatabaseCase):
             self.assertEqual((await self.client.get("/connection-status?hosts=1")).status_code, 403)
         self.panel.get_hosts.assert_not_called()
         self.panel.get_user_by_username.assert_not_called()
+
+    async def test_owner_changes_the_check_interval_and_odd_values_are_refused(self) -> None:
+        response = await self.client.post("/connection-status/interval", data={"seconds": "300"})
+        self.assertEqual(response.headers["location"], "/connection-status?saved=1")
+        page = await self.client.get("/connection-status")
+        self.assertIn('<option value="300" selected>هر ۵ دقیقه</option>', page.text)
+        self.assertIn("بررسی هر ۵ دقیقه انجام می‌شود", page.text)
+        response = await self.client.post("/connection-status/interval", data={"seconds": "45"})
+        self.assertIn("error=", response.headers["location"])
+        async with self.Session() as session:
+            self.assertEqual((await monitor_timing(session)).interval_seconds, 300)
 
     async def test_other_shop_target_cannot_be_edited_or_checked_by_id(self) -> None:
         await self.attach()

@@ -51,7 +51,7 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
         return u
 
     async def test_shop_gift_credits_shop_purse_not_platform(self):
-        from app.services.ux20 import create_charge_code, redeem_charge_code
+        from app.services.charge_codes import create_charge_code, redeem_charge_code
         from app.services.wallet import get_wallet_balance
 
         async with self.Session() as session:
@@ -387,7 +387,7 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
         from fastapi.responses import RedirectResponse
 
         from app.api.ux20_pages import register_ux20_pages
-        from app.services.ux20 import MAX_CHARGE_CODE_AMOUNT, create_charge_code
+        from app.services.charge_codes import MAX_CHARGE_CODE_AMOUNT, create_charge_code
 
         async with self.Session() as session:
             with self.assertRaises(ValueError):

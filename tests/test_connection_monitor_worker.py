@@ -8,16 +8,18 @@ import json
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy import delete, event, select
+from sqlalchemy import delete, event, select, update
 
 from connection_monitor_support import MonitorDatabaseCase, subscription_fixture_key
 
-from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, UserService
+from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, Setting, UserService
+from app.services.connection_monitor_snapshots import stored_utc
+from app.services.connection_monitor_timing import INTERVAL_SETTING_KEY
 from app.services.connection_monitor_config import MonitorBinding
 from app.services.connection_monitor_subscription import plan_monitor_configs, subscription_entries
 from app.services.connection_monitor_panel import MonitorAccount, MonitorCatalog
@@ -94,6 +96,45 @@ class MonitorWorkerTests(MonitorDatabaseCase):
             session.add(ConnectionMonitorState(enabled=True, pg_user_id=900, pg_username="monitor-only", account_revision="one", subscription_token_enc="synthetic"))
             session.add_all([ConnectionMonitorTarget(subscription_key=subscription_fixture_key(index), test_enabled=True, next_check_at=self.now) for index in range(2)])
             await session.commit()
+
+    async def _next_round(self) -> None:
+        """The targets are due again, as they are one interval after a completed round."""
+        async with self.Session() as session:
+            await session.execute(update(ConnectionMonitorTarget).values(next_check_at=datetime.now(timezone.utc) - timedelta(seconds=1)))
+            await session.commit()
+
+    async def test_a_round_with_nothing_due_reads_neither_the_panel_nor_the_core(self) -> None:
+        await run_monitor_cycle(self.Session, self.binary)
+        with patch("app.services.connection_monitor_worker.read_monitor_catalog",
+                   AsyncMock(side_effect=AssertionError("catalog read in an idle round"))):
+            result = await run_monitor_cycle(self.Session, self.binary)
+        self.assertEqual((result.claimed, result.completed), (True, 0))
+        self.assertEqual(self.started, 1)
+        async with self.Session() as session:
+            self.assertIsNone((await session.scalar(select(ConnectionMonitorState))).cycle_token)
+
+    async def test_a_catalog_one_interval_old_is_read_again_even_with_nothing_due(self) -> None:
+        await run_monitor_cycle(self.Session, self.binary)
+        async with self.Session() as session:
+            await session.execute(update(ConnectionMonitorState).values(
+                catalog_synced_at=datetime.now(timezone.utc) - timedelta(seconds=61)))
+            await session.commit()
+        reads = AsyncMock(side_effect=lambda account: MonitorCatalog(
+            copy.deepcopy(self.catalog["native_configs"]), checked_at=datetime.now(timezone.utc)))
+        with patch("app.services.connection_monitor_worker.read_monitor_catalog", reads):
+            await run_monitor_cycle(self.Session, self.binary)
+        self.assertEqual(reads.await_count, 1)
+        self.assertEqual(self.started, 1)
+
+    async def test_the_configured_interval_schedules_the_next_check(self) -> None:
+        async with self.Session() as session:
+            session.add(Setting(key=INTERVAL_SETTING_KEY, value="300"))
+            await session.commit()
+        before = datetime.now(timezone.utc)
+        await run_monitor_cycle(self.Session, self.binary)
+        async with self.Session() as session:
+            due = [stored_utc(row) for row in (await session.scalars(select(ConnectionMonitorTarget.next_check_at))).all()]
+        self.assertTrue(all(before + timedelta(seconds=300) <= at <= datetime.now(timezone.utc) + timedelta(seconds=300) for at in due))
 
     async def test_one_core_batch_persists_complete_coverage_and_releases_all_leases(self) -> None:
         result = await run_monitor_cycle(self.Session, self.binary)
@@ -227,6 +268,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
 
     async def test_panel_timeout_invalidates_evidence_without_incrementing_route_failure(self) -> None:
         await run_monitor_cycle(self.Session, self.binary)
+        await self._next_round()
         with patch("app.services.connection_monitor_worker.read_monitor_catalog", AsyncMock(side_effect=TimeoutError)):
             result = await run_monitor_cycle(self.Session, self.binary)
         self.assertEqual(result.reason, "catalog_unavailable")
@@ -236,6 +278,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
 
     async def test_inactive_account_error_is_not_ready_not_catalog_outage(self) -> None:
         await run_monitor_cycle(self.Session, self.binary)
+        await self._next_round()
         with patch("app.services.connection_monitor_worker.read_monitor_catalog",
                    AsyncMock(side_effect=MonitorAccountError("inactive"))):
             result = await run_monitor_cycle(self.Session, self.binary)
@@ -246,6 +289,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
 
     async def test_panel_timeout_account_error_stays_catalog_unavailable(self) -> None:
         await run_monitor_cycle(self.Session, self.binary)
+        await self._next_round()
         with patch("app.services.connection_monitor_worker.read_monitor_catalog",
                    AsyncMock(side_effect=MonitorAccountError("panel_timeout"))):
             result = await run_monitor_cycle(self.Session, self.binary)
@@ -256,6 +300,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
 
     async def test_monitor_config_error_stores_issue_code_as_reason(self) -> None:
         await run_monitor_cycle(self.Session, self.binary)
+        await self._next_round()
         with patch("app.services.connection_monitor_worker.plan_monitor_configs",
                    side_effect=MonitorConfigError(MonitorIssue.UNSUPPORTED)):
             result = await run_monitor_cycle(self.Session, self.binary)

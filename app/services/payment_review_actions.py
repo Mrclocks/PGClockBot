@@ -76,7 +76,7 @@ async def _report_failed_delivery(
     """
     # Local imports: both modules import handler code that imports this one.
     from app.services.notifications import notify_approved_delivery_stuck
-    from app.services.ux20 import note_delivery_send_failure
+    from app.services.delivery_failures import note_delivery_send_failure
 
     recorded = redact(failure_text(exc), limit=FAILURE_DETAIL_LIMIT)
     logger.warning("approved payment left undelivered payment=%s: %s", payment.id, recorded)
@@ -255,7 +255,7 @@ async def execute_payment_resend(
     try:
         await send_delivery_to_user(bot, user.telegram_id, session, payment, order)
         try:
-            from app.services.ux20 import resolve_delivery_failure
+            from app.services.delivery_failures import resolve_delivery_failure
 
             await resolve_delivery_failure(session, int(order.id))
             await session.commit()
@@ -271,7 +271,7 @@ async def execute_payment_resend(
         )
     except Exception as send_exc:
         try:
-            from app.services.ux20 import note_delivery_send_failure
+            from app.services.delivery_failures import note_delivery_send_failure
 
             await note_delivery_send_failure(
                 session, order=order, payment=payment, error=str(send_exc)
@@ -350,7 +350,7 @@ async def _deliver_and_notify(
     except Exception as send_exc:
         if order is not None:
             try:
-                from app.services.ux20 import note_delivery_send_failure
+                from app.services.delivery_failures import note_delivery_send_failure
 
                 await note_delivery_send_failure(
                     session, order=order, payment=payment, error=str(send_exc)

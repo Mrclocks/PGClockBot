@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -46,6 +47,23 @@ IN_CHUNK = 500
 
 class PanelListingIncomplete(Exception):
     """The panel's user list could not be read in full; the old total stays."""
+
+
+@dataclass(frozen=True, slots=True)
+class PanelUserLimit:
+    """The three fields the count needs; a full panel user row is several kilobytes."""
+
+    pg_id: int
+    username: str
+    limit_bytes: int
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> PanelUserLimit | None:
+        """A row without an integer id cannot be matched or de-duplicated and is skipped."""
+        uid = row.get("id")
+        if not isinstance(uid, int) or isinstance(uid, bool):
+            return None
+        return cls(uid, str(row.get("username") or "").strip().lower(), panel_user_limit_bytes(row))
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,13 +113,14 @@ def _page_users(data: Any) -> list[dict[str, Any]]:
     return [row for row in users if isinstance(row, dict)] if isinstance(users, list) else []
 
 
-async def list_panel_users_for_admin(pg: Any, admin_username: str) -> list[dict[str, Any]]:
+async def list_panel_users_for_admin(pg: Any, admin_username: str) -> list[PanelUserLimit]:
     """Every panel user owned by ``admin_username``; raise when the list cannot be read in full.
 
     Users created or deleted while paging can shift offsets, so the result is checked against
-    the panel's own total and refused when they disagree.
+    the panel's own total and refused when they disagree. Only id, username and limit are kept
+    from each page, so a shop with tens of thousands of users does not hold every full row.
     """
-    by_id: dict[int, dict[str, Any]] = {}
+    by_id: dict[int, PanelUserLimit] = {}
     total: int | None = None
     offset = 0
     while offset <= MAX_PANEL_USERS:
@@ -110,9 +129,9 @@ async def list_panel_users_for_admin(pg: Any, admin_username: str) -> list[dict[
             total = extract_list_total(data) if isinstance(data, dict) else None
         page = _page_users(data)
         for row in page:
-            uid = row.get("id")
-            if isinstance(uid, int) and not isinstance(uid, bool):
-                by_id[uid] = row
+            user = PanelUserLimit.from_row(row)
+            if user is not None:
+                by_id[user.pg_id] = user
         if len(page) < PAGE_SIZE:
             break
         offset += PAGE_SIZE
@@ -144,18 +163,18 @@ async def _local_matches(session: AsyncSession, shop_id: int, ids: list[int], na
     return local_ids, local_names
 
 
-async def compute_external_bytes(session: AsyncSession, *, shop_id: int, panel_users: list[dict[str, Any]]) -> int:
+async def compute_external_bytes(
+    session: AsyncSession, *, shop_id: int, panel_users: Sequence[PanelUserLimit]
+) -> int:
     """Sum of limits of the panel users the shop has no local service for."""
-    ids = [int(row["id"]) for row in panel_users if isinstance(row.get("id"), int)]
-    names = sorted({str(row.get("username") or "").strip().lower() for row in panel_users} - {""})
+    ids = [user.pg_id for user in panel_users]
+    names = sorted({user.username for user in panel_users} - {""})
     local_ids, local_names = await _local_matches(session, shop_id, ids, names)
-    external = 0
-    for row in panel_users:
-        name = str(row.get("username") or "").strip().lower()
-        if row.get("id") in local_ids or (name and name in local_names):
-            continue
-        external += panel_user_limit_bytes(row)
-    return external
+    return sum(
+        user.limit_bytes
+        for user in panel_users
+        if user.pg_id not in local_ids and not (user.username and user.username in local_names)
+    )
 
 
 async def due_shop_ids(session: AsyncSession, *, period_minutes: int, limit: int = DUE_BATCH) -> list[int]:
@@ -177,7 +196,7 @@ async def due_shop_ids(session: AsyncSession, *, period_minutes: int, limit: int
     return [int(x) for x in rows]
 
 
-async def _read_panel_users(sessions: async_sessionmaker[AsyncSession], shop_id: int) -> list[dict[str, Any]] | None:
+async def _read_panel_users(sessions: async_sessionmaker[AsyncSession], shop_id: int) -> list[PanelUserLimit] | None:
     async with sessions() as session:
         uname = (
             await session.scalar(select(ResellerProfile.pg_admin_username).where(ResellerProfile.user_id == shop_id))

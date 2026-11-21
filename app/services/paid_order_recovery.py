@@ -49,7 +49,7 @@ from app.services.stuck_order_resolution import (
     tell_customer_refunded,
 )
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
-from app.services.ux20 import record_delivery_failure
+from app.services.delivery_failures import record_delivery_failure
 
 logger = logging.getLogger(__name__)
 

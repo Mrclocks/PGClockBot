@@ -7,18 +7,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
-from app.services.ux20 import (
-    FUNNEL_STEPS,
-    bot_deep_link,
-    bot_tg_resolve_link,
-    capacity_should_warn,
-    compute_user_risk_flags,
-    generate_charge_code,
-    normalize_charge_code,
-    parse_risk_flags,
-    serialize_risk_flags,
-    shop_bundle_to_json,
-)
+from app.services.bot_links import bot_deep_link, bot_tg_resolve_link
+from app.services.charge_codes import generate_charge_code, normalize_charge_code
+from app.services.funnel_metrics import FUNNEL_STEPS
+from app.services.reseller_capacity_warn import capacity_should_warn
+from app.services.shop_bundle import shop_bundle_to_json
+from app.services.user_risk import compute_user_risk_flags, parse_risk_flags, serialize_risk_flags
 
 
 class Ux20HelpersTests(unittest.TestCase):
@@ -206,7 +200,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertNotIn("تبدیل", panel)
         self.assertIn("stat-ico", panel)
         self.assertEqual(panel.count("stat-ico"), 5)
-        ux = Path("app/services/ux20.py").read_text(encoding="utf-8")
+        ux = Path("app/services/funnel_metrics.py").read_text(encoding="utf-8")
         self.assertNotIn("_funnel_pct", ux)
         self.assertNotIn("_abandoned_plans", ux)
         self.assertNotIn("abandoned_plans", ux)
@@ -293,7 +287,7 @@ class Ux20RoutesRegistrationTests(unittest.TestCase):
 
 class Ux20AsyncServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_clone_plan_permission(self):
-        from app.services.ux20 import clone_plan
+        from app.services.plan_clone import clone_plan
 
         session = AsyncMock()
         result = MagicMock()
@@ -303,7 +297,7 @@ class Ux20AsyncServiceTests(unittest.IsolatedAsyncioTestCase):
             await clone_plan(session, 1, owner_reseller_id=None)
 
     async def test_action_center_shape(self):
-        from app.services.ux20 import build_action_center
+        from app.services.action_center import build_action_center
 
         session = AsyncMock()
 
@@ -505,7 +499,7 @@ class Ux20VersionTests(unittest.TestCase):
         self.assertIn("ارسال به تلگرام کاربر", html)
 
     def test_export_skips_secrets(self):
-        from app.services.ux20 import _is_secret_setting
+        from app.services.shop_bundle import _is_secret_setting
 
         for key in ("bot_token", "webhook_secret", "backup_telegram_bot_token"):
             self.assertTrue(_is_secret_setting(key), key)

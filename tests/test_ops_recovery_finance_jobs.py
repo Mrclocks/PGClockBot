@@ -92,7 +92,7 @@ class StuckPaidListTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_list_and_count_stuck_paid(self):
         from app.db.models import Order, OrderStatus, UserService
-        from app.services.ux20 import count_stuck_paid_orders, list_stuck_paid_orders
+        from app.services.delivery_failures import count_stuck_paid_orders, list_stuck_paid_orders
 
         async with self.Session() as session:
             u = await self._seed_user(session, 9001)

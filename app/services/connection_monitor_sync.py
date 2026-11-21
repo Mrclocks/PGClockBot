@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget
 from app.services.connection_monitor_claims import MonitorCycleClaim, current_monitor_cycle
 from app.services.connection_monitor_panel import MonitorAccount
 from app.services.connection_monitor_settings import ACCOUNT_UNAVAILABLE, LOCAL_PROBE_ID
+from app.services.connection_monitor_snapshots import stored_utc
 from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorConfigError, MonitorConfigPlan, MonitorIssue
 
 
@@ -29,6 +30,25 @@ async def load_cycle_inputs(session: AsyncSession, cycle: MonitorCycleClaim, *, 
     ).order_by(ConnectionMonitorTarget.id).limit(MAX_MONITOR_ENDPOINTS + 1))).all())
     await session.commit()
     return account, config_keys
+
+
+async def cycle_has_work(session: AsyncSession, cycle: MonitorCycleClaim, *, now: datetime, interval: timedelta) -> bool:
+    """True when a checkable target is due (scheduled or manual) or the catalog is one interval old.
+
+    Otherwise the round would only re-read the panel catalog and start the xray core for nothing.
+    """
+    synced_at = await session.scalar(select(ConnectionMonitorState.catalog_synced_at).where(
+        ConnectionMonitorState.id == cycle.state_id, ConnectionMonitorState.reseller_id.is_(None),
+    ).limit(1))
+    if synced_at is None or stored_utc(synced_at) <= now - interval:
+        return True
+    due = await session.scalar(select(ConnectionMonitorTarget.id).where(
+        ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.test_enabled.is_(True),
+        ConnectionMonitorTarget.generation != "", ConnectionMonitorTarget.endpoint_count > 0,
+        ConnectionMonitorTarget.next_check_at <= now,
+        or_(ConnectionMonitorTarget.claim_until.is_(None), ConnectionMonitorTarget.claim_until <= now),
+    ).limit(1))
+    return due is not None
 
 
 def plan_generation(plan: MonitorConfigPlan) -> str:

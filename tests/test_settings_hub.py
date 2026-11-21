@@ -60,7 +60,7 @@ class HubSectionTests(unittest.TestCase):
         self.assertNotIn("/settings?tab=bot", [h for _l, h in rows(hub_sections(groups, "/settings", area_icon="bot"))])
 
     def test_every_described_or_iconed_key_is_a_real_tab(self) -> None:
-        keys = {k for k, _ in SETTINGS_TABS} | {k for k, _ in RESELLER_SETTINGS_TABS} | {"identity", "buttons", "delivery", "variables"}
+        keys = {k for k, _ in SETTINGS_TABS} | {k for k, _ in RESELLER_SETTINGS_TABS} | {"identity", "buttons", "delivery", "customer_services", "variables"}
         self.assertLessEqual(set(TAB_DESCRIPTIONS), keys)
         self.assertLessEqual(set(TAB_ICONS), keys)
 

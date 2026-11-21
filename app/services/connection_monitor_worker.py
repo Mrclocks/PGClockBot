@@ -25,7 +25,8 @@ from app.services.connection_monitor_claims import (
 )
 from app.services.connection_monitor_panel import mark_monitor_user_missing, read_monitor_catalog
 from app.services.connection_monitor_snapshots import complete_monitor_target, invalidate_monitor_evidence
-from app.services.connection_monitor_sync import load_cycle_inputs, reconcile_monitor_plans
+from app.services.connection_monitor_sync import cycle_has_work, load_cycle_inputs, reconcile_monitor_plans
+from app.services.connection_monitor_timing import MonitorTiming, monitor_timing
 from app.services.connection_monitor_types import MonitorConfigError, MonitorConfigPlan
 from app.services.connection_probe import probe_client, probe_control, probe_proxy
 from app.services.connection_status_types import ConnectionStatus, MonitorReason, ObservationKind, ProbeObservation
@@ -70,7 +71,8 @@ async def _record_issue(sessions: async_sessionmaker[AsyncSession], cycle: Monit
 
 
 async def _check_target(sessions: async_sessionmaker[AsyncSession], claim: MonitorTargetClaim,
-                        batch: XrayBatch, semaphore: asyncio.Semaphore, *, control_ok: bool) -> bool:
+                        batch: XrayBatch, semaphore: asyncio.Semaphore, *, control_ok: bool,
+                        timing: MonitorTiming) -> bool:
     async def check(binding: MonitorBinding) -> tuple[str, ProbeObservation]:
         async with semaphore:
             client = await asyncio.to_thread(probe_client, port=binding.port)
@@ -82,29 +84,29 @@ async def _check_target(sessions: async_sessionmaker[AsyncSession], claim: Monit
     try:
         observations = dict(await gather_or_cancel(check(binding) for binding in bindings))
         async with sessions() as session:
-            return await complete_monitor_target(session, claim, observations, now=datetime.now(timezone.utc))
+            return await complete_monitor_target(session, claim, observations, now=datetime.now(timezone.utc), timing=timing)
     except Exception as exc:
         # Each target is an independent read-only network unit. Its lease remains
         # releasable and other targets must still complete if this unit fails.
         logger.warning("Monitoring target failed target=%s error_type=%s", claim.target_id, type(exc).__name__)
-        return await _record_target_failure(sessions, claim, bindings)
+        return await _record_target_failure(sessions, claim, bindings, timing=timing)
 
 
 async def _record_target_failure(sessions: async_sessionmaker[AsyncSession], claim: MonitorTargetClaim,
-                                 bindings: tuple[MonitorBinding, ...]) -> bool:
+                                 bindings: tuple[MonitorBinding, ...], *, timing: MonitorTiming) -> bool:
     now = datetime.now(timezone.utc)
     observations = {binding.endpoint.endpoint_key: ProbeObservation(ObservationKind.UNKNOWN, now, reason="probe_unavailable")
                     for binding in bindings}
     try:
         async with sessions() as session:
-            return await complete_monitor_target(session, claim, observations, now=now)
+            return await complete_monitor_target(session, claim, observations, now=now, timing=timing)
     except (SQLAlchemyError, ValueError):
         logger.warning("Monitoring target evidence unavailable target=%s", claim.target_id)
         return False
 
 
 async def _probe_claims(sessions: async_sessionmaker[AsyncSession], claims: tuple[MonitorTargetClaim, ...],
-                         plans: tuple[MonitorConfigPlan, ...], binary: XrayBinary) -> int:
+                         plans: tuple[MonitorConfigPlan, ...], binary: XrayBinary, *, timing: MonitorTiming) -> int:
     config_keys = {claim.config_key for claim in claims}
     endpoints = tuple(endpoint for plan in plans if plan.config_key in config_keys for endpoint in plan.endpoints)
     semaphore = asyncio.Semaphore(PROXY_CONCURRENCY)
@@ -113,7 +115,7 @@ async def _probe_claims(sessions: async_sessionmaker[AsyncSession], claims: tupl
         async with run_xray_batch(binary, endpoints) as batch:
             control_ok = await control
             results = await gather_or_cancel(
-                _check_target(sessions, claim, batch, semaphore, control_ok=control_ok) for claim in claims
+                _check_target(sessions, claim, batch, semaphore, control_ok=control_ok, timing=timing) for claim in claims
             )
             return sum(results)
     finally:
@@ -123,6 +125,10 @@ async def _probe_claims(sessions: async_sessionmaker[AsyncSession], claims: tupl
 
 async def _run_work(sessions: async_sessionmaker[AsyncSession], cycle: MonitorCycleClaim, binary: XrayBinary) -> int:
     async with sessions() as session:
+        timing = await monitor_timing(session)
+        if not await cycle_has_work(session, cycle, now=datetime.now(timezone.utc), interval=timing.interval):
+            await session.commit()
+            return 0
         account, selected = await load_cycle_inputs(session, cycle, now=datetime.now(timezone.utc))
     if not selected:
         return 0
@@ -141,7 +147,7 @@ async def _run_work(sessions: async_sessionmaker[AsyncSession], cycle: MonitorCy
         claims = await claim_due_targets(session, cycle, now=datetime.now(timezone.utc))
     if not claims:
         return 0
-    return await _probe_claims(sessions, claims, plans, binary)
+    return await _probe_claims(sessions, claims, plans, binary, timing=timing)
 
 
 async def run_monitor_cycle(sessions: async_sessionmaker[AsyncSession], binary: XrayBinary) -> MonitorCycleResult:

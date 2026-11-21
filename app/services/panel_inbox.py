@@ -153,7 +153,7 @@ async def _safe_action_center(
     session: AsyncSession, *, reseller_id: int | None, expire_days: int
 ) -> dict:
     from app.services.db_safe import rollback_quiet
-    from app.services.ux20 import build_action_center
+    from app.services.action_center import build_action_center
 
     try:
         return await build_action_center(
@@ -228,7 +228,7 @@ async def build_inbox_context(
     action_center_ok = True
     if has_scope:
         try:
-            from app.services.ux20 import build_action_center
+            from app.services.action_center import build_action_center
 
             action_center = await build_action_center(
                 session,
@@ -256,7 +256,7 @@ async def build_inbox_context(
     elif rid and staff.get("pg_admin_username"):
         try:
             from app.services.pg_overview import build_reseller_pg_overview
-            from app.services.ux20 import capacity_should_warn
+            from app.services.reseller_capacity_warn import capacity_should_warn
 
             ov = await build_reseller_pg_overview(staff, session=session)
             if ov.get("ready"):

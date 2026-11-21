@@ -102,7 +102,7 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("WEB_SECRET", SETTING_RISK_NOTES[tg.ALLOW_ENV_KEY])
 
     def test_a_shop_settings_import_cannot_turn_on_the_risk_switch(self) -> None:
-        from app.services.ux20 import shop_bundle_allowed_setting_keys
+        from app.services.shop_bundle import shop_bundle_allowed_setting_keys
 
         self.assertNotIn(tg.ALLOW_ENV_KEY, shop_bundle_allowed_setting_keys())
 
@@ -227,7 +227,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.send(), "error")
 
     async def test_the_backup_bot_token_is_not_part_of_the_shop_export(self) -> None:
-        from app.services.ux20 import export_shop_bundle
+        from app.services.shop_bundle import export_shop_bundle
 
         async with self.Session() as session:
             await set_setting(session, TOKEN_KEY, normalize_backup_setting(TOKEN_KEY, TOKEN))
