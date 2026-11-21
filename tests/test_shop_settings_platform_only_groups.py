@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import ResellerSetting
 from app.services.users import clear_settings_cache, get_all_settings
-from app.services.ux20 import shop_bundle_allowed_setting_keys
+from app.services.shop_bundle import shop_bundle_allowed_setting_keys
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarness
 
 SHOP_ID = 5

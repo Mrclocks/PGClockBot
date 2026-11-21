@@ -13,8 +13,10 @@ from app.services import bot_overview as overview
 from app.services.dashboard_trend import empty_trend, sales_trend
 from app.services.db_safe import rollback_quiet
 from app.services.host_gauges import empty_host_gauges, gauges_json, local_host_gauges
+from app.services.job_metrics import job_metrics
+from app.services.resource_cost import HEAVY_LABEL, job_usage_rows
 from app.services.shop_scope import empty_shop_stats
-from app.services.ux20 import count_stuck_paid_orders
+from app.services.delivery_failures import count_stuck_paid_orders
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,7 @@ def register_bot_overview_pages(app, *, render, require_perm, require_admin, get
             "period_labels": overview.PERIOD_LABELS,
             "compare_label": overview.COMPARE_LABELS[period],
             "host_gauges": None,
+            "job_usage": [],
             "bot_setup_needed": False,
             "stats": empty_shop_stats(),
         }
@@ -84,6 +87,9 @@ def register_bot_overview_pages(app, *, render, require_perm, require_admin, get
             except Exception:
                 logger.warning("bot host gauges unavailable", exc_info=True)
                 ctx["host_gauges"] = empty_host_gauges()
+            # Background jobs of this process: the server owner sees them next to the server meters.
+            ctx["job_usage"] = job_usage_rows(job_metrics.snapshot())
+            ctx["heavy_label"] = HEAVY_LABEL
         return render(request, "dashboard.html", ctx)
 
     @app.get("/dashboard/metrics")

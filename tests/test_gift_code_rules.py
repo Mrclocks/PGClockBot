@@ -28,7 +28,7 @@ from app.services.orders import (
     cancel_order,
     _release_order_discount,
 )
-from app.services.ux20 import create_charge_code, redeem_charge_code
+from app.services.charge_codes import create_charge_code, redeem_charge_code
 from tests.postgres_support import scoped_async_engine, scoped_database_url, scoped_sync_engine
 
 

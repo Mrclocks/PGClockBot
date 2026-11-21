@@ -127,7 +127,7 @@ class DeleteReasonExtractionTests(unittest.TestCase):
         self.assertFalse(delete_reason_too_short("حذف"))
 
     def test_users_delete_uses_helper(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/api/user_list_pages.py").read_text(encoding="utf-8")
         self.assertIn("extract_delete_reason", src)
         self.assertIn("delete_reason_too_short", src)
 

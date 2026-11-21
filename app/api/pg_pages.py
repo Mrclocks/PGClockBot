@@ -11,6 +11,7 @@ from fastapi import Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.service_freeze_guard import close_freezes_of_pg_user
 from app.services.action_reasons import ReasonRequired, log_reasoned_action, reason_from_form
 from app.services.credential_policy import validate_pg_username
 from app.services.customer_action_notices import notify_customers, pg_user_targets
@@ -348,7 +349,7 @@ def register_pg_pages(
                         "pg_username": staff_row.pg_username,
                     }
 
-        from app.services.ux20 import resolve_pg_open_url
+        from app.services.action_center import resolve_pg_open_url
 
         pg_external_url = await resolve_pg_open_url(
             session, is_admin=_is_pg_owner_principal(staff)
@@ -503,7 +504,7 @@ def register_pg_pages(
         ``pg_external_url`` for the open-PasarGuard link inside the dash body.
         """
         from app.services.panel_timing import mark
-        from app.services.ux20 import resolve_pg_open_url
+        from app.services.action_center import resolve_pg_open_url
 
         mark(request, "handler")
         widgets = await _pg_display_widgets(staff, session)
@@ -1107,6 +1108,7 @@ def register_pg_pages(
             await pg.set_disabled_by_id(user_id, True)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
+        await close_freezes_of_pg_user(session, user_id)
         await log_reasoned_action(
             session, staff, action="pg_user_disable", target_type="pg_user", target_id=user_id, reason=reason
         )

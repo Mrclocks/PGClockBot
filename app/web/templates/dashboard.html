@@ -27,6 +27,37 @@
 {% set title = 'سرور ربات' %}
 {% set metrics_url = '/dashboard/metrics' %}
 {% include "_server_meters.html" %}
+<section class="card card-flush" aria-label="کارهای پس‌زمینه">
+  <header class="card-flush-head">
+    {{ card_title('activity', 'کارهای پس‌زمینه') }}
+  </header>
+  {% if job_usage %}
+  <div class="table-wrap">
+    <table class="table-compact table-list-sm">
+      <thead>
+        <tr>
+          <th>کار</th><th>اجرا</th><th>میانگین (میلی‌ثانیه)</th><th class="col-hide-sm">بیشترین (میلی‌ثانیه)</th><th>خطا</th>
+          <th class="li-head" scope="col"><span class="li-count">کارهای پس‌زمینه · میانگین به میلی‌ثانیه</span></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for job in job_usage %}
+        <tr>
+          <td class="li-title">{{ job.label }}{% if job.is_heavy %} <span class="li-hide"><span class="ds-badge" data-tone="warn">{{ heavy_label }}</span></span>{% endif %}</td>
+          <td class="mono li-sub"><span>{{ job.runs | num }} اجرا</span> <span class="li-only">· بیشترین {{ job.max_ms | num }}{% if job.failures %} · {{ job.failures | num }} خطا{% endif %}</span></td>
+          <td class="mono li-value">{{ job.average_ms | num }}</td>
+          <td class="mono col-hide-sm">{{ job.max_ms | num }}</td>
+          <td class="mono li-badge"><span class="li-hide">{{ job.failures | num }}{% if job.overlaps %} · {{ job.overlaps | num }} هم‌پوشانی{% endif %}</span>{% if job.is_heavy %}<span class="li-only"><span class="ds-badge" data-tone="warn">{{ heavy_label }}</span></span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted ov-empty">از آخرین راه‌اندازی ربات، پرکارترین‌ها بالاتر. «خطا» یعنی اجرایی که در آن خطایی ثبت شد، حتی اگر کار ادامه پیدا کرد.</p>
+  {% else %}
+  <p class="muted ov-empty">هنوز کاری از آخرین راه‌اندازی اجرا نشده.</p>
+  {% endif %}
+</section>
 {% endif %}
 
 {% set bot_detail = ('@' ~ bot.username ~ ' · ' if bot.username else '') ~ (bot.detail or '') %}

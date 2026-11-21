@@ -27,7 +27,7 @@ from app.services import pg_read_resilience as resilience
 from app.services.pasarguard import PasarGuardClient, PasarGuardError
 from app.services.pg_access import resolve_acl_from_client
 from app.services.pg_staff_access import enforce_pg_admin_web_gate
-from app.services.ux20 import check_pg_connection
+from app.services.action_center import check_pg_connection
 from tests.postgres_support import scoped_async_engine
 
 

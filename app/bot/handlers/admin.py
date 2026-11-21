@@ -395,7 +395,7 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
-    from app.services.ux20 import list_stuck_paid_orders
+    from app.services.delivery_failures import list_stuck_paid_orders
 
     stuck = await list_stuck_paid_orders(session, reseller_id=None, limit=12)
     stuck_ids = {int(o.id) for o in stuck}
@@ -512,7 +512,7 @@ async def _approve_order_bot(
                 )
         except Exception as send_exc:
             try:
-                from app.services.ux20 import note_delivery_send_failure
+                from app.services.delivery_failures import note_delivery_send_failure
 
                 await note_delivery_send_failure(
                     session,
@@ -538,7 +538,7 @@ async def _approve_order_bot(
                     )
             except Exception as send_exc:
                 try:
-                    from app.services.ux20 import note_delivery_send_failure
+                    from app.services.delivery_failures import note_delivery_send_failure
 
                     await note_delivery_send_failure(
                         session,
@@ -725,7 +725,7 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
-    from app.services.ux20 import payment_shop_clause
+    from app.services.action_center import payment_shop_clause
 
     result = await session.execute(
         select(Payment)

@@ -83,7 +83,7 @@ class ReadPathTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(circuit["paused"])
         self.assertGreater(circuit["retry_in_sec"], 0)
         self.assertEqual(circuit["pause_count"], 1)
-        self.assertIn("connect:3", health.summary_text())
+        self.assertIn(f"connect:{resilience.FAILURES_TO_PAUSE}", health.summary_text())
 
 
 class SnapshotTests(unittest.TestCase):

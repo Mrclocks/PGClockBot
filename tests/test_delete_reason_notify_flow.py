@@ -81,7 +81,7 @@ class DeleteNotifyIncludesReasonTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_users_delete_handler_extracts_reason_before_notify(self):
         """Static+behavioral: handler wires extract → notify(reason=) → delete."""
-        api = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        api = (ROOT / "app/api/user_list_pages.py").read_text(encoding="utf-8")
         block = api.split("async def users_delete", 1)[1].split("\n    @app.", 1)[0]
         self.assertIn("extract_delete_reason(form)", block)
         self.assertIn("delete_reason_too_short(reason)", block)

@@ -18,7 +18,7 @@ class BillingModeMigrateTests(unittest.TestCase):
         self.assertIn("reseller_plans", src)
 
     def test_plans_page_soft_fails_reseller_list(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/api/plan_pages.py").read_text(encoding="utf-8")
         fn = src[src.find("async def plans_page") : src.find("async def plans_create")]
         self.assertIn("reseller_plans_err", fn)
         self.assertIn("list_reseller_plans(session)", fn)

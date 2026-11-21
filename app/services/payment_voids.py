@@ -31,6 +31,7 @@ from app.db.models import (
 from app.services.formatting import format_toman
 from app.services.cashback import reverse_after_refund
 from app.services.cashback_topup import reverse_after_topup_void
+from app.services.service_transfer_guard import order_service_was_transferred
 from app.services.loyalty import reverse_order_points
 from app.services.orders import _order_note, _wallet_topup_already_credited, is_mutation_order_note
 from app.services.pasarguard import get_pg, get_pg_for_reseller, is_pg_not_found
@@ -122,6 +123,9 @@ async def _resolve_plan(session: AsyncSession, payment: Payment, order: Order | 
         raise ValueError("ابطال پرداخت تمدید، افزونه یا نمایندگی از این بخش ممکن نیست؛ سرویس را دستی ویرایش کنید")
     if order.status not in VOIDABLE_ORDER_STATUSES:
         raise ValueError("سفارش این پرداخت در وضعیتی نیست که بتوان ابطال کرد")
+    if await order_service_was_transferred(session, order_id=int(order.id), service_id=order.service_id):
+        # Voiding would disable the service of a customer who did not make this payment.
+        raise ValueError("سرویس این پرداخت به مشتری دیگری منتقل شده است؛ ابطال را دستی بررسی کنید")
     service_ids = await _order_service_ids(session, order)
     if order.status == OrderStatus.DELIVERED.value and not service_ids:
         raise ValueError("سرویس تحویل‌شدهٔ این سفارش پیدا نشد؛ ابتدا سفارش را بررسی کنید")

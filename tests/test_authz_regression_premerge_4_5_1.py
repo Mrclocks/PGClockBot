@@ -15,6 +15,7 @@ from app.services.plans_catalog import staff_can_create_pg_template
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PG_PAGES = (ROOT / "app" / "api" / "pg_pages.py").read_text(encoding="utf-8")
 APP_PY = (ROOT / "app" / "api" / "app.py").read_text(encoding="utf-8")
+PLAN_PAGES_PY = (ROOT / "app" / "api" / "plan_pages.py").read_text(encoding="utf-8")
 PANEL_JS = (ROOT / "app" / "web" / "static" / "panel.js").read_text(encoding="utf-8")
 PANEL_CSS = (ROOT / "app" / "web" / "static" / "panel.css").read_text(encoding="utf-8")
 
@@ -119,10 +120,10 @@ class PgWriteRouteStaticAudit(unittest.TestCase):
         self.assertIn("بدون اعتبارنامه اختصاصی", fn)
 
     def test_plans_also_create_template_uses_staff_credentials(self):
-        self.assertIn("staff_can_create_pg_template", APP_PY)
-        idx = APP_PY.find("if also_create_template:")
+        self.assertIn("staff_can_create_pg_template", PLAN_PAGES_PY)
+        idx = PLAN_PAGES_PY.find("if also_create_template:")
         self.assertGreater(idx, 0)
-        chunk = APP_PY[idx : idx + 2500]
+        chunk = PLAN_PAGES_PY[idx : idx + 2500]
         self.assertIn("_staff_pg(", chunk)
         self.assertIn("create_user_template", chunk)
         self.assertNotIn("get_pg().create_user_template", chunk)

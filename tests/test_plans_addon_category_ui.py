@@ -15,11 +15,13 @@ class PlansAddonCategoryUiTests(unittest.TestCase):
         # before the price, and only once.
         from app.api.app import templates
         from app.db.models import PlanCategory
+        from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
 
         html = templates.env.get_template("_user_plan_forms.html").render(
             plan_categories=[PlanCategory(id=1, name="ویژه", audience="users", is_active=True)],
             plan_category_tones={1: "success"},
             groups=[], templates=[], values={}, plan_style_options=[], pack_style_options=[],
+            trial_placement_labels=TRIAL_PLACEMENT_LABELS,
         )
         fixed = html.split('id="panel-user-fixed"', 1)[1].split('id="panel-user-trial"', 1)[0]
         name, category, price = (fixed.find(f'name="{field}"') for field in ("name", "category_id", "price"))
@@ -33,7 +35,7 @@ class PlansAddonCategoryUiTests(unittest.TestCase):
         self.assertIn("plan-pg-warn-dot", html)
         self.assertIn('badge warn', html)
         self.assertIn("خالی", html)
-        app = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        app = (ROOT / "app/api/plan_pages.py").read_text(encoding="utf-8")
         self.assertIn("pg_live_template_ids", app)
 
     def test_reseller_addon_category_not_hidden(self):

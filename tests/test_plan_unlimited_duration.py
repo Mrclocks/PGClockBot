@@ -78,7 +78,7 @@ class PanelTemplateGuards(unittest.TestCase):
         self.assertIn('data-ds-unlimited="#edit-plan-days" data-ds-empty-is-unlimited', edit)
 
     def test_api_parses_duration_as_string(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/api/plan_pages.py").read_text(encoding="utf-8")
         create = src.split("async def plans_create")[1].split("async def plans_trial_save")[0]
         self.assertIn('duration_days: str = Form("")', create)
         self.assertIn("parse_user_plan_duration_days", create)

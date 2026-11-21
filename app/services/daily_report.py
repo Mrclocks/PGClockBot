@@ -622,7 +622,8 @@ async def collect_report_values(
     """Compute values for enabled keys only (no cross-shop bleed)."""
     from app.services.formatting import format_toman
     from app.config import get_settings
-    from app.services.ux20 import build_action_center, funnel_summary
+    from app.services.action_center import build_action_center
+    from app.services.funnel_metrics import funnel_summary
 
     keys = enabled_keys if enabled_keys is not None else default_metric_keys(actor)
     allowed = {m.key for m in metrics_for_actor(actor)}
@@ -818,3 +819,24 @@ async def shop_daily_report_chat_ids(session: AsyncSession, reseller_id: int) ->
             seen.add(tid)
             ids.append(tid)
     return ids
+
+
+async def build_admin_daily_report(session: AsyncSession) -> str:
+    """Backward-compatible Owner report (platform shop only)."""
+    from app.services.daily_report import (
+        ACTOR_OWNER,
+        DEFAULT_REPORT_TEMPLATE,
+        build_daily_report,
+    )
+    from app.services.users import get_setting
+
+    template = await get_setting(session, "admin_daily_report_template", "")
+    metrics = await get_setting(session, "admin_daily_report_metrics", "")
+    return await build_daily_report(
+        session,
+        reseller_id=None,
+        actor=ACTOR_OWNER,
+        admin_name="مالک سیستم",
+        template=template or DEFAULT_REPORT_TEMPLATE,
+        metrics_raw=metrics,
+    )

@@ -29,7 +29,7 @@ from app.services.secret_box import reveal_bot_token
 from app.services.setup_wizard import current_setup_values
 from app.services.shop_membership import shop_member_clause
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
-from app.services.ux20 import payment_shop_clause
+from app.services.action_center import payment_shop_clause
 
 _TEHRAN = ZoneInfo("Asia/Tehran")
 

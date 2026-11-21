@@ -33,7 +33,12 @@ from app.services.stuck_order_resolution import (
     tell_customer_refunded,
 )
 from app.services.delivery_failure_queue import NOTHING_TO_DISMISS, dismiss_delivery_failures
-from app.services.ux20 import DeliveryNotRetryable, list_open_delivery_failures, list_stuck_paid_orders, retry_delivery
+from app.services.delivery_failures import (
+    DeliveryNotRetryable,
+    list_open_delivery_failures,
+    list_stuck_paid_orders,
+    retry_delivery,
+)
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)

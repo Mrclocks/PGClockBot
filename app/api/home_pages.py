@@ -88,7 +88,7 @@ _EMPTY_ACTION = {
 
 async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
     from app.services.db_safe import rollback_quiet
-    from app.services.ux20 import funnel_summary
+    from app.services.funnel_metrics import funnel_summary
 
     try:
         return await funnel_summary(session, reseller_id=reseller_id, days=7)
@@ -137,7 +137,7 @@ def kpi_links(staff: dict | None) -> dict[str, bool]:
 
 async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None, expire_days: int = 3):
     from app.services.db_safe import rollback_quiet
-    from app.services.ux20 import build_action_center
+    from app.services.action_center import build_action_center
 
     try:
         return await build_action_center(
@@ -192,7 +192,7 @@ async def _safe_pg_health(*, reseller_user_id: int | None = None, session: Async
     """Display-only PG reachability — never used for allow/deny (stats reuse: pg_reachability_max_age)."""
     from app.services.db_safe import rollback_quiet
     from app.services.panel_display_timeout import display_await
-    from app.services.ux20 import check_pg_connection
+    from app.services.action_center import check_pg_connection
 
     async def _probe():
         try:
@@ -494,7 +494,7 @@ async def _warn_capacity(session: AsyncSession, profile, pg_limits: dict | None)
     if not pg_limits:
         return
     try:
-        from app.services.ux20 import maybe_warn_reseller_capacity
+        from app.services.reseller_capacity_warn import maybe_warn_reseller_capacity
 
         await maybe_warn_reseller_capacity(session, profile, pg_limits)
     except Exception:

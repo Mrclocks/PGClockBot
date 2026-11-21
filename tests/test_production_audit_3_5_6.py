@@ -65,7 +65,7 @@ class DiscountReserveTests(unittest.TestCase):
 
 class ShopIsolationWebPaymentsTests(unittest.TestCase):
     def test_admin_cannot_approve_shop_payments(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/api/order_review_pages.py").read_text(encoding="utf-8")
         self.assertIn(
             "پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود",
             src,

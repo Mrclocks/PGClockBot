@@ -150,6 +150,8 @@ class Settings(BaseSettings):
     webhook_url: str = Field(default="", alias="WEBHOOK_URL")
     webhook_path: str = Field(default="/telegram/webhook", alias="WEBHOOK_PATH")
     webhook_secret_token: str = Field(default="", alias="WEBHOOK_SECRET_TOKEN")
+    # Opt-in: shop bots receive updates by webhook too (needs WEBHOOK_URL); off keeps them polling.
+    shop_bot_webhook: bool = Field(default=False, alias="SHOP_BOT_WEBHOOK")
     public_base_url: str = Field(default="", alias="PUBLIC_BASE_URL")
     # Optional public docs site (e.g. https://docs.example.com). Empty = same-origin /help/
     docs_base_url: str = Field(default="", alias="DOCS_BASE_URL")

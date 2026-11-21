@@ -15,7 +15,7 @@ TONE_ERR = "err"
 TONE_NEUTRAL = "neutral"
 _TONES = frozenset({TONE_WARN, TONE_ERR, TONE_NEUTRAL})
 
-# Icons of the work-queue rows (ux20.build_action_center keys); anything new falls back to the inbox bell.
+# Icons of the work-queue rows (action_center.build_action_center keys); anything new falls back to the inbox bell.
 _ACTION_CENTER_ICONS: dict[str, str] = {
     "pending": "receipt",
     "delivery": "queue",

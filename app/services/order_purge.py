@@ -48,7 +48,7 @@ from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.stale_order_cleanup import disable_all_legacy_soft_cancel
 from app.services.user_purge import purge_row_references
 from app.services.users import get_all_settings, set_settings_bulk
-from app.services.ux20 import payment_shop_clause
+from app.services.action_center import payment_shop_clause
 
 logger = logging.getLogger(__name__)
 

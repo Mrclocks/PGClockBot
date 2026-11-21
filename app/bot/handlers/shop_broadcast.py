@@ -22,6 +22,7 @@ from app.services.broadcast_queue import STATUS_LABELS, cancel_broadcast
 from app.bot.message_button_picker import ask_for_buttons, register_flow
 from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard
 from app.services.redact import user_safe_error
+from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.services.shop_broadcast import (
     clean_shop_broadcast_text,
     new_shop_request_key,
@@ -189,9 +190,7 @@ async def open_shop_broadcast_hub(
     reseller_owner_id: int | None = None,
     push: bool = True,
 ) -> None:
-    from app.bot.nav_chrome import with_caption
     from app.bot.nav_inline import present_nav_panel
-    from app.bot.screen_registry import screen_caption, screen_heading
 
     shop_id = await resolve_shop_id(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
