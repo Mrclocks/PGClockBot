@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 MIN_AGE_HOURS = 24
 MAX_AGE_HOURS = 72
+# How often the scheduler runs the check (app/jobs/scheduler.py); also shown in the «پر مصرف» note.
+CHECK_INTERVAL_MINUTES = 30
 BATCH_SIZE = 100
 MAX_BATCHES = 5
 SETTING_KEY = "first_use_nudge_enabled"

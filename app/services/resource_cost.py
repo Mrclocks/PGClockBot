@@ -11,17 +11,22 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from app.services.first_use_nudge import CHECK_INTERVAL_MINUTES as FIRST_USE_CHECK_MINUTES
 from app.services.job_metrics import JobStatsView
+from app.services.numbers import to_fa_digits
+from app.services.usage_alerts import ALERT_CHECK_INTERVAL_HOURS
 
 HEAVY_LABEL = "پر مصرف"
 
 # Settings key -> what runs in the background while the switch is on.
 HEAVY_SETTINGS: dict[str, str] = {
     "user_alert_low_enabled": (
-        "هر ۶ ساعت وضعیت تک‌تک سرویس‌های فعال از پنل خوانده می‌شود؛ با تعداد زیاد سرویس، بار پنل و شبکه بالا می‌رود."
+        f"هر {to_fa_digits(ALERT_CHECK_INTERVAL_HOURS)} ساعت وضعیت تک‌تک سرویس‌های فعال از پنل خوانده می‌شود؛ "
+        "با تعداد زیاد سرویس، بار پنل و شبکه بالا می‌رود."
     ),
     "first_use_nudge_enabled": (
-        "هر ۳۰ دقیقه سرویس‌های تازه یکی‌یکی از پنل خوانده می‌شوند تا مصرف نداشتنشان معلوم شود."
+        f"هر {to_fa_digits(FIRST_USE_CHECK_MINUTES)} دقیقه سرویس‌های تازه از پنل خوانده می‌شوند "
+        "تا مصرف نداشتنشان معلوم شود."
     ),
 }
 
