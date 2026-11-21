@@ -20,6 +20,7 @@ tests/test_connection_status_menu_migration.py
 tests/test_connection_monitor_install.py
 tests/test_connection_status.py
 tests/test_connection_status_authz.py
+tests/test_connection_monitor_timing.py
 tests/test_connection_status_concurrency.py
 tests/test_connection_status_migration.py
 # Subscription contact ownership, shop isolation and cancellation notification claims.
