@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 
 from app.services.auto_renew_offer import queue_auto_renew_offer
 from app.services.custom_plans import discard_unsold_custom_plan
+from app.services.db_safe import rollback_and_reload
 from app.services.panel_user_note import build_panel_user_note
 from app.services.funnel_events import STEP_DELIVERED, STEP_RECEIPT, record_order_funnel
 from app.services.catalog_pricing import PriceTarget, active_discounts, annotate_prices, assert_expected_price, displayed_quote, quote_price, quote_product, sale_price
@@ -224,20 +225,16 @@ async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None
     referrer = await session.get(BotUser, int(buyer.referred_by_id))
     if not referrer:
         return
+    buyer_id, referrer_id = int(buyer.id), int(referrer.id)  # readable after a rollback below
     try:
         await credit_wallet(
             session, referrer, bonus, reason, shop_id=shop_id
         )
-    except IntegrityError:
-        # Unique (user_id, reason) — concurrent first-delivery race
-        pass
     except Exception:
-        logger.warning(
-            "referral bonus failed buyer=%s referrer=%s",
-            getattr(buyer, "id", None),
-            getattr(referrer, "id", None),
-            exc_info=True,
-        )
+        # A failed ledger write leaves the shared session unusable, and the caller goes on to the
+        # loyalty and cashback steps of the same order: roll back and reload the order for them.
+        logger.warning("referral bonus failed buyer=%s referrer=%s", buyer_id, referrer_id, exc_info=True)
+        await rollback_and_reload(session, order)
 
 
 async def _reseller_pg_link(
@@ -2651,10 +2648,13 @@ async def deliver_order(
         await finish_charge(session, payg_charge, commit=False)
         await session.commit()
         await session.refresh(order)
+        # The order is committed as delivered. Each reward below is best effort, and a failed one rolls
+        # the shared session back so the next one (cashback last) still runs.
         try:
             await _maybe_pay_referral_bonus(session, order)
         except Exception:
-            logger.debug("deliver_order: ignored failure", exc_info=True)
+            logger.warning("referral bonus step failed order=%s", order_id, exc_info=True)
+            await rollback_and_reload(session, order)
         try:
             from app.services.loyalty import consume_loyalty_discount_for_order, on_order_delivered
 
@@ -2662,7 +2662,8 @@ async def deliver_order(
             await session.commit()
             await on_order_delivered(session, order)
         except Exception:
-            logger.warning("loyalty on_order_delivered failed order=%s", order.id, exc_info=True)
+            logger.warning("loyalty on_order_delivered failed order=%s", order_id, exc_info=True)
+            await rollback_and_reload(session, order)
         await grant_after_delivery(session, order)
         await record_order_funnel(session, order, STEP_DELIVERED, key=f"delivered:order:{order.id}")
         return order
