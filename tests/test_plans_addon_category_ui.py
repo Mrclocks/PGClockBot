@@ -33,7 +33,7 @@ class PlansAddonCategoryUiTests(unittest.TestCase):
         self.assertIn("plan-pg-warn-dot", html)
         self.assertIn('badge warn', html)
         self.assertIn("خالی", html)
-        app = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        app = (ROOT / "app/api/plan_pages.py").read_text(encoding="utf-8")
         self.assertIn("pg_live_template_ids", app)
 
     def test_reseller_addon_category_not_hidden(self):
