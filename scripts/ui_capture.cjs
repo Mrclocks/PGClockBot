@@ -29,14 +29,16 @@ const SKIP = /logout|export|csv|download|delete|remove|purge|reset|restart|updat
 // example service name gets a fixed text (its length moves what sits next to it).
 const MASK = ['[data-server-meters]', '[data-live]',
   // Figures measured by the running process: job run times, panel-link timings, the report's own clock.
-  'section[aria-label="کارهای پس‌زمینه"] .table-wrap', '.home-link-health .link-health-summary',
+  '.home-link-health .link-health-summary',
   '.home-link-health .link-health-grid', '.finance-report-stamp'];
 const FIXED_TEXT = { '#naming-sample': 'clk_sample01', '[data-naming-sample]': 'clk_sample01' };
 // Chromium does not paint blurred backdrops and fading scrollbars the same way twice. Both runs
-// screenshot without them; everything else on the page is drawn as served.
+// screenshot without them. The dashboard's background-job card is left out too: how many jobs it
+// lists depends on what ran since start, so even its height changes. Everything else is as served.
 const STEADY_CSS = `*, *::before, *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
   scrollbar-width: none !important; caret-color: transparent !important; }
-  ::-webkit-scrollbar { display: none !important; }`;
+  ::-webkit-scrollbar { display: none !important; }
+  section[aria-label="کارهای پس‌زمینه"] { display: none !important; }`;
 
 const slug = (u) => (u.replace(/^\//, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'root').slice(0, 120);
 
