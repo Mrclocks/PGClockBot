@@ -35,6 +35,8 @@ def _chart_page() -> str:
         '<!doctype html><html lang="fa" dir="rtl" data-theme="dark"><head><meta charset="utf-8">'
         '<link rel="stylesheet" href="/static/panel.css"></head>'
         f'<body><div style="width:760px;padding:24px">{card}</div>'
+        # base.html loads fa-number.js in the head of every page; the chart formats its figures with it.
+        '<script src="/static/fa-number.js"></script>'
         '<script src="/static/sales-chart.js"></script></body></html>'
     )
 

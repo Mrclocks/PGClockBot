@@ -8,6 +8,11 @@ from collections.abc import Iterator
 
 import pytest
 
+from tests import network_guard
+
+# No test may reach another machine (AGENTS.md §10); see tests/network_guard.py.
+network_guard.install()
+
 # The app builds its engine from DATABASE_URL at import time. Point it at the
 # test server before any app module loads, so no test can reach a database
 # named in a developer's .env.

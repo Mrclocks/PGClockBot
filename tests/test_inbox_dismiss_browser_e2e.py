@@ -31,9 +31,12 @@ def _free_port() -> int:
 
 def _dismiss_modal_html() -> str:
     base = (WEB / "templates" / "base.html").read_text(encoding="utf-8")
-    start = base.index('<div class="ui-modal" id="modal-inbox-dismiss"')
-    end = base.index('<div class="ui-modal" id="modal-confirm"')
-    source = '{% from "macros.html" import modal_title %}' + base[start:end]
+    # Cut by id: the modals' classes follow the design system and change with it.
+    start = base.rindex("<div", 0, base.index('id="modal-inbox-dismiss"'))
+    end = base.rindex("<div", 0, base.index('id="modal-confirm"'))
+    # The same macro imports base.html makes before the modal.
+    imports = "".join(line + "\n" for line in base.splitlines() if line.strip().startswith("{% from "))
+    source = imports + base[start:end]
     env = Environment(loader=FileSystemLoader(str(WEB / "templates")), autoescape=True)
     return env.from_string(source).render(csrf_token="e2e-token")
 
