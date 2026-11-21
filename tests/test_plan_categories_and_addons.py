@@ -321,7 +321,7 @@ class WiringTests(unittest.TestCase):
         self.assertIn("pcm:addon:", manage)
         self.assertIn("cat_audience", manage)
 
-        admin = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
+        admin = Path("app/bot/handlers/admin_plan_editor.py").read_text(encoding="utf-8")
         self.assertIn("adm:plan:newcat:", admin)
         self.assertIn("adm:plan:catpick:", admin)
         self.assertIn("adm:plan:setcat:", admin)
