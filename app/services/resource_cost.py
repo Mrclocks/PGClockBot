@@ -70,6 +70,8 @@ JOB_LABELS: dict[str, str] = {
     "broadcast": "ارسال همگانی",
     "first_use_nudge": "پیام سرویس بدون مصرف",
     "service_automation": "تمدید و افزایش خودکار",
+    "service_freezes": "پایان توقف سرویس‌ها",
+    "service_transfers": "تغییر لینک سرویس‌های منتقل‌شده",
     "expiry": "هشدار کمبود حجم و زمان",
     "admin_daily_report": "گزارش روزانه",
 }
