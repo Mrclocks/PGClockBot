@@ -23,6 +23,9 @@ from pathlib import Path
 from PIL import Image, ImageChops
 
 HIGHLIGHT = (255, 0, 0)
+# Chromium dithers shadows and gradients by a step or two per channel between runs; nobody can see
+# that. A real change (moved, recoloured or different text) differs by far more than this.
+PIXEL_TOLERANCE = 8
 
 
 def compare_images(before: Path, after: Path, diff_dir: Path) -> list[str]:
@@ -42,13 +45,15 @@ def compare_images(before: Path, after: Path, diff_dir: Path) -> list[str]:
             problems.append(f"screenshot size changed: {name} {old.size} -> {new.size}")
             continue
         delta = ImageChops.difference(old, new)
-        box = delta.getbbox()
+        # Largest channel difference per pixel, then only the pixels above the tolerance.
+        strongest = ImageChops.lighter(ImageChops.lighter(*delta.split()[:2]), delta.split()[2])
+        mask = strongest.point(lambda value: 255 if value > PIXEL_TOLERANCE else 0)
+        box = mask.getbbox()
         if box is None:
             continue
-        changed = sum(1 for pixel in delta.getdata() if pixel != (0, 0, 0))
+        changed = mask.histogram()[255]
         problems.append(f"screenshot differs: {name} {changed} px in box {box}")
         diff_dir.mkdir(parents=True, exist_ok=True)
-        mask = delta.convert("L").point(lambda value: 255 if value else 0)
         marked = new.copy()
         marked.paste(HIGHLIGHT, mask=mask)
         marked.save(diff_dir / name)

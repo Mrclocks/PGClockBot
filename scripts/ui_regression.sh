@@ -54,7 +54,8 @@ CHECKOUT="$OUT/checkout"
 
 capture() {
   local label="$1" ref="$2" port="$3"
-  local wt="$CHECKOUT" db="pgclock_ui_${label}_$$"
+  # One database name for both: the backup settings page shows it.
+  local wt="$CHECKOUT" db="pgclock_ui_regression"
   git -C "$REPO" worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
   git worktree add --quiet --detach "$wt" "$ref"
   WORKTREES+=("$wt")
