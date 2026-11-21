@@ -814,6 +814,43 @@ class ServiceAutomation(Base):
     renew_offered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ServiceFreeze(Base):
+    """A customer's pause of one service: ``pausing`` -> ``frozen`` -> ``resuming`` -> ``done``.
+
+    ``closed`` ends a freeze whose service was cancelled or removed meanwhile (never re-enabled).
+
+    The time left is saved before the panel is told to disable the user, and the target expiry is
+    saved before the resume call, so a retry after a timeout reuses the same numbers. At most one
+    open freeze per service (partial unique index).
+    """
+
+    __tablename__ = "service_freezes"
+    __table_args__ = (
+        Index("ix_service_freezes_status_resume_by", "status", "resume_by"),
+        Index("ix_service_freezes_service_created", "service_id", "created_at"),
+        Index(
+            "uq_service_freezes_open",
+            "service_id",
+            unique=True,
+            postgresql_where=text("status IN ('pausing', 'frozen', 'resuming')"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_id: Mapped[int] = mapped_column(ForeignKey("user_services.id", ondelete="CASCADE"))
+    shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    status: Mapped[str] = mapped_column(String(16), default="pausing", server_default="pausing")
+    remaining_seconds: Mapped[int] = mapped_column(Integer)
+    # The panel expiry when the service was paused: a change staff make while it is frozen is kept.
+    frozen_expire: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    resume_by: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    target_expire: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    resumed_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    resumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Ticket(Base):
     __tablename__ = "tickets"
 

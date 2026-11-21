@@ -1,0 +1,56 @@
+{# «توقف و انتقال»: what a customer may do on their own service, one card per action (DESIGN_SYSTEM.md §6).
+   Each card's switch sits in its header; the body, with its save button, shows only while the switch is on.
+   Expects: values, plan_scope_choices, service_action_bounds, settings_action, csrf_token. #}
+{% from "_ds.html" import ds_sec, ds_head_switch, ico %}
+
+{% macro is_on(key) -%}{{ '1' if (values.get(key, '')|string|lower) in ['1', 'true', 'yes', 'on'] else '' }}{%- endmacro %}
+
+{% macro plan_scope_field(key, id_prefix) -%}
+{% set scope = (values.get(key, '') or '')|string|lower %}
+{% set chosen = scope.split(',') %}
+<div class="form-field">
+  <span class="ds-label-text" id="{{ id_prefix }}-label">پلن‌ها</span>
+  <select name="s_{{ key }}_mode" id="{{ id_prefix }}-mode" hidden data-ui-select="1">
+    <option value="some"{% if scope != 'all' %} selected{% endif %}>پلن‌های انتخابی</option>
+    <option value="all"{% if scope == 'all' %} selected{% endif %}>همهٔ پلن‌ها</option>
+  </select>
+  <div class="sales-seg ds-seg" role="radiogroup" aria-labelledby="{{ id_prefix }}-label" data-ds-choice data-ds-target="#{{ id_prefix }}-mode">
+    <button type="button" role="radio" data-value="some">پلن‌های انتخابی</button><button type="button" role="radio" data-value="all">همهٔ پلن‌ها</button>
+  </div>
+  <div class="ds-tags" role="group" aria-labelledby="{{ id_prefix }}-label" data-ds-show-when="#{{ id_prefix }}-mode:some"{% if scope == 'all' %} hidden{% endif %}>
+    {% for choice in plan_scope_choices %}
+    <label class="ds-tag"><input type="checkbox" name="s_{{ key }}" value="{{ choice.plan_id }}"{% if (choice.plan_id|string) in chosen %} checked{% endif %} />{{ ico('check') }}<span dir="auto">{{ choice.name }}</span></label>
+    {% else %}
+    <span class="muted">هنوز پلنی برای فروش ساخته نشده است.</span>
+    {% endfor %}
+  </div>
+  <small class="muted" data-ds-show-when="#{{ id_prefix }}-mode:some"{% if scope == 'all' %} hidden{% endif %}>فقط سرویس‌های پلن‌های انتخاب‌شده؛ تا پلنی انتخاب نکنید، برای هیچ سرویسی فعال نیست.</small>
+  <small class="muted" data-ds-show-when="#{{ id_prefix }}-mode:all"{% if scope != 'all' %} hidden{% endif %}>همهٔ پلن‌ها، از جمله پلن‌هایی که بعداً می‌سازید.</small>
+</div>
+{%- endmacro %}
+
+{% macro number_field(key, label, unit, hint='') -%}
+{% set bounds = service_action_bounds.get(key, (0, 0)) %}
+<label class="form-field">{{ label }}
+  <span class="ds-unit"><input name="s_{{ key }}" type="number" min="{{ bounds[0] }}" max="{{ bounds[1] }}" step="1" inputmode="numeric" dir="ltr" value="{{ values.get(key, '') }}" required /><span class="ds-unit-label">{{ unit }}</span></span>
+  {% if hint %}<small class="muted">{{ hint }}</small>{% endif %}
+</label>
+{%- endmacro %}
+
+<form method="post" action="{{ settings_action }}" class="form-stack ds-page-form" id="settings-form">
+  {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+
+  {% set freeze_switch %}{{ ds_head_switch('s_service_freeze_enabled', 'توقف موقت سرویس', 'sf-enabled', is_on('service_freeze_enabled')) }}{% endset %}
+  {% call ds_sec('توقف موقت سرویس', side=freeze_switch) %}
+    <div class="form-stack" data-ds-show-when="#sf-enabled:1"{% if not is_on('service_freeze_enabled') %} hidden{% endif %}>
+      <p class="ds-desc">مشتری از «⚙️ بیشتر» سرویس، آن را چند روز متوقف می‌کند و روزهای باقی‌مانده‌اش حفظ می‌شود. با «ادامهٔ سرویس» یا در پایان مهلت، سرویس با همان روزها دوباره فعال می‌شود.</p>
+      {{ plan_scope_field('service_freeze_plans', 'sf-plans') }}
+      <div class="ds-grid-2">
+        {{ number_field('service_freeze_max_days', 'حداکثر مدت توقف', 'روز', 'در پایان این مهلت سرویس خودکار فعال می‌شود') }}
+        {{ number_field('service_freeze_per_period', 'تعداد توقف در ۳۰ روز', 'بار') }}
+        {{ number_field('service_freeze_min_days_left', 'حداقل زمان باقی‌مانده', 'روز', '۰ یعنی بدون حداقل') }}
+      </div>
+      <div class="actions"><button class="btn" type="submit">ذخیرهٔ توقف موقت</button></div>
+    </div>
+  {% endcall %}
+</form>

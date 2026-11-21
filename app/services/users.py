@@ -43,6 +43,11 @@ from app.services.auto_renew_timing import (
     TIMING_DEFAULTS as AUTO_RENEW_DEFAULTS,
     WEB_FIELDS as AUTO_RENEW_FIELDS,
 )
+from app.services.service_freeze_settings import (
+    FREEZE_DEFAULTS,
+    GROUP_TITLE as SERVICE_FREEZE_GROUP,
+    WEB_FIELDS as SERVICE_FREEZE_FIELDS,
+)
 from app.services.psp_gateways import KEY_PSP_GATEWAYS, merge_submitted_psp_gateways
 from app.services.retired_text_defaults import refresh_retired_defaults
 from app.services.user_purge import purge_user_references
@@ -1282,6 +1287,7 @@ DEFAULT_SETTINGS.update(button_style_defaults())
 DEFAULT_SETTINGS.update(screen_text_defaults())
 DEFAULT_SETTINGS.update(MONITOR_TEXT_DEFAULTS)
 DEFAULT_SETTINGS.update(ENTRY_APPROVAL_DEFAULTS)
+DEFAULT_SETTINGS.update(FREEZE_DEFAULTS)
 DEFAULT_SETTINGS.update(RECEIPT_RISK_DEFAULTS)
 DEFAULT_SETTINGS.update(AUTO_RENEW_DEFAULTS)
 DEFAULT_SETTINGS.update(notice_text_defaults())
@@ -1303,6 +1309,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("naming", "قالب نام‌گذاری"),
     ("limits", "قوانین و محدودیت‌ها"),
     ("service_import", "افزودن سرویس قبلی"),
+    ("service_actions", "کارهای مشتری روی سرویس"),
     ("guides", "آموزش اتصال"),
     ("notifications", "هشدارها"),
     ("daily_report", "گزارش روزانه"),
@@ -2150,6 +2157,7 @@ SETTING_GROUPS = {
 }
 SETTING_GROUPS.update(screen_text_setting_groups())
 SETTING_GROUPS[ENTRY_APPROVAL_GROUP] = entry_approval_setting_fields()
+SETTING_GROUPS[SERVICE_FREEZE_GROUP] = list(SERVICE_FREEZE_FIELDS)
 SETTING_GROUPS[AUTO_RENEW_GROUP] = list(AUTO_RENEW_FIELDS)
 SETTING_GROUPS.update(notice_web_setting_groups())
 
@@ -2210,6 +2218,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     ],
     "guides": ["آموزش اتصال"],
     "service_import": ["افزودن سرویس قبلی", "مسیرها و ادمین‌های مجاز"],
+    "service_actions": [SERVICE_FREEZE_GROUP],
     # Legacy aliases — redirected to limits
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],
@@ -2230,6 +2239,11 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "bot": [],
     "appearance": [],
 }
+
+# Fields that hold a plan scope (plan_scope.py): saved from a list of checkboxes, not one value.
+PLAN_SCOPE_KEYS = frozenset(
+    item[0] for fields in SETTING_GROUPS.values() for item in fields if len(item) >= 3 and item[2] == "plans"
+)
 
 TOGGLE_KEYS = {
     item[0]

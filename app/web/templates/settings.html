@@ -153,6 +153,9 @@
         <button class="btn" type="submit">ذخیره نام‌گذاری</button>
       </div>
     </form>
+  {% elif tab == 'service_actions' %}
+    {% set settings_action = '/settings?tab=service_actions' %}
+    {% include "_settings_service_actions.html" %}
   {% else %}
     {% if tab == 'service_import' %}
       {% include "_settings_service_import.html" %}

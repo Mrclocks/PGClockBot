@@ -24,6 +24,7 @@ from app.db.models import (
 )
 from app.services.billing import GB, is_payg
 from app.services.db_safe import rollback_quiet
+from app.services.service_freeze_guard import frozen_pg_user_ids
 from app.services.formatting import format_toman
 from app.services.volume_allocation import is_hard_panel_rejection
 from app.services.volume_allocation_cascade import assert_child_growth_fits, assert_parent_has_room
@@ -844,7 +845,9 @@ async def restore_subscription_access(
             restore_ids.add(int(uid))
         except (TypeError, ValueError):
             continue
-    for uid in sorted(restore_ids):
+    # A service the customer froze stays off; its own resume brings it back with its days.
+    frozen = await frozen_pg_user_ids(session, restore_ids)
+    for uid in sorted(restore_ids - frozen):
         try:
             await pg.set_disabled_by_id(uid, False)
             stats["users_restored"] += 1

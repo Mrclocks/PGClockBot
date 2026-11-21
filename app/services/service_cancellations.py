@@ -12,6 +12,7 @@ from app.services.cashback import reverse_after_refund
 from app.services.cancellation_customer_notice import notify_cancellation_decision
 from app.services.pasarguard import get_pg, get_pg_for_reseller
 from app.services.service_automation import service_shop_id
+from app.services.service_freeze_guard import assert_not_frozen
 from app.services.service_import import is_external_service
 from app.services.wallet import credit_wallet
 
@@ -59,6 +60,7 @@ async def request_cancellation(session, user, service_id, *, shop_id, reason):
     if not reason or len(reason) > 1000:
         raise ValueError("دلیل لغو را بین ۱ تا ۱۰۰۰ نویسه بنویسید")
     service = await owned_cancellation_service(session, user, service_id, shop_id)
+    await assert_not_frozen(session, service.id)
     existing = await cancellation_status(session, user, service_id, shop_id=shop_id)
     if existing and existing["status"] in {"pending", "processing", "review", "approved"}:
         return existing
