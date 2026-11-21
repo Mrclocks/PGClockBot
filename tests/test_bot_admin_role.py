@@ -30,6 +30,7 @@ from app.services.bot_admins import (
     is_bot_admin,
     role_badge,
 )
+from tests.postgres_support import scoped_async_engine
 
 ADMIN_TID = 7001
 OTHER_TID = 7002
