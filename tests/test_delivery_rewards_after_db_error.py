@@ -27,16 +27,16 @@ class ReferralRaceTests(CrossShopCase):
         await session.commit()
         return order
 
-    async def test_the_session_is_usable_after_the_referral_race(self) -> None:
-        async def paid_by_the_other_delivery(session, user, amount, reason, **_kwargs):
-            # The other delivery's row already exists: the same (user_id, reason) fails on flush.
+    async def test_the_session_is_usable_after_a_failed_ledger_write(self) -> None:
+        async def failed_ledger_write(session, user, amount, reason, **_kwargs):
+            # Two ledger rows in one flush, written the way a second delivery would write them.
             session.add(WalletTransaction(user_id=user.id, amount=amount, balance_after=amount, reason=reason))
             session.add(WalletTransaction(user_id=user.id, amount=amount, balance_after=amount, reason=reason))
             await session.flush()
 
         async with self.Session() as session:
             order = await self._order(session)
-            with patch.object(orders, "credit_wallet", paid_by_the_other_delivery):
+            with patch.object(orders, "credit_wallet", failed_ledger_write):
                 await orders._maybe_pay_referral_bonus(session, order)
             self.assertEqual(await session.scalar(text("SELECT 1")), 1, "the next step can still query")
 

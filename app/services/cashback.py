@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, CashbackBudget, CashbackGrant, CashbackRule, Order, OrderStatus
 from app.py_compat import StrEnum
 from app.services.customer_notice_buttons import customer_notice_markup
-from app.services.db_safe import rollback_quiet
+from app.services.db_safe import rollback_and_reload, rollback_quiet
 from app.services.formatting import format_toman
 from app.services.platform_identity import deliverable_telegram_id
 from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_user
@@ -410,7 +410,7 @@ async def grant_after_delivery(session: AsyncSession, order: Order) -> None:
         await grant_for_order(session, order)
     except Exception:  # noqa: BLE001 - optional reward after a committed delivery; logged
         logger.warning("cashback grant failed order=%s", order_id, exc_info=True)
-        await rollback_quiet(session)
+        await rollback_and_reload(session, order)  # the caller still reads the delivered order
 
 
 async def reverse_after_refund(session: AsyncSession, *, service_id: int | None = None,
