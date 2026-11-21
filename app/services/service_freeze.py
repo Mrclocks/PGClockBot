@@ -20,7 +20,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, Order, OrderStatus, ServiceFreeze, UserService
+from app.db.models import BotUser, Order, OrderStatus, Plan, ServiceFreeze, UserService
 from app.services.formatting import parse_expire
 from app.services.pasarguard import PasarGuardError, get_pg, get_pg_for_reseller
 from app.services.service_import import is_external_service
@@ -70,6 +70,18 @@ BUTTON_PAUSE = "pause"
 BUTTON_RESUME = "resume"
 
 
+async def is_on_paid_plan(session: AsyncSession, service: UserService) -> bool:
+    """Only services bought on a sellable plan; a trial or a service with no plan never qualifies.
+
+    «همهٔ پلن‌ها» means every paid plan: a free trial frozen or handed on would turn free test
+    accounts into extra paid time.
+    """
+    if service.plan_id is None:
+        return False
+    is_trial = await session.scalar(select(Plan.is_trial).where(Plan.id == int(service.plan_id)))
+    return is_trial is False
+
+
 async def freeze_button(session: AsyncSession, service: UserService, ui: Mapping[str, Any]) -> str | None:
     """Which freeze button the service's «⚙️ بیشتر» shows, if any."""
     if not can_be_frozen(service):
@@ -77,7 +89,9 @@ async def freeze_button(session: AsyncSession, service: UserService, ui: Mapping
     row = await open_freeze(session, int(service.id))
     if row is not None:
         return BUTTON_RESUME if row.status == STATUS_FROZEN else None
-    return BUTTON_PAUSE if freeze_policy(ui).allows_plan(service.plan_id) else None
+    if not freeze_policy(ui).allows_plan(service.plan_id):
+        return None
+    return BUTTON_PAUSE if await is_on_paid_plan(session, service) else None
 
 
 async def _owned_service(session: AsyncSession, user: BotUser, service_id: int, shop_id: int | None) -> UserService:
@@ -212,7 +226,7 @@ async def _validate_start(
     if isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= policy.max_days:
         raise ValueError(f"مدت توقف باید بین ۱ و {policy.max_days} روز باشد")
     service = await _owned_service(session, user, service_id, shop_id)
-    if not policy.plans.allows(service.plan_id):
+    if not policy.plans.allows(service.plan_id) or not await is_on_paid_plan(session, service):
         raise ValueError("توقف موقت برای پلن این سرویس فعال نیست")
     if await _freezes_in_period(session, service) >= policy.per_period:
         raise ValueError("سقف توقف این سرویس در ۳۰ روز گذشته پر شده است")
@@ -250,12 +264,22 @@ async def start_freeze(
 def _resume_target(row: ServiceFreeze, info: Mapping[str, Any], now: datetime) -> int:
     """The expiry to write: now plus the time held, plus any change staff made on the panel meanwhile.
 
-    0 means unlimited (staff made the service unlimited while it was frozen).
+    0 means unlimited, only when the panel says so (staff made the service unlimited meanwhile).
+    A user something else already enabled has been using its panel time since, so that expiry is
+    kept as it is: adding the held time again would count it twice.
     """
-    expire = parse_expire(info.get("expire") or info.get("expire_date"))
+    if "expire" not in info and "expire_date" not in info:
+        raise ValueError("پاسخ پنل تاریخ انقضا ندارد")
+    raw = info.get("expire") if "expire" in info else info.get("expire_date")
+    expire = parse_expire(raw)
     if expire is None:
+        if raw not in (None, 0, "0", ""):
+            raise ValueError("تاریخ انقضای پنل خوانا نیست")
         return 0
-    staff_change = int(expire.timestamp()) - int(row.frozen_expire) if row.frozen_expire else 0
+    expire_ts = int(expire.timestamp())
+    if str(info.get("status") or "").lower() == "active":
+        return expire_ts
+    staff_change = expire_ts - int(row.frozen_expire) if row.frozen_expire else 0
     return max(int(now.timestamp()), int(now.timestamp()) + int(row.remaining_seconds) + staff_change)
 
 
@@ -273,10 +297,18 @@ def _service_is_gone(service: UserService | None) -> bool:
     return service is None or not service.pg_user_id or bool(service.is_cancelled)
 
 
+async def _stays_off(session: AsyncSession, service: UserService | None) -> bool:
+    """The service must not be enabled again: it is gone or cancelled, or its owner is blocked."""
+    if _service_is_gone(service):
+        return True
+    owner = await session.get(BotUser, int(service.bot_user_id))
+    return owner is None or bool(owner.is_blocked)
+
+
 async def _claim_resume(session: AsyncSession, row: ServiceFreeze, *, by: str, now: datetime) -> bool:
     """Save the target expiry before the panel write, so a retry writes the same one."""
     service = await session.get(UserService, int(row.service_id))
-    if _service_is_gone(service):
+    if await _stays_off(session, service):
         await _close(session, row, expected=STATUS_FROZEN)
         return False
     try:
@@ -286,7 +318,9 @@ async def _claim_resume(session: AsyncSession, row: ServiceFreeze, *, by: str, n
             await _close(session, row, expected=STATUS_FROZEN)
             return False
         raise
-    target = _resume_target(row, info if isinstance(info, dict) else {}, now)
+    if not isinstance(info, dict):
+        raise ValueError("پاسخ پنل نامعتبر است")
+    target = _resume_target(row, info, now)
     result = await session.execute(
         update(ServiceFreeze).where(ServiceFreeze.id == int(row.id), ServiceFreeze.status == STATUS_FROZEN)
         .values(status=STATUS_RESUMING, target_expire=target, resumed_by=by)
@@ -302,7 +336,7 @@ async def _claim_resume(session: AsyncSession, row: ServiceFreeze, *, by: str, n
 async def _apply_resume(session: AsyncSession, row: ServiceFreeze) -> bool:
     """Write the saved expiry and enable the user; True once the freeze is done."""
     service = await session.get(UserService, int(row.service_id))
-    if _service_is_gone(service):
+    if await _stays_off(session, service):
         await _close(session, row, expected=STATUS_RESUMING)
         return False
     pg = await _panel(session, row.shop_id)
@@ -333,7 +367,7 @@ async def resume_freeze(session: AsyncSession, user: BotUser, service_id: int, *
         raise ValueError("این سرویس متوقف نیست یا در حال اعمال تغییر است")
     try:
         claimed = await _claim_resume(session, row, by=BY_CUSTOMER, now=_now())
-    except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
+    except (PasarGuardError, httpx.HTTPError, TimeoutError, ValueError) as exc:
         raise ValueError(PANEL_DOWN) from exc
     if not claimed:
         raise ValueError("این سرویس در حال فعال شدن است یا دیگر وجود ندارد")

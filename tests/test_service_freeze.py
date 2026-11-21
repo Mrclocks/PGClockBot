@@ -264,6 +264,66 @@ class FreezeTests(unittest.IsolatedAsyncioTestCase):
             await self.start()
         self.assertEqual(await self.rows(), [])
 
+    async def test_a_trial_or_a_plan_less_service_is_never_frozen_even_on_all_plans(self) -> None:
+        for plan_change in ({"is_trial": True}, None):
+            async with self.Session() as session:
+                if plan_change is None:
+                    (await session.get(UserService, 10)).plan_id = None
+                else:
+                    await session.execute(sa.update(Plan).where(Plan.id == 1).values(**plan_change))
+                await session.commit()
+            with self.subTest(plan_change=plan_change):
+                with self.assertRaisesRegex(ValueError, "پلن"):
+                    await self.start()
+                async with self.Session() as session:
+                    self.assertIsNone(await freeze.freeze_button(session, await session.get(UserService, 10), UI))
+        self.assertEqual(await self.rows(), [])
+
+    async def test_a_blocked_customer_is_not_enabled_again_at_the_deadline(self) -> None:
+        await self.start(days=3)
+        async with self.Session() as session:
+            (await session.get(BotUser, 1)).is_blocked = True
+            await session.commit()
+        await self.job(now=datetime.now(timezone.utc) + timedelta(days=4))
+        self.assertEqual([r.status for r in await self.rows()], ["closed"])
+        self.assertEqual((self.pg.info["status"], self.pg.modifies), ("disabled", []))
+
+    async def test_a_service_enabled_meanwhile_keeps_its_panel_expiry_instead_of_getting_the_time_twice(self) -> None:
+        await self.start()
+        running_expire = int(time.time()) + 2 * DAY
+        self.pg.info.update(status="active", expire=running_expire)
+        await self.resume()
+        self.assertEqual(self.pg.info["expire"], running_expire)
+
+    async def test_an_incomplete_panel_answer_is_retried_not_read_as_unlimited(self) -> None:
+        await self.start(days=3)
+        del self.pg.info["expire"]
+        await self.job(now=datetime.now(timezone.utc) + timedelta(days=4))
+        self.assertEqual([r.status for r in await self.rows()], ["frozen"])
+        with self.assertRaises(ValueError):
+            await self.resume()
+        self.assertEqual(self.pg.modifies, [])
+
+    async def test_a_voided_purchase_is_never_enabled_again(self) -> None:
+        await self.start(days=3)
+        async with self.Session() as session:
+            # payment_voids marks the services of a voided order cancelled before it commits.
+            await session.execute(sa.update(UserService).where(UserService.id == 10).values(is_cancelled=True))
+            await session.commit()
+        with self.assertRaises(ValueError):
+            await self.resume()
+        self.assertEqual(([r.status for r in await self.rows()], self.pg.modifies), (["closed"], []))
+
+    async def test_bulk_re_enable_skips_frozen_users_and_staff_disable_ends_the_freeze(self) -> None:
+        from app.services.service_freeze_guard import close_freezes_of_pg_user, frozen_pg_user_ids
+
+        await self.start()
+        async with self.Session() as session:
+            self.assertEqual(await frozen_pg_user_ids(session, [500, 501, 999]), {500})
+            self.assertEqual(await close_freezes_of_pg_user(session, 500), 1)
+            self.assertEqual(await frozen_pg_user_ids(session, [500]), set())
+        self.assertEqual([r.status for r in await self.rows()], ["closed"])
+
     def test_the_more_keyboard_carries_the_freeze_button(self) -> None:
         from app.bot.nav_inline import service_more_keyboard
 
