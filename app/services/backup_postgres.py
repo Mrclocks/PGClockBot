@@ -14,8 +14,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
+
 from app.config import get_settings
-from app.db.engine_url import pg_connection_parts
+from app.db.engine_url import pg_connection_parts, to_sync_url
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +26,9 @@ DUMP_TIMEOUT_SEC = 600
 RESTORE_TIMEOUT_SEC = 900
 CHECK_TIMEOUT_SEC = 120
 _TOOL_DIRS = (Path("/usr/bin"), Path("/usr/local/bin"), Path("/bin"))
+# Debian and Ubuntu keep each installed PostgreSQL version's client tools under <dir>/<major>/bin.
+_VERSIONED_TOOL_ROOT = Path("/usr/lib/postgresql")
+SERVER_VERSION_TIMEOUT_SEC = 15
 
 MISSING_TOOL_MESSAGE = "ابزار {tool} روی سرور نصب نیست؛ بستهٔ postgresql-client را نصب کنید."
 DUMP_FAILED_MESSAGE = "ساخت نسخهٔ دیتابیس ناموفق بود؛ جزئیات در لاگ سرور ثبت شد."
@@ -44,16 +50,32 @@ class BackupDatabaseError(RuntimeError):
     """A database backup or restore step failed; the message is safe to show to the admin."""
 
 
-def find_tool(name: str) -> str | None:
-    """Resolve a client tool even when systemd PATH is only ``.venv/bin``."""
+def _executable(path: Path) -> bool:
+    try:
+        return path.is_file() and os.access(path, os.X_OK)
+    except OSError:
+        return False
+
+
+def find_tool(name: str, *, server_major: int | None = None) -> str | None:
+    """Resolve a client tool even when systemd PATH is only ``.venv/bin``.
+
+    With ``server_major``, the tool of that PostgreSQL version wins when it is installed. On Debian
+    and Ubuntu ``/usr/bin/pg_dump`` runs the newest installed client, and a dump from a newer
+    client carries settings an older server rejects on restore (``transaction_timeout`` from 17).
+    """
+    if server_major is not None:
+        matching = _VERSIONED_TOOL_ROOT / str(int(server_major)) / "bin" / name
+        if _executable(matching):
+            return str(matching)
     found = shutil.which(name)
     if found:
         return found
     candidates = [directory / name for directory in _TOOL_DIRS]
     try:
-        candidates += sorted(Path("/usr/lib/postgresql").glob(f"*/bin/{name}"), reverse=True)
+        candidates += sorted(_VERSIONED_TOOL_ROOT.glob(f"*/bin/{name}"), reverse=True)
     except OSError:
-        log.debug("listing /usr/lib/postgresql failed", exc_info=True)
+        log.debug("listing %s failed", _VERSIONED_TOOL_ROOT, exc_info=True)
     for path in candidates:
         try:
             if path.is_file() and os.access(path, os.X_OK):
@@ -63,8 +85,24 @@ def find_tool(name: str) -> str | None:
     return None
 
 
-def _require_tool(name: str) -> str:
-    tool = find_tool(name)
+def server_major_version() -> int | None:
+    """Major version of the configured database server, or None when it cannot be read."""
+    engine = create_engine(
+        to_sync_url(get_settings().database_url), connect_args={"connect_timeout": SERVER_VERSION_TIMEOUT_SEC},
+    )
+    try:
+        with engine.connect() as conn:
+            number = int(conn.execute(text("SHOW server_version_num")).scalar_one())
+    except (SQLAlchemyError, ValueError, TypeError):
+        log.warning("could not read the database server version; using the default client tools", exc_info=True)
+        return None
+    finally:
+        engine.dispose()
+    return number // 10000
+
+
+def _require_tool(name: str, *, server_major: int | None = None) -> str:
+    tool = find_tool(name, server_major=server_major)
     if not tool:
         raise BackupDatabaseError(MISSING_TOOL_MESSAGE.format(tool=name))
     return tool
@@ -99,7 +137,13 @@ def _run(cmd: list[str], env: dict[str, str], *, timeout: int, step: str) -> sub
 
 def _failure_message(stderr: str, default: str) -> str:
     text = (stderr or "").lower()
-    if "unsupported version" in text or "server version mismatch" in text or "aborting because of server version" in text:
+    if (
+        "unsupported version" in text
+        or "server version mismatch" in text
+        or "aborting because of server version" in text
+        # A dump from a newer client sets parameters an older server does not know.
+        or "unrecognized configuration parameter" in text
+    ):
         return VERSION_MESSAGE
     if "lock timeout" in text or "canceling statement due to lock timeout" in text:
         return BUSY_MESSAGE
@@ -108,7 +152,7 @@ def _failure_message(stderr: str, default: str) -> str:
 
 def dump_database(dest: Path) -> int:
     """Write a custom-format dump of the configured database; returns its size in bytes."""
-    pg_dump = _require_tool("pg_dump")
+    pg_dump = _require_tool("pg_dump", server_major=server_major_version())
     target, env = _connection()
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.unlink(missing_ok=True)
@@ -161,7 +205,7 @@ def end_other_sessions() -> int:
 
 def restore_database(dump_path: Path) -> None:
     """Replace the configured database with the dump, all or nothing."""
-    pg_restore = _require_tool("pg_restore")
+    pg_restore = _require_tool("pg_restore", server_major=server_major_version())
     target, env = _connection()
     closed = end_other_sessions()
     if closed:
