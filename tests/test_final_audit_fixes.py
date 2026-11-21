@@ -162,7 +162,7 @@ class PgAclWiringTests(unittest.TestCase):
         self.assertIn("enrich_staff_pg_from_role", src)
         order_review = Path("app/api/order_review_pages.py").read_text(encoding="utf-8")
         self.assertIn("open_notify_bot_for_user", order_review)
-        self.assertIn("revoke_reseller", src)
+        self.assertIn("revoke_reseller", Path("app/api/user_list_pages.py").read_text(encoding="utf-8"))
 
     def test_users_role_uses_revoke(self):
         tree = ast.parse(Path("app/api/app.py").read_text(encoding="utf-8"))
@@ -177,7 +177,7 @@ class PgAclWiringTests(unittest.TestCase):
                         if isinstance(func, ast.Attribute) and func.attr == "revoke_reseller":
                             found = True
         # revoke_reseller is imported and awaited inside users_set_role
-        src = Path("app/api/app.py").read_text(encoding="utf-8")
+        src = Path("app/api/user_list_pages.py").read_text(encoding="utf-8")
         self.assertIn("await revoke_reseller(", src)
 
 

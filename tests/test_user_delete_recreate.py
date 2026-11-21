@@ -137,7 +137,7 @@ class DeleteBotUserBehaviorTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_web_handler_only_oks_after_delete(self):
         """Success flash path is after delete_bot_user returns (post-commit)."""
-        api = Path("app/api/app.py").read_text(encoding="utf-8")
+        api = Path("app/api/user_list_pages.py").read_text(encoding="utf-8")
         block = api.split("async def users_delete", 1)[1].split(
             "async def menu_layout_page", 1
         )[0]

@@ -58,7 +58,7 @@ class WebShopOrderIsolationTests(unittest.TestCase):
         self.assertIn("تأیید رسید نیاز به دسترسی «پرداخت‌ها» دارد", src)
 
     def test_dashboard_requires_dashboard_perm(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/api/user_list_pages.py").read_text(encoding="utf-8")
         self.assertIn('Depends(require_perm("dashboard"))', src)
 
     def test_require_staff_applies_with_shop_settings(self):
