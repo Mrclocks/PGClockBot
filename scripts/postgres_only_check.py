@@ -29,6 +29,8 @@ EXEMPT_PREFIXES = (
     # The check and its test have to name what they look for.
     "scripts/postgres_only_check.py",
     "tests/test_postgres_only_check.py",
+    # Release notes are history shown to operators, like the Markdown below.
+    "app/services/release_notes.py",
 )
 # Prose may describe the history; documentation is cleaned up by hand.
 EXEMPT_SUFFIXES = (".md",)
