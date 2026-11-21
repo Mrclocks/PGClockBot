@@ -203,7 +203,6 @@ html[data-theme="light"] .btn-warn { color: var(--btn-fg, var(--brand-fg)) !impo
 .ds textarea { margin: 0; }
 .ds .ds-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); }
 .ds .ds-req { color: var(--destructive); font-weight: 700; }
-.ds .ds-error { margin: 0; color: var(--destructive); font-size: var(--fs-2); font-weight: 400; }
 .ds .ds-unit { position: relative; display: block; }
 /* The unit sits inside the field on its left; the number starts from the right edge, like the text around it, so it
    never drifts towards the unit. */
@@ -351,7 +350,6 @@ html[data-theme="dark"] .ds .ds-steps a.need { color: #fbbf24; }
 .ds .ds-tag:has(input:checked) svg, .ds .ui-switch-chip:has(input:checked)::before { display: block; }
 .ds .ui-switch-chip:has(input:checked) .ui-switch-copy strong { font-weight: 600; color: var(--sel-fg); }
 .ds .ds-tag:has(input:focus-visible), .ds .ui-switch-chip:has(input:focus-visible) { outline: 2px solid var(--sel-line); outline-offset: 2px; }
-.ds .ds-count { font-size: var(--fs-2); font-weight: 500; color: var(--muted-fg); }
 
 /* Status tags and counters. */
 .ds .badge, .ds .ds-badge, .ds .ds-meta {
