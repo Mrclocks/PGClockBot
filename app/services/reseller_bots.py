@@ -152,7 +152,7 @@ class ResellerBotManager:
                     ),
                     timeout=WEBHOOK_SETUP_SECONDS,
                 )
-            except Exception:  # noqa: BLE001 - any failure falls back to polling, which always works
+            except Exception:  # any failure falls back to polling, which always works
                 log.warning("shop bot %s webhook not accepted; polling instead", reseller_profile_id, exc_info=True)
             else:
                 self._webhook_ids.add(reseller_profile_id)
@@ -179,7 +179,7 @@ class ResellerBotManager:
             if bot is not None and reseller_profile_id in self._webhook_ids:
                 try:
                     await asyncio.wait_for(bot.delete_webhook(request_timeout=12), timeout=WEBHOOK_SETUP_SECONDS)
-                except Exception:  # noqa: BLE001 - a webhook left behind only makes Telegram retry to a closed path
+                except Exception:  # a webhook left behind only makes Telegram retry to a closed path
                     log.warning("shop bot %s webhook not removed", reseller_profile_id, exc_info=True)
             await self._stop_locked(reseller_profile_id)
 

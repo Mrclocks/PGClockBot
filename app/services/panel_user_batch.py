@@ -93,6 +93,12 @@ async def _listed_rows(pg: Any, services: Sequence[PanelService], stats: BatchSt
             logger.info("panel ignores the user id filter; reading services one by one")
             break
         found.update(rows)
+    missing = len(ids) - len(found)
+    if missing and not stats.filter_ignored:
+        # Typical when the bot's panel login is not sudo: the list only holds that admin's users.
+        logger.info(
+            "panel user list returned %s of %s requested services; the rest are read one by one", len(found), len(ids)
+        )
     return found
 
 
@@ -103,7 +109,7 @@ async def _single(pg: Any, token: str | None, gate: asyncio.Semaphore, stats: Ba
         stats.single_calls += 1
         try:
             info = await asyncio.wait_for(pg.subscription_info(token), timeout=SINGLE_TIMEOUT_SECONDS)
-        except Exception:  # noqa: BLE001 - one unreadable service must not stop the batch; it is retried next run
+        except Exception:  # one unreadable service must not stop the batch; it is retried next run
             logger.debug("subscription lookup failed", exc_info=True)
             return None
     return info if isinstance(info, dict) else None

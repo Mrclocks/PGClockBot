@@ -70,6 +70,15 @@ class PanelInfosTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(infos[1]["source"], "subscription")
         self.assertEqual(panel.single_calls, ["tok2"])
 
+    async def test_services_missing_from_the_list_are_logged_once_and_read_one_by_one(self) -> None:
+        rows = services(5)
+        panel = FakePanel({1: "user1", 2: "user2"})  # e.g. a non-sudo login sees only its own users
+        with self.assertLogs("app.services.panel_user_batch", level="INFO") as logs:
+            infos = await panel_infos(panel, rows)
+        self.assertEqual(sum("returned 2 of 5" in line for line in logs.output), 1)
+        self.assertEqual(panel.single_calls, ["tok3", "tok4", "tok5"])
+        self.assertEqual([info.get("id") for info in infos[:2]], [1, 2])
+
     async def test_a_panel_that_ignores_the_filter_falls_back_for_every_service(self) -> None:
         rows = services(ID_CHUNK * 2, start=1000)
         users = {s.pg_user_id: s.pg_username for s in rows} | {1: "someone", 2: "else"}
