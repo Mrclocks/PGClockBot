@@ -24,6 +24,8 @@ from app.services.replaceable_notices import replace_notices
 from app.services.users import on
 from app.services.wallet import wallet_balances_for_scope
 
+# How often the scheduler reads every active service for low-usage alerts; also shown in the «پر مصرف» note.
+ALERT_CHECK_INTERVAL_HOURS = 6
 ALERT_TIME = "time"
 ALERT_TRAFFIC = "traffic"
 SECONDS_PER_DAY = 86400

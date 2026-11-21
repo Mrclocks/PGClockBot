@@ -20,6 +20,7 @@ from app.services.volume_allocation_external import (
     IN_CHUNK,
     PAGE_SIZE,
     PanelListingIncomplete,
+    PanelUserLimit,
     compute_external_bytes,
     due_shop_ids,
     external_sync_is_stale,
@@ -86,7 +87,24 @@ def _users(n: int, gb: int = 1, start: int = 1) -> list[dict]:
     return [{"id": i, "username": f"p{i}", "data_limit": gb * GB} for i in range(start, start + n)]
 
 
+def _limits(rows: list[dict]) -> list[PanelUserLimit]:
+    return [user for user in map(PanelUserLimit.from_row, rows) if user is not None]
+
+
 class PaginationAndMatchTests(ExternalHarness):
+    async def test_only_id_name_and_limit_are_kept_from_each_panel_row(self) -> None:
+        rows = [
+            {"id": 7, "username": " Mixed ", "data_limit": 3 * GB, "links": ["x" * 4096], "proxies": {"vless": {}}},
+            {"id": True, "username": "bool-id", "data_limit": GB},
+            {"id": "8", "username": "text-id", "data_limit": GB},
+            {"id": 9, "username": "negative", "data_limit": -5},
+        ]
+        pg = AsyncMock(get_users=_paged(rows))
+        self.assertEqual(
+            await list_panel_users_for_admin(pg, "admin10"),
+            [PanelUserLimit(7, "mixed", 3 * GB), PanelUserLimit(9, "negative", 0)],
+        )
+
     async def test_every_page_is_collected(self) -> None:
         pg = AsyncMock(get_users=_paged(_users(PAGE_SIZE + 3), total=PAGE_SIZE + 3))
         self.assertEqual(len(await list_panel_users_for_admin(pg, "admin10")), PAGE_SIZE + 3)
@@ -115,18 +133,18 @@ class PaginationAndMatchTests(ExternalHarness):
                 ]
             )
             await session.commit()
-            panel = [
+            panel = _limits([
                 {"id": 1, "username": "local-one", "data_limit": GB},
-                {"id": 2, "username": "local-two", "data_limit": GB},
+                {"id": 2, "username": "Local-Two ", "data_limit": GB},
                 {"id": 99, "username": "panel-only", "data_limit": 4 * GB},
                 {"id": 100, "username": "unlimited", "data_limit": 0},
-            ]
+            ])
             self.assertEqual(await compute_external_bytes(session, shop_id=10, panel_users=panel), 4 * GB)
 
     async def test_large_lists_are_matched_in_chunks(self) -> None:
         await self._shop()
         async with self.Session() as session:
-            panel = _users(IN_CHUNK * 2 + 5)
+            panel = _limits(_users(IN_CHUNK * 2 + 5))
             self.assertEqual(
                 await compute_external_bytes(session, shop_id=10, panel_users=panel), (IN_CHUNK * 2 + 5) * GB
             )

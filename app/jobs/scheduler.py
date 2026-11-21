@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from aiogram import Bot
+from apscheduler.events import (
+    EVENT_JOB_ERROR,
+    EVENT_JOB_EXECUTED,
+    EVENT_JOB_MAX_INSTANCES,
+    EVENT_JOB_SUBMITTED,
+    JobEvent,
+)
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import or_, select
 
@@ -35,6 +43,9 @@ from app.services.alert_thresholds import (
 from app.services.daily_report_delivery import deliver_daily_reports
 from app.services.service_period import period_usage
 from app.services.formatting import parse_expire
+from app.services.first_use_nudge import CHECK_INTERVAL_MINUTES as FIRST_USE_CHECK_MINUTES
+from app.services.job_metrics import install_job_error_handler, job_metrics, tracked_job
+from app.services.panel_user_batch import panel_infos
 from app.services.pasarguard import get_pg
 from app.services.usage_alert_messages import (
     send_alert_with_default_fallback,
@@ -42,6 +53,7 @@ from app.services.usage_alert_messages import (
     traffic_alert_text,
 )
 from app.services.usage_alerts import (
+    ALERT_CHECK_INTERVAL_HOURS,
     ALERT_TIME,
     ALERT_TRAFFIC,
     SentAlert,
@@ -57,8 +69,23 @@ from app.services.usage_alerts import (
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
 
-# Bound concurrent PG subscription lookups during expiry scan
-_PG_FETCH_CONCURRENCY = 8
+
+def record_job_event(event: JobEvent) -> None:
+    """Feed run time, failures and overlapping runs of every job into ``job_metrics``."""
+    if event.code == EVENT_JOB_SUBMITTED:
+        job_metrics.mark_started(event.job_id)
+    elif event.code == EVENT_JOB_EXECUTED:
+        job_metrics.mark_finished(event.job_id, succeeded=True)
+    elif event.code == EVENT_JOB_ERROR:
+        job_metrics.mark_finished(event.job_id, succeeded=False)
+    elif event.code == EVENT_JOB_MAX_INSTANCES:
+        job_metrics.mark_overlap(event.job_id)
+
+
+scheduler.add_listener(
+    record_job_event, EVENT_JOB_SUBMITTED | EVENT_JOB_EXECUTED | EVENT_JOB_ERROR | EVENT_JOB_MAX_INSTANCES
+)
+
 # Where the next alert re-arm sweep continues (in memory: a restart simply starts from the beginning).
 _rearm_after_id = 0
 
@@ -196,20 +223,13 @@ async def check_expiring_services(bot: Bot) -> None:
                 for shop in {item[5] for item in eligible}
             }
             plan_days = await plan_durations(session, [item[0] for item in eligible])
-            sem = asyncio.Semaphore(_PG_FETCH_CONCURRENCY)
             sent_alerts: list[SentAlert] = []
 
-            async def _fetch_info(token: str):
-                async with sem:
-                    try:
-                        return await asyncio.wait_for(pg.subscription_info(token), timeout=12)
-                    except Exception:
-                        logger.debug("subscription_info failed for service fetch", exc_info=True)
-                        return None
-
-            infos = await asyncio.gather(
-                *[_fetch_info(svc.subscription_token) for svc, *_rest in eligible]
-            )
+            # End the read transaction: no connection waits idle in a transaction on the panel or
+            # Telegram. Loaded rows stay usable (expire_on_commit=False); the flags set below are
+            # written by the commit after the batch.
+            await session.commit()
+            infos = await panel_infos(pg, [item[0] for item in eligible])
 
             for (svc, user, _ui, traffic_limit, time_limit, shop_rid), info in zip(eligible, infos):
                 if not info:
@@ -418,23 +438,19 @@ async def run_scheduled_receipt_approvals() -> None:
 
 async def run_crypto_rate_refresh() -> None:
     """Every minute: read the API rate of each shop that converts crypto amounts with one."""
+    from app.services.crypto_rates import api_rate_scopes, refresh_api_rates
+    from app.services.users import get_all_settings
+
     async with SessionLocal() as session:
         try:
-            from app.services.crypto_rates import refresh_api_rates
-            from app.services.users import get_all_settings
-
-            shop_ids = list(
-                (
-                    await session.execute(
-                        select(ResellerProfile.user_id).where(ResellerProfile.is_active.is_(True))
-                    )
-                ).scalars().all()
-            )
+            scopes = await api_rate_scopes(session)
+            if not scopes:
+                return
 
             async def settings_for(shop_id: int | None) -> dict[str, str]:
                 return await get_all_settings(session, reseller_id=shop_id)
 
-            await refresh_api_rates(settings_for, [None, *[int(rid) for rid in shop_ids]])
+            await refresh_api_rates(settings_for, scopes)
         except Exception:
             logger.exception("crypto rate refresh failed")
 
@@ -611,6 +627,11 @@ async def run_psp_settlement_poll() -> None:
 BOT_PHOTO_FIRST_RUN_MINUTES = 2
 
 
+def _add_job(func: Callable[..., Awaitable[Any]], trigger: str, *, id: str, **options: Any) -> None:
+    """Register a job whose errors, even ones it catches and logs, count against it in job_metrics."""
+    scheduler.add_job(tracked_job(id, func), trigger, id=id, **options)
+
+
 def start_background_scheduler() -> None:
     """Run financial and maintenance jobs as soon as the database is ready."""
     jobs = (
@@ -641,7 +662,7 @@ def start_background_scheduler() -> None:
     )
     for job_id, func, interval, grace in jobs:
         if scheduler.get_job(job_id) is None:
-            scheduler.add_job(
+            _add_job(
                 func,
                 "interval",
                 id=job_id,
@@ -652,17 +673,18 @@ def start_background_scheduler() -> None:
             )
     if scheduler.get_job("bot_profile_photo") is None:
         # Every 6 hours, but the first copy soon after start so a new logo shows the same day.
-        scheduler.add_job(
+        _add_job(
             run_bot_profile_photo_sync, "interval", hours=6, id="bot_profile_photo",
             next_run_time=datetime.now(timezone.utc) + timedelta(minutes=BOT_PHOTO_FIRST_RUN_MINUTES),
             max_instances=1, coalesce=True, misfire_grace_time=3600,
         )
     if scheduler.get_job("user_photo_prune") is None:
-        scheduler.add_job(
+        _add_job(
             run_user_photo_prune, "interval", hours=24, id="user_photo_prune",
             max_instances=1, coalesce=True, misfire_grace_time=3600,
         )
     if not scheduler.running:
+        install_job_error_handler()
         scheduler.start()
         logger.info("Background scheduler started")
 
@@ -670,40 +692,40 @@ def start_background_scheduler() -> None:
 def start_scheduler(bot: Bot) -> None:
     """Attach notification jobs after the bot connects to Telegram."""
     start_background_scheduler()
-    scheduler.add_job(
+    _add_job(
         run_cancellation_notifications, "interval", seconds=10, args=[bot], id="cancellation_notifications",
         max_instances=1, coalesce=True, misfire_grace_time=60, replace_existing=True,
     )
-    scheduler.add_job(
+    _add_job(
         run_customer_notices, "interval", seconds=10, args=[bot], id="customer_notices",
         max_instances=1, coalesce=True, misfire_grace_time=60, replace_existing=True,
     )
-    scheduler.add_job(
+    _add_job(
         run_panel_alert_notifications, "interval", minutes=5, args=[bot], id="panel_alert_notifications",
         max_instances=1, coalesce=True, misfire_grace_time=300, replace_existing=True,
     )
-    scheduler.add_job(
+    _add_job(
         run_targeted_campaigns_tick, "interval", minutes=1, args=[bot], id="targeted_campaigns",
         max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,
     )
-    scheduler.add_job(
+    _add_job(
         run_broadcast_tick, "interval", minutes=1, args=[bot], id="broadcast",
         max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,
     )
-    scheduler.add_job(
-        run_first_use_nudge_tick, "interval", minutes=30, args=[bot], id="first_use_nudge",
+    _add_job(
+        run_first_use_nudge_tick, "interval", minutes=FIRST_USE_CHECK_MINUTES, args=[bot], id="first_use_nudge",
         max_instances=1, coalesce=True, misfire_grace_time=1800, replace_existing=True,
     )
-    scheduler.add_job(
+    _add_job(
         run_service_automation_tick,
         "interval", minutes=1, args=[bot], id="service_automation",
         max_instances=1, coalesce=True, misfire_grace_time=120,
         replace_existing=True,
     )
-    scheduler.add_job(
+    _add_job(
         check_expiring_services,
         "interval",
-        hours=6,
+        hours=ALERT_CHECK_INTERVAL_HOURS,
         args=[bot],
         id="expiry",
         max_instances=1,
@@ -711,7 +733,7 @@ def start_scheduler(bot: Bot) -> None:
         misfire_grace_time=3600,
         replace_existing=True,
     )
-    scheduler.add_job(
+    _add_job(
         run_admin_daily_report,
         "interval",
         minutes=30,

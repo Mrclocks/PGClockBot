@@ -19,6 +19,7 @@ from app.services.bot_updates import get_update_scheduler
 from app.jobs.scheduler import start_background_scheduler, start_scheduler, stop_scheduler
 from app.services.home_overview import close_bot_probe_client
 from app.services.pasarguard import get_pg
+from app.services.shop_bot_webhook import shop_webhook_config
 from app.services.terminal_text import install_english_logging
 from app.services.users import ensure_default_settings
 from app.services.web_auth import load_web_admin
@@ -91,6 +92,8 @@ def main() -> None:
             logger.exception("Bot init failed — starting web panel only")
             bot = None
             dp = None
+    # Opt-in (SHOP_BOT_WEBHOOK): shop bots use the main bot's public HTTPS origin; None keeps them polling.
+    shop_webhook = shop_webhook_config() if dp is not None else None
 
     @asynccontextmanager
     async def lifespan(app):
@@ -283,7 +286,7 @@ def main() -> None:
                 try:
                     from app.services.reseller_bots import init_reseller_bot_manager
 
-                    reseller_mgr = init_reseller_bot_manager(dp)
+                    reseller_mgr = init_reseller_bot_manager(dp, webhook=shop_webhook)
                     await asyncio.wait_for(reseller_mgr.start_all(), timeout=90)
                 except TimeoutError:
                     logger.error(
@@ -381,6 +384,11 @@ def main() -> None:
             # process dies is not resent, as with polling, where the offset also moves on fetch.
             await get_update_scheduler().submit(dp, bot, update)
             return {"ok": True}
+
+    if shop_webhook is not None:
+        from app.api.shop_bot_webhook_pages import register_shop_bot_webhook
+
+        register_shop_bot_webhook(api, config=shop_webhook)
 
     from app.services.setup_wizard import is_setup_complete, persist_setup_entry_url
     from app.services.web_auth import repair_web_admin_from_env

@@ -24,6 +24,7 @@ from app.services.connection_monitor_errors import monitor_error_message
 from app.services.connection_monitor_preferences import delete_monitor_target, pause_monitor_target
 from app.services.connection_monitor_queue import queue_manual_check
 from app.services.connection_monitor_settings import set_monitor_account
+from app.services.connection_monitor_timing import INTERVAL_CHOICES, set_monitor_interval
 from app.services.connection_monitor_views import monitor_admin_page
 from app.services.connection_status_texts import PLAIN_STATUS_LABELS, REASON_LABELS, connection_check_time
 from app.services.db_safe import rollback_quiet
@@ -75,6 +76,7 @@ def register_connection_status_pages(app: FastAPI, *, render: Callable, require_
             "status_labels": PLAIN_STATUS_LABELS, "reason_labels": REASON_LABELS,
             "checked_time": connection_check_time,
             "binary_configured": bool(deployment.connection_monitor_xray_path and deployment.connection_monitor_xray_sha256),
+            "interval_choices": INTERVAL_CHOICES,
         })
 
     @app.post(STATUS_PATH + "/account")
@@ -86,6 +88,11 @@ def register_connection_status_pages(app: FastAPI, *, render: Callable, require_
     async def connection_runtime(enabled: Annotated[Literal["0", "1"], Form()],
                                  access: MonitorAccess = Depends(require_access), session: AsyncSession = Depends(get_db)) -> Response:
         return await _action_result(session, set_monitor_enabled(session, access, enabled=enabled == "1"))
+
+    @app.post(STATUS_PATH + "/interval")
+    async def connection_interval(seconds: Annotated[int, Form(ge=1, le=86400)],
+                                  access: MonitorAccess = Depends(require_access), session: AsyncSession = Depends(get_db)) -> Response:
+        return await _action_result(session, set_monitor_interval(session, access, seconds=seconds))
 
     @app.post(STATUS_PATH + "/configs/{config_key}")
     async def connection_select(config_key: str, access: MonitorAccess = Depends(require_access),

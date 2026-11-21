@@ -8,7 +8,6 @@ once the remaining share is clearly above the shop's threshold.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
@@ -20,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import UserService
 from app.services.formatting import parse_expire
+from app.services.panel_user_batch import panel_infos
 from app.services.alert_thresholds import AlertThreshold, should_rearm_time, should_rearm_traffic
 from app.services.service_period import period_usage
 from app.services.usage_alerts import period_seconds, plan_durations
@@ -29,21 +29,9 @@ logger = logging.getLogger(__name__)
 SWEEP_LIMIT = 100
 # A service whose quota changed this recently is looked at first: its change is the likeliest reason to re-arm.
 RECENT_CHANGE_WINDOW = timedelta(hours=12)
-FETCH_TIMEOUT_SECONDS = 12
-FETCH_CONCURRENCY = 8
 
 Thresholds = tuple[bool, AlertThreshold, AlertThreshold]  # (alerts on, volume, time)
 ThresholdsFor = Callable[[int | None], Awaitable[Thresholds]]
-
-
-async def _fetch(pg: Any, gate: asyncio.Semaphore, token: str) -> dict | None:
-    async with gate:
-        try:
-            info = await asyncio.wait_for(pg.subscription_info(token), timeout=FETCH_TIMEOUT_SECONDS)
-        except Exception:  # noqa: BLE001 - one unreadable service must not stop the sweep
-            logger.debug("alert re-arm lookup failed", exc_info=True)
-            return None
-    return info if isinstance(info, dict) else None
 
 
 def _rearm_one(
@@ -151,8 +139,10 @@ async def rearm_flagged_alerts(
     if not services:
         return SweepResult(0, 0)
     plans = await plan_durations(session, services)
-    gate = asyncio.Semaphore(FETCH_CONCURRENCY)
-    infos = await asyncio.gather(*(_fetch(pg, gate, s.subscription_token) for s in services))
+    # No connection waits idle in a transaction on the panel; loaded rows stay usable because the
+    # app's sessions do not expire on commit, and the changes below get their own commit.
+    await session.commit()
+    infos = await panel_infos(pg, services)
     rearmed = 0
     for service, info in zip(services, infos, strict=True):
         _enabled, traffic_limit, time_limit = settings[service.shop_id]

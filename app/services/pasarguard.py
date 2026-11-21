@@ -758,6 +758,12 @@ class PasarGuardClient:
             "/api/users", params=params, cache_max_age=cache_max_age, last_good_ok=last_good_ok
         )
 
+    async def list_users_by_ids(self, ids: list[int]) -> Any:
+        """Users with these panel ids, read fresh for background jobs and kept out of the read cache."""
+        return await self.request(
+            "GET", "/api/users", params={"ids": list(ids), "limit": len(ids), "offset": 0}, use_cache=False,
+        )
+
     async def get_user_by_username(self, username: str) -> dict:
         return await self.request("GET", f"/api/user/by-username/{username}")
 

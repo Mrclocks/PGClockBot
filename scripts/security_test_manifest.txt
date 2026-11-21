@@ -20,6 +20,7 @@ tests/test_connection_status_menu_migration.py
 tests/test_connection_monitor_install.py
 tests/test_connection_status.py
 tests/test_connection_status_authz.py
+tests/test_connection_monitor_timing.py
 tests/test_connection_status_concurrency.py
 tests/test_connection_status_migration.py
 # Subscription contact ownership, shop isolation and cancellation notification claims.
@@ -156,6 +157,8 @@ tests/test_service_live_info.py
 tests/test_setup_bot_placeholder_rejection.py
 tests/test_setup_gate_install_url.py
 tests/test_setup_url_log_redaction.py
+tests/test_payment_log_token_redaction.py
+tests/test_shop_bot_webhook.py
 tests/test_setup_wizard_secret_masking.py
 tests/test_shop_isolation_3_5_4.py
 tests/test_nav_admin_counters_0_2_47.py

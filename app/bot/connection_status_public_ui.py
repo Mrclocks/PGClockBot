@@ -42,7 +42,7 @@ def public_status_text(page: PublicConnectionPage, ui: dict[str, str], *, now: d
                       f"آخرین بررسی: {checked_time(entry.checked_at)}"])
         if entry.is_catalog_stale and entry.status == ConnectionStatus.UNKNOWN:
             lines.append(CATALOG_STALE_NOTICE)
-        elif entry.checked_at is not None and not is_fresh(entry.checked_at, now=now):
+        elif entry.checked_at is not None and not is_fresh(entry.checked_at, now=now, freshness=page.freshness):
             lines.append("نتیجه قدیمی است؛ وضعیت فعلی نامشخص است.")
     return "\n".join(lines)
 

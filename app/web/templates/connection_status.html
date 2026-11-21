@@ -36,10 +36,11 @@
 
   <section class="card" aria-labelledby="test-runtime-title">
     <div class="connection-card-head">
-      <h2 id="test-runtime-title">تست خودکار</h2>
+      <h2 id="test-runtime-title">تست خودکار <span class="ds-badge" data-tone="warn">{{ heavy_label }}</span></h2>
       <span class="badge {{ 'ok' if page.settings.enabled else 'neutral' }}">{{ 'روشن' if page.settings.enabled else 'خاموش' }}</span>
     </div>
-    <p class="muted">بعد از ثبت کاربر تست و انتخاب کانفیگ‌ها، تست‌ها را روشن کنید. بررسی تقریباً هر دقیقه انجام می‌شود و «تازه‌سازی» فقط آخرین نتیجه را نشان می‌دهد.</p>
+    <p class="muted">{{ connection_monitor_cost }}</p>
+    <p class="muted">بعد از ثبت کاربر تست و انتخاب کانفیگ‌ها، تست‌ها را روشن کنید. بررسی {{ interval_choices.get(page.timing.interval_seconds, '') }} انجام می‌شود و «تازه‌سازی» فقط آخرین نتیجه را نشان می‌دهد.</p>
     {% if page.stop_reason %}
     <div class="flash warn" role="status">
       <div class="flash-copy">{{ reason_labels.get(page.stop_reason, 'پایش متوقف شد.') }}</div>
@@ -60,6 +61,18 @@
       <div class="actions"><button class="btn {{ 'btn-danger' if page.settings.enabled else '' }}" type="submit"{% if not page.settings.enabled and (not page.settings.has_account or not binary_configured) %} disabled{% endif %}>{{ 'توقف تست‌ها' if page.settings.enabled else 'شروع تست‌ها' }}</button></div>
     </form>
     <small class="muted">روشن کردن دوبارهٔ تست‌ها، کانفیگ‌ها را خودکار به کاربران نشان نمی‌دهد.</small>
+    <form method="post" action="/connection-status/interval" class="form-stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="form-field">فاصلهٔ بررسی
+        <select name="seconds" aria-describedby="monitor-interval-help">
+          {% for seconds, label in interval_choices.items() %}
+          <option value="{{ seconds }}"{% if seconds == page.timing.interval_seconds %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <small class="muted" id="monitor-interval-help">فاصلهٔ بیشتر، اجرای هستهٔ xray و خواندن پنل را کمتر می‌کند. وضعیت «خارج از دسترس» همچنان بعد از سه دور شکست پشت‌سرهم اعلام می‌شود، پس با فاصلهٔ بیشتر دیرتر دیده می‌شود.</small>
+      </label>
+      <div class="actions"><button class="btn btn-ghost" type="submit">ذخیرهٔ فاصله</button></div>
+    </form>
   </section>
 </div>
 
