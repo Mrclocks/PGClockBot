@@ -9,13 +9,24 @@ running process.
 
 from __future__ import annotations
 
+import contextvars
+import functools
+import logging
 import threading
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import ParamSpec, TypeVar
 
 # Job ids come from code, but a bound keeps a bug from growing the table without limit.
 MAX_TRACKED_JOBS = 128
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+# The scheduled job whose code is running in this task, for the error-log handler below.
+_current_job: contextvars.ContextVar[str | None] = contextvars.ContextVar("current_job", default=None)
 
 
 @dataclass(slots=True)
@@ -58,6 +69,8 @@ class JobMetrics:
         self._max_jobs = max_jobs
         self._stats: dict[str, JobStats] = {}
         self._started: dict[str, float] = {}
+        # Jobs whose current run logged an error: jobs catch their own failures and log them.
+        self._failed_runs: set[str] = set()
         self._lock = threading.Lock()
 
     def _entry(self, job_id: str) -> JobStats | None:
@@ -68,6 +81,7 @@ class JobMetrics:
 
     def mark_started(self, job_id: str, *, now: float | None = None) -> None:
         with self._lock:
+            self._failed_runs.discard(job_id)
             if job_id in self._stats or len(self._stats) < self._max_jobs:
                 self._started[job_id] = time.monotonic() if now is None else now
 
@@ -78,6 +92,9 @@ class JobMetrics:
         finished = finished_at or datetime.now(timezone.utc)
         with self._lock:
             started = self._started.pop(job_id, None)
+            if job_id in self._failed_runs:
+                self._failed_runs.discard(job_id)
+                succeeded = False
             entry = self._entry(job_id)
             if entry is None:
                 return
@@ -92,6 +109,12 @@ class JobMetrics:
             else:
                 entry.failures += 1
                 entry.last_failure_at = finished
+
+    def note_failure(self, job_id: str) -> None:
+        """The running job logged an error it handled itself; its run counts as failed."""
+        with self._lock:
+            if job_id in self._started:
+                self._failed_runs.add(job_id)
 
     def mark_overlap(self, job_id: str) -> None:
         """The job was due again while its previous run was still going."""
@@ -125,6 +148,49 @@ class JobMetrics:
         with self._lock:
             self._stats.clear()
             self._started.clear()
+            self._failed_runs.clear()
 
 
 job_metrics = JobMetrics()
+
+
+def tracked_job(job_id: str, func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+    """``func`` run with ``job_id`` as the current job, so errors it logs count against that job."""
+
+    @functools.wraps(func)
+    async def run(*args: P.args, **kwargs: P.kwargs) -> R:
+        token = _current_job.set(job_id)
+        try:
+            return await func(*args, **kwargs)
+        finally:
+            _current_job.reset(token)
+
+    return run
+
+
+class JobErrorLogHandler(logging.Handler):
+    """Marks the running job's run as failed when anything logs at ERROR or above during it."""
+
+    def __init__(self, metrics: JobMetrics | None = None) -> None:
+        super().__init__(level=logging.ERROR)
+        self._metrics = metrics
+
+    def emit(self, record: logging.LogRecord) -> None:
+        job_id = _current_job.get()
+        if job_id is not None:
+            (self._metrics or job_metrics).note_failure(job_id)
+
+
+_handler_lock = threading.Lock()
+_installed: list[JobErrorLogHandler] = []
+
+
+def install_job_error_handler(logger: logging.Logger | None = None) -> None:
+    """Attach the handler once to the root logger (or ``logger``); repeated calls do nothing."""
+    target = logger or logging.getLogger()
+    with _handler_lock:
+        if any(handler in target.handlers for handler in _installed):
+            return
+        handler = JobErrorLogHandler()
+        target.addHandler(handler)
+        _installed.append(handler)

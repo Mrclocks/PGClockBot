@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import unittest
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app.services.job_metrics import JobMetrics
+from app.services.job_metrics import JobErrorLogHandler, JobMetrics, tracked_job
 
 
 class JobMetricsTests(unittest.TestCase):
@@ -99,3 +102,76 @@ class SchedulerListenerTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HandledFailureTests(unittest.IsolatedAsyncioTestCase):
+    """Jobs catch and log their own errors; such a run still counts as failed."""
+
+    def setUp(self) -> None:
+        self.metrics = JobMetrics()
+        self.handler = JobErrorLogHandler(self.metrics)
+        self.log = logging.getLogger("tests.job_metrics.handled")
+        self.log.addHandler(self.handler)
+        self.log.propagate = False
+        self.addCleanup(self.log.removeHandler, self.handler)
+
+    async def _run(self, job_id: str, body) -> None:
+        self.metrics.mark_started(job_id, now=0.0)
+        await tracked_job(job_id, body)()
+        self.metrics.mark_finished(job_id, succeeded=True, now=1.0)
+
+    async def test_an_error_the_job_logged_marks_its_run_failed(self) -> None:
+        async def job() -> None:
+            try:
+                raise RuntimeError("panel down")
+            except RuntimeError:
+                self.log.exception("tick failed")
+
+        await self._run("a", job)
+        (view,) = self.metrics.snapshot()
+        self.assertEqual((view.runs, view.failures), (1, 1))
+        self.assertIsNone(view.last_success_at)
+
+    async def test_warnings_and_logs_outside_a_job_do_not_count(self) -> None:
+        async def job() -> None:
+            self.log.warning("one shop kept its old total")
+
+        await self._run("a", job)
+        self.log.error("not inside any job")
+        (view,) = self.metrics.snapshot()
+        self.assertEqual(view.failures, 0)
+
+    async def test_the_next_clean_run_is_a_success_again(self) -> None:
+        async def failing() -> None:
+            self.log.error("bad")
+
+        async def clean() -> None:
+            return None
+
+        await self._run("a", failing)
+        await self._run("a", clean)
+        (view,) = self.metrics.snapshot()
+        self.assertEqual((view.runs, view.failures), (2, 1))
+        self.assertIsNotNone(view.last_success_at)
+
+    async def test_the_wrapper_keeps_the_jobs_name_and_result(self) -> None:
+        async def run_sample(value: int) -> int:
+            return value * 2
+
+        wrapped = tracked_job("sample", run_sample)
+        self.assertEqual(wrapped.__name__, "run_sample")
+        self.assertEqual(await wrapped(4), 8)
+
+
+class JobLabelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_every_registered_job_has_a_persian_label(self) -> None:
+        from app.jobs import scheduler as scheduler_module
+        from app.services.resource_cost import JOB_LABELS
+
+        fresh = AsyncIOScheduler()
+        with patch.object(scheduler_module, "scheduler", fresh):
+            scheduler_module.start_scheduler(SimpleNamespace())
+            ids = {job.id for job in fresh.get_jobs()}
+            fresh.shutdown(wait=False)
+        self.assertGreater(len(ids), 20)
+        self.assertEqual(sorted(ids - set(JOB_LABELS)), [])
