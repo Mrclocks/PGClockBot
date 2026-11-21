@@ -83,7 +83,7 @@ def _require_rep_mgmt(staff: dict) -> None:
     try:
         assert_staff_can_manage_representatives(staff)
     except RepresentativeUnifyError:
-        raise HTTPException(status_code=403, detail="forbidden")
+        raise HTTPException(status_code=403, detail="forbidden") from None
 
 
 async def _validate_reseller_capacity_inputs(
@@ -246,7 +246,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         try:
             await assert_live_parent_for_child(session, staff)
         except RepresentativeUnifyError:
-            raise HTTPException(status_code=403, detail="forbidden")
+            raise HTTPException(status_code=403, detail="forbidden") from None
 
         owner_view = is_explicit_owner_staff(staff)
         l2_pg_roles: list[dict] = []
@@ -571,7 +571,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         try:
             await assert_live_parent_for_child(session, staff)
         except RepresentativeUnifyError:
-            raise HTTPException(status_code=403, detail="forbidden")
+            raise HTTPException(status_code=403, detail="forbidden") from None
         form = await request.form()
         _ = form.get("parent_id")
         _ = form.get("depth")
@@ -794,7 +794,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         try:
             await assert_live_parent_for_child(session, staff)
         except RepresentativeUnifyError:
-            raise HTTPException(status_code=403, detail="forbidden")
+            raise HTTPException(status_code=403, detail="forbidden") from None
 
         user, _profile, status = await _load_scoped_reseller(session, staff, user_id)
         if status == "forbidden":
@@ -832,7 +832,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         try:
             await assert_live_parent_for_child(session, staff)
         except RepresentativeUnifyError:
-            raise HTTPException(status_code=403, detail="forbidden")
+            raise HTTPException(status_code=403, detail="forbidden") from None
 
         form = await request.form()
         user, _profile, status = await _load_scoped_reseller(session, staff, user_id)

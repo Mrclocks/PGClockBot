@@ -574,7 +574,7 @@ def _reseller_capacity_entries(profile=None, ui: dict | None = None) -> list[tup
             entries.append(("res_addon_packs", _t(ui, "btn_res_addon_packs")))
     except Exception:
         # Fail closed — do not expose capacity without a verified subscription plan
-        pass
+        logger.warning("reseller capacity buttons left out: plan check failed", exc_info=True)
     return entries
 
 

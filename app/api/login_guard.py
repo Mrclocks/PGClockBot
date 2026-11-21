@@ -109,9 +109,10 @@ def _lock_file() -> Iterator[None]:
             import fcntl
 
             fcntl.flock(fd, fcntl.LOCK_EX)
-        except Exception:
-            # Windows / restricted FS: best-effort without flock
-            pass
+        except (ImportError, OSError):
+            # Windows / restricted FS: best-effort without flock. Two logins at the same moment may then
+            # overwrite each other's failed-attempt count, so say so.
+            logger.warning("login lockout file lock unavailable; continuing without it", exc_info=True)
         yield
     finally:
         try:

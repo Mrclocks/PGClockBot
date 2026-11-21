@@ -450,7 +450,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             )
         except Exception:
             # Reply is persisted; Telegram delivery failure should not roll back UX.
-            pass
+            logger.warning("ticket reply saved but the bot notification failed ticket=%s", ticket.id, exc_info=True)
         return RedirectResponse(
             f"/tickets?ok=tg_replied&tg={ticket_id}", status_code=303
         )

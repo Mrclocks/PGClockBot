@@ -44,7 +44,7 @@ async def recover_session(session: AsyncSession | None) -> None:
             return
     except Exception:
         # Fall through to transactional-state probe
-        pass
+        logger.debug("session connection probe failed; checking its transaction state", exc_info=True)
     try:
         sync = getattr(session, "sync_session", None)
         if sync is None:

@@ -315,8 +315,8 @@ async def provision_level1_principal(
 
     try:
         owner = await ensure_owner_principal(session)
-    except OrgPrincipalError:
-        raise PrincipalProvisionError("مالک سازمان فعال نیست", code="inactive_owner")
+    except OrgPrincipalError as exc:
+        raise PrincipalProvisionError("مالک سازمان فعال نیست", code="inactive_owner") from exc
     if not is_owner_principal(owner):
         raise PrincipalProvisionError("مالک سازمان فعال نیست", code="inactive_owner")
 
