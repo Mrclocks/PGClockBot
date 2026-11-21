@@ -125,6 +125,8 @@ class FreezeSettingsPageTests(TabHarness):
             self.assertIn('name="s_service_transfer_enabled" value="1" id="st-enabled"', page)
             self.assertIn('data-ds-show-when="#st-enabled:1" hidden', page)
             self.assertIn('name="s_service_transfer_link_hours" type="number" min="1" max="168"', page)
+            # Link rotation is on by default, so the warning about turning it off starts hidden.
+            self.assertIn('data-ds-show-when="#st-new-link:0" hidden', page)
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
             "s_service_freeze_enabled": "1", "s_service_freeze_max_days": "7",
             "s_service_freeze_per_period": "2", "s_service_freeze_min_days_left": "1",

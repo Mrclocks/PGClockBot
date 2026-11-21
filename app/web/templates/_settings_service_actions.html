@@ -63,7 +63,8 @@
         {{ number_field('service_transfer_link_hours', 'اعتبار لینک انتقال', 'ساعت', 'بعد از این مدت لینک کار نمی‌کند') }}
         {{ number_field('service_transfer_per_period', 'تعداد انتقال در ۳۰ روز', 'بار') }}
       </div>
-      <div class="ds-rows">{{ ds_switch('s_service_transfer_new_link', 'عوض شدن لینک اشتراک بعد از انتقال', help='پیشنهادی: روشن. لینک قبلی از کار می‌افتد تا صاحب قبلی دیگر به سرویس وصل نشود.', checked=is_on('service_transfer_new_link')) }}</div>
+      <div class="ds-rows">{{ ds_switch('s_service_transfer_new_link', 'عوض شدن لینک اشتراک بعد از انتقال', help='پیشنهادی: روشن. لینک قبلی از کار می‌افتد تا صاحب قبلی دیگر به سرویس وصل نشود.', checked=is_on('service_transfer_new_link'), id='st-new-link') }}</div>
+      <div class="ds-note" data-tone="danger" role="note" data-ds-show-when="#st-new-link:0"{% if is_on('service_transfer_new_link') %} hidden{% endif %}>{{ ico('shield-alert') }}<span>بدون عوض شدن لینک، فرستنده بعد از انتقال هنوز با لینک قبلی به سرویس وصل می‌شود.</span></div>
       <div class="actions"><button class="btn" type="submit">ذخیرهٔ انتقال سرویس</button></div>
     </div>
   {% endcall %}

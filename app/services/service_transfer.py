@@ -34,7 +34,12 @@ from app.services.pasarguard import (
     get_pg_for_reseller,
     user_subscription_url,
 )
-from app.services.service_freeze import can_be_frozen as is_self_service, has_open_order, open_freeze
+from app.services.service_freeze import (
+    can_be_frozen as is_self_service,
+    has_open_order,
+    is_on_paid_plan,
+    open_freeze,
+)
 from app.services.service_scope import service_shop_id
 from app.services.service_transfer_settings import (
     DONE_ACTION,
@@ -72,7 +77,9 @@ async def transfer_button(session: AsyncSession, service: UserService, ui: Mappi
     row = await open_transfer(session, int(service.id))
     if row is not None and row.expires_at > _now():
         return BUTTON_CANCEL
-    return BUTTON_START if transfer_policy(ui).allows_plan(service.plan_id) else None
+    if not transfer_policy(ui).allows_plan(service.plan_id):
+        return None
+    return BUTTON_START if await is_on_paid_plan(session, service) else None
 
 
 def token_hash(token: str) -> str:
@@ -99,7 +106,8 @@ async def _expire_stale(session: AsyncSession, service_id: int, now: datetime) -
 
 
 async def _assert_transferable(session: AsyncSession, service: UserService) -> None:
-    if not is_self_service(service):
+    # A free trial handed on would turn test accounts into paid time for someone else.
+    if not is_self_service(service) or not await is_on_paid_plan(session, service):
         raise ValueError("این سرویس را نمی‌توان منتقل کرد")
     if await open_freeze(session, int(service.id)) is not None:
         raise ValueError("سرویس متوقف است؛ اول آن را از حالت توقف خارج کنید")
@@ -237,7 +245,11 @@ async def accept_transfer(
         raise ValueError(LINK_GONE)
     offer = await preview_transfer(session, recipient, token, shop_id=shop_id)
     row = await session.get(ServiceTransfer, offer.transfer_id)
-    service = await session.get(UserService, offer.service_id)
+    # Locked until the commit below: the checks and the move see the same service row, and a
+    # renewal claim (which locks the row too) waits instead of slipping in between.
+    service = await session.scalar(
+        select(UserService).where(UserService.id == offer.service_id).with_for_update().execution_options(populate_existing=True)
+    )
     policy = transfer_policy(ui)
     # Re-checked here: the shop may have turned transfers off or removed the plan since the link was made.
     if not policy.allows_plan(service.plan_id) or await service_shop_id(session, service) != row.shop_id:

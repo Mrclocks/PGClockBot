@@ -213,6 +213,36 @@ class TransferTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ValueError, "منتقل"):
                 await request_cancellation(session, await session.get(BotUser, FRIEND), 10, shop_id=None, reason="x")
 
+    async def test_a_trial_service_never_moves_even_on_all_plans(self) -> None:
+        token = await self.make()
+        async with self.Session() as session:
+            await session.execute(sa.update(Plan).where(Plan.id == 1).values(is_trial=True))
+            await session.commit()
+        with self.assertRaises(ValueError):
+            await self.accept(token)
+        with self.assertRaises(ValueError):
+            await self.make()
+        async with self.Session() as session:
+            owner = await session.get(BotUser, OWNER)
+            await transfer.cancel_transfer(session, owner, 10, shop_id=None)
+            # No new link is offered; the open one could still be cancelled above.
+            self.assertIsNone(await transfer.transfer_button(session, await session.get(UserService, 10), UI))
+        self.assertEqual((await self.service()).bot_user_id, OWNER)
+
+    async def test_voiding_the_senders_payment_is_left_to_staff(self) -> None:
+        from types import SimpleNamespace
+
+        from app.services.payment_voids import _resolve_plan
+
+        async with self.Session() as session:
+            session.add(Order(id=90, user_id=OWNER, plan_id=1, amount=100, status="delivered", service_id=10))
+            await session.commit()
+        await self.accept(await self.make())
+        async with self.Session() as session:
+            payment = SimpleNamespace(method="card", is_wallet_topup=False, amount=100)
+            with self.assertRaisesRegex(ValueError, "منتقل"):
+                await _resolve_plan(session, payment, await session.get(Order, 90), False)
+
     async def test_the_more_menu_offers_start_then_cancel(self) -> None:
         async with self.Session() as session:
             service = await session.get(UserService, 10)
