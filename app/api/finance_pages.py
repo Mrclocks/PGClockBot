@@ -502,7 +502,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
                 return render(request, "finance.html", ctx)
             try:
-                from app.services.payment_review_diag import diagnose_order_delivery
+                from app.services.payment_review_diag import diagnose_order_deliveries
 
                 failures = await list_open_delivery_failures(session, reseller_id=rid)
                 stuck = await list_stuck_paid_orders(session, reseller_id=rid, limit=100)
@@ -534,18 +534,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                         if oid and oid not in payments_by_order:
                             payments_by_order[oid] = p
 
-                diag_by_order: dict[int, object] = {}
-                for oid, o in orders_by_id.items():
-                    try:
-                        diag_by_order[int(oid)] = await diagnose_order_delivery(
-                            session,
-                            o,
-                            payment=payments_by_order.get(int(oid)),
-                        )
-                    except Exception:
-                        logger.debug(
-                            "delivery diagnosis failed order=%s", oid, exc_info=True
-                        )
+                diag_by_order = await diagnose_order_deliveries(
+                    session, orders_by_id.values(), payments_by_order
+                )
 
                 ctx["delivery_failures"] = failures
                 ctx["stuck_paid_orders"] = stuck
