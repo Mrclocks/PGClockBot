@@ -63,7 +63,10 @@ capture() {
   # shellcheck disable=SC2086
   createdb $PGARGS "$db"
   (cd "$wt" && DATABASE_URL="$PG_URL/$db" PYTHONPATH="$wt" python3 "$REPO/scripts/ui_fixture.py" "$wt" "$port" >/dev/null)
-  (cd "$wt" && PYTHONPATH="$wt" exec python3 -m app.main >"$OUT/$label-server.log" 2>&1) &
+  # Outbound HTTP goes to a dead proxy, so checks against GitHub fail the same way on every run;
+  # loopback (the app itself and the fake panel) stays direct.
+  (cd "$wt" && PYTHONPATH="$wt" HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 \
+    NO_PROXY=127.0.0.1,localhost exec python3 -m app.main >"$OUT/$label-server.log" 2>&1) &
   PIDS+=($!)
   for _ in $(seq 1 90); do
     curl -fsS -o /dev/null "http://127.0.0.1:$port/login" 2>/dev/null && break
