@@ -10,19 +10,12 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import shutil
 import subprocess
-import tempfile
-import threading
 from pathlib import Path
-from typing import IO
-
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
-from app.db.engine_url import pg_connection_parts, to_sync_url
+from app.db.engine_url import pg_connection_parts
 
 log = logging.getLogger(__name__)
 
@@ -30,9 +23,6 @@ DUMP_TIMEOUT_SEC = 600
 RESTORE_TIMEOUT_SEC = 900
 CHECK_TIMEOUT_SEC = 120
 _TOOL_DIRS = (Path("/usr/bin"), Path("/usr/local/bin"), Path("/bin"))
-# Debian and Ubuntu keep each installed PostgreSQL version's client tools under <dir>/<major>/bin.
-_VERSIONED_TOOL_ROOT = Path("/usr/lib/postgresql")
-SERVER_VERSION_TIMEOUT_SEC = 15
 
 MISSING_TOOL_MESSAGE = "ابزار {tool} روی سرور نصب نیست؛ بستهٔ postgresql-client را نصب کنید."
 DUMP_FAILED_MESSAGE = "ساخت نسخهٔ دیتابیس ناموفق بود؛ جزئیات در لاگ سرور ثبت شد."
@@ -54,32 +44,16 @@ class BackupDatabaseError(RuntimeError):
     """A database backup or restore step failed; the message is safe to show to the admin."""
 
 
-def _executable(path: Path) -> bool:
-    try:
-        return path.is_file() and os.access(path, os.X_OK)
-    except OSError:
-        return False
-
-
-def find_tool(name: str, *, server_major: int | None = None) -> str | None:
-    """Resolve a client tool even when systemd PATH is only ``.venv/bin``.
-
-    With ``server_major``, the tool of that PostgreSQL version wins when it is installed. On Debian
-    and Ubuntu ``/usr/bin/pg_dump`` runs the newest installed client, and a dump from a newer
-    client carries settings an older server rejects on restore (``transaction_timeout`` from 17).
-    """
-    if server_major is not None:
-        matching = _VERSIONED_TOOL_ROOT / str(int(server_major)) / "bin" / name
-        if _executable(matching):
-            return str(matching)
+def find_tool(name: str) -> str | None:
+    """Resolve a client tool even when systemd PATH is only ``.venv/bin``."""
     found = shutil.which(name)
     if found:
         return found
     candidates = [directory / name for directory in _TOOL_DIRS]
     try:
-        candidates += sorted(_VERSIONED_TOOL_ROOT.glob(f"*/bin/{name}"), reverse=True)
+        candidates += sorted(Path("/usr/lib/postgresql").glob(f"*/bin/{name}"), reverse=True)
     except OSError:
-        log.debug("listing %s failed", _VERSIONED_TOOL_ROOT, exc_info=True)
+        log.debug("listing /usr/lib/postgresql failed", exc_info=True)
     for path in candidates:
         try:
             if path.is_file() and os.access(path, os.X_OK):
@@ -89,24 +63,8 @@ def find_tool(name: str, *, server_major: int | None = None) -> str | None:
     return None
 
 
-def server_major_version() -> int | None:
-    """Major version of the configured database server, or None when it cannot be read."""
-    engine = create_engine(
-        to_sync_url(get_settings().database_url), connect_args={"connect_timeout": SERVER_VERSION_TIMEOUT_SEC},
-    )
-    try:
-        with engine.connect() as conn:
-            number = int(conn.execute(text("SHOW server_version_num")).scalar_one())
-    except (SQLAlchemyError, ValueError, TypeError):
-        log.warning("could not read the database server version; using the default client tools", exc_info=True)
-        return None
-    finally:
-        engine.dispose()
-    return number // 10000
-
-
-def _require_tool(name: str, *, server_major: int | None = None) -> str:
-    tool = find_tool(name, server_major=server_major)
+def _require_tool(name: str) -> str:
+    tool = find_tool(name)
     if not tool:
         raise BackupDatabaseError(MISSING_TOOL_MESSAGE.format(tool=name))
     return tool
@@ -141,13 +99,7 @@ def _run(cmd: list[str], env: dict[str, str], *, timeout: int, step: str) -> sub
 
 def _failure_message(stderr: str, default: str) -> str:
     text = (stderr or "").lower()
-    if (
-        "unsupported version" in text
-        or "server version mismatch" in text
-        or "aborting because of server version" in text
-        # A dump from a newer client sets parameters an older server does not know.
-        or "unrecognized configuration parameter" in text
-    ):
+    if "unsupported version" in text or "server version mismatch" in text or "aborting because of server version" in text:
         return VERSION_MESSAGE
     if "lock timeout" in text or "canceling statement due to lock timeout" in text:
         return BUSY_MESSAGE
@@ -156,7 +108,7 @@ def _failure_message(stderr: str, default: str) -> str:
 
 def dump_database(dest: Path) -> int:
     """Write a custom-format dump of the configured database; returns its size in bytes."""
-    pg_dump = _require_tool("pg_dump", server_major=server_major_version())
+    pg_dump = _require_tool("pg_dump")
     target, env = _connection()
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.unlink(missing_ok=True)
@@ -207,36 +159,13 @@ def end_other_sessions() -> int:
     return sum(1 for (closed,) in rows if closed)
 
 
-# Settings a newer pg_dump writes into every dump that an older server rejects. Leaving them out keeps
-# the restore identical: they only bound how long the restore session may run.
-NEWER_CLIENT_ONLY_SETTINGS = ("SET transaction_timeout",)
-_VERSION_LINE = re.compile(r"\b(\d+)(?:\.\d+)*\b")
-
-
-def client_major_version(tool: str) -> int | None:
-    """Major version of a PostgreSQL client tool (``pg_restore (PostgreSQL) 17.2`` -> 17)."""
-    try:
-        proc = subprocess.run([tool, "--version"], capture_output=True, text=True, timeout=CHECK_TIMEOUT_SEC, check=False)
-    except (OSError, subprocess.SubprocessError):
-        log.debug("could not read %s --version", tool, exc_info=True)
-        return None
-    match = _VERSION_LINE.search(proc.stdout or "")
-    return int(match.group(1)) if match else None
-
-
 def restore_database(dump_path: Path) -> None:
     """Replace the configured database with the dump, all or nothing."""
-    server_major = server_major_version()
-    pg_restore = _require_tool("pg_restore", server_major=server_major)
-    client_major = client_major_version(pg_restore)
+    pg_restore = _require_tool("pg_restore")
     target, env = _connection()
     closed = end_other_sessions()
     if closed:
         log.info("closed %s panel database sessions before restore", closed)
-    if server_major is not None and client_major is not None and client_major > server_major:
-        log.info("pg_restore %s is newer than the server (%s); restoring through psql", client_major, server_major)
-        _restore_through_psql(pg_restore, dump_path, target, env, server_major=server_major)
-        return
     cmd = [
         pg_restore,
         "--clean",
@@ -252,73 +181,3 @@ def restore_database(dump_path: Path) -> None:
     if proc.returncode != 0:
         log.warning("pg_restore failed code=%s: %s", proc.returncode, (proc.stderr or proc.stdout or "")[:2000])
         raise BackupDatabaseError(_failure_message(proc.stderr, RESTORE_FAILED_MESSAGE))
-
-
-def _pump_sql(producer: subprocess.Popen[bytes], sink: IO[bytes]) -> None:
-    """Feed the dump's SQL to psql inside one transaction that commits only on a complete dump.
-
-    psql gets BEGIN, the SQL without the settings an older server rejects, and COMMIT only after
-    pg_restore exited cleanly. A dump that breaks off part-way ends the session without COMMIT, so
-    PostgreSQL rolls everything back and the database stays as it was.
-    """
-    skip = tuple(setting.encode() for setting in NEWER_CLIENT_ONLY_SETTINGS)
-    try:
-        sink.write(b"BEGIN;\n")
-        for line in producer.stdout or ():
-            if not line.lstrip().startswith(skip):
-                sink.write(line)
-        if producer.wait() == 0:
-            sink.write(b"COMMIT;\n")
-    except (BrokenPipeError, ValueError):
-        # psql stopped at an error and closed its input; its exit code reports the failure.
-        log.debug("psql closed its input during restore", exc_info=True)
-    finally:
-        try:
-            sink.close()
-        except OSError:
-            log.debug("closing psql input failed", exc_info=True)
-
-
-def _restore_through_psql(
-    pg_restore: str, dump_path: Path, target: list[str], env: dict[str, str], *, server_major: int,
-) -> None:
-    """The same all-or-nothing restore, for a client newer than the server.
-
-    pg_restore only turns the dump into SQL (no database connection); the settings an older server
-    does not know are left out, and psql runs the rest in one transaction (see ``_pump_sql``),
-    stopping at the first error.
-    """
-    psql = _require_tool("psql", server_major=server_major)
-    to_sql = [pg_restore, "--clean", "--if-exists", "--no-owner", "--no-acl", "--file", "-", str(dump_path)]
-    apply_sql = [psql, "--no-psqlrc", "--quiet", "--set", "ON_ERROR_STOP=1", "--output", os.devnull, *target]
-    with tempfile.TemporaryFile() as restore_err, tempfile.TemporaryFile() as psql_err:
-        try:
-            producer = subprocess.Popen(to_sql, env=env, stdout=subprocess.PIPE, stderr=restore_err)
-            consumer = subprocess.Popen(apply_sql, env=env, stdin=subprocess.PIPE, stderr=psql_err)
-        except OSError as exc:
-            log.warning("restore through psql could not start", exc_info=True)
-            raise BackupDatabaseError(MISSING_TOOL_MESSAGE.format(tool="psql")) from exc
-        pump = threading.Thread(target=_pump_sql, args=(producer, consumer.stdin), daemon=True)
-        pump.start()
-        try:
-            consumer.wait(timeout=RESTORE_TIMEOUT_SEC)
-            if producer.poll() is None:
-                # psql stopped at an error and no longer reads: the converter's output is not needed.
-                producer.kill()
-            producer.wait(timeout=CHECK_TIMEOUT_SEC)
-        except subprocess.TimeoutExpired as exc:
-            for proc in (producer, consumer):
-                proc.kill()
-            log.warning("restore through psql timed out after %ss", RESTORE_TIMEOUT_SEC)
-            raise BackupDatabaseError(TIMEOUT_MESSAGE) from exc
-        finally:
-            pump.join(timeout=5)
-            if producer.stdout is not None:
-                producer.stdout.close()
-        restore_err.seek(0)
-        psql_err.seek(0)
-        stderr = (restore_err.read() + psql_err.read()).decode("utf-8", "replace")
-    if consumer.returncode != 0 or producer.returncode != 0:
-        log.warning("restore through psql failed pg_restore=%s psql=%s: %s",
-                    producer.returncode, consumer.returncode, stderr[:2000])
-        raise BackupDatabaseError(_failure_message(stderr, RESTORE_FAILED_MESSAGE))

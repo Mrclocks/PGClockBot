@@ -6,7 +6,6 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.host_metrics import cpu_percent, format_bytes_short, host_metrics, memory_stats
-from app.services import home_overview
 from app.services.home_overview import _node_tone, _tone_class, check_bot_connection
 
 
@@ -39,15 +38,6 @@ class HostMetricsTests(unittest.TestCase):
 
 
 class HomeOverviewHelpersTests(unittest.IsolatedAsyncioTestCase):
-    def setUp(self) -> None:
-        # The probe cache and the shared getMe client are per process: another test's answer for the same
-        # token, or a client it opened (which a patched httpx.AsyncClient would never replace), must not leak in.
-        home_overview._bot_probe_cache.clear()
-        self.addCleanup(home_overview._bot_probe_cache.clear)
-        client = patch.object(home_overview, "_telegram_client", None)
-        client.start()
-        self.addCleanup(client.stop)
-
     def test_node_tone(self):
         self.assertEqual(_node_tone("connected"), "ok")
         self.assertEqual(_node_tone("connecting"), "warn")

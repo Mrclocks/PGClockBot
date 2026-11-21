@@ -1204,6 +1204,7 @@ class CashbackGrant(Base):
             "uq_cashback_grant_payment",
             "payment_id",
             unique=True,
+            sqlite_where=text("payment_id IS NOT NULL"),
             postgresql_where=text("payment_id IS NOT NULL"),
         ),
         Index("ix_cashback_grants_status_available", "status", "available_at"),

@@ -4,7 +4,6 @@ import unittest
 from types import SimpleNamespace as NS
 
 from app.api.app import templates
-from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
 
 
 def render(*, admin: bool, tab: str | None = None) -> str:
@@ -12,7 +11,6 @@ def render(*, admin: bool, tab: str | None = None) -> str:
     return templates.env.get_template("plans.html").render(
         request=request, staff={"role": "admin"}, is_platform_admin=admin, values={}, plans=[], reseller_plans=[],
         csp_nonce="n", csrf_token="T", pg_limit_cards=[], service_addon_packs=[],
-        trial_placement_labels=TRIAL_PLACEMENT_LABELS,
     )
 
 
