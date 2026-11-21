@@ -40,9 +40,13 @@ class HostMetricsTests(unittest.TestCase):
 
 class HomeOverviewHelpersTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        # The probe cache is per process: another test's answer for the same token must not leak in.
+        # The probe cache and the shared getMe client are per process: another test's answer for the same
+        # token, or a client it opened (which a patched httpx.AsyncClient would never replace), must not leak in.
         home_overview._bot_probe_cache.clear()
         self.addCleanup(home_overview._bot_probe_cache.clear)
+        client = patch.object(home_overview, "_telegram_client", None)
+        client.start()
+        self.addCleanup(client.stop)
 
     def test_node_tone(self):
         self.assertEqual(_node_tone("connected"), "ok")
