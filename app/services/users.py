@@ -43,6 +43,11 @@ from app.services.auto_renew_timing import (
     TIMING_DEFAULTS as AUTO_RENEW_DEFAULTS,
     WEB_FIELDS as AUTO_RENEW_FIELDS,
 )
+from app.services.service_transfer_settings import (
+    GROUP_TITLE as SERVICE_TRANSFER_GROUP,
+    TRANSFER_DEFAULTS,
+    WEB_FIELDS as SERVICE_TRANSFER_FIELDS,
+)
 from app.services.service_freeze_settings import (
     FREEZE_DEFAULTS,
     GROUP_TITLE as SERVICE_FREEZE_GROUP,
@@ -1288,6 +1293,7 @@ DEFAULT_SETTINGS.update(screen_text_defaults())
 DEFAULT_SETTINGS.update(MONITOR_TEXT_DEFAULTS)
 DEFAULT_SETTINGS.update(ENTRY_APPROVAL_DEFAULTS)
 DEFAULT_SETTINGS.update(FREEZE_DEFAULTS)
+DEFAULT_SETTINGS.update(TRANSFER_DEFAULTS)
 DEFAULT_SETTINGS.update(RECEIPT_RISK_DEFAULTS)
 DEFAULT_SETTINGS.update(AUTO_RENEW_DEFAULTS)
 DEFAULT_SETTINGS.update(notice_text_defaults())
@@ -2158,6 +2164,7 @@ SETTING_GROUPS = {
 SETTING_GROUPS.update(screen_text_setting_groups())
 SETTING_GROUPS[ENTRY_APPROVAL_GROUP] = entry_approval_setting_fields()
 SETTING_GROUPS[SERVICE_FREEZE_GROUP] = list(SERVICE_FREEZE_FIELDS)
+SETTING_GROUPS[SERVICE_TRANSFER_GROUP] = list(SERVICE_TRANSFER_FIELDS)
 SETTING_GROUPS[AUTO_RENEW_GROUP] = list(AUTO_RENEW_FIELDS)
 SETTING_GROUPS.update(notice_web_setting_groups())
 
@@ -2218,7 +2225,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     ],
     "guides": ["آموزش اتصال"],
     "service_import": ["افزودن سرویس قبلی", "مسیرها و ادمین‌های مجاز"],
-    "service_actions": [SERVICE_FREEZE_GROUP],
+    "service_actions": [SERVICE_FREEZE_GROUP, SERVICE_TRANSFER_GROUP],
     # Legacy aliases — redirected to limits
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],

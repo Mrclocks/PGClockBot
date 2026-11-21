@@ -122,6 +122,11 @@ class FreezeSettingsPageTests(TabHarness):
             self.assertNotIn('id="sf-enabled" aria-label="توقف موقت سرویس" data-ds-submit-on-change checked', page)
             self.assertIn('data-ds-show-when="#sf-enabled:1" hidden', page)
             self.assertIn('name="s_service_freeze_max_days" type="number" min="1" max="90"', page)
+            self.assertIn('name="s_service_transfer_enabled" value="1" id="st-enabled"', page)
+            self.assertIn('data-ds-show-when="#st-enabled:1" hidden', page)
+            self.assertIn('name="s_service_transfer_link_hours" type="number" min="1" max="168"', page)
+            # Link rotation is on by default, so the warning about turning it off starts hidden.
+            self.assertIn('data-ds-show-when="#st-new-link:0" hidden', page)
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
             "s_service_freeze_enabled": "1", "s_service_freeze_max_days": "7",
             "s_service_freeze_per_period": "2", "s_service_freeze_min_days_left": "1",
@@ -129,6 +134,7 @@ class FreezeSettingsPageTests(TabHarness):
         shop, owner = await self.stored(5), await self.stored(None)
         self.assertEqual((shop["service_freeze_enabled"], shop["service_freeze_max_days"]), ("1", "7"))
         self.assertEqual((owner["service_freeze_enabled"], owner["service_freeze_plans"]), ("0", ""))
+        self.assertEqual((owner["service_transfer_enabled"], owner["service_transfer_plans"]), ("0", ""))
 
     async def test_out_of_range_numbers_are_stored_as_the_limit(self):
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
@@ -151,6 +157,7 @@ class FreezeSettingsPageTests(TabHarness):
         page = (await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_actions")).text
         self.assertIn('<input type="checkbox" name="s_service_freeze_plans" value="72" />', page)
         self.assertNotIn('value="71"', page)
+        self.assertIn('<input type="checkbox" name="s_service_transfer_plans" value="72" />', page)
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
             "s_service_freeze_enabled": "1", "s_service_freeze_plans_mode": "some", "s_service_freeze_plans": ["72", "71"],
         })

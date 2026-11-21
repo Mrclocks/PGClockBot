@@ -14,8 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.plan_scope import plan_choices
 from app.services.service_freeze_settings import FREEZE_BOUNDS
+from app.services.service_transfer_settings import TRANSFER_BOUNDS
 
-NUMBER_BOUNDS: dict[str, tuple[int, int]] = {**FREEZE_BOUNDS}
+NUMBER_BOUNDS: dict[str, tuple[int, int]] = {**FREEZE_BOUNDS, **TRANSFER_BOUNDS}
 
 
 async def service_actions_context(session: AsyncSession, shop_id: int | None) -> dict[str, Any]:

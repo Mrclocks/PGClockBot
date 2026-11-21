@@ -29,6 +29,7 @@ from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_catalog_plan
 from app.services.pasarguard import absolutize_subscription_url, get_pg
 from app.services.service_freeze import freeze_button
+from app.services.service_transfer import transfer_button
 from app.services.service_import import is_external_service
 from app.services.service_panel_presence import (
     ABSENT,
@@ -1074,6 +1075,7 @@ async def svc_more(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             reply_markup=service_more_keyboard(
                 svc_id, ui, external=is_external_service(svc), wireguard=has_wireguard(info),
                 freeze=await freeze_button(session, svc, ui),
+                transfer=await transfer_button(session, svc, ui),
             ),
         )
 

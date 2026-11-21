@@ -84,6 +84,10 @@ from app.services.bot_setting_values import (
 )
 from app.services.receipt_risk import BOT_FIELDS as RECEIPT_RISK_BOT_FIELDS
 from app.services.service_freeze_settings import BOT_FIELDS as SERVICE_FREEZE_BOT_FIELDS, GROUP_TITLE as SERVICE_FREEZE_GROUP
+from app.services.service_transfer_settings import (
+    BOT_FIELDS as SERVICE_TRANSFER_BOT_FIELDS,
+    GROUP_TITLE as SERVICE_TRANSFER_GROUP,
+)
 from app.services.settings_operation_fields import (
     AUTO_APPROVE_AFTER_FIELDS,
     AUTO_RENEW_FIELDS,
@@ -381,6 +385,7 @@ SECTIONS: dict[str, dict] = {
                 (IMPORT_KEY_MAX_PER_USER, "سقف سرویس هر مشتری", "number"),
             ]),
             ("freeze", SERVICE_FREEZE_GROUP, SERVICE_FREEZE_BOT_FIELDS),
+            ("transfer", SERVICE_TRANSFER_GROUP, SERVICE_TRANSFER_BOT_FIELDS),
             # Same keys as the web «مینی‌اپ» tab; the brand colour stays on the web (it has a preview).
             ("miniapp", "مینی‌اپ", [
                 (MINIAPP_SHOPS_SWITCH, "مینی‌اپ فروشگاه نمایندگان", "toggle"),

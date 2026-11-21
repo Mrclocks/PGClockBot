@@ -31,6 +31,7 @@ from app.services.customer_notice_queue import (
 )
 from app.services.auto_renew_offer import ACTION as AUTO_RENEW_OFFER, OFFER_TEXT as AUTO_RENEW_OFFER_TEXT
 from app.services.service_freeze_settings import RESUMED_ACTION as FREEZE_RESUMED, RESUMED_TEXT as FREEZE_RESUMED_TEXT
+from app.services.service_transfer_settings import DONE_ACTION as TRANSFER_DONE, DONE_TEXT as TRANSFER_DONE_TEXT
 from app.services.customer_notice_buttons import (
     auto_renew_button,
     buy_new_button,
@@ -121,7 +122,9 @@ SERVICES_ONLY_ACTIONS = frozenset({"pg_user_revoke_sub", "service_import_assign"
 
 def notice_text(action: str, *, service_name: str, reason: str) -> str:
     """The Persian message; every dynamic part is escaped for Telegram HTML."""
-    fixed = {AUTO_RENEW_OFFER: AUTO_RENEW_OFFER_TEXT, FREEZE_RESUMED: FREEZE_RESUMED_TEXT}.get(action)
+    fixed = {
+        AUTO_RENEW_OFFER: AUTO_RENEW_OFFER_TEXT, FREEZE_RESUMED: FREEZE_RESUMED_TEXT, TRANSFER_DONE: TRANSFER_DONE_TEXT,
+    }.get(action)
     if fixed is not None:
         return fixed.format(name=html.escape(service_name or "—"))
     template = CLEANUP_NOTICE_TEXTS.get(action)

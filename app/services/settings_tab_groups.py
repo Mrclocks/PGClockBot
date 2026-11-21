@@ -47,7 +47,7 @@ _SECTION_LABELS = {
     "welcome": "خوش‌آمد",
     "appearance": "پروفایل تلگرام",
     "service_import": "افزودن سرویس قبلی",
-    "service_actions": "توقف موقت",
+    "service_actions": "توقف و انتقال",
     "buttons": "متن دکمه‌ها",
 }
 

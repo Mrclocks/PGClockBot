@@ -1,7 +1,7 @@
 {# «توقف و انتقال»: what a customer may do on their own service, one card per action (DESIGN_SYSTEM.md §6).
    Each card's switch sits in its header; the body, with its save button, shows only while the switch is on.
    Expects: values, plan_scope_choices, service_action_bounds, settings_action, csrf_token. #}
-{% from "_ds.html" import ds_sec, ds_head_switch, ico %}
+{% from "_ds.html" import ds_sec, ds_head_switch, ds_switch, ico %}
 
 {% macro is_on(key) -%}{{ '1' if (values.get(key, '')|string|lower) in ['1', 'true', 'yes', 'on'] else '' }}{%- endmacro %}
 
@@ -51,6 +51,21 @@
         {{ number_field('service_freeze_min_days_left', 'حداقل زمان باقی‌مانده', 'روز', '۰ یعنی بدون حداقل') }}
       </div>
       <div class="actions"><button class="btn" type="submit">ذخیرهٔ توقف موقت</button></div>
+    </div>
+  {% endcall %}
+
+  {% set transfer_switch %}{{ ds_head_switch('s_service_transfer_enabled', 'انتقال سرویس', 'st-enabled', is_on('service_transfer_enabled')) }}{% endset %}
+  {% call ds_sec('انتقال سرویس', side=transfer_switch) %}
+    <div class="form-stack" data-ds-show-when="#st-enabled:1"{% if not is_on('service_transfer_enabled') %} hidden{% endif %}>
+      <p class="ds-desc">مشتری از «⚙️ بیشتر» سرویس یک لینک یک‌بارمصرف می‌سازد؛ کسی که آن را در همین ربات بپذیرد صاحب سرویس می‌شود. تمدید خودکار سرویس خاموش می‌شود تا از کیف پول گیرنده بدون رضایتش برداشت نشود.</p>
+      {{ plan_scope_field('service_transfer_plans', 'st-plans') }}
+      <div class="ds-grid-2">
+        {{ number_field('service_transfer_link_hours', 'اعتبار لینک انتقال', 'ساعت', 'بعد از این مدت لینک کار نمی‌کند') }}
+        {{ number_field('service_transfer_per_period', 'تعداد انتقال در ۳۰ روز', 'بار') }}
+      </div>
+      <div class="ds-rows">{{ ds_switch('s_service_transfer_new_link', 'عوض شدن لینک اشتراک بعد از انتقال', help='پیشنهادی: روشن. لینک قبلی از کار می‌افتد تا صاحب قبلی دیگر به سرویس وصل نشود.', checked=is_on('service_transfer_new_link'), id='st-new-link') }}</div>
+      <div class="ds-note" data-tone="danger" role="note" data-ds-show-when="#st-new-link:0"{% if is_on('service_transfer_new_link') %} hidden{% endif %}>{{ ico('shield-alert') }}<span>بدون عوض شدن لینک، فرستنده بعد از انتقال هنوز با لینک قبلی به سرویس وصل می‌شود.</span></div>
+      <div class="actions"><button class="btn" type="submit">ذخیرهٔ انتقال سرویس</button></div>
     </div>
   {% endcall %}
 </form>
