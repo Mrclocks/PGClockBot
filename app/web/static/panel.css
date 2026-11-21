@@ -12765,3 +12765,4 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
   color: var(--ok-fg);
   border-color: color-mix(in srgb, var(--ok) 45%, transparent);
   background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
