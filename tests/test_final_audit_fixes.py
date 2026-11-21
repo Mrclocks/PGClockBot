@@ -160,7 +160,8 @@ class PgAclWiringTests(unittest.TestCase):
     def test_require_staff_refreshes_pg_acl(self):
         src = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("enrich_staff_pg_from_role", src)
-        self.assertIn("open_notify_bot_for_user", src)
+        order_review = Path("app/api/order_review_pages.py").read_text(encoding="utf-8")
+        self.assertIn("open_notify_bot_for_user", order_review)
         self.assertIn("revoke_reseller", src)
 
     def test_users_role_uses_revoke(self):
