@@ -1,3 +1,14 @@
+/* Text and attribute values written into HTML strings: &, <, >, " and ' become entities. Every
+   part of this file builds markup with it, so no caller escapes only some of them. */
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
   (function(){
     function csrfToken() {
       var meta = document.querySelector('meta[name="csrf-token"]');
@@ -2036,29 +2047,21 @@
         const link = entry && entry.link ? String(entry.link) : '';
         const title = entry && entry.title ? String(entry.title) : '';
         const req = !entry || entry.required !== false;
-        function attrEsc(v) {
-          return String(v == null ? '' : v)
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-        }
         return (
           '<div class="force-channel-row">' +
             '<label class="form-field force-channel-title-wrap">عنوان دکمه اینلاین' +
               '<input type="text" class="force-channel-title" placeholder="مثلاً کانال اخبار" value="' +
-                attrEsc(title) + '" autocomplete="off" />' +
+                escapeHtml(title) + '" autocomplete="off" />' +
               '<small class="muted">متنی که روی دکمه عضویت در ربات دیده می‌شود</small>' +
             '</label>' +
             '<label class="form-field force-channel-id-wrap">شناسه کانال' +
               '<input type="text" class="force-channel-id" dir="ltr" placeholder="@channel یا -100… یا t.me/c/…" value="' +
-                attrEsc(id) + '" autocomplete="off" />' +
+                escapeHtml(id) + '" autocomplete="off" />' +
               '<small class="muted">برای تأیید عضویت: @username یا −100… — ربات باید ادمین کانال باشد</small>' +
             '</label>' +
             '<label class="form-field force-channel-link-wrap">لینک دکمه / دعوت' +
               '<input type="text" class="force-channel-link" dir="ltr" placeholder="https://t.me/+… یا t.me/channel" value="' +
-                attrEsc(link) + '" autocomplete="off" />' +
+                escapeHtml(link) + '" autocomplete="off" />' +
               '<small class="muted">لینک روی دکمه اینلاین؛ کانال خصوصی حتماً لینک دعوت (+…) بگذارید</small>' +
             '</label>' +
             '<div class="force-channel-foot">' +
@@ -2494,7 +2497,7 @@
            report "too short" even after a valid reason was typed. */
         reasonSlot.innerHTML =
           '<label class="form-field" id="confirm-reason-wrap">' +
-            '<span id="confirm-reason-label">' + String(label).replace(/</g, '&lt;') + '</span>' +
+            '<span id="confirm-reason-label">' + escapeHtml(label) + '</span>' +
             '<textarea id="confirm-reason" name="confirm_reason" rows="3" ' +
               'placeholder="حداقل ' + min + ' کاراکتر" autocomplete="off"></textarea>' +
           '</label>';
@@ -2516,9 +2519,9 @@
         reasonSlot.hidden = false;
         reasonSlot.innerHTML =
           '<label class="form-field" id="confirm-phrase-wrap">' +
-            '<span id="confirm-phrase-label">' + label.replace(/</g, '&lt;') + '</span>' +
+            '<span id="confirm-phrase-label">' + escapeHtml(label) + '</span>' +
             '<input id="confirm-phrase" name="confirm_phrase" type="text" autocomplete="off" ' +
-              'spellcheck="false" dir="ltr" placeholder="' + phrase.replace(/"/g, '&quot;') + '" />' +
+              'spellcheck="false" dir="ltr" placeholder="' + escapeHtml(phrase) + '" />' +
           '</label>';
         const input = document.getElementById('confirm-phrase');
         if (submitBtn) submitBtn.disabled = true;
@@ -3037,14 +3040,6 @@
       function uid() {
         return 'pd' + Math.random().toString(36).slice(2, 10);
       }
-      function attrEsc(v) {
-        return String(v == null ? '' : v)
-          .replace(/&/g, '&amp;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-      }
       function parseJson(raw) {
         try {
           const data = JSON.parse(raw || '[]');
@@ -3100,14 +3095,14 @@
         const provider = item.provider || 'zarinpal';
         const keyHint = item.has_secret ? '•••••••• ذخیره شده؛ برای تغییر بنویسید' : 'وارد کنید';
         return (
-          '<div class="pay-dest-row" data-pay-dest-row' + saved + ' data-pay-dest-id="' + attrEsc(id) + '">' +
+          '<div class="pay-dest-row" data-pay-dest-row' + saved + ' data-pay-dest-id="' + escapeHtml(id) + '">' +
             '<div class="pay-dest-fields">' +
-              '<label>نام درگاه<input type="text" class="pay-dest-psp-name" maxlength="64" value="' + attrEsc(item.name) + '" autocomplete="off" /></label>' +
+              '<label>نام درگاه<input type="text" class="pay-dest-psp-name" maxlength="64" value="' + escapeHtml(item.name) + '" autocomplete="off" /></label>' +
               '<label>ارائه‌دهنده<select class="pay-dest-psp-provider">' +
                 optionsHtml([['zarinpal', 'زرین‌پال'], ['sunpay', 'سان‌پی (SunPay)'], ['mock', 'Mock (فقط تست محلی)']], provider) +
               '</select></label>' +
-              '<label>مرچنت / کلید API<input type="password" class="pay-dest-psp-key" dir="ltr" value="" autocomplete="new-password" placeholder="' + attrEsc(keyHint) + '" /></label>' +
-              '<label>آدرس پایه (فقط سان‌پی)<input type="text" class="pay-dest-psp-url" dir="ltr" value="' + attrEsc(item.pay_url) + '" placeholder="https://pay.example.com" autocomplete="off" /></label>' +
+              '<label>مرچنت / کلید API<input type="password" class="pay-dest-psp-key" dir="ltr" value="" autocomplete="new-password" placeholder="' + escapeHtml(keyHint) + '" /></label>' +
+              '<label>آدرس پایه (فقط سان‌پی)<input type="text" class="pay-dest-psp-url" dir="ltr" value="' + escapeHtml(item.pay_url) + '" placeholder="https://pay.example.com" autocomplete="off" /></label>' +
               '<label>روش درخواست سان‌پی<select class="pay-dest-psp-method">' +
                 optionsHtml([['GET', 'GET (مستند)'], ['POST', 'POST']], item.request_method || 'GET') +
               '</select></label>' +
@@ -3136,10 +3131,10 @@
         const styleHtml = styleSelectHtml(storedStyleValue(item), inheritLabel);
         if (kind === 'cards') {
           return (
-            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + attrEsc(id) + '">' +
+            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + escapeHtml(id) + '">' +
               '<div class="pay-dest-fields">' +
-                '<label>شماره کارت<input type="text" class="pay-dest-card-number" dir="ltr" value="' + attrEsc(item.number) + '" autocomplete="off" /></label>' +
-                '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + attrEsc(item.holder) + '" autocomplete="off" /></label>' +
+                '<label>شماره کارت<input type="text" class="pay-dest-card-number" dir="ltr" value="' + escapeHtml(item.number) + '" autocomplete="off" /></label>' +
+                '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + escapeHtml(item.holder) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
               '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
@@ -3148,10 +3143,10 @@
         }
         if (kind === 'gateways') {
           return (
-            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + attrEsc(id) + '">' +
+            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + escapeHtml(id) + '">' +
               '<div class="pay-dest-fields">' +
-                '<label>نام درگاه<input type="text" class="pay-dest-gw-name" value="' + attrEsc(item.name) + '" autocomplete="off" /></label>' +
-                '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + attrEsc(item.link) + '" autocomplete="off" /></label>' +
+                '<label>نام درگاه<input type="text" class="pay-dest-gw-name" value="' + escapeHtml(item.name) + '" autocomplete="off" /></label>' +
+                '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + escapeHtml(item.link) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
               '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
@@ -3159,11 +3154,11 @@
           );
         }
         return (
-          '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + attrEsc(id) + '">' +
+          '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + escapeHtml(id) + '">' +
             '<div class="pay-dest-fields">' +
-              '<label>رمزارز<input type="text" class="pay-dest-cr-asset" value="' + attrEsc(item.asset || 'USDT') + '" autocomplete="off" /></label>' +
-              '<label>شبکه<input type="text" class="pay-dest-cr-network" value="' + attrEsc(item.network || 'TRC20') + '" autocomplete="off" /></label>' +
-              '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + attrEsc(item.address) + '" autocomplete="off" /></label>' +
+              '<label>رمزارز<input type="text" class="pay-dest-cr-asset" value="' + escapeHtml(item.asset || 'USDT') + '" autocomplete="off" /></label>' +
+              '<label>شبکه<input type="text" class="pay-dest-cr-network" value="' + escapeHtml(item.network || 'TRC20') + '" autocomplete="off" /></label>' +
+              '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + escapeHtml(item.address) + '" autocomplete="off" /></label>' +
               styleHtml +
             '</div>' +
             '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
@@ -3299,25 +3294,17 @@
         if (styleVal === '') return { button_style: '' };
         return { button_style: styleVal };
       }
-      function esc(v) {
-        return String(v == null ? '' : v)
-          .replace(/&/g, '&amp;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-      }
       function rowHtml(item) {
         const id = (item && item.id) || uid();
         const enabled = !item || item.enabled === undefined || item.enabled === null
           ? true
           : !!item.enabled;
         return (
-          '<div class="pay-dest-row" data-supports-row data-supports-id="' + esc(id) + '">' +
+          '<div class="pay-dest-row" data-supports-row data-supports-id="' + escapeHtml(id) + '">' +
             '<div class="pay-dest-fields supports-fields-grid">' +
-              '<label>عنوان<input type="text" class="supports-title" maxlength="80" value="' + esc(item && item.title) + '" placeholder="مثلاً پشتیبان ربات" autocomplete="off" /></label>' +
-              '<label>آیدی / یوزرنیم تلگرام<input type="text" class="supports-telegram" dir="ltr" value="' + esc(item && item.telegram) + '" placeholder="@username یا 123456789" autocomplete="off" /></label>' +
-              '<label>ترتیب<input type="number" class="supports-sort" dir="ltr" value="' + esc(item && item.sort != null ? item.sort : 0) + '" /></label>' +
+              '<label>عنوان<input type="text" class="supports-title" maxlength="80" value="' + escapeHtml(item && item.title) + '" placeholder="مثلاً پشتیبان ربات" autocomplete="off" /></label>' +
+              '<label>آیدی / یوزرنیم تلگرام<input type="text" class="supports-telegram" dir="ltr" value="' + escapeHtml(item && item.telegram) + '" placeholder="@username یا 123456789" autocomplete="off" /></label>' +
+              '<label>ترتیب<input type="number" class="supports-sort" dir="ltr" value="' + escapeHtml(item && item.sort != null ? item.sort : 0) + '" /></label>' +
               '<label class="support-enabled supports-enabled-field">' +
                 '<span>فعال</span>' +
                 '<span class="ui-switch">' +
@@ -3415,14 +3402,6 @@
           return [];
         }
       }
-      function esc(v) {
-        return String(v == null ? '' : v)
-          .replace(/&/g, '&amp;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-      }
       function styleSelectHtml(cur) {
         const val = cur == null ? 'primary' : String(cur);
         const tone = !val ? 'default' : val;
@@ -3451,8 +3430,8 @@
         const item = link || {};
         return (
           '<div class="guides-link-row" data-guides-link>' +
-            '<label>متن دکمه<input type="text" class="guides-link-label" maxlength="48" value="' + esc(item.label) + '" placeholder="▶️ دیدن ویدیو" autocomplete="off" /></label>' +
-            '<label>لینک<input type="url" class="guides-link-url" dir="ltr" maxlength="512" value="' + esc(item.url) + '" placeholder="https://youtu.be/…" autocomplete="off" /></label>' +
+            '<label>متن دکمه<input type="text" class="guides-link-label" maxlength="48" value="' + escapeHtml(item.label) + '" placeholder="▶️ دیدن ویدیو" autocomplete="off" /></label>' +
+            '<label>لینک<input type="url" class="guides-link-url" dir="ltr" maxlength="512" value="' + escapeHtml(item.url) + '" placeholder="https://youtu.be/…" autocomplete="off" /></label>' +
             '<button type="button" class="icon-btn icon-remove guides-link-remove" aria-label="حذف این لینک" title="حذف این لینک">' +
               '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>' +
             '</button>' +
@@ -3484,14 +3463,14 @@
         const deep = !!(item && item.deep_link);
         const style = item && item.style != null ? item.style : (item && item.button_style != null ? item.button_style : 'primary');
         return (
-          '<div class="pay-dest-row" data-guides-row data-guides-id="' + esc(id) + '">' +
+          '<div class="pay-dest-row" data-guides-row data-guides-id="' + escapeHtml(id) + '">' +
             '<div class="pay-dest-fields supports-fields-grid">' +
-              '<label>عنوان دکمه<input type="text" class="guides-title" maxlength="64" value="' + esc(item && item.title) + '" placeholder="مثلاً V2Box" autocomplete="off" /></label>' +
+              '<label>عنوان دکمه<input type="text" class="guides-title" maxlength="64" value="' + escapeHtml(item && item.title) + '" placeholder="مثلاً V2Box" autocomplete="off" /></label>' +
               '<label>مخاطب<select class="guides-audience">' +
                 '<option value="user"' + (audience === 'user' ? ' selected' : '') + '>کاربران</option>' +
                 '<option value="reseller"' + (audience === 'reseller' ? ' selected' : '') + '>نمایندگان</option>' +
               '</select></label>' +
-              '<label>ترتیب<input type="number" class="guides-sort" dir="ltr" value="' + esc(item && item.sort != null ? item.sort : 0) + '" /></label>' +
+              '<label>ترتیب<input type="number" class="guides-sort" dir="ltr" value="' + escapeHtml(item && item.sort != null ? item.sort : 0) + '" /></label>' +
               '<label class="support-enabled supports-enabled-field">' +
                 '<span>فعال</span>' +
                 '<span class="ui-switch">' +
@@ -3507,7 +3486,7 @@
                 '</span>' +
               '</label>' +
               styleSelectHtml(style) +
-              '<label class="full">متن آموزش<textarea class="guides-body" rows="4" maxlength="4000" placeholder="مراحل اتصال…">' + esc(item && (item.body || item.text)) + '</textarea></label>' +
+              '<label class="full">متن آموزش<textarea class="guides-body" rows="4" maxlength="4000" placeholder="مراحل اتصال…">' + escapeHtml(item && (item.body || item.text)) + '</textarea></label>' +
               linksHtml(item && item.links) +
               '<div class="full guides-media" data-guides-media-slot></div>' +
             '</div>' +
@@ -4035,13 +4014,6 @@ const root = document.getElementById('upd-root');
     if (busy) setBlockLeave(true);
   }
 
-  function escHtml(s){
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
 
   function setMetaTone(available){
     if (localBox) {
@@ -4065,11 +4037,11 @@ const root = document.getElementById('upd-root');
     }
     changelogBlocks.innerHTML = (cl.blocks || []).map(function (block) {
       const notes = (block.notes || []).map(function (n) {
-        return '<li>' + escHtml(n) + '</li>';
+        return '<li>' + escapeHtml(n) + '</li>';
       }).join('');
       return (
         '<div class="update-changelog-block">' +
-          '<strong class="update-changelog-ver" dir="ltr">v' + escHtml(block.version) + '</strong>' +
+          '<strong class="update-changelog-ver" dir="ltr">v' + escapeHtml(block.version) + '</strong>' +
           '<ul class="update-changelog-list">' + notes + '</ul>' +
         '</div>'
       );
