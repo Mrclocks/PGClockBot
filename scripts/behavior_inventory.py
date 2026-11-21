@@ -31,6 +31,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from aiogram.fsm.state import State, StatesGroup
+
 ROOT = Path(__file__).resolve().parents[1]
 PLACEHOLDER_TOKEN = "123456:inventory-placeholder-token-000000000"
 _ADDRESS = re.compile(r" at 0x[0-9a-f]+")
@@ -49,6 +51,12 @@ def describe(obj: Any, depth: int = 0) -> Any:
         return "..."
     if obj is None or isinstance(obj, (bool, int, float, str)):
         return obj
+    # A state filter matches the stored state name ("AdminStates:add_plan_name"), which does not
+    # include the module, so a states class that moved to another module matches the same updates.
+    if isinstance(obj, State):
+        return {"state": obj.state}
+    if isinstance(obj, type) and issubclass(obj, StatesGroup):
+        return {"states_group": sorted(state.state for state in obj.__all_states__)}
     if isinstance(obj, (list, tuple, set, frozenset)):
         items = [describe(item, depth + 1) for item in obj]
         return sorted(items, key=json.dumps) if isinstance(obj, (set, frozenset)) else items

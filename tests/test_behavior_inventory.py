@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from aiogram import F
+from aiogram.fsm.state import State, StatesGroup
 
 from scripts.behavior_inventory import compare, describe
 
@@ -24,7 +25,21 @@ HANDLER = {"router": "dispatcher/plans", "event": "callback_query", "handler": "
            "filters": [describe(F.data.startswith("adm:plans"))]}
 
 
+def _states_class_in(module: str) -> type[StatesGroup]:
+    class AdminStates(StatesGroup):
+        add_plan_name = State()
+
+    AdminStates.__module__ = module
+    return AdminStates
+
+
 class DescribeTests(unittest.TestCase):
+    def test_a_state_is_described_by_its_stored_name_wherever_its_class_lives(self) -> None:
+        before, after = _states_class_in("app.bot.handlers.admin"), _states_class_in("app.bot.handlers.admin_states")
+        self.assertEqual(describe(before.add_plan_name), describe(after.add_plan_name))
+        self.assertEqual(describe(before.add_plan_name), {"state": "AdminStates:add_plan_name"})
+        self.assertEqual(describe(before), describe(after))
+
     def test_filters_are_described_by_what_they_match_not_by_memory_address(self) -> None:
         one, same, other = (describe(F.data.startswith(prefix)) for prefix in ("adm:", "adm:", "res:"))
         self.assertEqual(one, same)
