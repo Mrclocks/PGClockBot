@@ -106,12 +106,12 @@ def main() -> None:
                 "Database init timed out after 120s — check PostgreSQL is up, "
                 "DATABASE_URL password/HBA, and listen_addresses"
             )
-            raise SystemExit("Database init timed out (PostgreSQL unreachable?)")
+            raise SystemExit("Database init timed out (PostgreSQL unreachable?)") from None
         except Exception:
             logger.exception(
                 "Database init failed — panel will not listen until DATABASE_URL works"
             )
-            raise SystemExit("Database init failed — see journalctl -u pgclockbot")
+            raise SystemExit("Database init failed — see journalctl -u pgclockbot") from None
 
         from app.services.setup_wizard import ensure_web_secret
 
@@ -119,7 +119,7 @@ def main() -> None:
             ensure_web_secret()
         except Exception:
             logger.exception("ensure_web_secret failed")
-            raise SystemExit("WEB_SECRET could not be persisted — check .env permissions")
+            raise SystemExit("WEB_SECRET could not be persisted — check .env permissions") from None
 
         try:
             from app.services.service_control import ensure_restart_helper

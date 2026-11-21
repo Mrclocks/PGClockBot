@@ -210,6 +210,7 @@ def _sudo_restart_works() -> bool:
             if r.returncode in {0, 3, 4}:
                 return True
         except Exception:
+            logger.debug("sudo probe failed", exc_info=True)
             continue
     return False
 

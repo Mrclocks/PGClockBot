@@ -203,8 +203,8 @@ async def shop_ops_snapshot(
                 if exp.tzinfo is None:
                     exp = exp.replace(tzinfo=timezone.utc)
                 exp = exp + timedelta(days=int(days))
-            except Exception:
-                continue
+            except (TypeError, ValueError, OverflowError):
+                continue  # a row with a duration that is not a whole number of days is not counted
             if now <= exp <= cutoff:
                 expiring += 1
     out["expiring_services"] = expiring

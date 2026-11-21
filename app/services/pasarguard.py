@@ -540,6 +540,7 @@ class PasarGuardClient:
                         _remember_api_base(configured, base)
                         return
             except Exception:
+                logger.debug("panel API base probe failed base=%s", base, exc_info=True)
                 continue
 
     async def ensure_token(self) -> str:

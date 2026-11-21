@@ -15,6 +15,7 @@ Security contract:
 from __future__ import annotations
 
 import html
+import logging
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -431,7 +432,7 @@ try:
     )
     _VARS = (*_VARS, *_DAILY_VARS)
 except Exception:  # pragma: no cover — catalog still loads if daily_report import fails
-    pass
+    logging.getLogger(__name__).warning("daily report variables unavailable", exc_info=True)
 
 _BY_KEY: dict[str, MessageVar] = {v.key: v for v in _VARS}
 _ALIAS_TO_CANONICAL: dict[str, str] = {}
