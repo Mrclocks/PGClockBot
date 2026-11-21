@@ -325,7 +325,7 @@ async def send_resellers_plans_overview(
 
 async def users_fixed_list_view(session: AsyncSession, page_index: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     """One page of the platform's fixed plans: cards in the text, a button per plan."""
-    from app.bot.handlers.admin import _plan_line  # admin imports this module
+    from app.bot.handlers.admin_plan_editor import _plan_line  # admin_plan_editor imports this module
 
     ui = await get_all_settings(session)
     result = await session.execute(
