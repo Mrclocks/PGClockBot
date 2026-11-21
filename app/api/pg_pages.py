@@ -349,7 +349,7 @@ def register_pg_pages(
                         "pg_username": staff_row.pg_username,
                     }
 
-        from app.services.ux20 import resolve_pg_open_url
+        from app.services.action_center import resolve_pg_open_url
 
         pg_external_url = await resolve_pg_open_url(
             session, is_admin=_is_pg_owner_principal(staff)
@@ -504,7 +504,7 @@ def register_pg_pages(
         ``pg_external_url`` for the open-PasarGuard link inside the dash body.
         """
         from app.services.panel_timing import mark
-        from app.services.ux20 import resolve_pg_open_url
+        from app.services.action_center import resolve_pg_open_url
 
         mark(request, "handler")
         widgets = await _pg_display_widgets(staff, session)

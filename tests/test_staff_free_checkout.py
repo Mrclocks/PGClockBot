@@ -217,7 +217,7 @@ class StaffFreeCheckoutTests(ShopFixture):
 
         with (
             patch.object(free, "deliver_order", lost_answer),
-            patch("app.services.ux20.note_delivery_send_failure", AsyncMock()),
+            patch("app.services.delivery_failures.note_delivery_send_failure", AsyncMock()),
         ):
             delivered, stuck, _error = await free.deliver_staff_free_order(self.session, order, actor_id=SHOP_ID)
 

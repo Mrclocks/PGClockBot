@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Order, OrderStatus
 from app.services.db_safe import rollback_quiet
 from app.services.orders import apply_discount_to_order, cancel_order, create_order, pay_with_wallet
-from app.services.ux20 import redeem_charge_code
+from app.services.charge_codes import redeem_charge_code
 from app.services.wallet import get_wallet_balance
 
 CODE_MAX_LENGTH = 64

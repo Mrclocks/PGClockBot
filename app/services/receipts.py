@@ -223,7 +223,7 @@ async def _queue_undelivered(
             await hold_unknown_delivery_for_review(session, order, error=error)
             await session.refresh(payment)
         else:
-            from app.services.ux20 import note_delivery_send_failure
+            from app.services.delivery_failures import note_delivery_send_failure
 
             await note_delivery_send_failure(session, order=order, payment=payment, error=error)
     except SQLAlchemyError:

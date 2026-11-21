@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import BotUser, DeliveryFailure, Order
 from app.services.delivery_failure_queue import dismiss_delivery_failures
-from app.services.ux20 import DeliveryNotRetryable, list_open_delivery_failures, retry_delivery
+from app.services.delivery_failures import DeliveryNotRetryable, list_open_delivery_failures, retry_delivery
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarness
 
 OWNER = OWNER_SESSION

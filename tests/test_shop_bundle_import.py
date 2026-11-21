@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.db import Base
 from app.db.models import BotUser, Order, Plan
 from app.services.users import get_setting, set_setting
-from app.services.ux20 import export_shop_bundle, import_shop_bundle
+from app.services.shop_bundle import export_shop_bundle, import_shop_bundle
 from tests.postgres_support import scoped_async_engine
 
 

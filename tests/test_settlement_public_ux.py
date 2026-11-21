@@ -103,7 +103,7 @@ class SettlementStatusTemplateTests(unittest.TestCase):
 
 class ShopBotChatUrlTests(unittest.IsolatedAsyncioTestCase):
     async def test_shop_username_wins_over_platform(self) -> None:
-        from app.services.ux20 import shop_bot_chat_url, shop_bot_https_url
+        from app.services.bot_links import shop_bot_chat_url, shop_bot_https_url
 
         profile = MagicMock(bot_username="ShopBot")
         result = MagicMock()
@@ -119,7 +119,7 @@ class ShopBotChatUrlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(https, "https://t.me/ShopBot")
 
     async def test_platform_fallback_when_shop_has_no_username(self) -> None:
-        from app.services.ux20 import shop_bot_chat_url
+        from app.services.bot_links import shop_bot_chat_url
 
         result = MagicMock()
         result.scalar_one_or_none.return_value = MagicMock(bot_username=None)
@@ -132,7 +132,7 @@ class ShopBotChatUrlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(url, "tg://resolve?domain=MainBot")
 
     async def test_platform_shop_uses_settings_username(self) -> None:
-        from app.services.ux20 import shop_bot_chat_url
+        from app.services.bot_links import shop_bot_chat_url
 
         session = AsyncMock()
         with patch("app.config.get_settings") as gs:
@@ -142,7 +142,7 @@ class ShopBotChatUrlTests(unittest.IsolatedAsyncioTestCase):
         session.execute.assert_not_called()
 
     async def test_missing_username_returns_none(self) -> None:
-        from app.services.ux20 import shop_bot_chat_url
+        from app.services.bot_links import shop_bot_chat_url
 
         session = AsyncMock()
         with patch("app.config.get_settings") as gs:
@@ -153,7 +153,7 @@ class ShopBotChatUrlTests(unittest.IsolatedAsyncioTestCase):
 
 class BotTgResolveLinkTests(unittest.TestCase):
     def test_builds_native_deep_link(self) -> None:
-        from app.services.ux20 import bot_tg_resolve_link, normalize_bot_username
+        from app.services.bot_links import bot_tg_resolve_link, normalize_bot_username
 
         self.assertEqual(normalize_bot_username("@Shop_Bot"), "Shop_Bot")
         self.assertEqual(

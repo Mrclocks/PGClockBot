@@ -30,7 +30,7 @@ from app.services.formatting import format_money, format_number
 from app.services.home_overview import admin_customer_counts, bot_dashboard_summary, bot_panel_summary, reseller_shop_summary
 from app.services.loyalty import overview_metrics
 from app.services.subordinate_report import SubordinateShop, collect_subordinate_stats
-from app.services.ux20 import funnel_summary
+from app.services.funnel_metrics import funnel_summary
 from app.services.shop_scope import ShopScopeError
 from app.services.numbers import to_fa_digits
 from tests.postgres_support import scoped_async_engine, scoped_sync_engine

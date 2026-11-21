@@ -89,7 +89,7 @@ class UsersOpsUnitTests(unittest.TestCase):
 
 class ActionCenterExpiringHrefTests(unittest.IsolatedAsyncioTestCase):
     async def test_expiring_href(self):
-        from app.services.ux20 import build_action_center
+        from app.services.action_center import build_action_center
 
         now = datetime.now(timezone.utc)
         calls = {"n": 0}

@@ -463,7 +463,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             ctx["payment_voids"] = await list_voids(session, [int(p.id) for p in payments])
             # Soft receipt match suggestions for pending payments
             from app.services.users import on as _on
-            from app.services.ux20 import suggest_receipt_matches
+            from app.services.receipt_matching import suggest_receipt_matches
 
             values = ctx.get("values") or {}
             if _on(values.get("receipt_auto_match_enabled", "1")):
@@ -492,10 +492,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
         elif tab == "delivery" and can_orders:
             from app.services.db_safe import rollback_quiet
-            from app.services.ux20 import (
-                list_open_delivery_failures,
-                list_stuck_paid_orders,
-            )
+            from app.services.delivery_failures import list_open_delivery_failures, list_stuck_paid_orders
 
             rid = None if is_platform_admin(staff) else shop_owner_id(staff)
             if not is_platform_admin(staff) and not rid:

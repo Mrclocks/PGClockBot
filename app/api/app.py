@@ -3779,7 +3779,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         )
                     except Exception as send_exc:
                         if order is not None:
-                            from app.services.ux20 import note_delivery_send_failure
+                            from app.services.delivery_failures import note_delivery_send_failure
 
                             await note_delivery_send_failure(
                                 session, order=order, payment=payment, error=str(send_exc)
