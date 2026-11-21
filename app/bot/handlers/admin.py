@@ -6,7 +6,6 @@ import logging
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.handlers.admin_broadcast_confirm import preview_broadcast
+from app.bot.handlers.admin_states import AdminStates
 from app.bot.message_button_picker import ask_for_buttons, register_flow
 from app.bot.auth import (
     platform_can_manage_representatives,
@@ -498,32 +498,6 @@ async def _pending_user_plan_finish(
 RESELLER_APPS_LIST = "adm:resapp:list"
 
 router = Router(name="admin")
-
-class AdminStates(StatesGroup):
-    add_plan_name = State()
-    add_plan_price = State()
-    add_plan_days = State()
-    add_plan_gb = State()
-    add_plan_link = State()  # waiting for mode after basics
-    add_plan_color = State()  # Telegram button color before category/save
-    add_plan_category = State()  # optional PlanCategory before save
-    plan_edit_field = State()
-    make_reseller = State()
-    ticket_reply = State()
-    user_search = State()
-    reseller_search = State()
-    user_wallet_credit = State()
-    user_wallet_reason = State()
-    user_message = State()
-    revoke_reseller_reason = State()
-    block_user_reason = State()
-    delete_user_reason = State()
-    broadcast_text = State()
-    broadcast_audience = State()
-    svc_adjust_days_input = State()
-    svc_adjust_gb_input = State()
-    reseller_cap_days_input = State()
-    reseller_cap_gb_input = State()
 
 @router.callback_query(F.data == "adm:home")
 @require_bot_owner_handler
