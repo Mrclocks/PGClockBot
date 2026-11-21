@@ -66,7 +66,7 @@ class PlanListTests(unittest.IsolatedAsyncioTestCase):
         session = MagicMock(execute=AsyncMock(return_value=MagicMock(scalars=lambda: MagicMock(all=lambda: plans))))
         with (
             patch.object(admin_plans, "get_all_settings", AsyncMock(return_value={})),
-            patch("app.bot.handlers.admin._plan_line", side_effect=lambda p: f"card {p.id}"),
+            patch("app.bot.handlers.admin_plan_editor._plan_line", side_effect=lambda p: f"card {p.id}"),
         ):
             text, markup = await admin_plans.users_fixed_list_view(session, 2)
         data = _callbacks(markup)

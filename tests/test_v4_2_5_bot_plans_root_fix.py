@@ -7,14 +7,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
+PLAN_EDITOR = (ROOT / "app/bot/handlers/admin_plan_editor.py").read_text(encoding="utf-8")
 ADMIN_PLANS = (ROOT / "app/bot/handlers/admin_plans.py").read_text(encoding="utf-8")
 
 
 class PlanDetailKeyboardTests(unittest.TestCase):
     def test_plan_detail_keyboard_append_is_valid(self):
         """Bug: rows.append(row1, row2) raised TypeError after create → generic error."""
-        block = ADMIN[
-            ADMIN.find("def _plan_detail_keyboard") : ADMIN.find("router = Router")
+        block = PLAN_EDITOR[
+            PLAN_EDITOR.find("def _plan_detail_keyboard") : PLAN_EDITOR.find("router = Router")
         ]
         # Must not call append with two list args
         self.assertNotIn(
@@ -56,7 +57,7 @@ class ResellerAddRoutingTests(unittest.TestCase):
 
 class UserGroupConfirmTests(unittest.TestCase):
     def test_grpdone_uses_safe_edit_and_defensive_finish(self):
-        block = ADMIN[ADMIN.find("async def adm_plan_grp_done") : ADMIN.find("async def adm_plan_clear_link")]
+        block = PLAN_EDITOR[PLAN_EDITOR.find("async def adm_plan_grp_done") : PLAN_EDITOR.find("async def adm_plan_clear_link")]
         self.assertIn("safe_edit_text", block)
         self.assertIn("ساخت پلن انجام نشد", block)
         # The color-pick step (also in this slice) now calls a shared
@@ -64,13 +65,13 @@ class UserGroupConfirmTests(unittest.TestCase):
         # _finish_new_plan() — same defensive finish, one layer of reuse
         # added so other color-pick entry points can share it too.
         self.assertIn("await _pending_user_plan_finish", block)
-        wrapper = ADMIN[
-            ADMIN.find("async def _pending_user_plan_finish") : ADMIN.find("async def adm_plan_grp_done")
+        wrapper = PLAN_EDITOR[
+            PLAN_EDITOR.find("async def _pending_user_plan_finish") : PLAN_EDITOR.find("async def adm_plan_grp_done")
         ]
         self.assertIn("await _finish_new_plan", wrapper)
 
     def test_finish_new_plan_does_not_clear_before_read(self):
-        block = ADMIN[ADMIN.find("async def _finish_new_plan") : ADMIN.find("@router.callback_query(F.data == \"adm:plan:new:mode:tpl\")")]
+        block = PLAN_EDITOR[PLAN_EDITOR.find("async def _finish_new_plan") : PLAN_EDITOR.find("@router.callback_query(F.data == \"adm:plan:new:mode:tpl\")")]
         # Read name before mutating state; no early state.clear()
         name_idx = block.find('name = str(data.get("name")')
         clear_idx = block.find("await state.clear()")
@@ -81,9 +82,9 @@ class UserGroupConfirmTests(unittest.TestCase):
 
 class ParityGapTests(unittest.TestCase):
     def test_sort_and_naming_edit_fields(self):
-        self.assertIn("adm:plan:edit:sort:", ADMIN)
-        self.assertIn("adm:plan:edit:prefix:", ADMIN)
-        self.assertIn("adm:plan:edit:suffix:", ADMIN)
+        self.assertIn("adm:plan:edit:sort:", PLAN_EDITOR)
+        self.assertIn("adm:plan:edit:prefix:", PLAN_EDITOR)
+        self.assertIn("adm:plan:edit:suffix:", PLAN_EDITOR)
 
     def test_reseller_pg_flags(self):
         self.assertIn("adm:resplan:flag:pgadmin:", ADMIN_PLANS)

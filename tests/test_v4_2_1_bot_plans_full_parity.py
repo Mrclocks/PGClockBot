@@ -12,6 +12,7 @@ REPLY_KEYBOARDS = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-
 REPLY_NAV = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
 MENU_NAV = (ROOT / "app/bot/menu_nav.py").read_text(encoding="utf-8")
 ADMIN = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
+PLAN_EDITOR = (ROOT / "app/bot/handlers/admin_plan_editor.py").read_text(encoding="utf-8")
 
 
 class PlansBackLinkTests(unittest.TestCase):
@@ -41,8 +42,8 @@ class PlansBackLinkTests(unittest.TestCase):
         self.assertNotIn("adm:resplan:hint", ADMIN_PLANS)
 
     def test_user_plan_delete_in_bot(self):
-        self.assertIn("adm:plan:delask:", ADMIN)
-        self.assertIn("adm:plan:del:", ADMIN)
+        self.assertIn("adm:plan:delask:", PLAN_EDITOR)
+        self.assertIn("adm:plan:del:", PLAN_EDITOR)
 
     def test_no_duplicate_adm_plans_kind_in_admin(self):
         self.assertNotIn("async def adm_plans_kind", ADMIN)
@@ -90,7 +91,7 @@ class InlineBackSanityTests(unittest.TestCase):
         self.assertIn("adm:plans:aud:users", block)
 
     def test_user_plan_detail_has_list_back(self):
-        detail = ADMIN[ADMIN.find("def _plan_detail_keyboard") : ADMIN.find("router = Router")]
+        detail = PLAN_EDITOR[PLAN_EDITOR.find("def _plan_detail_keyboard") : PLAN_EDITOR.find("router = Router")]
         self.assertIn("adm:plans:aud:users", detail)
 
 

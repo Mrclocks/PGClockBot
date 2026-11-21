@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_PLANS = (ROOT / "app/bot/handlers/admin_plans.py").read_text(encoding="utf-8")
 ADMIN = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
+PLAN_EDITOR = (ROOT / "app/bot/handlers/admin_plan_editor.py").read_text(encoding="utf-8")
 TG_UTILS = (ROOT / "app/bot/tg_utils.py").read_text(encoding="utf-8")
 
 
@@ -35,7 +36,7 @@ class PlansCrudFixTests(unittest.TestCase):
         self.assertIn("adm:resplan:add:setrole:", ADMIN_PLANS)
 
     def test_user_plan_detail_escapes_html(self):
-        detail = ADMIN[ADMIN.find("async def _plan_detail_text") : ADMIN.find("def _plan_detail_keyboard")]
+        detail = PLAN_EDITOR[PLAN_EDITOR.find("async def _plan_detail_text") : PLAN_EDITOR.find("def _plan_detail_keyboard")]
         self.assertIn("html.escape(p.name)", detail)
 
     def test_persian_digit_parser(self):

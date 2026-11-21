@@ -10,6 +10,7 @@ KEYBOARDS = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
 REPLY_NAV = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
 ADMIN_PLANS = (ROOT / "app/bot/handlers/admin_plans.py").read_text(encoding="utf-8")
 ADMIN = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
+PLAN_EDITOR = (ROOT / "app/bot/handlers/admin_plan_editor.py").read_text(encoding="utf-8")
 
 
 class PlansLabelCollisionTests(unittest.TestCase):
@@ -46,7 +47,7 @@ class PlansLabelCollisionTests(unittest.TestCase):
         self.assertIn("admin_resellers_plans_overview_keyboard", KEYBOARDS)
 
     def test_user_fixed_plan_edit_in_bot(self):
-        self.assertIn("adm:plan:edit:name:", ADMIN)
+        self.assertIn("adm:plan:edit:name:", PLAN_EDITOR)
 
 
 if __name__ == "__main__":
