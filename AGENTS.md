@@ -140,6 +140,7 @@ How to verify a change:
 export TEST_DATABASE_URL=postgresql+asyncpg://user:password@127.0.0.1:5432/pgclock_test
 python -m pytest tests/test_<area>.py -q          # focused tests first
 node tests/<name>.test.cjs                        # browser logic, if touched
+bash scripts/run_node_tests.sh                   # every standalone browser-logic test
 bash scripts/run_security_tests.sh               # what CI runs
 scripts/lint_changed.sh                          # lint ratchet, see section 11
 python scripts/postgres_only_check.py            # no SQLite anywhere, see section 2
@@ -147,7 +148,7 @@ python scripts/design_check.py --details         # design ratchet for templates 
 python -m pytest tests -q -p no:cacheprovider    # full suite before opening the PR
 ```
 
-The full suite currently has known unrelated failures on `dev`. Compare against a clean `dev` checkout; a pull request must not add a failure. Report the counts in the description.
+`dev` passes the full suite, and CI (`.github/workflows/full-tests.yml`) runs it, the standalone Node tests and the lint ratchet on every pull request; a pull request must keep all of them green. The browser tests (`tests/*_browser_e2e.py`) skip themselves without Python's `playwright`; install it (`pip install playwright && python -m playwright install chromium`) to run them locally. Report the counts in the description.
 
 ## 11. Static analysis
 
