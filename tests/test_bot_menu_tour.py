@@ -2,7 +2,7 @@
 
 A cleanup that moves handlers, keyboards or middlewares must keep every button working. The tour
 starts the real dispatcher in a simulated private chat, taps each button of the main reply
-keyboard (and, for the owner, each button of the admin panel it opens) and checks that the bot
+keyboard (and, for the owner, each inline button of the admin panel it opens) and checks that the bot
 answered with a screen of its own and that nothing was logged at ERROR on the way.
 """
 
@@ -17,6 +17,8 @@ from tests.chat_sim import ChatSim
 
 RESTART = "🔄 شروع مجدد"
 ADMIN_PANEL = "🛠 پنل ادمین"
+# Admin-panel buttons that go back to the main menu or switch the menus into edit mode.
+LEAVES_PANEL = ("menu:home", "ed:")
 
 
 class _ErrorLog(logging.Handler):
@@ -56,6 +58,7 @@ class _Tour(unittest.IsolatedAsyncioTestCase):
 
     async def press(self, label: str) -> None:
         before = {m.message_id for m in self.sim.telegram.visible() if m.from_bot}
+        self.errors.records.clear()  # each button is judged on its own errors
         await self.sim.type(label)
         answered = [m for m in self.sim.telegram.visible() if m.from_bot and m.message_id not in before]
         self.assertTrue(answered or self.sim.telegram.keyboard, f"{label!r} got no answer: {self.sim.screen()}")
@@ -86,15 +89,29 @@ class OwnerMenuTourTests(_Tour):
 
     async def test_every_admin_panel_button_answers(self) -> None:
         await self.sim.type(ADMIN_PANEL)
-        hub = [label for label in self.labels() if label != ADMIN_PANEL]
-        for label in hub:
-            if label == RESTART:
-                continue
-            with self.subTest(button=label):
-                await self.press(label)
-            await self.sim.type("/start")
-            await self.sim.type(ADMIN_PANEL)
+        hub = self.admin_buttons()
+        self.assertTrue(hub, "the admin panel shows its buttons")
+        for text, data in hub:
+            with self.subTest(button=text):
+                await self.sim.type("/start")
+                await self.sim.type(ADMIN_PANEL)
+                await self.tap_inline(text, data)
 
+    def admin_buttons(self) -> list[tuple[str, str]]:
+        """The inline buttons of the admin panel, without the ones that leave it or edit the menus."""
+        panel = next(m for m in reversed(self.sim.telegram.visible()) if m.from_bot and m.inline)
+        return [(text, data) for row in panel.inline for text, data in row if not data.startswith(LEAVES_PANEL)]
+
+    async def tap_inline(self, text: str, data: str) -> None:
+        panel = next(m for m in reversed(self.sim.telegram.visible())
+                     if any(d == data for row in m.inline for _, d in row))
+        alerts = len(self.sim.telegram.alerts)
+        self.errors.records.clear()  # each button is judged on its own errors
+        self.sim.telegram.begin_turn()
+        await self.sim._tap(panel, data)
+        answered = self.sim.telegram.last_turn or len(self.sim.telegram.alerts) > alerts
+        self.assertTrue(answered, f"{text!r} got no answer: {self.sim.screen()}")
+        self.assertEqual([r.getMessage() for r in self.errors.records], [], f"{text!r} logged an error")
 
 if __name__ == "__main__":
     unittest.main()
