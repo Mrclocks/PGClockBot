@@ -69,3 +69,8 @@ Needs a local PostgreSQL (`UI_PG_URL`, default `postgresql+asyncpg://postgres@12
 The sample data and the fake panel cover the common states of each page, not every state live data can
 reach. Pages that only show PasarGuard data are compared in their "panel data unavailable" state. A
 pull request that passes all three checks should still be tried on a staging copy before production.
+
+## Performance changes
+
+A pull request that claims fewer database queries measures them with the query profile
+(`docs/QUERY_PROFILE.md`) on the base and on the change, and puts both numbers in its description.
