@@ -243,7 +243,7 @@ class RoleRequiresTemplateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(plan_groups_denial(staff, [2]), PLAN_GROUPS_DENIED_MESSAGE)
 
     async def test_plan_import_refuses_groups_for_a_template_only_role(self):
-        from app.services.ux20 import _validate_import_plan
+        from app.services.shop_bundle import _validate_import_plan
 
         staff = self._limited(require_template=True)
         with self.assertRaises(ValueError) as ctx:
@@ -251,7 +251,7 @@ class RoleRequiresTemplateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(str(ctx.exception), ROLE_REQUIRES_TEMPLATE_MESSAGE)
 
     async def test_plan_import_refuses_a_group_outside_the_allow_list(self):
-        from app.services.ux20 import _validate_import_plan
+        from app.services.shop_bundle import _validate_import_plan
 
         staff = self._limited(require_template=False)
         staff["pg_access"]["allowed_group_ids"] = [1]

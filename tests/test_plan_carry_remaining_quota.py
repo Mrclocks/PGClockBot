@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.bot.handlers import reseller_plans as reseller_plan_handlers
 from app.db.models import Base, BotUser, Plan, ResellerProfile
 from app.services.service_renewals import calculate_renewal, renewal_terms
-from app.services.ux20 import clone_plan
+from app.services.plan_clone import clone_plan
 from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]

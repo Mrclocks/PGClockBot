@@ -16,7 +16,7 @@ from app.services.host_gauges import empty_host_gauges, gauges_json, local_host_
 from app.services.job_metrics import job_metrics
 from app.services.resource_cost import HEAVY_LABEL, job_usage_rows
 from app.services.shop_scope import empty_shop_stats
-from app.services.ux20 import count_stuck_paid_orders
+from app.services.delivery_failures import count_stuck_paid_orders
 
 logger = logging.getLogger(__name__)
 

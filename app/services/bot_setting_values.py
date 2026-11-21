@@ -28,6 +28,8 @@ from app.services.service_import_config import (
     UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
     UNLIMITED_WORDS as IMPORT_UNLIMITED_WORDS,
 )
+from app.services.service_freeze_settings import FREEZE_BOUNDS
+from app.services.service_transfer_settings import TRANSFER_BOUNDS
 from app.services.settings_operation_fields import ALERT_UNIT_OPTIONS, OPERATION_NUMBER_BOUNDS
 
 TOPUP_PRESETS_KEY = "wallet_topup_presets"
@@ -61,6 +63,8 @@ NUMBER_BOUNDS: dict[str, tuple[int, int]] = {
     "custom_plan_max_days": (1, CUSTOM_PLAN_MAX_DAYS),
     **OPERATION_NUMBER_BOUNDS,
     IMPORT_KEY_MAX_PER_USER: (IMPORT_MIN_PER_USER, IMPORT_MAX_PER_USER_LIMIT),
+    **FREEZE_BOUNDS,
+    **TRANSFER_BOUNDS,
     **ENTRY_APPROVAL_NUMBER_BOUNDS,
 }
 

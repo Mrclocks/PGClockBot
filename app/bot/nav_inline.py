@@ -1479,9 +1479,10 @@ def service_card_keyboard(service_id: int, ui: dict | None = None) -> InlineKeyb
 
 @editable_screen("c.service_more")
 def service_more_keyboard(
-    service_id: int, ui: dict | None = None, *, external: bool = False, wireguard: bool = False
+    service_id: int, ui: dict | None = None, *, external: bool = False, wireguard: bool = False,
+    freeze: str | None = None, transfer: str | None = None,
 ) -> InlineKeyboardMarkup:
-    """«⚙️ بیشتر» of a service card: refresh, WireGuard, automation, cancellation and delete.
+    """«⚙️ بیشتر» of a service card: refresh, WireGuard, automation, freeze, transfer, cancellation, delete.
 
     The WireGuard button shows only for a service the panel gave a WireGuard address (``wireguard``).
     Cancel sits above delete so destructive delete stays visually separated. A service that was
@@ -1494,6 +1495,16 @@ def service_more_keyboard(
     if wireguard:
         rows.append([_service_button(ui, "btn_svc_wireguard", "🔐 فایل WireGuard", f"svc:wg:{sid}", "svc_wireguard")])
     rows.append([_service_button(ui, "btn_svc_auto", "⚙️ تنظیمات خودکار", f"svc:auto:{sid}", "svc_auto")])
+    # «pause» or «resume» from service_freeze.freeze_button; None when the shop has it off.
+    if freeze == "pause":
+        rows.append([_service_button(ui, "btn_svc_freeze", "⏸ توقف موقت سرویس", f"svc:frz:{sid}", "svc_auto")])
+    elif freeze == "resume":
+        rows.append([_service_button(ui, "btn_svc_unfreeze", "▶️ ادامهٔ سرویس", f"svc:frzres:{sid}", "svc_auto")])
+    # «start» or «cancel» from service_transfer.transfer_button; None when the shop has it off.
+    if transfer == "start":
+        rows.append([_service_button(ui, "btn_svc_transfer", "🔁 انتقال به شخص دیگر", f"svc:trn:{sid}", "svc_auto")])
+    elif transfer == "cancel":
+        rows.append([_service_button(ui, "btn_svc_transfer_cancel", "✖️ لغو لینک انتقال", f"svc:trnx:{sid}", "svc_auto")])
     if not external:
         rows.append([_service_button(ui, "btn_svc_cancel", "📝 درخواست لغو", f"svc:cancel:{sid}", "svc_cancel")])
     rows.append(

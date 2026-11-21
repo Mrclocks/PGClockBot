@@ -1400,8 +1400,8 @@ async def _resume_unfinished_wallet_order(session: AsyncSession, order: Order, u
         raise DeliveryOutcomeUnknown()
     resumed = await _resume_paid_wallet_order(session, order, user)
     if resumed.status == OrderStatus.DELIVERED.value:
-        # Local import: ux20 imports this module.
-        from app.services.ux20 import resolve_delivery_failure
+        # Local import: delivery_failures imports this module.
+        from app.services.delivery_failures import resolve_delivery_failure
 
         await resolve_delivery_failure(session, int(resumed.id))
         await session.commit()
@@ -1566,8 +1566,8 @@ async def hold_unknown_delivery_for_review(
     if payment is not None and not _order_note(order).startswith("renew:"):
         payment.review_note = UNKNOWN_DELIVERY_NOTE
         await session.commit()
-    # Local import: ux20 imports this module.
-    from app.services.ux20 import note_delivery_send_failure
+    # Local import: delivery_failures imports this module.
+    from app.services.delivery_failures import note_delivery_send_failure
 
     await note_delivery_send_failure(session, order=order, payment=payment, error=error)
     return DeliveryOutcomeUnknown()
@@ -1597,8 +1597,8 @@ async def settle_failed_free_delivery(
         .order_by(Payment.id.desc())
         .limit(1)
     )
-    # Local import: ux20 imports this module.
-    from app.services.ux20 import note_delivery_send_failure
+    # Local import: delivery_failures imports this module.
+    from app.services.delivery_failures import note_delivery_send_failure
 
     await note_delivery_send_failure(session, order=order, payment=payment, error=error)
     return payment

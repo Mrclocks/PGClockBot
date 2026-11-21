@@ -335,6 +335,12 @@ async def _handle_start_deeplink(
     key = raw.split("_", 1)[0].lower()
     rest = raw[len(key) + 1 :] if "_" in raw else ""
 
+    if key == "tr" and rest:
+        from app.bot.handlers.service_transfer import present_transfer_offer
+
+        await present_transfer_offer(message, session, db_user, rest)
+        return True
+
     if key == "wallet":
         from app.bot.handlers.reply_nav import open_wallet_home
 

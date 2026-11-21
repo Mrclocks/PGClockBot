@@ -18,10 +18,11 @@ Security invariants (read-only classifier; callers decide actions):
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -204,39 +205,48 @@ def _base(
     )
 
 
-async def _open_delivery_failure(
+@dataclass(frozen=True, slots=True)
+class OpenFailureKeys:
+    """Orders and payments that have an unresolved delivery failure, read in one query."""
+
+    order_ids: frozenset[int]
+    payment_ids: frozenset[int]
+
+    def has(self, *, order_id: int | None, payment_id: int | None) -> bool:
+        return bool(order_id and order_id in self.order_ids) or bool(payment_id and payment_id in self.payment_ids)
+
+
+async def load_open_failure_keys(
+    session: AsyncSession, *, order_ids: Iterable[int], payment_ids: Iterable[int]
+) -> OpenFailureKeys:
+    orders, payments = {int(i) for i in order_ids}, {int(i) for i in payment_ids}
+    if not orders and not payments:
+        return OpenFailureKeys(frozenset(), frozenset())
+    rows = await session.execute(
+        select(DeliveryFailure.order_id, DeliveryFailure.payment_id).where(
+            DeliveryFailure.resolved_at.is_(None),
+            or_(DeliveryFailure.order_id.in_(orders), DeliveryFailure.payment_id.in_(payments)),
+        )
+    )
+    found = rows.all()
+    return OpenFailureKeys(
+        frozenset(int(o) for o, _ in found if o is not None and int(o) in orders),
+        frozenset(int(p) for _, p in found if p is not None and int(p) in payments),
+    )
+
+
+async def _has_open_delivery_failure(
     session: AsyncSession,
     *,
     order_id: int | None,
     payment_id: int | None,
-) -> DeliveryFailure | None:
-    if order_id:
-        row = (
-            await session.execute(
-                select(DeliveryFailure)
-                .where(
-                    DeliveryFailure.order_id == int(order_id),
-                    DeliveryFailure.resolved_at.is_(None),
-                )
-                .order_by(DeliveryFailure.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if row:
-            return row
-    if payment_id:
-        return (
-            await session.execute(
-                select(DeliveryFailure)
-                .where(
-                    DeliveryFailure.payment_id == int(payment_id),
-                    DeliveryFailure.resolved_at.is_(None),
-                )
-                .order_by(DeliveryFailure.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-    return None
+    known: OpenFailureKeys | None = None,
+) -> bool:
+    if known is None:
+        known = await load_open_failure_keys(
+            session, order_ids=[order_id] if order_id else [], payment_ids=[payment_id] if payment_id else []
+        )
+    return known.has(order_id=order_id, payment_id=payment_id)
 
 
 def _order_work_complete(order: Order) -> bool:
@@ -260,8 +270,13 @@ async def diagnose_payment_review(
     payment: Payment | None,
     *,
     order: Order | None = None,
+    open_failures: OpenFailureKeys | None = None,
 ) -> PaymentReviewDiagnosis:
-    """Classify a payment for review / stuck-delivery UX (bot + web)."""
+    """Classify a payment for review / stuck-delivery UX (bot + web).
+
+    ``open_failures`` is the result of ``load_open_failure_keys`` for a page of payments; without it
+    the open failure of this one payment is looked up.
+    """
     if payment is None:
         return _base(
             kind="missing",
@@ -338,12 +353,12 @@ async def diagnose_payment_review(
     if order is None and payment.order_id:
         order = await session.get(Order, int(payment.order_id))
 
-    fail = await _open_delivery_failure(
+    has_fail = await _has_open_delivery_failure(
         session,
         order_id=int(order.id) if order else (int(payment.order_id) if payment.order_id else None),
         payment_id=int(payment.id),
-    )
-    has_fail = fail is not None or _note_hints_send_fail(payment)
+        known=open_failures,
+    ) or _note_hints_send_fail(payment)
 
     if order is None:
         return _base(
@@ -409,9 +424,14 @@ async def diagnose_order_delivery(
     order: Order,
     *,
     payment: Payment | None = None,
+    payment_loaded: bool = False,
+    open_failures: OpenFailureKeys | None = None,
 ) -> PaymentReviewDiagnosis:
-    """Diagnose a stuck/failed delivery row (web finance tab)."""
-    if payment is None:
+    """Diagnose a stuck/failed delivery row (web finance tab).
+
+    ``payment_loaded`` says the caller already looked the payment up, so ``None`` means there is none.
+    """
+    if payment is None and not payment_loaded:
         payment = (
             await session.execute(
                 select(Payment)
@@ -421,15 +441,15 @@ async def diagnose_order_delivery(
             )
         ).scalar_one_or_none()
     if payment is None:
-        fail = await _open_delivery_failure(
-            session, order_id=int(order.id), payment_id=None
+        has_fail = await _has_open_delivery_failure(
+            session, order_id=int(order.id), payment_id=None, known=open_failures
         )
         incomplete = not _order_work_complete(order)
         return _base(
             kind="approved_fulfill" if incomplete else "unapprovable",
             payment=None,
             order=order,
-            has_open_delivery_failure=fail is not None,
+            has_open_delivery_failure=has_fail,
             can_resume_fulfill=incomplete,
             can_resend_telegram=_order_work_complete(order),
             label_fa="بدون پرداخت" if not incomplete else "گیرکرده بدون پرداخت",
@@ -437,7 +457,38 @@ async def diagnose_order_delivery(
             detail_fa="برای این سفارش پرداختی پیدا نشد.",
             log_code="payrev.order_no_payment",
         )
-    return await diagnose_payment_review(session, payment, order=order)
+    return await diagnose_payment_review(session, payment, order=order, open_failures=open_failures)
+
+
+async def diagnose_order_deliveries(
+    session: AsyncSession,
+    orders: Iterable[Order],
+    payments_by_order: dict[int, Payment],
+) -> dict[int, PaymentReviewDiagnosis]:
+    """Diagnose a page of delivery rows; ``payments_by_order`` holds the newest payment of each.
+
+    Open delivery failures of all of them are read in one query, so the page costs the same for
+    one order or a hundred. One row that cannot be diagnosed is left out, not the whole page.
+    """
+    orders = list(orders)
+    open_failures = await load_open_failure_keys(
+        session,
+        order_ids=[int(o.id) for o in orders],
+        payment_ids=[int(p.id) for p in payments_by_order.values()],
+    )
+    diagnoses: dict[int, PaymentReviewDiagnosis] = {}
+    for order in orders:
+        try:
+            diagnoses[int(order.id)] = await diagnose_order_delivery(
+                session,
+                order,
+                payment=payments_by_order.get(int(order.id)),
+                payment_loaded=True,
+                open_failures=open_failures,
+            )
+        except Exception:  # display only: the row is shown without a diagnosis
+            logger.debug("delivery diagnosis failed order=%s", order.id, exc_info=True)
+    return diagnoses
 
 
 def log_payment_review_diagnosis(

@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, PanelInboxDismissal, Plan, UserService
 from app.services import inbox_dismissals as mod
-from app.services.ux20 import build_action_center
+from app.services.action_center import build_action_center
 from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]

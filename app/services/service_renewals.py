@@ -27,6 +27,7 @@ from app.services.formatting import (
     format_bytes, format_expire_short, hold_duration_from_info, is_on_hold_status,
     parse_expire,
 )
+from app.services.service_freeze_guard import assert_not_frozen
 from app.services.service_live_info import validate_service_info
 
 GB = 1024**3
@@ -300,6 +301,7 @@ async def validate_renewal_selection(session, *, user_id, service, plan, shop_id
         raise ValueError("سرویس متعلق به شما نیست")
     if not service.pg_user_id or (service.remark or "").strip() == "linked":
         raise ValueError("تمدید این سرویس از این مسیر ممکن نیست")
+    await assert_not_frozen(session, service.id)
     from app.services.service_automation import service_shop_id
     if await service_shop_id(session, service) != shop_id:
         raise ValueError("سرویس این فروشگاه نیست")

@@ -61,7 +61,7 @@ class SourceContractTests(unittest.TestCase):
             )
 
     def test_m10_import_uses_shop_allowlist_and_plan_gates(self):
-        src = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/services/shop_bundle.py").read_text(encoding="utf-8")
         self.assertIn("def shop_bundle_allowed_setting_keys", src)
         self.assertIn("async def _validate_import_plan", src)
         self.assertIn("plan_template_denial", src)
@@ -308,7 +308,7 @@ class ImportShopBundleAllowlistTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_reseller_import_drops_platform_only_keys(self):
         from app.db.models import BotUser, ResellerSetting, Role
-        from app.services.ux20 import import_shop_bundle
+        from app.services.shop_bundle import import_shop_bundle
 
         async with self.Session() as session:
             owner = BotUser(
@@ -321,7 +321,7 @@ class ImportShopBundleAllowlistTests(unittest.IsolatedAsyncioTestCase):
                 "pg_access": {"allowed_template_ids": [], "allowed_group_ids": []},
             }
             with patch(
-                "app.services.ux20._validate_import_plan",
+                "app.services.shop_bundle._validate_import_plan",
                 new=AsyncMock(return_value=None),
             ):
                 stats = await import_shop_bundle(

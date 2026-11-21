@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Order
 from app.services.db_safe import rollback_quiet
 from app.services.users import get_setting, on
-from app.services.ux20 import record_funnel_event
+from app.services.funnel_metrics import record_funnel_event
 
 logger = logging.getLogger(__name__)
 

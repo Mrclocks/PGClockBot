@@ -194,7 +194,7 @@ async def _record_shop_funnel(
     if not on(ui.get("funnel_tracking_enabled", "1")):
         return
     try:
-        from app.services.ux20 import record_funnel_event
+        from app.services.funnel_metrics import record_funnel_event
 
         await record_funnel_event(
             session,

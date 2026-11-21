@@ -263,7 +263,7 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
     except Exception as send_exc:
         if order is not None:
             try:
-                from app.services.ux20 import note_delivery_send_failure
+                from app.services.delivery_failures import note_delivery_send_failure
 
                 await note_delivery_send_failure(
                     session, order=order, payment=payment, error=str(send_exc)

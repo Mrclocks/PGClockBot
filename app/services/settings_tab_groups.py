@@ -27,7 +27,7 @@ _TAB_PAGES = {MESSAGE_VARIABLES_TAB_KEY: "/message-variables"}
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("look", "ظاهر ربات", ("links", "welcome", "appearance", "brand", "menu", "miniapp")),
     ("texts", "متن‌ها", ("messages", "buttons", "colors", "screens", MESSAGE_VARIABLES_TAB_KEY)),
-    ("service", "فروش و سرویس", ("naming", "qr", "guides", "limits", "service_import")),
+    ("service", "فروش و سرویس", ("naming", "qr", "guides", "limits", "service_import", "service_actions")),
     ("alerts", "هشدار و گزارش", ("notifications", "daily_report")),
     # A reseller's own shop bot (the Owner's bot connection is a system setting).
     ("connect", "ربات اختصاصی", ("bot",)),
@@ -40,11 +40,14 @@ _MERGED_TABS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("identity", "هویت ربات", ("welcome", "appearance")),
     ("buttons", "دکمه‌ها", ("buttons", "colors")),
     ("delivery", "تحویل سرویس", ("naming", "qr", "guides")),
+    ("customer_services", "سرویس‌های مشتری", ("service_import", "service_actions")),
 )
 # Section names inside a merged tab, where the old tab name no longer fits.
 _SECTION_LABELS = {
     "welcome": "خوش‌آمد",
     "appearance": "پروفایل تلگرام",
+    "service_import": "افزودن سرویس قبلی",
+    "service_actions": "توقف و انتقال",
     "buttons": "متن دکمه‌ها",
 }
 

@@ -160,8 +160,6 @@ async def reopen_admin_backup(
     state: FSMContext,
     **_kw,
 ) -> None:
-    from app.bot import keyboards as kb
-    from app.bot.handlers.admin_backup import _lasting_kb
     from app.bot.handlers.reply_nav import open_admin_backup_hub
     from app.bot.nav_chrome import answer_staff_nav
 
@@ -173,7 +171,7 @@ async def reopen_admin_backup(
         session,
         db_user,
         text=feedback.CANCELLED,
-        classic=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()),
+        classic=None,
         state=state,
         reopen_panel=_panel,
         clear_state=True,
@@ -226,8 +224,6 @@ async def reopen_pg_nodes(
     state: FSMContext,
     **_kw,
 ) -> None:
-    from app.bot import keyboards as kb
-    from app.bot.handlers.admin_pg_nodes import _lasting_kb
     from app.bot.handlers.reply_nav import open_admin_product_hub
     from app.bot.nav_chrome import answer_staff_nav
 
@@ -239,7 +235,7 @@ async def reopen_pg_nodes(
         session,
         db_user,
         text=feedback.CANCELLED,
-        classic=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()),
+        classic=None,
         state=state,
         reopen_panel=_panel,
         clear_state=True,

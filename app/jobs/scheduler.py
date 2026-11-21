@@ -23,6 +23,8 @@ from app.jobs.cancellation_notifications import run_cancellation_notifications
 from app.jobs.chat_message_purge import run_chat_message_purge
 from app.jobs.connection_status import run_connection_status
 from app.jobs.customer_notices import run_customer_notices
+from app.jobs.service_freezes import run_service_freezes
+from app.jobs.service_transfers import run_service_transfers
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
 from app.jobs.paid_order_recovery import run_paid_order_recovery
 from app.jobs.pg_link_watchdog import run_pg_link_watchdog
@@ -651,6 +653,10 @@ def start_background_scheduler() -> None:
         ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
         ("chat_message_purge", run_chat_message_purge, {"hours": 1}, 3600),
         ("service_cleanup", run_service_cleanup, {"minutes": 30}, 1800),
+        # Resumes frozen services at their deadline and retries unfinished panel steps; needs no bot.
+        ("service_freezes", run_service_freezes, {"minutes": 1}, 120),
+        # Rotates the old owner's subscription link when it failed at acceptance; needs no bot.
+        ("service_transfers", run_service_transfers, {"minutes": 1}, 120),
         # Timed quick switches; one indexed query when nothing is due.
         ("switch_reverts", run_switch_reverts, {"minutes": 1}, 120),
     )

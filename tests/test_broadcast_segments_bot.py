@@ -6,6 +6,8 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from sqlalchemy import update
+
 from app.bot.broadcast_segments import (
     HUB_SEGMENTS,
     PLATFORM_LIST,
@@ -15,7 +17,7 @@ from app.bot.broadcast_segments import (
     targeted_keyboard,
 )
 from app.bot.panel_history import panel_history
-from app.db.models import BotUser
+from app.db.models import BotUser, ResellerProfile
 from app.services.broadcast_audience import SEGMENTS
 from app.services.notifications import _send_to_chats
 from tests.chat_sim import ChatSim
@@ -95,6 +97,42 @@ class ShopFlowTests(_Flow):
         await self.show("forged", f"{SHOP_PICK}admins")
         await self.sim.tap("forged")
         self.assertGreater(len(self.sim.telegram.alerts), alerts)
+
+
+class ShopHubTests(_Flow):
+    """The shop owner opens group messages through the real permission check (nothing stubbed)."""
+
+    async def asyncSetUp(self) -> None:
+        await super().asyncSetUp()
+        self.sim = ChatSim(5403)
+        await self.sim.start_shop(staff=True)
+        self.addAsyncCleanup(self.sim.stop)
+
+    async def grant(self, permissions: str) -> None:
+        async with self.sim.Session() as session:
+            await session.execute(update(ResellerProfile).values(bot_permissions=permissions, web_permissions=permissions))
+            await session.commit()
+
+    async def test_the_shop_owner_opens_group_messages_without_an_error(self) -> None:
+        from app.bot.handlers.shop_broadcast import CB_HUB
+
+        await self.grant("dashboard,broadcast,campaigns")
+        await self.show("📢 پیام گروهی", CB_HUB)
+        await self.sim.tap("📢 پیام گروهی")
+        screen = self.sim.screen()
+        self.assertFalse(any("خطایی رخ داد" in line for line in screen), screen)
+        shown = [d for m in self.sim.telegram.visible() for row in m.inline for _t, d in row]
+        self.assertIn(SHOP_LIST, shown)
+        self.assertIn(f"{SHOP_PICK}all", shown)
+
+    async def test_staff_without_the_permission_is_told_so(self) -> None:
+        from app.bot.handlers.shop_broadcast import CB_HUB
+
+        await self.grant("dashboard")
+        await self.show("📢 پیام گروهی", CB_HUB)
+        await self.sim.tap("📢 پیام گروهی")
+        self.assertFalse(any("خطایی رخ داد" in line for line in self.sim.screen()), self.sim.screen())
+        self.assertTrue(self.sim.telegram.alerts)
 
 
 if __name__ == "__main__":

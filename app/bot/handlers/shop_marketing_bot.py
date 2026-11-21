@@ -49,7 +49,7 @@ from app.services.gift_codes import describe_code, list_gift_codes, set_gift_cod
 from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
 from app.services.user_errors import domain_error_text
 from app.services.users import get_all_settings
-from app.services.ux20 import FUNNEL_STEPS, funnel_summary
+from app.services.funnel_metrics import FUNNEL_STEPS, funnel_summary
 
 logger = logging.getLogger(__name__)
 router = Router(name="shop_marketing_bot")

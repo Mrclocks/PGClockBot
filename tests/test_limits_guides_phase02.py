@@ -38,7 +38,7 @@ class LimitsGuidesPhase02Tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_redeem_charge_code_per_user_once(self):
         from app.db.models import ChargeCode, ChargeCodeUse
-        from app.services.ux20 import create_charge_code, redeem_charge_code
+        from app.services.charge_codes import create_charge_code, redeem_charge_code
         from sqlalchemy import select
 
         async with self.Session() as session:

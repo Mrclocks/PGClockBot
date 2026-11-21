@@ -27,7 +27,7 @@ from app.db.models import (
 from app.services.daily_report import previous_tehran_day_bounds
 from app.services.daily_report_delivery import deliver_daily_reports
 from app.services.users import clear_settings_cache
-from app.services.ux20 import funnel_summary
+from app.services.funnel_metrics import funnel_summary
 from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]

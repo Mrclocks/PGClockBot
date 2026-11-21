@@ -423,7 +423,7 @@ async def bulk_retry_delivery(
 ) -> tuple[int, int]:
     """Retry failed deliveries — mirrors /orders/{id}/retry-delivery."""
     from app.services.shop_scope import ShopScopeError, assert_order_retry_in_scope
-    from app.services.ux20 import retry_delivery
+    from app.services.delivery_failures import retry_delivery
 
     ids = parse_bulk_ids(order_ids)
     ok = fail = 0

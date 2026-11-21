@@ -10,7 +10,7 @@ from app.db.models import Base, BotUser, FunnelEvent, Order, OrderStatus, Paymen
 from app.services.funnel_events import STEP_PAY_START, record_order_funnel
 from app.services.orders import attach_receipt, deliver_order
 from app.services.users import clear_settings_cache, set_setting
-from app.services.ux20 import funnel_summary
+from app.services.funnel_metrics import funnel_summary
 from tests.test_miniapp_shop_purchase import SHOP, SHOP_PLAN
 from tests.test_miniapp_shop_purchase import ShopPurchaseTests as _ShopPurchaseTests
 from tests.postgres_support import scoped_async_engine

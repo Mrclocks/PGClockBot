@@ -151,6 +151,8 @@ from app.services.users import (
     set_setting,
     set_settings_bulk,
 )
+from app.services.plan_scope import normalize_plan_scopes, scope_selection
+from app.services.service_actions_page import clamp_service_action_numbers, service_actions_context
 from app.services.web_auth import (
     admin_session_version,
     load_web_admin,
@@ -3782,7 +3784,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                         )
                     except Exception as send_exc:
                         if order is not None:
-                            from app.services.ux20 import note_delivery_send_failure
+                            from app.services.delivery_failures import note_delivery_send_failure
 
                             await note_delivery_send_failure(
                                 session, order=order, payment=payment, error=str(send_exc)
@@ -4625,6 +4627,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                     pay_ui.get("payment_crypto_wallets")
                 ),
             )
+        elif tab == "service_actions":
+            ctx.update(await service_actions_context(session, None))
         elif tab == "notifications":
             prefs = await get_notify_prefs(session)
             ctx["notify_prefs"] = prefs
@@ -4776,6 +4780,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.screen_titles import SCREEN_TEXT_TAB, validate_screen_text_settings
         from app.services.users import (
             IMAGE_KEYS,
+            PLAN_SCOPE_KEYS,
             SECRET_KEYS,
             TOGGLE_KEYS,
             default_values_for_keys,
@@ -5253,8 +5258,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         for key in TOGGLE_KEYS:
             if key in known:
                 payload[key] = "1" if form.get(f"s_{key}") else "0"
+        payload.update(await normalize_plan_scopes(session, {
+            key: scope_selection(form.get(f"s_{key}_mode"), form.getlist(f"s_{key}"))
+            for key in PLAN_SCOPE_KEYS & known
+        }, shop_id=None))
         for key in known:
-            if key in TOGGLE_KEYS or key in IMAGE_KEYS:
+            if key in TOGGLE_KEYS or key in IMAGE_KEYS or key in PLAN_SCOPE_KEYS:
                 continue
             raw = form.get(f"s_{key}")
             if raw is not None and not isinstance(raw, UploadFile):
@@ -5281,6 +5290,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                     val = normalize_setting_value(key, val)
                 payload[key] = val
         normalize_threshold_form(payload)
+        clamp_service_action_numbers(payload)
         if tab == "daily_report":
             from app.services.daily_report import (
                 ACTOR_OWNER,

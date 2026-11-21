@@ -42,7 +42,7 @@ from app.services.receipts import auto_approve_receipt
 from app.services.service_renewals import RenewalPendingReview
 from app.services.stuck_order_resolution import refund_undelivered_order
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
-from app.services.ux20 import count_stuck_paid_orders, list_stuck_paid_orders, retry_delivery
+from app.services.delivery_failures import count_stuck_paid_orders, list_stuck_paid_orders, retry_delivery
 from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 GB = 1024**3
