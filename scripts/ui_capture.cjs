@@ -25,8 +25,15 @@ const MAX_VIEWS = +(args.max || 300);
 const SEED = ['/home', '/dashboard', '/users', '/users/11/edit', '/plans', '/plans/1/edit', '/finance', '/tickets',
   '/inbox', '/resellers', '/resellers/2/edit', '/marketing', '/settings', '/connection-status', '/security', '/pg'];
 const SKIP = /logout|export|csv|download|delete|remove|purge|reset|restart|update\/|backup\/(create|restore)|\/run|setup/i;
-// Content that differs on every load by design: live server meters and the random example service name.
-const MASK = ['[data-server-meters]', '[data-live]', '#naming-sample', '[data-naming-sample]'];
+// Content that differs on every load by design: the live server meters are masked, the random
+// example service name gets a fixed text (its length moves what sits next to it).
+const MASK = ['[data-server-meters]', '[data-live]'];
+const FIXED_TEXT = { '#naming-sample': 'clk_sample01', '[data-naming-sample]': 'clk_sample01' };
+// Chromium does not paint blurred backdrops and fading scrollbars the same way twice. Both runs
+// screenshot without them; everything else on the page is drawn as served.
+const STEADY_CSS = `*, *::before, *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  scrollbar-width: none !important; caret-color: transparent !important; }
+  ::-webkit-scrollbar { display: none !important; }`;
 
 const slug = (u) => (u.replace(/^\//, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'root').slice(0, 120);
 
@@ -58,8 +65,16 @@ async function contentHeight(p) {
     }).map((el) => el.scrollHeight + el.getBoundingClientRect().top)));
 }
 
+async function steady(p) {
+  await p.addStyleTag({ content: STEADY_CSS });
+  await p.evaluate((fixed) => {
+    for (const [selector, text] of Object.entries(fixed)) document.querySelectorAll(selector).forEach((el) => { el.textContent = text; });
+  }, FIXED_TEXT);
+}
+
 async function shoot(p, view, width) {
   const base = p.viewportSize();
+  await steady(p);
   for (const theme of THEMES) {
     await p.evaluate((t) => { localStorage.setItem('panel-theme', t); document.documentElement.setAttribute('data-theme', t); }, theme);
     const height = Math.min(MAX_SHOT_HEIGHT, Math.max(base.height, Math.ceil(await contentHeight(p))));
