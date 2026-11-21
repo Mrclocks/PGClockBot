@@ -276,6 +276,17 @@ class BackgroundJobCardTests(DashboardRenderTests):
         # One heavy row: the tag once for the desktop table and once for the phone list.
         self.assertEqual(html.count("پر مصرف"), 2)
 
+    def test_the_jobs_card_has_the_overview_header_and_its_caption_under_it(self):
+        viewer = Viewer(shop_id=None, has_shop=True, can_payments=True, can_orders=True, can_tickets=True,
+                        can_settings=True)
+        ctx = self.context(viewer)
+        ctx.update(host_gauges=HOST, job_usage=self.ROWS, heavy_label="پر مصرف")
+        card = _render("dashboard.html", **ctx).split('aria-label="کارهای پس‌زمینه"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('<header class="ov-head">', card)
+        self.assertNotIn("card-flush", card)
+        self.assertLess(card.index('class="muted ov-caption"'), card.index('class="table-wrap"'))
+        self.assertNotIn("ov-empty", card, "the empty-state style is only for a card without rows")
+
     def test_shop_staff_never_see_the_server_jobs(self):
         viewer = Viewer(shop_id=SHOP, has_shop=True, can_payments=True, can_orders=True, can_tickets=True,
                         can_settings=True)

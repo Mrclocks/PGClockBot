@@ -134,6 +134,14 @@ class PhoneListTests(unittest.TestCase):
                 for cells in rows:
                     self.assertTrue(any("empty-row" in c for c in cells), cells)
 
+    def test_the_cashback_switch_is_the_header_of_its_card(self) -> None:
+        html = _pages(filled=False)["cashback"]
+        card = html.split('<section class="ds-sec ds-toggle-sec">', 1)[1].split("</section>", 1)[0]
+        self.assertIn('<label class="ui-switch-row ds-switch ds-toggle-head">', card)
+        self.assertIn("<strong>کش‌بک</strong>", card)
+        self.assertIn('id="cb-enabled" data-ds-submit-on-change checked', card)
+        self.assertIn('data-ds-show-when="#cb-enabled:1">', card)
+
     def test_customer_text_is_escaped(self) -> None:
         html = _pages(filled=True)["cashback"]
         self.assertNotIn("<b>rule</b>", html)

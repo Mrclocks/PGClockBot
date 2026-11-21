@@ -27,11 +27,10 @@
 {% set title = 'سرور ربات' %}
 {% set metrics_url = '/dashboard/metrics' %}
 {% include "_server_meters.html" %}
-<section class="card card-flush" aria-label="کارهای پس‌زمینه">
-  <header class="card-flush-head">
-    {{ card_title('activity', 'کارهای پس‌زمینه') }}
-  </header>
+<section class="card ov-jobs" aria-label="کارهای پس‌زمینه">
+  <header class="ov-head">{{ card_title('activity', 'کارهای پس‌زمینه') }}</header>
   {% if job_usage %}
+  <p class="muted ov-caption">از آخرین راه‌اندازی ربات، پرکارترین‌ها بالاتر. «خطا» یعنی اجرایی که در آن خطایی ثبت شد، حتی اگر کار ادامه پیدا کرد.</p>
   <div class="table-wrap">
     <table class="table-compact table-list-sm">
       <thead>
@@ -53,7 +52,6 @@
       </tbody>
     </table>
   </div>
-  <p class="muted ov-empty">از آخرین راه‌اندازی ربات، پرکارترین‌ها بالاتر. «خطا» یعنی اجرایی که در آن خطایی ثبت شد، حتی اگر کار ادامه پیدا کرد.</p>
   {% else %}
   <p class="muted ov-empty">هنوز کاری از آخرین راه‌اندازی اجرا نشده.</p>
   {% endif %}

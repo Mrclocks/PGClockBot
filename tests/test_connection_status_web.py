@@ -339,6 +339,16 @@ class MonitorWebTests(MonitorDatabaseCase):
         title_block = text.split('class="page-title"', 1)[1].split("</div>", 2)[1]
         self.assertNotIn("<p", title_block)
 
+    async def test_the_test_card_keeps_one_action_and_the_interval_has_its_own_card(self) -> None:
+        text = (await self.client.get("/connection-status")).text
+        test_card = text.split('aria-labelledby="test-runtime-title"', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(test_card.count("<form"), 1)
+        self.assertIn('action="/connection-status/runtime"', test_card)
+        interval_card = text.split('aria-labelledby="monitor-interval-title"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('action="/connection-status/interval"', interval_card)
+        self.assertIn('name="seconds"', interval_card)
+        self.assertLess(text.index("test-runtime-title"), text.index("monitor-interval-title"))
+
     async def test_missing_core_warning_is_one_readable_block_with_a_copyable_command(self) -> None:
         await self.attach()
         with patch("app.api.connection_status_pages.get_settings", return_value=SimpleNamespace(
