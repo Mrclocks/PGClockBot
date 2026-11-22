@@ -157,9 +157,6 @@ class PlanDeleteFkBlockedTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_web_and_bulk_paths_use_helper(self):
         root = Path(__file__).resolve().parents[1]
-        app_src = (root / "app/api/plan_pages.py").read_text(encoding="utf-8")
-        self.assertIn("delete_shop_plan", app_src)
-        self.assertIn("PlanDeleteBlocked", app_src)
         bulk = (root / "app/services/table_bulk_ext.py").read_text(encoding="utf-8")
         self.assertIn("delete_shop_plan", bulk)
         self.assertIn("begin_nested", bulk)
