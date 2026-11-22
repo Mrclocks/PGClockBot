@@ -16,6 +16,7 @@ from app.bot.keyboards import back_button
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.connection_monitor_access import MonitorAccess
+from app.services.connection_monitor_timing import monitor_timing
 from app.services.connection_monitor_views import monitor_admin_page, monitor_target_view
 from app.services.connection_monitor_errors import monitor_error_message
 from app.services.connection_monitor_subscription import validate_config_key
@@ -38,7 +39,7 @@ def parse_monitor_callback(raw: str) -> MonitorCommand:
     parts = raw.split(":")
     arity = {"account": 2, "home": 3, "hosts": 3, "item": 3, "pick": 3,
              "check": 3, "pause": 3, "stop": 3, "delete": 3, "purge": 3,
-             "name": 3, "order": 3, "run": 3, "halt": 3, "public": 4}
+             "name": 3, "order": 3, "run": 3, "halt": 3, "public": 4, "interval": 3, "every": 3}
     if len(parts) < 2 or parts[0] != "cma" or arity.get(parts[1]) != len(parts):
         raise ValueError("درخواست نامعتبر است.")
     if len(parts) == 2:
@@ -48,7 +49,7 @@ def parse_monitor_callback(raw: str) -> MonitorCommand:
     if not parts[2].isascii() or not parts[2].isdecimal() or len(parts[2]) > 10:
         raise ValueError("شناسه نامعتبر است.")
     identifier = int(parts[2])
-    minimum = 0 if parts[1] in ("home", "hosts", "run", "halt") else 1
+    minimum = 0 if parts[1] in ("home", "hosts", "run", "halt", "interval") else 1
     if not minimum <= identifier <= 2147483647:
         raise ValueError("شناسه نامعتبر است.")
     if parts[1] in ("run", "halt") and identifier not in (0, 1):
@@ -62,8 +63,9 @@ async def show_monitor_home(message: Message, session: AsyncSession, access: Mon
                              after_id: int = 0, edit: bool = True) -> None:
     page = await monitor_admin_page(session, access, now=datetime.now(timezone.utc), after_id=after_id)
     ui = await get_all_settings(session)
+    interval = (await monitor_timing(session)).interval_seconds
     await session.commit()
-    text, markup = admin_page_text(page, ui), admin_page_keyboard(page, ui)
+    text, markup = admin_page_text(page, ui, interval_seconds=interval), admin_page_keyboard(page, ui)
     if edit:
         await safe_edit_text(message, text, reply_markup=markup)
     else:

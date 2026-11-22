@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.auth import resolve_bot_owner_principal
 from app.bot.keyboards import back_button
 from app.db.models import BotUser
+from app.services.connection_monitor_timing import DEFAULT_INTERVAL_SECONDS, INTERVAL_CHOICES
 from app.services.authz import authz_from_staff
 from app.services.connection_monitor_access import MONITOR_ACCESS_DENIED, MonitorAccess
 from app.services.connection_monitor_admin import MonitorConfigPage
@@ -63,11 +64,13 @@ def button(label: str, data: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=label, callback_data=data)
 
 
-def admin_page_text(page: MonitorAdminPage, ui: dict[str, str]) -> str:
+def admin_page_text(page: MonitorAdminPage, ui: dict[str, str], *, interval_seconds: int | None = None) -> str:
     runtime = "فعال" if page.settings.enabled else "متوقف"
     account = "متصل" if page.settings.has_account else "تنظیم نشده"
     lines = [f"<b>{monitor_text(ui, 'connection_status_admin_title')}</b>", "بررسی از سرور ربات",
              f"تست خودکار: {runtime} | کاربر تست: {account}"]
+    if interval_seconds is not None:
+        lines.append(f"فاصلهٔ بررسی: {INTERVAL_CHOICES.get(interval_seconds, INTERVAL_CHOICES[DEFAULT_INTERVAL_SECONDS])}")
     if page.settings.username:
         lines.append(f"نام کاربری: <code>{html.escape(page.settings.username)}</code>")
     if not page.settings.has_account:
@@ -82,13 +85,26 @@ def admin_page_text(page: MonitorAdminPage, ui: dict[str, str]) -> str:
 
 def admin_page_keyboard(page: MonitorAdminPage, ui: dict[str, str] | None = None) -> InlineKeyboardMarkup:
     rows = [[button("👤 تنظیم کاربر تست", "cma:account"), button("➕ انتخاب کانفیگ", "cma:hosts:0")],
-            [button("⏹ توقف تست‌ها" if page.settings.enabled else "▶️ شروع تست‌ها", f"cma:run:{int(not page.settings.enabled)}")]]
+            [button("⏹ توقف تست‌ها" if page.settings.enabled else "▶️ شروع تست‌ها", f"cma:run:{int(not page.settings.enabled)}"),
+             button("⏱ فاصلهٔ بررسی", "cma:interval:0")]]
     rows.extend([button(target.public_name or target.config_name or f"کانفیگ {format_number(target.id)}", f"cma:item:{target.id}")] for target in page.targets)
     if page.next_id is not None:
         rows.append([button("صفحهٔ بعد", f"cma:home:{page.next_id}")])
     rows.append([button("🔄 تازه‌سازی", "cma:home:0")])
     rows.append([back_button(ui, ADMIN_HOME_CALLBACK)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def interval_keyboard(current_seconds: int, ui: dict[str, str] | None = None) -> InlineKeyboardMarkup:
+    """The offered check intervals, the saved one marked; each saves and returns to the monitor page."""
+    rows = [[button(f"✅ {label}" if seconds == current_seconds else label, f"cma:every:{seconds}")]
+            for seconds, label in INTERVAL_CHOICES.items()]
+    rows.append([back_button(ui, MONITOR_HOME_CALLBACK)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+INTERVAL_PICKER_TEXT = ("<b>فاصلهٔ بررسی</b>\nهر چند وقت یک بار همهٔ کانفیگ‌ها تست شوند. فاصلهٔ بیشتر یعنی بار کمتر "
+                        "روی سرور ربات و پنل، و وضعیتی که دیرتر به‌روز می‌شود.")
 
 
 def target_text(target: MonitorTargetView) -> str:
