@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import ast
 import logging
+import re
 import time
-from typing import Any
+from typing import Any, TypedDict
 
 import httpx
 
@@ -1583,6 +1584,44 @@ def _versions_after_through(
     return found
 
 
+# «topic: text (#123، #124)» — the topic becomes a tag and the PR numbers a quiet trailer on the update page.
+_NOTE_TOPIC_RE = re.compile(r"^\s*([^:：()]{1,24}?)\s*[:：]\s*(.+)$", re.S)
+_NOTE_REFS_RE = re.compile(r"\s*\(\s*(#\d+(?:\s*[،,]\s*#\d+)*)\s*\)\s*$")
+_NOTE_REF_RE = re.compile(r"#\d+")
+NOTE_TONE_FIX = "fix"
+NOTE_TONE_SECURITY = "security"
+NOTE_TONE_DEFAULT = "topic"
+_NOTE_TONES = {"رفع اشکال": NOTE_TONE_FIX, "امنیت": NOTE_TONE_SECURITY}
+
+
+class ReleaseNoteItem(TypedDict):
+    topic: str
+    text: str
+    refs: list[str]
+    tone: str
+
+
+def split_release_note(note: str) -> ReleaseNoteItem:
+    """Split one note into its topic tag, its text and the PR numbers at its end."""
+    text = str(note or "").strip()
+    refs: list[str] = []
+    refs_match = _NOTE_REFS_RE.search(text)
+    if refs_match:
+        refs = _NOTE_REF_RE.findall(refs_match.group(1))
+        text = text[: refs_match.start()].rstrip()
+    topic = ""
+    topic_match = _NOTE_TOPIC_RE.match(text)
+    if topic_match:
+        topic, text = topic_match.group(1).strip(), topic_match.group(2).strip()
+    tone = _NOTE_TONES.get(topic, NOTE_TONE_DEFAULT)
+    return {"topic": topic, "text": text, "refs": refs, "tone": tone}
+
+
+def _with_items(block: dict[str, Any]) -> dict[str, Any]:
+    notes = [str(n) for n in block.get("notes") or []]
+    return {**block, "items": [split_release_note(n) for n in notes]}
+
+
 def changelog_for_update_page(
     *,
     local: str | None = None,
@@ -1620,4 +1659,6 @@ def changelog_for_update_page(
         blocks = [block] if block else []
         title = f"تغییرات نسخه {block['version']}" if block else "چنج‌لاگ"
 
-    return {"title": title, "blocks": blocks, "has_notes": bool(blocks)}
+    blocks = [_with_items(block) for block in blocks]
+    total = sum(len(block["items"]) for block in blocks)
+    return {"title": title, "blocks": blocks, "has_notes": bool(blocks), "total": total}

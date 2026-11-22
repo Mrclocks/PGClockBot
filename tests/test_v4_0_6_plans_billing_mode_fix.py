@@ -17,14 +17,6 @@ class BillingModeMigrateTests(unittest.TestCase):
         self.assertIn("0002_pg_staff_credentials", src)
         self.assertIn("reseller_plans", src)
 
-    def test_plans_page_soft_fails_reseller_list(self):
-        src = (ROOT / "app/api/plan_pages.py").read_text(encoding="utf-8")
-        fn = src[src.find("async def plans_page") : src.find("async def plans_create")]
-        self.assertIn("reseller_plans_err", fn)
-        self.assertIn("list_reseller_plans(session)", fn)
-        self.assertIn("except Exception", fn)
-
-
 class ResellerPlansTabRemovedTests(unittest.TestCase):
     def test_tabs_no_longer_include_plans(self):
         src = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")

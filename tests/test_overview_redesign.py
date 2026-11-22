@@ -273,8 +273,25 @@ class BackgroundJobCardTests(DashboardRenderTests):
         self.assertIn("کارهای پس‌زمینه", html)
         self.assertLess(html.index("تست اتصال سرویس"), html.index("صورت‌حساب"))
         self.assertIn("۱٬۲۳۴", html)
-        # One heavy row: the tag once for the desktop table and once for the phone list.
-        self.assertEqual(html.count("پر مصرف"), 2)
+        # One heavy row: the tag once, in the job's own cell (a plain dashboard table has no separate phone list).
+        self.assertEqual(html.count("پر مصرف"), 1)
+
+    def test_the_jobs_table_is_built_like_the_other_dashboard_tables_and_comes_last(self):
+        viewer = Viewer(shop_id=None, has_shop=True, can_payments=True, can_orders=True, can_tickets=True,
+                        can_settings=True)
+        ctx = self.context(viewer)
+        ctx.update(host_gauges=HOST, job_usage=self.ROWS, heavy_label="پر مصرف")
+        html = _render("dashboard.html", **ctx)
+        payments = html.split('aria-label="آخرین پرداخت‌ها"', 1)[0].rsplit("<section", 1)[1]
+        jobs_open = html.split('aria-label="کارهای پس‌زمینه"', 1)[0].rsplit("<section", 1)[1]
+        self.assertEqual(jobs_open, payments, "same card class as «آخرین پرداخت‌ها»")
+        card = html.split('aria-label="کارهای پس‌زمینه"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('<header class="card-flush-head">', card)
+        self.assertIn('<table class="table-compact">', card)
+        self.assertNotIn("table-list-sm", card)
+        self.assertLess(card.index('class="muted card-flush-note"'), card.index('class="table-wrap"'))
+        self.assertNotIn("ov-empty", card, "the empty-state style is only for a card without rows")
+        self.assertGreater(html.index("کارهای پس‌زمینه"), html.index("آخرین سفارش‌ها"), "the jobs table is last")
 
     def test_shop_staff_never_see_the_server_jobs(self):
         viewer = Viewer(shop_id=SHOP, has_shop=True, can_payments=True, can_orders=True, can_tickets=True,
