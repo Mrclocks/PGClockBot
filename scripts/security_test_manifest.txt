@@ -601,3 +601,6 @@ tests/test_discount_rules.py
 tests/test_discount_rule_pages.py
 tests/test_coupon_programs.py
 tests/test_discount_budget_winback.py
+#
+# No renewal or pack is sold for a service the panel removed; retrying its paid order says why.
+tests/test_panel_removed_service_purchases.py
