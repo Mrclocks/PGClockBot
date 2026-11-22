@@ -34,7 +34,8 @@ STUB = """(answer) => {
 STATE = """() => ({
   tone: document.getElementById('upd-hero').dataset.tone,
   select: document.getElementById('upd-channel').value,
-  active: document.querySelector('#upd-channel-seg .active').dataset.channel,
+  active: [...document.querySelectorAll('#upd-channel-seg button')].filter((b) => b.classList.contains('on')
+    && getComputedStyle(b).backgroundColor !== getComputedStyle(b.parentElement).backgroundColor).map((b) => b.dataset.channel).join(),
   startHidden: document.getElementById('upd-start').hidden,
   oldHidden: document.getElementById('upd-local-box').hidden,
   rows: document.querySelectorAll('.upd-note-row').length,
@@ -67,6 +68,7 @@ class UpdatePageScriptTests(unittest.TestCase):
             browser, page = self._open(playwright, tmp)
             try:
                 before = page.evaluate(STATE)
+                self.assertEqual(before["active"], "main", "the saved channel is drawn as the chosen one")
                 page.click('#upd-channel-seg button[data-channel="dev"]')
                 page.wait_for_function("document.getElementById('upd-hero').dataset.tone === 'ok'")
                 after = page.evaluate(STATE)
