@@ -13,9 +13,9 @@ import httpx
 from app.api.app import create_api_app
 
 # The module that holds the wizard's routes: its names are what the routes call.
-ROUTES = "app.api.app"
+ROUTES = "app.api.setup_pages"
 # Where the PasarGuard login check and the restart are looked up when a route runs.
-LOOKUPS = {"pg_login": "app.services.pg_access", "restart": "app.services.service_control"}
+LOOKUPS = {"pg_login": ROUTES, "restart": ROUTES}
 STRONG_PASSWORD = "Ab12Cd34!@xyZ"
 PG_FORM = {"pg_base_url": "https://pg.example:8443", "pg_username": "panel-admin", "pg_password": "pg-secret",
            "public_base_url": "https://bot.example.com/"}
@@ -27,7 +27,9 @@ class SetupWizardRouteTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         stack = ExitStack()
         self.addCleanup(stack.close)
-        stack.enter_context(patch("app.api.app.is_setup_complete", return_value=False))
+        # The setup gate in the middleware and the routes each ask whether setup is done.
+        for module in ("app.api.app", ROUTES):
+            stack.enter_context(patch(f"{module}.is_setup_complete", return_value=False))
         for name in ("begin_setup", "ensure_web_secret", "mark_setup_complete"):
             stack.enter_context(patch(f"{ROUTES}.{name}"))
         self.stored: dict[str, str] = {}
