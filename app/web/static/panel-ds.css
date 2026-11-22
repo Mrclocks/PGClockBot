@@ -427,7 +427,7 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-pack-amt .ds-unit-label { display: none; }
 .ds .ds-del {
   width: var(--ctl-h); height: var(--ctl-h); padding: 0; border-radius: var(--control-radius); border: 1px solid transparent; background: none;
-  color: var(--muted-fg); cursor: pointer; justify-self: center;
+  color: var(--destructive-fg); cursor: pointer; justify-self: center;
 }
 .ds .ds-del svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ds .ds-del:hover { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, transparent); }
