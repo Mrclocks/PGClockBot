@@ -20,6 +20,8 @@ OPERATIONS = {
     "credit_cycle",
     # Credits cashback whose hold has passed; needs no running bot.
     "cashback_mature",
+    # Issues win-back coupons and opens each shop's bot for the notices itself; needs no running bot.
+    "coupon_win_back",
     "pg_admin_subscription",
     # Deletes the order and payment rows each shop chose for automatic deletion; needs no running bot.
     "order_purge",

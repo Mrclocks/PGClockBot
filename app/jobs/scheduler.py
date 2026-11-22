@@ -373,6 +373,19 @@ async def run_cashback_mature_job() -> None:
             logger.exception("cashback maturity failed")
 
 
+async def run_coupon_winback_job() -> None:
+    """Every 6 hours: win-back coupons for customers who stopped buying, once per lapse."""
+    async with SessionLocal() as session:
+        try:
+            from app.services.coupon_winback import issue_winback_coupons
+
+            issued = await issue_winback_coupons(session)
+            if issued:
+                logger.info("win-back coupons issued %s", issued)
+        except Exception:
+            logger.exception("win-back coupons failed")
+
+
 async def run_credit_cycle_job() -> None:
     """Hourly: close last month's credit statements, settle paid debt, apply the overdue ladder."""
     async with SessionLocal() as session:
@@ -638,6 +651,8 @@ def start_background_scheduler() -> None:
         ("billing_tick", run_reseller_billing_tick, {"minutes": 1}, 120),
         ("credit_cycle", run_credit_cycle_job, {"hours": 1}, 3600),
         ("cashback_mature", run_cashback_mature_job, {"minutes": 5}, 300),
+        # Idempotent per lapse and bounded per shop, so a restart that runs it again is harmless.
+        ("coupon_win_back", run_coupon_winback_job, {"hours": 6}, 3600),
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("order_purge", run_auto_order_purge, {"hours": 1}, 3600),
         ("scheduled_receipt_approval", run_scheduled_receipt_approvals, {"seconds": 60}, 90),

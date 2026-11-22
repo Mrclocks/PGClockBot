@@ -76,7 +76,7 @@ class CouponIssueTests(unittest.IsolatedAsyncioTestCase):
             await session.flush()
             session.add(Plan(id=1, name="پلن", price=100_000, duration_days=30, owner_reseller_id=SHOP_A))
             await session.commit()
-        self.notify = patch("app.services.coupon_programs._notify", AsyncMock())
+        self.notify = patch("app.services.coupon_programs.notify_coupon", AsyncMock())
         self.sent = self.notify.start()
 
     async def asyncTearDown(self) -> None:

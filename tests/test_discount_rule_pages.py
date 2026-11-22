@@ -153,7 +153,8 @@ class TemplateTests(unittest.TestCase):
         html = env.get_template("discount_rules.html").render(
             request=SimpleNamespace(query_params={}, url=SimpleNamespace(path="/discount-rules"), cookies={}),
             staff={"role": "admin"}, rules=[rule], views={3: rule_view(rule, now=NOW)}, plans=[(1, "<i>p</i>", True)],
-            csrf_token="t", programs={}, triggers=TRIGGERS,
+            csrf_token="t", programs={}, triggers=TRIGGERS, budget=0, budget_used=0, report_days=30,
+            rule_results={3: SimpleNamespace(orders=2, discount=1000, sales=9000)}, coupon_results={},
         )
         self.assertIn('action="/discount-rules/coupons/next_purchase"', html)
         self.assertNotIn("<script>x</script>", html)

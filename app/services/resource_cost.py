@@ -47,6 +47,7 @@ JOB_LABELS: dict[str, str] = {
     "billing_tick": "صورت‌حساب مصرفی نماینده‌ها",
     "credit_cycle": "دورهٔ اعتبار نماینده‌ها",
     "cashback_mature": "آزادسازی کش‌بک",
+    "coupon_win_back": "کوپن بازگشت مشتری",
     "pg_admin_subscription": "اشتراک ادمین‌های پنل",
     "order_purge": "پاکسازی سفارش‌های قدیمی",
     "scheduled_receipt_approval": "تأیید زمان‌دار رسید",
