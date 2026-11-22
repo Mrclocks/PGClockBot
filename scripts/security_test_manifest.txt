@@ -604,3 +604,4 @@ tests/test_discount_budget_winback.py
 tests/test_tools_area.py
 tests/test_system_health.py
 tests/test_stuck_work.py
+tests/test_maintenance_tools.py

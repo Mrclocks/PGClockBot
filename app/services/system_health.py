@@ -69,15 +69,19 @@ class HealthItem:
     href: str = ""
     # A POST path that fixes the line (behind a confirm dialog); a line has a link or an action, not both.
     action: str = ""
+    # The confirm dialog's question for ``action``; empty uses the re-run wording.
+    confirm: str = ""
+    confirm_title: str = ""
 
     @property
     def tone_label(self) -> str:
-        return TONE_LABELS[self.tone]
+        """Empty for a tool line without a state (``tone=""``), which shows no badge."""
+        return TONE_LABELS.get(self.tone, "")
 
     @property
     def badge_class(self) -> str:
         """The panel's badge class for the tone (the red badge is named ``error``)."""
-        return BADGE_CLASSES[self.tone]
+        return BADGE_CLASSES.get(self.tone, "")
 
 
 @dataclass(frozen=True, slots=True)

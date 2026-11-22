@@ -56,3 +56,8 @@ def invalidate_sidebar_counts(key: str | None = None) -> None:
         _STORE.pop(key, None)
         return
     _STORE.clear()
+
+
+def clear_sidebar_counts() -> None:
+    """Forget every cached count (the «پاک کردن کش‌ها» tool); the next page reads them again."""
+    _STORE.clear()

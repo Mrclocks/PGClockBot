@@ -39,8 +39,8 @@
       {%- set tag = 'a' if item.href else ('button' if item.action else 'div') %}
       {%- if item.action %}
       <form method="post" action="{{ item.action }}" class="hub-row-form"
-            data-confirm="«{{ item.label }}» همین حالا دوباره اجرا شود؟ کار همان است که خودکار هم انجام می‌شود."
-            data-confirm-title="اجرای دوباره" data-confirm-label="اجرا شود">
+            data-confirm="{{ item.confirm or ('«' ~ item.label ~ '» همین حالا دوباره اجرا شود؟ کار همان است که خودکار هم انجام می‌شود.') }}"
+            data-confirm-title="{{ item.confirm_title or 'اجرای دوباره' }}" data-confirm-label="اجرا شود">
         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
       {%- endif %}
       <{{ tag }} class="hub-row"{% if item.href %} href="{{ item.href }}"{% endif %}{% if item.action %} type="submit"{% endif %} data-health="{{ item.key }}" data-tone="{{ item.tone }}">
@@ -49,7 +49,7 @@
           <span class="hub-label">{{ item.label }}</span>
           <span class="hub-desc">{{ item.summary }}</span>
         </span>
-        <span class="badge {{ item.badge_class }}">{{ item.tone_label }}</span>
+        {%- if item.tone_label %}<span class="badge {{ item.badge_class }}">{{ item.tone_label }}</span>{% endif %}
         {#- The arrow's place is kept on rows without a page, so every badge lines up. #}
         <span class="hub-chev" aria-hidden="true">{% if item.href or item.action %}{{ icon('chev') }}{% endif %}</span>
       </{{ tag }}>

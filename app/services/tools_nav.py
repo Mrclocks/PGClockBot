@@ -27,6 +27,8 @@ ORDER_CLEANUP = "order_cleanup"
 BACKUP = "backup"
 HEALTH = "health"
 HEALTH_HREF = TOOLS_LIST_HREF + "/health"
+MAINTENANCE = "maintenance"
+MAINTENANCE_HREF = TOOLS_LIST_HREF + "/maintenance"
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +53,10 @@ _HEALTH = ToolSection(
     HEALTH, "سلامت سیستم", HEALTH_HREF,
     "دیتابیس، پنل، ربات، بکاپ و کارهای پس‌زمینه", "pulse",
 )
+_MAINTENANCE = ToolSection(
+    MAINTENANCE, "نگهداری سرور", MAINTENANCE_HREF,
+    "اتصال دوبارهٔ ربات‌ها و پاک کردن کش‌ها", "sliders",
+)
 _BACKUP = ToolSection(
     BACKUP, "بکاپ", "/settings?tab=backup",
     "ساخت، بازگردانی و بکاپ زمان‌بندی‌شده", "download",
@@ -59,7 +65,7 @@ _BACKUP = ToolSection(
 # (group label, section keys in display order); a group with none of them is left out.
 _GROUP_LAYOUT: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("پاکسازی", (SERVICE_CLEANUP, ORDER_CLEANUP)),
-    ("نگهداری", (HEALTH, BACKUP)),
+    ("نگهداری", (HEALTH, MAINTENANCE, BACKUP)),
 )
 
 
@@ -100,9 +106,10 @@ def tool_sections(staff: Mapping[str, Any] | None) -> tuple[ToolSection, ...]:
         SERVICE_CLEANUP: _can_open_service_cleanup(staff),
         ORDER_CLEANUP: _can_open_order_cleanup(staff),
         HEALTH: is_owner_staff(staff),
+        MAINTENANCE: is_owner_staff(staff),
         BACKUP: is_owner_staff(staff),
     }
-    by_key = {s.key: s for s in (_SERVICE_CLEANUP, _ORDER_CLEANUP, _HEALTH, _BACKUP)}
+    by_key = {s.key: s for s in (_SERVICE_CLEANUP, _ORDER_CLEANUP, _HEALTH, _MAINTENANCE, _BACKUP)}
     return tuple(by_key[key] for _label, keys in _GROUP_LAYOUT for key in keys if allowed[key])
 
 

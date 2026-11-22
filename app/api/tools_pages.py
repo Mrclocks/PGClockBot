@@ -10,9 +10,18 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.numbers import to_fa_digits
+from app.services.maintenance import (
+    CLEAR_CACHES_PATH,
+    RECONNECT_PATH,
+    clear_caches,
+    maintenance_group,
+    record_maintenance,
+    start_shop_bot_reconnect,
+)
 from app.services.stuck_work import RERUN_PATH, request_rerun, stuck_group
 from app.services.system_health import collect_health
-from app.services.tools_nav import HEALTH_HREF, TOOLS_LIST_HREF, tool_sections, tools_hub_sections
+from app.services.tools_nav import HEALTH_HREF, MAINTENANCE_HREF, TOOLS_LIST_HREF, tool_sections, tools_hub_sections
 
 
 def register_tools_pages(
@@ -43,3 +52,33 @@ def register_tools_pages(
             return RedirectResponse(f"{HEALTH_HREF}?err={quote(str(exc))}", status_code=303)
         done = f"«{kind.label}» همین حالا دوباره اجرا می‌شود؛ چند ثانیهٔ دیگر صفحه را تازه کنید"
         return RedirectResponse(f"{HEALTH_HREF}?ok={quote(done)}", status_code=303)
+
+    @app.get(MAINTENANCE_HREF, response_class=HTMLResponse)
+    async def maintenance_page(
+        request: Request, staff: dict = Depends(require_admin), session: AsyncSession = Depends(get_db)
+    ) -> HTMLResponse:
+        return render(request, "maintenance.html", {"staff": staff, "groups": (await maintenance_group(session),)})
+
+    @app.post(RECONNECT_PATH)
+    async def maintenance_reconnect_bots(
+        staff: dict = Depends(require_admin), session: AsyncSession = Depends(get_db)
+    ) -> RedirectResponse:
+        try:
+            start_shop_bot_reconnect()
+        except ValueError as exc:
+            return _back(MAINTENANCE_HREF, err=str(exc))
+        await record_maintenance(session, staff, label="اتصال دوبارهٔ ربات فروشگاه‌ها")
+        return _back(MAINTENANCE_HREF, ok="اتصال دوبارهٔ ربات‌ها شروع شد؛ چند ثانیهٔ دیگر صفحه را تازه کنید")
+
+    @app.post(CLEAR_CACHES_PATH)
+    async def maintenance_clear_caches(
+        staff: dict = Depends(require_admin), session: AsyncSession = Depends(get_db)
+    ) -> RedirectResponse:
+        cleared = clear_caches()
+        await record_maintenance(session, staff, label="پاک کردن کش‌های پنل")
+        return _back(MAINTENANCE_HREF, ok=f"کش‌های پنل پاک شد ({to_fa_digits(cleared)} مورد)")
+
+
+def _back(path: str, **flash: str) -> RedirectResponse:
+    key, value = next(iter(flash.items()))
+    return RedirectResponse(f"{path}?{key}={quote(value)}", status_code=303)
