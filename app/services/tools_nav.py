@@ -17,6 +17,7 @@ from app.services.order_purge import purge_scope
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.service_cleanup import cleanup_scope
 from app.services.settings_hub import HubRow, HubSection
+from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
 
 TOOLS_LIST_HREF = "/tools"
 TOOLS_TITLE = "ابزار و پاکسازی"
@@ -27,6 +28,7 @@ ORDER_CLEANUP = "order_cleanup"
 BACKUP = "backup"
 HEALTH = "health"
 HEALTH_HREF = TOOLS_LIST_HREF + "/health"
+RETRIAL = "retrial"
 MAINTENANCE = "maintenance"
 MAINTENANCE_HREF = TOOLS_LIST_HREF + "/maintenance"
 
@@ -57,6 +59,11 @@ _MAINTENANCE = ToolSection(
     MAINTENANCE, "نگهداری سرور", MAINTENANCE_HREF,
     "ربات‌ها، کش، همگام‌سازی و راه‌اندازی مجدد", "sliders",
 )
+# The trial users page filtered to the customers who never bought: the round runs from its bulk bar.
+_RETRIAL = ToolSection(
+    RETRIAL, "دور جدید تست", "/trial-users?filter=non_buyers",
+    "اجازهٔ تست دوباره به کاربرانی که تست گرفتند و نخریدند", "trial",
+)
 _BACKUP = ToolSection(
     BACKUP, "بکاپ", "/settings?tab=backup",
     "ساخت، بازگردانی و بکاپ زمان‌بندی‌شده", "download",
@@ -65,6 +72,7 @@ _BACKUP = ToolSection(
 # (group label, section keys in display order); a group with none of them is left out.
 _GROUP_LAYOUT: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("پاکسازی", (SERVICE_CLEANUP, ORDER_CLEANUP)),
+    ("کاربران تست", (RETRIAL,)),
     ("نگهداری", (HEALTH, MAINTENANCE, BACKUP)),
 )
 
@@ -93,6 +101,18 @@ def _can_open_order_cleanup(staff: Mapping[str, Any]) -> bool:
     return True
 
 
+def _can_open_retrial(staff: Mapping[str, Any]) -> bool:
+    """The trial users page (``trial_users`` and a shop scope) plus the ``trial_reset`` right its action needs."""
+    authz = authz_from_staff(dict(staff))
+    if not (can_shop(authz, "trial_users") and can_shop(authz, "trial_reset")):
+        return False
+    try:
+        resolve_shop_scope_id(dict(staff))
+    except ShopScopeError:
+        return False
+    return True
+
+
 def is_owner_staff(staff: Mapping[str, Any]) -> bool:
     """Same rule as ``require_admin``, which guards the system settings and the health page."""
     return staff.get("role") == "admin" and is_explicit_owner_staff(dict(staff))
@@ -105,11 +125,12 @@ def tool_sections(staff: Mapping[str, Any] | None) -> tuple[ToolSection, ...]:
     allowed = {
         SERVICE_CLEANUP: _can_open_service_cleanup(staff),
         ORDER_CLEANUP: _can_open_order_cleanup(staff),
+        RETRIAL: _can_open_retrial(staff),
         HEALTH: is_owner_staff(staff),
         MAINTENANCE: is_owner_staff(staff),
         BACKUP: is_owner_staff(staff),
     }
-    by_key = {s.key: s for s in (_SERVICE_CLEANUP, _ORDER_CLEANUP, _HEALTH, _MAINTENANCE, _BACKUP)}
+    by_key = {s.key: s for s in (_SERVICE_CLEANUP, _ORDER_CLEANUP, _RETRIAL, _HEALTH, _MAINTENANCE, _BACKUP)}
     return tuple(by_key[key] for _label, keys in _GROUP_LAYOUT for key in keys if allowed[key])
 
 

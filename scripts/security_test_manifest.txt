@@ -606,3 +606,4 @@ tests/test_system_health.py
 tests/test_stuck_work.py
 tests/test_maintenance_tools.py
 tests/test_restart_and_resync.py
+tests/test_trial_retrial.py

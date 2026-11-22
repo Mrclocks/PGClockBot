@@ -69,6 +69,7 @@ ACTION_LABELS = {
     "setting_off": "خاموش کردن تنظیم",
     "job_rerun": "اجرای دوبارهٔ کار پس‌زمینه",
     "maintenance_run": "ابزار نگهداری",
+    "trial_reset": "اجازهٔ تست دوباره",
 }
 
 TARGET_LABELS = {
