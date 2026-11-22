@@ -10,35 +10,13 @@ existed elsewhere but wasn't consulted here.
 
 from __future__ import annotations
 
-import ast
 import unittest
-from pathlib import Path
 
 from app.services.security_policy import is_placeholder_bot_token
 
 
 class SetupBotPlaceholderRejectionTests(unittest.TestCase):
-    """Structural check: setup_bot must call is_placeholder_bot_token(token)."""
-
-    def _setup_bot_source(self) -> str:
-        tree = ast.parse(Path("app/api/app.py").read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.AsyncFunctionDef) and node.name == "setup_bot":
-                return ast.unparse(node)
-        raise AssertionError("setup_bot function not found in app/api/app.py")
-
-    def test_setup_bot_checks_placeholder_before_persisting(self):
-        body = self._setup_bot_source()
-        self.assertIn("is_placeholder_bot_token", body)
-
-        # Must reject *before* the token is ever written to disk.
-        check_pos = body.index("is_placeholder_bot_token")
-        persist_pos = body.index("update_env_keys")
-        self.assertLess(
-            check_pos,
-            persist_pos,
-            "is_placeholder_bot_token must be checked before update_env_keys persists the token",
-        )
+    """The rule itself; tests/test_setup_wizard_routes.py drives POST /setup/bot with it."""
 
     def test_known_example_tokens_are_flagged(self):
         # Same values documented in README / .env.example — must never pass.
