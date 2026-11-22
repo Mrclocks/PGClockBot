@@ -26,15 +26,23 @@
 </label>
 {%- endmacro %}
 
-{# Switch for a section that turns on and off (rule 6): passed as ds_sec(side=...). The
-   section title names it, so it has no visible label; the body (with its save button)
-   carries data-ds-show-when="#id:1" and stays hidden while the switch is off. Flipping
-   it saves its form at once, since the save button is hidden while it is off. #}
-{% macro ds_head_switch(name, label, id, checked=false, value='1') -%}
-<label class="ds-head-switch"><span class="ui-switch">
-  <input type="checkbox" name="{{ name }}" value="{{ value }}" id="{{ id }}" aria-label="{{ label }}" data-ds-submit-on-change{% if checked %} checked{% endif %} />
-  <span class="ui-switch-track" aria-hidden="true"></span>
-</span></label>
+{# A section that turns on and off (rule 6): one card whose first row is its header: the title, one line of what it
+   does and the switch, on one line, built as the panel's switch row. While the switch is off the card is only that
+   row; the body (caller(), with its save button) opens under it while it is on. Flipping the switch saves its form at
+   once, since the save button is hidden while it is off. #}
+{% macro ds_toggle_sec(title, desc, name, id, checked=false, sid='') -%}
+<section class="ds-sec ds-toggle-sec"{% if sid %} id="{{ sid }}"{% endif %}>
+  <div class="ds-card">
+    <label class="ui-switch-row ds-switch ds-toggle-head">
+      <span class="ui-switch-copy"><strong>{{ title }}</strong>{% if desc %}<small>{{ desc }}</small>{% endif %}</span>
+      <span class="ui-switch">
+        <input type="checkbox" name="{{ name }}" value="1" id="{{ id }}" data-ds-submit-on-change{% if checked %} checked{% endif %} />
+        <span class="ui-switch-track" aria-hidden="true"></span>
+      </span>
+    </label>
+    <div class="ds-toggle-body" data-ds-show-when="#{{ id }}:1"{% if not checked %} hidden{% endif %}>{{ caller() }}</div>
+  </div>
+</section>
 {%- endmacro %}
 
 {# Number field where 0 means «no limit»: the «نامحدود» toggle sets 0 and locks the field. #}

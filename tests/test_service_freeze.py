@@ -124,6 +124,27 @@ class FreezeTests(unittest.IsolatedAsyncioTestCase):
             notices = list(await session.scalars(select(CustomerNotice)))
         self.assertEqual([(n.action, n.service_id, n.telegram_id) for n in notices], [("service_freeze_resumed", 10, 1001)])
 
+    async def test_a_freeze_the_panel_keeps_refusing_does_not_hold_back_the_others(self) -> None:
+        # A rollback for one row used to expire the rest, so the job crashed on the next row and
+        # every freeze behind the broken one stayed disabled past its deadline.
+        async with self.Session() as session:
+            session.add(UserService(id=12, bot_user_id=2, plan_id=1, pg_user_id=502, pg_username="svc2"))
+            await session.commit()
+        await self.start(days=3)
+        self.pg.info["status"] = "active"  # one fake panel serves both users
+        await self.start(user_id=2, service_id=12, days=3)
+        write = self.pg.modify_user_by_id
+
+        async def modify(user_id: int, payload: dict) -> dict:
+            if user_id == 500:
+                raise RuntimeError("the panel refuses this user")
+            return await write(user_id, payload)
+
+        self.pg.modify_user_by_id = modify
+        resumed = await self.job(now=datetime.now(timezone.utc) + timedelta(days=3, minutes=1))
+        self.assertEqual({r.service_id: r.status for r in await self.rows()}, {10: "resuming", 12: "done"})
+        self.assertEqual([(r.service_id, r.resumed_by) for r in resumed], [(12, "deadline")])
+
     async def test_a_lost_disable_is_retried_by_the_job(self) -> None:
         self.pg.fail_disable = True
         self.assertEqual((await self.start()).status, "pausing")

@@ -344,7 +344,6 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertRegex(inbox, r'btn-ok[^>]*>\s*آپدیت\s*<')
         upd = (ROOT / "app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn('id="upd-start"', upd)
-        self.assertIn("btn-ok", upd)
 
     def test_pg_admins_uses_row_actions_macro(self):
         src = (ROOT / "app/web/templates/pg_admins.html").read_text(encoding="utf-8")

@@ -410,12 +410,25 @@ async def _advance(session: AsyncSession, row: ServiceFreeze, now: datetime) -> 
 async def process_due_freezes(session: AsyncSession, *, now: datetime | None = None) -> list[ServiceFreeze]:
     """Retry unfinished steps and resume freezes past their deadline; one bad row never stops the batch."""
     now = now or _now()
-    resumed: list[ServiceFreeze] = []
-    for row in await _due(session, now):
+    resumed_ids: list[int] = []
+    for freeze_id in [int(row.id) for row in await _due(session, now)]:
         try:
-            if await _advance(session, row, now) == BY_DEADLINE:
-                resumed.append(row)
+            # Read from the identity map; only a rollback for an earlier row makes this a query.
+            row = await session.get(ServiceFreeze, freeze_id)
+            if row is not None and await _advance(session, row, now) == BY_DEADLINE:
+                resumed_ids.append(freeze_id)
         except Exception:  # noqa: BLE001 - per-row isolation in a background job; the row is retried
-            logger.warning("freeze step failed freeze=%s status=%s", row.id, row.status, exc_info=True)
+            logger.warning("freeze step failed freeze=%s", freeze_id, exc_info=True)
             await session.rollback()
-    return resumed
+    return await _reload(session, resumed_ids)
+
+
+async def _reload(session: AsyncSession, freeze_ids: list[int]) -> list[ServiceFreeze]:
+    """The rows again, fresh: a later row's rollback expired the ones already done."""
+    if not freeze_ids:
+        return []
+    rows = await session.scalars(
+        select(ServiceFreeze).where(ServiceFreeze.id.in_(freeze_ids)).order_by(ServiceFreeze.id)
+        .execution_options(populate_existing=True)
+    )
+    return list(rows)

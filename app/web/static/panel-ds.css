@@ -152,8 +152,11 @@ html[data-theme="light"] .btn-warn { color: var(--btn-fg, var(--brand-fg)) !impo
 .ds .ds-sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); margin: 0 0 var(--g2); }
 /* A title alone needs no room for an action, so the space above its letters is not padded out. */
 .ds .ds-sec-head:has(> :only-child) { min-height: 0; }
-/* The on/off switch of a section sits at the far end of its title row (rule 6). */
-.ds .ds-head-switch { display: inline-flex; align-items: center; flex: 0 0 auto; cursor: pointer; }
+/* A section that turns on and off (rule 6, ds_toggle_sec): the card's first row is its header (title, one line, switch);
+   the title reads as the card's title, and the body opens under it with the card's own gap. */
+.ds .ds-toggle-head .ui-switch-copy strong { font-size: var(--fs-3); font-weight: 700; color: var(--foreground); }
+.ds .ds-toggle-body { display: flex; flex-direction: column; gap: var(--box-gap); }
+.ds .ds-toggle-body > * { margin-block: 0; }
 /* A page form built of sections keeps the section gap to the box after it. */
 .ds .ds-page-form { margin: 0 0 var(--sec-gap); }
 /* While it is off only the title row shows: a card whose one body is hidden is not drawn. */
@@ -1093,3 +1096,91 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .msg-preset-copy strong { font-size: var(--fs-3); font-weight: 600; }
 .ds .msg-preset-copy small { font-size: var(--fs-2); color: var(--muted-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds .msg-preset-empty { margin: 0; padding: var(--g4); font-size: var(--fs-2); }
+
+/* ===================================================================== 17. Panel update page (DESIGN_SYSTEM.md §6-4)
+   One version card whose colour is its state (data-tone), and a changelog card; side by side on a desktop. */
+.ds.upd { display: grid; gap: var(--section-gap); align-items: start; }
+@media (min-width: 1100px) { .ds.upd { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.ds.upd .upd-card { display: flex; flex-direction: column; gap: var(--box-gap); margin: 0; }
+.ds.upd .upd-head { display: flex; align-items: center; gap: var(--g3); min-height: var(--ctl-h); }
+.ds.upd .upd-head h2 { flex: 1 1 auto; margin: 0; font-size: var(--fs-4); font-weight: 700; }
+.ds.upd .upd-head small { color: var(--muted-fg); font-size: var(--fs-2); }
+.ds.upd .upd-head .icon-btn { border-radius: 50%; }
+.ds.upd .upd-go { width: 100%; }
+
+.ds .upd-hero {
+  --tone: var(--brand); --tone-fg: var(--brand-fg);
+  position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: var(--g3);
+  padding: var(--g6) var(--g4) var(--g4); border-radius: var(--inner-radius);
+  border: 1px solid color-mix(in srgb, var(--tone) 24%, transparent);
+  background: radial-gradient(110% 85% at 50% 0%, color-mix(in srgb, var(--tone) 22%, transparent), transparent 70%),
+    color-mix(in srgb, var(--foreground) 3%, transparent);
+}
+.ds .upd-hero::after {
+  content: ''; position: absolute; inset-inline: 20%; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tone) 80%, transparent), transparent);
+}
+.ds .upd-hero[data-tone="ok"] { --tone: var(--ok); --tone-fg: var(--ok-fg); }
+.ds .upd-hero[data-tone="warn"] { --tone: var(--warn); --tone-fg: var(--warn-fg); }
+.ds .upd-hero[data-tone="err"] { --tone: var(--destructive); --tone-fg: var(--destructive-fg); }
+.ds .upd-versions { display: flex; align-items: flex-end; justify-content: center; gap: var(--g4); }
+.ds .upd-ver { display: flex; flex-direction: column; align-items: center; gap: var(--g1); }
+.ds .upd-ver small { color: var(--muted-fg); font-size: var(--fs-2); }
+.ds .upd-ver strong {
+  font-size: var(--fs-5); line-height: 1.2; font-weight: 800; color: var(--tone-fg);
+  text-shadow: 0 0 24px color-mix(in srgb, var(--tone) 45%, transparent);
+}
+.ds .upd-ver.is-old strong { color: var(--muted-fg); font-size: var(--fs-4); font-weight: 600; text-shadow: none; }
+.ds .upd-arrow { display: grid; place-items: center; color: var(--tone-fg); margin-bottom: var(--g1); }
+.ds .upd-arrow .ico { width: 20px; height: 20px; }
+.ds .upd-status {
+  display: inline-flex; align-items: center; gap: var(--g2); max-width: 100%; padding: 6px 14px;
+  border-radius: var(--control-radius); background: color-mix(in srgb, var(--tone) 14%, transparent);
+  color: var(--tone-fg); font-size: var(--fs-2); font-weight: 600; text-align: center;
+}
+.ds .upd-status i {
+  flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 22%, transparent);
+}
+.ds .upd-status .ico { flex: 0 0 auto; width: 15px; height: 15px; stroke-width: 2.4; }
+.ds .upd-meta { margin: 0; color: var(--muted-fg); font-size: var(--fs-2); }
+.ds .upd-prog { width: 100%; display: flex; flex-direction: column; gap: var(--g2); }
+.ds .upd-bar { height: 8px; border-radius: var(--control-radius); overflow: hidden; background: color-mix(in srgb, var(--foreground) 9%, transparent); }
+.ds .upd-fill {
+  height: 100%; width: 100%; border-radius: inherit; transform-origin: right center; transform: scaleX(calc(var(--p, 0) / 100));
+  background: var(--tone); box-shadow: 0 0 12px color-mix(in srgb, var(--tone) 60%, transparent);
+  transition: transform var(--motion-med) ease;
+}
+.ds .upd-progline { display: flex; justify-content: space-between; gap: var(--g3); font-size: var(--fs-2); color: var(--muted-fg); }
+.ds .upd-progline b { color: var(--foreground); font-weight: 600; }
+
+.ds .upd-field { display: flex; flex-direction: column; gap: var(--g2); }
+.ds .upd-field > span { font-size: var(--fs-3); font-weight: 600; }
+.ds .upd-hint { color: var(--muted-fg); font-size: var(--fs-2); line-height: 1.7; }
+.ds .upd-note {
+  display: flex; gap: var(--g3); margin: 0; padding: var(--g3); border-radius: var(--inner-radius);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent); color: var(--muted-fg); font-size: var(--fs-2); line-height: 1.8;
+}
+.ds .upd-note .ico { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 2px; }
+/* While an update runs only its progress and the stay-on-page note show. */
+.ds.upd[data-show-ops="1"] .upd-busy-hide,
+.ds.upd[data-show-ops="0"] .upd-busy-only { display: none; }
+
+.ds .upd-notes { display: flex; flex-direction: column; }
+.ds .upd-notes-ver { margin: var(--g3) 0 var(--g1); color: var(--muted-fg); font-size: var(--fs-2); font-weight: 700; text-align: end; }
+.ds .upd-notes-ver:first-child { margin-top: 0; }
+.ds .upd-note-row { --c: var(--brand-fg); display: flex; gap: var(--g3); align-items: flex-start; padding: var(--g3) 0; border-top: 1px solid var(--border); }
+.ds .upd-note-row:first-child, .ds .upd-notes-ver + .upd-note-row { border-top: 0; padding-top: 0; }
+.ds .upd-note-row[data-tone="fix"] { --c: var(--ok-fg); }
+.ds .upd-note-row[data-tone="security"] { --c: var(--warn-fg); }
+.ds .upd-tag {
+  flex: 0 0 auto; min-width: 64px; padding: 3px 10px; border-radius: var(--control-radius); text-align: center; white-space: nowrap;
+  background: color-mix(in srgb, var(--c) 14%, transparent); color: var(--c); font-size: var(--fs-1); font-weight: 700; line-height: 1.6;
+}
+.ds .upd-note-row p { flex: 1 1 auto; margin: 0; font-size: var(--fs-3); line-height: 1.75; overflow-wrap: anywhere; }
+.ds .upd-note-row bdi { color: var(--muted-fg); font-size: var(--fs-1); }
+@media (prefers-reduced-motion: reduce) { .ds .upd-fill { transition: none; } }
+.ds .upd-hero[data-tone="ok"] .upd-status i,
+.ds .upd-hero:not([data-tone="ok"]) .upd-status .ico { display: none; }
+/* While installing, the progress line names the step, so the status capsule would repeat it. */
+.ds.upd[data-show-ops="1"] .upd-hero:not([data-tone="err"]) .upd-status { display: none; }

@@ -120,14 +120,19 @@ class DiagnosisBatchTests(_Harness):
 
 class DeliveryTabRouteTests(_Harness):
     async def statements_for_the_tab(self) -> int:
+        """Statements of one load of the tab, measured right after a warm-up load.
+
+        The settings and sidebar caches live for 15-20 seconds. Warming them just before each
+        measurement keeps their expiry on a slow machine from counting as extra queries.
+        """
         cookie = f"session={self.signer.dumps(OWNER_SESSION)}"
+        await self.client.get("/finance?tab=delivery", headers={"cookie": cookie})
         self.statements = 0
         response = await self.client.get("/finance?tab=delivery", headers={"cookie": cookie})
         self.assertEqual(response.status_code, 200)
         return self.statements
 
     async def test_the_tab_runs_the_same_queries_for_ten_orders_and_for_sixty(self) -> None:
-        await self.statements_for_the_tab()  # warms the per-process settings and badge caches
         ten = await self.statements_for_the_tab()
         await self.add_orders(FIRST_ORDER + 10, 50)
         sixty = await self.statements_for_the_tab()
