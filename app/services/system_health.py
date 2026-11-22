@@ -102,7 +102,8 @@ async def check_database(session: AsyncSession) -> HealthItem:
     if current != expected:
         return _item("database", WARN,
                           "ساختار دیتابیس با نسخهٔ برنامه یکی نیست؛ مایگریشن را اجرا کنید", "/settings?tab=update")
-    return _item("database", OK, f"پاسخ در {_fa(elapsed_ms)} میلی‌ثانیه؛ ساختار به‌روز")
+    speed = f"{_fa(elapsed_ms)} میلی‌ثانیه" if elapsed_ms >= 1 else "کمتر از ۱ میلی‌ثانیه"
+    return _item("database", OK, f"پاسخ در {speed}؛ ساختار به‌روز")
 
 
 @functools.cache

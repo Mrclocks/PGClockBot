@@ -867,6 +867,7 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 /* Status list (system health): a row without a page to open is not a button, so it does not light up. */
 .ds .status-hub div.hub-row:hover { background: none; }
 .ds .status-hub .hub-row .badge { flex: 0 0 auto; }
+.ds .status-hub .hub-chev { min-width: var(--ico-sm); }
 .ds .hub-ico {
   display: grid;
   place-items: center;

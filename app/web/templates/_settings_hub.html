@@ -43,7 +43,8 @@
           <span class="hub-desc">{{ item.summary }}</span>
         </span>
         <span class="badge {{ item.badge_class }}">{{ item.tone_label }}</span>
-        {%- if item.href %}<span class="hub-chev" aria-hidden="true">{{ icon('chev') }}</span>{% endif %}
+        {#- The arrow's place is kept on rows without a page, so every badge lines up. #}
+        <span class="hub-chev" aria-hidden="true">{% if item.href %}{{ icon('chev') }}{% endif %}</span>
       </{{ tag }}>
       {%- endfor %}
     </div>
