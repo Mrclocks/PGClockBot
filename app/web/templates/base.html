@@ -78,7 +78,7 @@
   {% set ident = identity if identity is defined and identity else {} %}
   {% set nav_dots = {'inbox_alert': inbox_alert, 'tickets_unread': tickets_unread, 'cancel_alert': cancel_alert} %}
   {# Environments built outside the panel app (template unit tests) have no registry global. #}
-  {% set nav_sections = panel_sidebar(staff, ident, is_owner, marketing_sections if marketing_sections is defined else (), path, request.query_params.get('tab') or '', tool_sections=tool_sections if tool_sections is defined else ()) if panel_sidebar is defined else () %}
+  {% set nav_sections = panel_sidebar(staff, ident, is_owner, marketing_sections if marketing_sections is defined else (), path, request.query_params.get('tab') or '') if panel_sidebar is defined else () %}
   <div class="shell">
     {# Phone header: logo, brand and version, the action center and the panel search. The menu opens from «منو» in the bottom bar. #}
     <header class="topbar mobile-only">
