@@ -97,6 +97,7 @@
   'next_purchase': 'بعد از هر خرید یا تمدید تحویل‌شده، یک کوپن برای خرید بعدی به مشتری داده می‌شود.',
   'referral_welcome': 'مشتری‌ای که با لینک دعوت وارد فروشگاه می‌شود، یک کوپن خوش‌آمد می‌گیرد.',
   'referral_reward': 'بعد از اولین خرید تحویل‌شدهٔ دوست، معرف یک کوپن می‌گیرد.',
+  'win_back': 'مشتری‌ای که مدتی خرید نکرده، یک کوپن برای برگشت می‌گیرد؛ برای هر دورهٔ غیبت فقط یک بار.',
 } %}
 
 {% macro coupon_modal(trigger, label, p) %}
@@ -121,6 +122,11 @@
           <label class="form-field">مدت اعتبار
             <span class="ds-unit"><input name="valid_days" type="number" min="1" max="365" inputmode="numeric" dir="ltr" required value="{{ p.valid_days if p else 14 }}" /><span class="ds-unit-label">روز</span></span>
           </label>
+          {% if trigger == 'win_back' %}
+          <label class="form-field">روز بدون خرید
+            <span class="ds-unit"><input name="inactive_days" type="number" min="1" max="365" inputmode="numeric" dir="ltr" required value="{{ p.inactive_days if p and p.inactive_days else 45 }}" /><span class="ds-unit-label">روز</span></span>
+          </label>
+          {% endif %}
           {% if trigger == 'referral_reward' %}
           <label class="form-field">سقف کوپن هر معرف در ماه
             <input name="monthly_cap" type="number" min="0" max="1000" inputmode="numeric" dir="ltr" placeholder="بدون سقف" value="{{ p.monthly_cap if p and p.monthly_cap is not none else '' }}" />
@@ -161,13 +167,25 @@
   {%- endif %}
 {% endcall %}
 
+<form method="post" action="/discount-rules/budget" class="form-stack ds-page-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% call ds_sec('بودجه', extra_class='ds-sec-first') %}
+    <label class="form-field">بودجهٔ ماهانهٔ تخفیف خودکار
+      <span class="ds-unit"><input name="monthly_budget" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ budget }}" /><span class="ds-unit-label">تومان</span></span>
+      <small class="muted">۰ یعنی بدون سقف · مصرف این ماه: <bdi dir="ltr">{{ budget_used | money }}</bdi></small>
+    </label>
+    <div class="actions"><button class="btn" type="submit">ذخیرهٔ بودجه</button></div>
+  {% endcall %}
+</form>
+
 <p class="muted">تخفیف خودکار بدون کد، هنگام ثبت سفارش روی قیمت اعمال می‌شود. اگر چند قانون بخورد، بیشترین تخفیف اعمال می‌شود. مشتری اگر کدی با تخفیف بیشتر وارد کند، کد جایگزین می‌شود.</p>
 
 <div class="card card-flush">
   <div class="card-flush-head"><h2>قانون‌ها</h2></div>
   <div class="table-wrap"><table class="table-compact table-list-sm">
     <thead><tr>
-      <th>نام</th><th>مقدار</th><th class="col-hide-sm">چه کسانی</th><th class="col-hide-sm">استفاده</th><th class="col-status">وضعیت</th>
+      <th>نام</th><th>مقدار</th><th class="col-hide-sm">چه کسانی</th><th class="col-hide-sm">استفاده</th>
+      <th class="col-hide-sm">{{ report_days | num }} روز اخیر</th><th class="col-status">وضعیت</th>
       <th class="col-actions"><span class="sr-only">اقدام</span></th>
       <th class="li-head" scope="col"><span class="li-count">{{ rules | length | num }} قانون</span></th>
     </tr></thead>
@@ -179,6 +197,8 @@
         <td class="cell-tight li-value"><bdi dir="ltr">{% if r.mode == 'fixed' %}{{ r.fixed_amount | money }}{% else %}{{ views[r.id].percent | fa }}%{% endif %}</bdi></td>
         <td class="col-hide-sm li-sub">{{ audience_labels.get(r.audience, r.audience) }} · {{ purchases }}</td>
         <td class="col-hide-sm">{{ r.used_count | num }}{% if r.max_uses is not none %} از {{ r.max_uses | num }}{% endif %}</td>
+        {% set result = rule_results.get(r.id) %}
+        <td class="col-hide-sm li-sub">{% if result %}{{ result.orders | num }} خرید · تخفیف <bdi dir="ltr">{{ result.discount | money }}</bdi> · فروش <bdi dir="ltr">{{ result.sales | money }}</bdi>{% else %}—{% endif %}</td>
         <td class="cell-tight li-badge">
           {% if views[r.id].is_expired %}<span class="badge neutral">پایان‌یافته</span>
           {% else %}<span class="badge {{ 'ok' if r.enabled else 'neutral' }}">{{ 'روشن' if r.enabled else 'خاموش' }}</span>{% endif %}
@@ -199,7 +219,7 @@
         </td>
       </tr>
     {% else %}
-      {{ empty_state('هنوز تخفیف خودکاری ساخته نشده است.', 'gift', colspan=6, action_label='قانون تازه', action_modal='modal-dr-rule-new') }}
+      {{ empty_state('هنوز تخفیف خودکاری ساخته نشده است.', 'gift', colspan=7, action_label='قانون تازه', action_modal='modal-dr-rule-new') }}
     {% endfor %}
     </tbody>
   </table></div>
@@ -209,7 +229,7 @@
   <div class="card-flush-head"><h2>کوپن‌های خودکار</h2></div>
   <div class="table-wrap"><table class="table-compact table-list-sm">
     <thead><tr>
-      <th>کوپن</th><th>مقدار</th><th class="col-hide-sm">اعتبار</th><th class="col-status">وضعیت</th>
+      <th>کوپن</th><th>مقدار</th><th class="col-hide-sm">اعتبار</th><th class="col-hide-sm">{{ report_days | num }} روز اخیر</th><th class="col-status">وضعیت</th>
       <th class="col-actions"><span class="sr-only">اقدام</span></th>
       <th class="li-head" scope="col"><span class="li-count">{{ triggers | length | num }} کوپن</span></th>
     </tr></thead>
@@ -220,6 +240,8 @@
         <td class="li-title"><span>{{ label }}</span></td>
         <td class="cell-tight li-value">{% if p %}<bdi dir="ltr">{{ p.percent | num }}%</bdi>{% else %}—{% endif %}</td>
         <td class="col-hide-sm li-sub">{% if p %}{{ p.valid_days | num }} روز{% else %}—{% endif %}</td>
+        {% set result = coupon_results.get(trigger) %}
+        <td class="col-hide-sm li-sub">{% if result and result.issued %}{{ result.issued | num }} صادر · {{ result.used | num }} استفاده{% else %}—{% endif %}</td>
         <td class="cell-tight li-badge"><span class="badge {{ 'ok' if p and p.enabled else 'neutral' }}">{{ 'روشن' if p and p.enabled else 'خاموش' }}</span></td>
         <td class="col-actions">
           {% call row_actions() %}

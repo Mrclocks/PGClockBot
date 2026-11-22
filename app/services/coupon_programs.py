@@ -5,7 +5,9 @@ Three programs per shop (``coupon_programs``):
 - ``next_purchase``: after a delivered new purchase or renewal, a coupon for the next one;
 - ``referral_welcome``: to a customer who joined the shop through a referral link;
 - ``referral_reward``: to the referrer after the friend's first delivered purchase, at most
-  ``monthly_cap`` per referrer and month.
+  ``monthly_cap`` per referrer and month;
+- ``win_back``: a daily job (``coupon_winback``) to customers without a purchase for
+  ``inactive_days``.
 
 A coupon is a ``LoyaltyDiscountEntitlement`` of the shop, so the existing checkout step offers
 and reserves it. Each event has an ``issue_key`` under a partial unique index: a repeated
@@ -36,10 +38,12 @@ logger = logging.getLogger(__name__)
 TRIGGER_NEXT_PURCHASE = "next_purchase"
 TRIGGER_REFERRAL_WELCOME = "referral_welcome"
 TRIGGER_REFERRAL_REWARD = "referral_reward"
+TRIGGER_WIN_BACK = "win_back"
 TRIGGERS: dict[str, str] = {
     TRIGGER_NEXT_PURCHASE: "کوپن خرید بعدی",
     TRIGGER_REFERRAL_WELCOME: "کوپن خوش‌آمد دوست دعوت‌شده",
     TRIGGER_REFERRAL_REWARD: "کوپن معرف",
+    TRIGGER_WIN_BACK: "کوپن بازگشت مشتری",
 }
 MAX_PERCENT = 90
 MAX_MONEY = 2_000_000_000
@@ -55,6 +59,7 @@ class ProgramInput:
     min_purchase: int
     valid_days: int
     monthly_cap: int | None
+    inactive_days: int = 0
 
 
 def shop_key(shop_id: int | None) -> int:
@@ -73,6 +78,8 @@ def validate_program(trigger: str, data: ProgramInput) -> None:
     for value, lower, upper, label in checks:
         if type(value) is not int or not lower <= value <= upper:
             raise ValueError(f"«{label}» خارج از محدودهٔ مجاز است")
+    if trigger == TRIGGER_WIN_BACK and (type(data.inactive_days) is not int or not 1 <= data.inactive_days <= MAX_VALID_DAYS):
+        raise ValueError("«روز بدون خرید» باید بین ۱ تا ۳۶۵ باشد")
     for value, upper, label in ((data.max_discount, MAX_MONEY, "سقف تخفیف"), (data.monthly_cap, MAX_MONTHLY_CAP, "سقف ماهانه")):
         if value is not None and (type(value) is not int or not 1 <= value <= upper):
             raise ValueError(f"«{label}» خارج از محدودهٔ مجاز است")
@@ -97,6 +104,7 @@ async def save_program(session: AsyncSession, shop_id: int | None, trigger: str,
     program.min_purchase = data.min_purchase
     program.valid_days = data.valid_days
     program.monthly_cap = data.monthly_cap if trigger == TRIGGER_REFERRAL_REWARD else None
+    program.inactive_days = data.inactive_days if trigger == TRIGGER_WIN_BACK else 0
     try:
         await session.commit()
     except IntegrityError:
@@ -159,7 +167,7 @@ def coupon_text(coupon: LoyaltyDiscountEntitlement, trigger: str) -> str:
     return "\n".join(lines)
 
 
-async def _notify(session: AsyncSession, user: BotUser, coupon: LoyaltyDiscountEntitlement, *, trigger: str,
+async def notify_coupon(session: AsyncSession, user: BotUser, coupon: LoyaltyDiscountEntitlement, *, trigger: str,
                   shop_id: int | None) -> None:
     chat_id = deliverable_telegram_id(getattr(user, "telegram_id", None))
     if chat_id is None:
@@ -192,7 +200,7 @@ async def _issue_and_notify(session: AsyncSession, *, shop_id: int | None, trigg
     if coupon is None:
         return
     try:
-        await _notify(session, user, coupon, trigger=trigger, shop_id=shop_id)
+        await notify_coupon(session, user, coupon, trigger=trigger, shop_id=shop_id)
     except Exception:  # noqa: BLE001 - the coupon is stored and shown at checkout; the notice is optional
         logger.warning("coupon notice failed trigger=%s user=%s", trigger, user_id, exc_info=True)
 

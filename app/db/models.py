@@ -2802,7 +2802,8 @@ class CouponProgram(Base):
     ``trigger`` is ``next_purchase`` (after a delivered purchase), ``referral_welcome`` (to a
     customer who joined through a referral link) or ``referral_reward`` (to the referrer after
     the friend's first delivered purchase). One row per shop and trigger; ``shop_key`` is 0 for
-    the platform shop.
+    the platform shop. ``win_back`` is issued by a daily job to customers without a purchase for
+    ``inactive_days``.
     """
 
     __tablename__ = "coupon_programs"
@@ -2817,4 +2818,19 @@ class CouponProgram(Base):
     min_purchase: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     valid_days: Mapped[int] = mapped_column(Integer, default=14, server_default="14")
     monthly_cap: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # win_back only: days since the customer's last delivered purchase.
+    inactive_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class DiscountBudget(Base):
+    """Automatic-rule discount a shop gave in one calendar month, checked atomically against its budget."""
+
+    __tablename__ = "discount_budgets"
+    __table_args__ = (UniqueConstraint("shop_key", "month", name="uq_discount_budget_month"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # The shop's user id, or 0 for the platform shop.
+    shop_key: Mapped[int] = mapped_column(Integer)
+    month: Mapped[str] = mapped_column(String(7))
+    used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import DiscountRule, Order, OrderDiscount, OrderStatus, Plan, UserService
 from app.services.cashback import order_event
+from app.services.discount_budget import claim_budget, give_back_budget, monthly_budget
 from app.services.order_discounts import SOURCE_RULE, order_shop_key, record_order_discount
 from app.services.random_discounts import apply_random_discount
 
@@ -187,12 +188,13 @@ async def _heal_dead_claims(session: AsyncSession, order: Order) -> None:
             OrderDiscount.order_id.in_(dead),
         )
         .values(released_at=datetime.now(timezone.utc))
-        .returning(OrderDiscount.source, OrderDiscount.source_ref)
+        .returning(OrderDiscount.source, OrderDiscount.source_ref, OrderDiscount.amount, OrderDiscount.created_at)
         .execution_options(synchronize_session=False)
     )
-    for source, ref in released.all():
+    for source, ref, amount, created_at in released.all():
         if source == SOURCE_RULE and ref and ref.isdigit():
             await _give_back_rule_use(session, int(ref))
+            await give_back_budget(session, order_shop_key(order), int(amount), at=created_at)
 
 
 async def _held_claims(session: AsyncSession, order: Order) -> set[str]:
@@ -239,10 +241,17 @@ async def _give_back_rule_use(session: AsyncSession, rule_id: int) -> None:
     )
 
 
-async def _take_rule(session: AsyncSession, order: Order, rule: DiscountRule, amount: int, claim: str | None) -> bool:
-    """Claim one use of ``rule`` and its ledger line in a savepoint; False leaves nothing behind."""
+async def _take_rule(
+    session: AsyncSession, order: Order, rule: DiscountRule, amount: int, *, claim: str | None, budget: int,
+) -> bool:
+    """Claim one use of ``rule``, the month's budget and its ledger line in a savepoint.
+
+    False leaves nothing behind.
+    """
     async with session.begin_nested() as savepoint:
-        if not await _claim_rule_use(session, rule):
+        if not await _claim_rule_use(session, rule) or not await claim_budget(
+            session, order_shop_key(order), amount, budget=budget, at=datetime.now(timezone.utc),
+        ):
             await savepoint.rollback()
             return False
         if not await record_order_discount(
@@ -275,9 +284,10 @@ async def apply_discount_rules(session: AsyncSession, order: Order) -> DiscountR
         return None
     await _heal_dead_claims(session, order)
     held = await _held_claims(session, order)
+    budget = await monthly_budget(session, order.reseller_id)
     for rule, amount in ranked:
         allowed, claim = claim_for(rule, held)
-        if not allowed or not await _take_rule(session, order, rule, amount, claim):
+        if not allowed or not await _take_rule(session, order, rule, amount, claim=claim, budget=budget):
             continue
         order.amount = int(order.amount) - amount
         order.discount_amount = int(order.discount_amount or 0) + amount
@@ -315,6 +325,7 @@ async def release_rule_discount(session: AsyncSession, order_id: int) -> int:
         return 0
     if line.source_ref and line.source_ref.isdigit():
         await _give_back_rule_use(session, int(line.source_ref))
+    await give_back_budget(session, int(line.shop_key), int(line.amount), at=line.created_at)
     return int(line.amount)
 
 

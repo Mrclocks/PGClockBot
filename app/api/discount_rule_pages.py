@@ -11,6 +11,8 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.discount_budget import MAX_BUDGET, budget_used, monthly_budget, save_monthly_budget
+from app.services.discount_report import REPORT_DAYS, coupon_results, rule_results
 from app.services.discount_rule_admin import (
     MAX_COUNT,
     MAX_DAYS,
@@ -114,6 +116,7 @@ def program_from_form(form: Any) -> ProgramInput:
         min_purchase=int(_int(form, "min_purchase", label="حداقل خرید") or 0),
         valid_days=int(_int(form, "valid_days", label="مدت اعتبار", upper=MAX_VALID_DAYS) or 0),
         monthly_cap=_int(form, "monthly_cap", label="سقف ماهانه", upper=MAX_MONTHLY_CAP, optional=True) or None,
+        inactive_days=int(_int(form, "inactive_days", label="روز بدون خرید", upper=MAX_VALID_DAYS) or 0),
     )
 
 
@@ -132,6 +135,10 @@ def register_discount_rule_pages(app: FastAPI, *, render: Callable, require_staf
             "plans": await gift_code_plan_options(session, shop_id=shop_id),
             "views": {rule.id: rule_view(rule, now=now) for rule in rules},
             "programs": await load_programs(session, shop_id), "triggers": TRIGGERS,
+            "budget": await monthly_budget(session, shop_id), "budget_used": await budget_used(session, shop_id, at=now),
+            "rule_results": await rule_results(session, shop_id, since=now - timedelta(days=REPORT_DAYS)),
+            "coupon_results": await coupon_results(session, shop_id, since=now - timedelta(days=REPORT_DAYS)),
+            "report_days": REPORT_DAYS,
             "flash_ok": request.query_params.get("ok"), "flash_err": request.query_params.get("err"),
         })
 
@@ -176,6 +183,16 @@ def _register_rule_routes(app: FastAPI, *, form_action: Callable, require_staff:
         async def action(shop_id: int | None, form: Any) -> str:
             await set_rule_enabled(session, shop_id, rule_id, bool(form.get("enabled")))
             return "وضعیت قانون ذخیره شد"
+        return await form_action(request, staff, action)
+
+    @app.post(PAGE + "/budget")
+    async def discount_budget_save(
+        request: Request, staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db),
+    ) -> RedirectResponse:
+        async def action(shop_id: int | None, form: Any) -> str:
+            amount = int(_int(form, "monthly_budget", label="بودجهٔ ماهانه", upper=MAX_BUDGET) or 0)
+            await save_monthly_budget(session, shop_id, amount)
+            return "بودجهٔ ماهانه ذخیره شد"
         return await form_action(request, staff, action)
 
     @app.post(PAGE + "/coupons/{trigger}")
