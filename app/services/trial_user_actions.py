@@ -1,4 +1,4 @@
-"""Block and message actions on the customers listed as trial users.
+"""Block, message and «تست دوباره» actions on the customers listed as trial users.
 
 Both actions only ever reach customers who took a trial from the acting shop. Blocking is
 a flag on the person, so it also stops them in every other shop and stays with the
@@ -9,18 +9,35 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from datetime import datetime, timezone
+
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, CampaignRecipient, MarketingPreference, TargetedCampaign
+from app.db.models import (
+    BotUser,
+    CampaignRecipient,
+    MarketingPreference,
+    Order,
+    TargetedCampaign,
+    TrialClaim,
+    UserService,
+)
 from app.services.campaigns import clean_campaign_text
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.table_bulk import MAX_BULK, bulk_toggle_block, parse_bulk_ids
-from app.services.trial_users import trial_orders_subquery
+from app.services.staff_audit import actor_from_staff, add_staff_action
+from app.services.trial_users import is_buyer_clause, trial_orders_subquery, trial_state
 
 SELECTED_AUDIENCE = "selected"
 ACTOR_LIMIT = 128
+
+
+@dataclass(slots=True)
+class RetrialResult:
+    reset: int
+    refused: int
 
 
 @dataclass(slots=True)
@@ -115,3 +132,48 @@ async def message_trial_users(
     session.add_all([CampaignRecipient(campaign_id=campaign.id, user_id=uid) for uid in recipients])
     await session.commit()
     return campaign
+
+
+def trial_shop_key(shop_id: int | None) -> str:
+    """The ``TrialClaim.shop_key`` of a shop, as ``create_order`` writes it."""
+    return "platform" if shop_id is None else str(int(shop_id))
+
+
+async def retrial_eligible_ids(session: AsyncSession, *, shop_id: int | None, user_ids: list[int]) -> set[int]:
+    """Who of ``user_ids`` may take this shop's trial again.
+
+    A customer of this shop's trial who never bought here, is not blocked, and whose trial service has ended
+    (or is gone): someone still on a trial would hold two at once, and a buyer is no longer a trial lead.
+    """
+    trials = trial_orders_subquery(shop_id)
+    rows = await session.execute(
+        select(BotUser.id, UserService)
+        .join(trials, trials.c.user_id == BotUser.id)
+        .join(Order, Order.id == trials.c.order_id)
+        .outerjoin(UserService, UserService.id == Order.service_id)
+        .where(BotUser.id.in_(user_ids), BotUser.is_blocked.is_(False), ~is_buyer_clause(shop_id, BotUser.id))
+    )
+    now = datetime.now(timezone.utc)
+    return {
+        int(uid) for uid, service in rows.all()
+        if service is None or service.is_cancelled or trial_state(service, now=now)[0] == "ended"
+    }
+
+
+async def reset_trials(session: AsyncSession, *, staff: dict, shop_id: int | None, user_ids: list[int]) -> RetrialResult:
+    """Let the chosen trial takers of this shop take its trial again; their past orders and services stay."""
+    wanted = parse_bulk_ids(user_ids)
+    eligible = await retrial_eligible_ids(session, shop_id=shop_id, user_ids=wanted) if wanted else set()
+    reset = 0
+    if eligible:
+        result = await session.execute(
+            delete(TrialClaim).where(TrialClaim.shop_key == trial_shop_key(shop_id), TrialClaim.user_id.in_(eligible))
+            .execution_options(synchronize_session=False)
+        )
+        reset = int(result.rowcount or 0)
+    if reset:
+        add_staff_action(session, actor_from_staff(staff, shop_id=shop_id), action="trial_reset",
+                         target_type="customer", target_id=None, reason=f"{reset} کاربر")
+    await session.commit()
+    return RetrialResult(reset=reset, refused=len(wanted) - reset)
+
