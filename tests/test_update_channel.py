@@ -235,8 +235,7 @@ class MigrationFlashNoDuplicateTests(unittest.TestCase):
         html = open(
             "app/web/templates/_settings_update.html", encoding="utf-8"
         ).read()
-        self.assertIn("migration_blocked or show_ops", html)
-        self.assertIn('id="upd-version-flash"', html)
+        self.assertIn('<div class="flash err" id="upd-version-flash" role="status" hidden></div>', html)
         self.assertIn('id="upd-migration-flash"', html)
 
 

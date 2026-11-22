@@ -9195,51 +9195,6 @@ html[data-theme="light"] .home-gauge.is-exhausted {
   }
 }
 
-/* Changelog sits under the update flash inside the same card */
-.update-changelog {
-  margin: 0;
-  padding: var(--card-pad);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-.update-changelog-title {
-  margin: 0 0 var(--space-2);
-  font-size: var(--fs-3);
-  font-weight: 600;
-  color: var(--foreground);
-}
-.update-changelog-block + .update-changelog-block {
-  margin-top: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--border);
-}
-.update-changelog-ver {
-  display: inline-block;
-  margin-bottom: var(--space-1);
-  font-size: var(--fs-3);
-  font-weight: 600;
-}
-.update-changelog-list {
-  margin: 0;
-  padding: 0 var(--space-2) 0 0;
-  list-style: disc;
-}
-.update-changelog-list li {
-  margin: 0 0 var(--space-1);
-  font-size: var(--fs-3);
-  line-height: 1.5;
-  color: var(--foreground);
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  max-width: 100%;
-}
-.update-changelog-list li:last-child { margin-bottom: 0; }
-
 /* —— Internal panel tickets —— */
 .page-sub {
   margin: var(--space-1) 0 0;

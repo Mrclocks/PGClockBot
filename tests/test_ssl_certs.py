@@ -133,7 +133,7 @@ class UpdateCopyTests(unittest.TestCase):
         src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn("upd-start", src)
         self.assertNotIn("rollback-version", src)
-        self.assertIn("progress-wrap", src)
+        self.assertIn('id="upd-ops"', src)
         self.assertNotIn("update-details", src)
         self.assertNotIn("get.sh", src)
 
