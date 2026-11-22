@@ -586,6 +586,10 @@ async def get_or_create_user(
             await on_user_referred(session, referred=user, source="telegram")
         except Exception:
             logger.debug("get_or_create_user: ignored failure", exc_info=True)
+        # Local import: coupon_programs reaches users through loyalty and the shop bots.
+        from app.services.coupon_programs import issue_referral_welcome
+
+        await issue_referral_welcome(session, user)
     return user
 
 

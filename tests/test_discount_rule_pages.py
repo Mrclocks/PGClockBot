@@ -20,6 +20,7 @@ from app.services.discount_rule_admin import (
     save_rule,
     set_rule_enabled,
 )
+from app.services.coupon_programs import TRIGGERS
 from app.services.marketing_nav import marketing_groups, marketing_sections
 from app.services.resellers import FEATURE_PERMS
 from tests.postgres_support import scoped_async_engine
@@ -152,8 +153,9 @@ class TemplateTests(unittest.TestCase):
         html = env.get_template("discount_rules.html").render(
             request=SimpleNamespace(query_params={}, url=SimpleNamespace(path="/discount-rules"), cookies={}),
             staff={"role": "admin"}, rules=[rule], views={3: rule_view(rule, now=NOW)}, plans=[(1, "<i>p</i>", True)],
-            csrf_token="t",
+            csrf_token="t", programs={}, triggers=TRIGGERS,
         )
+        self.assertIn('action="/discount-rules/coupons/next_purchase"', html)
         self.assertNotIn("<script>x</script>", html)
         self.assertNotIn("<i>p</i>", html)
         self.assertIn('action="/discount-rules/rules/3/delete"', html)
