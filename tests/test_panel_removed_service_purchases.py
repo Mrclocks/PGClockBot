@@ -8,13 +8,14 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.db.models import Base, BotUser, DeliveryFailure, Order
+from app.db.models import BotUser, DeliveryFailure, Order, UserService
 from app.services import delivery_failures as ux20
 from app.services.pasarguard import PasarGuardError
 from app.services.service_addons import KIND_VOLUME, validate_addon_selection
 from app.services.service_renewals import SERVICE_REMOVED_FROM_PANEL, validate_renewal_selection
+from tests.postgres_support import scoped_async_engine
 
 REMOVED_AT = datetime(2026, 11, 20, tzinfo=timezone.utc)
 
@@ -61,11 +62,11 @@ class PurchaseGuardTests(unittest.IsolatedAsyncioTestCase):
 
 class RetryMissingPanelUserTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-        async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        self.engine = scoped_async_engine()
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
         self.session.add(BotUser(id=1, telegram_id=101, referral_code="u1", role="user"))
+        await self.session.flush()
+        self.session.add(UserService(id=7, bot_user_id=1, pg_user_id=713, pg_username="u713", panel_missing_at=REMOVED_AT))
         await self.session.flush()
         self.session.add(Order(id=652, user_id=1, amount=210000, status="paid", note="addon:1:7:volume:30", service_id=7))
         await self.session.commit()
