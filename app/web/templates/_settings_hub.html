@@ -25,6 +25,34 @@
 </div>
 {%- endmacro %}
 
+{# A status list (DESIGN_SYSTEM.md §6-2, «فهرست وضعیت»): the list rows of settings_hub with a status badge at the end.
+   ``groups`` hold ``items`` with label, icon, summary, tone (ok, warn, err, neutral), tone_label, badge_class and an optional href;
+   a row with a page to fix it links there, a row without one is plain text. #}
+{% macro status_hub(groups, tone='brand') -%}
+<div class="settings-hub settings-hub--{{ tone }} status-hub">
+  {%- for group in groups %}
+  <section class="hub-group" aria-labelledby="status-group-{{ loop.index }}">
+    <h2 class="hub-group-title" id="status-group-{{ loop.index }}">{{ group.label }}</h2>
+    <div class="hub-list">
+      {%- for item in group["items"] %}
+      {%- set tag = 'a' if item.href else 'div' %}
+      <{{ tag }} class="hub-row"{% if item.href %} href="{{ item.href }}"{% endif %} data-health="{{ item.key }}" data-tone="{{ item.tone }}">
+        <span class="hub-ico" aria-hidden="true">{{ icon(item.icon) }}</span>
+        <span class="hub-text">
+          <span class="hub-label">{{ item.label }}</span>
+          <span class="hub-desc">{{ item.summary }}</span>
+        </span>
+        <span class="badge {{ item.badge_class }}">{{ item.tone_label }}</span>
+        {#- The arrow's place is kept on rows without a page, so every badge lines up. #}
+        <span class="hub-chev" aria-hidden="true">{% if item.href %}{{ icon('chev') }}{% endif %}</span>
+      </{{ tag }}>
+      {%- endfor %}
+    </div>
+  </section>
+  {%- endfor %}
+</div>
+{%- endmacro %}
+
 {# The settings menu beside every page of an area on a wide screen (DESIGN_SYSTEM.md §6-2): the list's groups and rows,
    compact, the open page marked. ``nav`` comes from settings_nav() / system_settings_nav(). Below the desktop width
    it is hidden and the page keeps its back button to the list. #}

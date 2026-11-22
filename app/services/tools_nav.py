@@ -25,6 +25,8 @@ TOOLS_ICON = "tools"
 SERVICE_CLEANUP = "service_cleanup"
 ORDER_CLEANUP = "order_cleanup"
 BACKUP = "backup"
+HEALTH = "health"
+HEALTH_HREF = TOOLS_LIST_HREF + "/health"
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +47,10 @@ _ORDER_CLEANUP = ToolSection(
     ORDER_CLEANUP, "پاکسازی سفارش‌ها", "/finance?tab=orders&settings=cleanup",
     "حذف سفارش‌ها و پرداخت‌های رهاشده", "cart",
 )
+_HEALTH = ToolSection(
+    HEALTH, "سلامت سیستم", HEALTH_HREF,
+    "دیتابیس، پنل، ربات، بکاپ و کارهای پس‌زمینه", "pulse",
+)
 _BACKUP = ToolSection(
     BACKUP, "بکاپ", "/settings?tab=backup",
     "ساخت، بازگردانی و بکاپ زمان‌بندی‌شده", "download",
@@ -53,7 +59,7 @@ _BACKUP = ToolSection(
 # (group label, section keys in display order); a group with none of them is left out.
 _GROUP_LAYOUT: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("پاکسازی", (SERVICE_CLEANUP, ORDER_CLEANUP)),
-    ("نگهداری", (BACKUP,)),
+    ("نگهداری", (HEALTH, BACKUP)),
 )
 
 
@@ -81,8 +87,8 @@ def _can_open_order_cleanup(staff: Mapping[str, Any]) -> bool:
     return True
 
 
-def _can_open_backup(staff: Mapping[str, Any]) -> bool:
-    """Same rule as ``require_admin``, which guards the system settings: ``role=admin`` plus an Owner principal."""
+def is_owner_staff(staff: Mapping[str, Any]) -> bool:
+    """Same rule as ``require_admin``, which guards the system settings and the health page."""
     return staff.get("role") == "admin" and is_explicit_owner_staff(dict(staff))
 
 
@@ -93,9 +99,10 @@ def tool_sections(staff: Mapping[str, Any] | None) -> tuple[ToolSection, ...]:
     allowed = {
         SERVICE_CLEANUP: _can_open_service_cleanup(staff),
         ORDER_CLEANUP: _can_open_order_cleanup(staff),
-        BACKUP: _can_open_backup(staff),
+        HEALTH: is_owner_staff(staff),
+        BACKUP: is_owner_staff(staff),
     }
-    by_key = {s.key: s for s in (_SERVICE_CLEANUP, _ORDER_CLEANUP, _BACKUP)}
+    by_key = {s.key: s for s in (_SERVICE_CLEANUP, _ORDER_CLEANUP, _HEALTH, _BACKUP)}
     return tuple(by_key[key] for _label, keys in _GROUP_LAYOUT for key in keys if allowed[key])
 
 

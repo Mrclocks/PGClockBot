@@ -864,6 +864,10 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .hub-row:is(:hover, :focus-visible, :active)::before,
 .ds .hub-row:is(:hover, :focus-visible, :active) + .hub-row::before { opacity: 0; }
 .ds .hub-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+/* Status list (system health): a row without a page to open is not a button, so it does not light up. */
+.ds .status-hub div.hub-row:hover { background: none; }
+.ds .status-hub .hub-row .badge { flex: 0 0 auto; }
+.ds .status-hub .hub-chev { min-width: var(--ico-sm); }
 .ds .hub-ico {
   display: grid;
   place-items: center;
