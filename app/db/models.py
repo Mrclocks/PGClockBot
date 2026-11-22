@@ -1985,7 +1985,6 @@ class LoyaltyDiscountEntitlement(Base):
             "uq_loyalty_discount_issue_key",
             "issue_key",
             unique=True,
-            sqlite_where=text("issue_key IS NOT NULL"),
             postgresql_where=text("issue_key IS NOT NULL"),
         ),
     )
