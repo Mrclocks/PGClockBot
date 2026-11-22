@@ -14,6 +14,7 @@ from apscheduler.events import (
     JobEvent,
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import or_, select
 
 from app.db.models import BotUser, ResellerProfile, UserService
@@ -41,11 +42,12 @@ from app.services.alert_thresholds import (
     traffic_threshold,
 )
 from app.services.daily_report_delivery import deliver_daily_reports
-from app.services.job_trigger import register_job_runner
+from app.services.job_trigger import register_job_interval_setter, register_job_runner
 from app.services.service_period import period_usage
 from app.services.formatting import parse_expire
 from app.services.first_use_nudge import CHECK_INTERVAL_MINUTES as FIRST_USE_CHECK_MINUTES
 from app.services.job_metrics import install_job_error_handler, job_metrics, tracked_job
+from app.services.lite_mode import apply_lite_mode, lite_mode_on
 from app.services.panel_user_batch import panel_infos
 from app.services.pasarguard import get_pg
 from app.services.usage_alert_messages import (
@@ -703,6 +705,7 @@ def start_background_scheduler() -> None:
         install_job_error_handler()
         scheduler.start()
         register_job_runner(_run_job_now)
+        register_job_interval_setter(_set_job_interval)
         logger.info("Background scheduler started")
 
 
@@ -713,6 +716,35 @@ def _run_job_now(job_id: str) -> bool:
         return False
     job.modify(next_run_time=datetime.now(timezone.utc))
     return True
+
+
+# A job's own interval, kept from before lite mode first changed it.
+_normal_intervals: dict[str, int] = {}
+
+
+def _set_job_interval(job_id: str, seconds: int | None) -> bool:
+    """Run a job every ``seconds`` but never more often than its own interval; None puts its own interval back."""
+    job = scheduler.get_job(job_id)
+    if job is None or not isinstance(job.trigger, IntervalTrigger):
+        return False
+    current = int(job.trigger.interval.total_seconds())
+    normal = _normal_intervals.setdefault(job_id, current)
+    target = normal if seconds is None else max(int(seconds), normal)
+    if target != current:
+        job.reschedule("interval", seconds=target)
+    return True
+
+
+async def run_lite_mode_apply() -> None:
+    """Called after each scheduler start: space the jobs out again when the owner left lite mode on."""
+    try:
+        async with SessionLocal() as session:
+            enabled = await lite_mode_on(session)
+    except Exception:  # noqa: BLE001 - jobs keep their own timers when the switch cannot be read
+        logger.warning("lite mode: saved switch unreadable at start", exc_info=True)
+        return
+    if enabled:
+        logger.info("lite mode applied jobs=%s", apply_lite_mode(True))
 
 
 def start_scheduler(bot: Bot) -> None:
@@ -775,5 +807,6 @@ def start_scheduler(bot: Bot) -> None:
 
 def stop_scheduler() -> None:
     register_job_runner(None)
+    register_job_interval_setter(None)
     if scheduler.running:
         scheduler.shutdown(wait=False)

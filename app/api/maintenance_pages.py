@@ -12,8 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.runtime import BOOT_ID
 from app.services.install_repair import CONFIRM_PHRASE, start_repair
+from app.services.lite_mode import set_lite_mode
 from app.services.maintenance import (
     CLEAR_CACHES_PATH,
+    LITE_OFF_PATH,
+    LITE_ON_PATH,
     RECONNECT_PATH,
     REPAIR_PATH,
     RESTART_PATH,
@@ -45,6 +48,8 @@ def register_maintenance_pages(
             "staff": staff, "groups": (await maintenance_group(session),), "restarting_from": restarting,
         })
 
+    _register_lite_mode(app, require_admin=require_admin, get_db=get_db)
+
     @app.post(RECONNECT_PATH)
     async def maintenance_reconnect_bots(
         staff: dict = Depends(require_admin), session: AsyncSession = Depends(get_db)
@@ -63,7 +68,6 @@ def register_maintenance_pages(
         cleared = clear_caches()
         await record_maintenance(session, staff, label="پاک کردن کش‌های پنل")
         return _back(MAINTENANCE_HREF, ok=f"کش‌های پنل پاک شد ({to_fa_digits(cleared)} مورد)")
-
 
     @app.post(RESTART_PATH)
     async def maintenance_restart(
@@ -108,6 +112,23 @@ def register_maintenance_pages(
             return _back(MAINTENANCE_HREF, err=str(exc))
         await record_maintenance(session, staff, label="تعمیر نصب")
         return _back(MAINTENANCE_HREF, ok="تعمیر نصب شروع شد: اول بکاپ گرفته می‌شود؛ چند لحظهٔ دیگر صفحه را تازه کنید")
+
+
+def _register_lite_mode(app: FastAPI, *, require_admin: Callable, get_db: Callable) -> None:
+    """One path per state, so a second press (or a double click) leaves the switch where it is."""
+    @app.post(LITE_ON_PATH)
+    async def maintenance_lite_on(
+        staff: dict = Depends(require_admin), session: AsyncSession = Depends(get_db)
+    ) -> RedirectResponse:
+        await set_lite_mode(session, staff, enabled=True)
+        return _back(MAINTENANCE_HREF, ok="حالت سبک روشن شد؛ کارهای جانبی از این به بعد کمتر اجرا می‌شوند")
+
+    @app.post(LITE_OFF_PATH)
+    async def maintenance_lite_off(
+        staff: dict = Depends(require_admin), session: AsyncSession = Depends(get_db)
+    ) -> RedirectResponse:
+        await set_lite_mode(session, staff, enabled=False)
+        return _back(MAINTENANCE_HREF, ok="حالت سبک خاموش شد؛ همهٔ کارها با فاصلهٔ عادی اجرا می‌شوند")
 
 
 def _back(path: str, **flash: str) -> RedirectResponse:
