@@ -89,7 +89,7 @@
       </select>
       <div class="sales-seg ds-seg" id="upd-channel-seg" role="radiogroup" aria-labelledby="upd-channel-title">
         {% for ch in update_channels %}
-        <button type="button" role="radio" data-channel="{{ ch.id }}"{% if ch.id == update_channel %} class="active" aria-checked="true"{% else %} aria-checked="false"{% endif %}{% if running or awaiting %} disabled{% endif %}>{{ ch.label }}</button>
+        <button type="button" role="radio" data-channel="{{ ch.id }}"{% if ch.id == update_channel %} class="on" aria-checked="true"{% else %} aria-checked="false"{% endif %}{% if running or awaiting %} disabled{% endif %}>{{ ch.label }}</button>
         {% endfor %}
       </div>
       <small class="upd-hint" id="upd-channel-hint">پایدار برای سرورهای فروش؛ توسعه تغییرات را زودتر می‌گیرد ولی ممکن است ناپایدار باشد.</small>

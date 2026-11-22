@@ -4018,7 +4018,7 @@ const root = document.getElementById('upd-root');
     if (!channelSeg || !channelSelect) return;
     channelSeg.querySelectorAll('button[data-channel]').forEach(function (btn) {
       const on = btn.dataset.channel === channelSelect.value;
-      btn.classList.toggle('active', on);
+      btn.classList.toggle('on', on);
       btn.setAttribute('aria-checked', on ? 'true' : 'false');
       btn.disabled = channelSelect.disabled;
     });
