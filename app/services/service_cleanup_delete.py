@@ -74,6 +74,8 @@ class DeleteResult:
     deleted: int = 0
     skipped: int = 0
     failed: int = 0
+    # Last service id of a full batch: the next batch of the same run starts after it. ``None`` = nothing left.
+    next_after_id: int | None = None
 
 
 def _aware(moment: datetime) -> datetime:
@@ -98,6 +100,15 @@ async def _blocked_by_other_state(session: AsyncSession, service_ids: list[int])
         )
     )
     return {int(i) for i in open_orders.all() if i} | {int(i) for i in auto_renew.all() if i}
+
+
+def _not_blocked_clauses() -> list[ColumnElement[bool]]:
+    """SQL twin of ``_blocked_by_other_state``, so services that must wait never take a batch's places."""
+    open_order = select(Order.id).where(Order.service_id == UserService.id, Order.status.in_(OPEN_ORDER_STATUSES))
+    auto_renew = select(ServiceAutomation.service_id).where(
+        ServiceAutomation.service_id == UserService.id, ServiceAutomation.renew_enabled.is_(True)
+    )
+    return [~open_order.exists(), ~auto_renew.exists()]
 
 
 def _warned_clause(kind: str, now: datetime) -> ColumnElement[bool]:
@@ -158,9 +169,13 @@ async def _claim_lease(
 
 async def delete_due_services(
     session: AsyncSession, *, shop_id: int | None, policy: CleanupPolicy, kind: str, now: datetime | None = None,
-    limit: int = DELETE_BATCH,
+    limit: int = DELETE_BATCH, after_id: int = 0,
 ) -> DeleteResult:
-    """Delete up to ``limit`` services of one scope and rule that are due; returns what happened."""
+    """Delete up to ``limit`` due services of one scope and rule with an id above ``after_id``.
+
+    Services that stay due but cannot be deleted now (unreadable panel, a check that failed) are passed
+    over by the next batch through ``next_after_id`` instead of filling every batch in id order.
+    """
     now = now or datetime.now(timezone.utc)
     due = _due_clause(kind, policy, now)
     if due is None:
@@ -172,7 +187,8 @@ async def delete_due_services(
             .join(BotUser, BotUser.id == UserService.bot_user_id)
             .where(
                 shop_services_clause(shop_id), *eligible_clauses(), not_held_clause(now), due,
-                _warning_clause(kind, now), BotUser.is_blocked.is_(False),
+                _warning_clause(kind, now), BotUser.is_blocked.is_(False), *_not_blocked_clauses(),
+                UserService.id > int(after_id),
                 or_(UserService.cleanup_claimed_at.is_(None), UserService.cleanup_claimed_at < now - LEASE),
             )
             .order_by(UserService.id)
@@ -182,6 +198,7 @@ async def delete_due_services(
     if not rows:
         return DeleteResult()
     services = [service for service, _tg in rows]
+    next_after_id = int(services[-1].id) if len(services) >= limit else None
     telegram = {int(service.id): int(tg or 0) for service, tg in rows}
     blocked = await _blocked_by_other_state(session, [int(s.id) for s in services])
     fresh = await live_refresh(session, services)
@@ -222,7 +239,7 @@ async def delete_due_services(
         deleted += outcome == "deleted"
         failed += outcome == "failed"
         skipped += outcome == "skipped"
-    return DeleteResult(deleted=deleted, skipped=skipped, failed=failed)
+    return DeleteResult(deleted=deleted, skipped=skipped, failed=failed, next_after_id=next_after_id)
 
 
 async def _read_panel_user(pg, pg_user_id: int) -> dict | None:

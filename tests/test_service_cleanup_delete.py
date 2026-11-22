@@ -15,6 +15,7 @@ from app.db.models import BotUser, CustomerNotice, Order, ServiceAutomation, Sho
 from app.services import service_cleanup_delete as delete
 from app.services.pasarguard import PasarGuardError
 from app.services.service_cleanup import KIND_TIME, KIND_VOLUME, CleanupPolicy
+from app.services.service_cleanup_notices import ScanResult
 from app.services.users import clear_settings_cache
 from tests.postgres_support import scoped_async_engine
 
@@ -144,6 +145,66 @@ class DeletionTests(DeleteCase):
         panel = FakePanel({1000 + i: expired() for i in range(1, 6)})
         self.assertEqual((await self.sweep(panel, limit=2)).deleted, 2)
         self.assertEqual(len(panel.deleted), 2)
+
+
+    async def test_services_waiting_on_an_order_or_automatic_renewal_never_fill_the_batch(self) -> None:
+        for i in (1, 2, 3):
+            await self.add(i)
+        async with self.Session() as session:
+            session.add(Order(user_id=20, service_id=1, amount=100, status="paid", reseller_id=SHOP))
+            session.add(ServiceAutomation(service_id=2, shop_id=SHOP, renew_enabled=True, renew_plan_id=None))
+            await session.commit()
+        panel = FakePanel({1001: expired(), 1002: expired(), 1003: expired()})
+        result = await self.sweep(panel, limit=2)
+        self.assertEqual((result.deleted, panel.deleted), (1, [1003]))
+        self.assertTrue(await self.exists(1) and await self.exists(2))
+
+    async def test_a_full_batch_of_unreadable_services_lets_the_next_batch_reach_the_rest(self) -> None:
+        for i in (1, 2, 3):
+            await self.add(i)
+
+        class PartlyDown(FakePanel):
+            async def get_user_by_id(self, user_id):
+                if user_id in (1001, 1002):
+                    raise TimeoutError()
+                return await super().get_user_by_id(user_id)
+
+        panel = PartlyDown({1001: expired(), 1002: expired(), 1003: expired()})
+        first = await self.sweep(panel, limit=2)
+        self.assertEqual((first.deleted, first.next_after_id), (0, 2))
+        with patch("app.services.bot_user_admin._pg_client_for_bot_service", AsyncMock(return_value=panel)):
+            async with self.Session() as session:
+                second = await delete.delete_due_services(
+                    session, shop_id=SHOP, policy=policy(), kind=KIND_TIME, now=NOW, limit=2, after_id=first.next_after_id
+                )
+        self.assertEqual((second.deleted, second.next_after_id, panel.deleted), (1, None, [1003]))
+        self.assertTrue(await self.exists(1) and await self.exists(2))
+
+    async def test_the_job_continues_past_a_batch_that_could_not_be_deleted(self) -> None:
+        from app.jobs import service_cleanup as job
+
+        for i in range(1, 4):
+            await self.add(i)
+
+        class PartlyDown(FakePanel):
+            async def get_user_by_id(self, user_id):
+                if user_id in (1001, 1002):
+                    raise TimeoutError()
+                return await super().get_user_by_id(user_id)
+
+        panel = PartlyDown({1001: expired(), 1002: expired(), 1003: expired()})
+        with (
+            patch.object(job, "SessionLocal", self.Session),
+            patch.object(job, "DELETE_BATCH", 2),
+            patch.object(job, "enabled_scopes", AsyncMock(return_value=[(SHOP, policy(volume_on=False))])),
+            patch.object(job, "scan_notices", AsyncMock(return_value=ScanResult())),
+            patch("app.services.service_cleanup_delete.datetime") as clock,
+            patch("app.services.bot_user_admin._pg_client_for_bot_service", AsyncMock(return_value=panel)),
+        ):
+            clock.now.return_value = NOW
+            await job.run_service_cleanup()
+        self.assertEqual(panel.deleted, [1003])
+        self.assertFalse(await self.exists(3))
 
 
 class LastMomentChecksTests(DeleteCase):
