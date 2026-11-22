@@ -287,21 +287,31 @@ async def mature_grants(session: AsyncSession, *, now: datetime | None = None) -
         .where(CashbackGrant.status == str(GrantStatus.PENDING), CashbackGrant.available_at <= now)
         .order_by(CashbackGrant.id).limit(MATURE_BATCH)
     )).all()
-    credited: list[CashbackGrant] = []
-    for grant in due:
+    credited_ids: list[int] = []
+    for grant_id in [int(grant.id) for grant in due]:
         try:
-            if not await _claim_status(session, grant, frm=GrantStatus.PENDING, to=GrantStatus.AVAILABLE, at=now):
+            # Read from the identity map; only a rollback for an earlier grant makes this a query.
+            grant = await session.get(CashbackGrant, grant_id)
+            if grant is None or not await _claim_status(
+                session, grant, frm=GrantStatus.PENDING, to=GrantStatus.AVAILABLE, at=now
+            ):
                 continue
             user = await session.get(BotUser, int(grant.user_id))
             # One commit for the claim and the credit: a failure rolls both back.
             await credit_wallet(session, user, int(grant.amount), f"کش‌بک {grant_label(grant)}",
-                                shop_id=grant.shop_id, commit=True, idempotency_key=f"cashback:{int(grant.id)}")
-            credited.append(grant)
+                                shop_id=grant.shop_id, commit=True, idempotency_key=f"cashback:{grant_id}")
+            credited_ids.append(grant_id)
         except Exception:  # noqa: BLE001 - per-row isolation in a background job; the row stays pending
-            logger.warning("cashback credit failed grant=%s", grant.id, exc_info=True)
+            logger.warning("cashback credit failed grant=%s", grant_id, exc_info=True)
             await rollback_quiet(session)
-    await notify_credited(session, credited)
-    return len(credited)
+    if credited_ids:
+        # Fresh rows: a later grant's rollback expired the ones already credited.
+        credited = list(await session.scalars(
+            select(CashbackGrant).where(CashbackGrant.id.in_(credited_ids)).order_by(CashbackGrant.id)
+            .execution_options(populate_existing=True)
+        ))
+        await notify_credited(session, credited)
+    return len(credited_ids)
 
 
 def grant_label(grant: CashbackGrant) -> str:
