@@ -25,7 +25,7 @@ from app.services.delivery_recovery_policy import (
     is_delivered,
     missing_delivery_clause,
 )
-from app.services.pasarguard import failure_text
+from app.services.pasarguard import failure_text, is_pg_not_found
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +177,13 @@ class DeliveryNotRetryable(ValueError):
     """The order can never be delivered again from the failure queue; the admin may dismiss it."""
 
 
+# Short enough for a Telegram alert after the «تلاش مجدد ناموفق: » prefix.
+SERVICE_USER_MISSING = (
+    "کاربر این سرویس در پنل پیدا نشد (احتمالاً حذف شده)؛ تلاش دوباره فایده ندارد. "
+    "«لغو و بازگشت وجه» یا «بستن بدون بازگشت وجه» را بزنید."
+)
+
+
 def _assert_retryable(order: Order) -> None:
     if order.status == OrderStatus.DELIVERED.value:
         if not order.service_id:
@@ -298,4 +305,7 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
     except Exception as exc:
         await record_delivery_failure(session, order=order, error=failure_text(exc))
         await session.commit()
+        if order.service_id and is_pg_not_found(exc):
+            # A renewal or pack for a panel user that is gone: the same press will fail the same way.
+            raise ValueError(SERVICE_USER_MISSING) from exc
         raise

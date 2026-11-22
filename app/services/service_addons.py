@@ -1047,7 +1047,9 @@ async def validate_addon_selection(
     if not user:
         raise ValueError("کاربر یافت نشد")
     from app.services.service_automation import service_shop_id
-    from app.services.service_renewals import assert_service_quota_available
+    from app.services.service_renewals import assert_service_on_panel, assert_service_quota_available
+
+    assert_service_on_panel(service)
 
     if await service_shop_id(session, service) != shop_id:
         raise ValueError("سرویس این فروشگاه نیست")
