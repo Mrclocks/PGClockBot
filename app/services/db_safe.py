@@ -24,6 +24,18 @@ async def rollback_quiet(session: AsyncSession | None) -> None:
         logger.debug("session rollback failed", exc_info=True)
 
 
+async def rollback_and_reload(session: AsyncSession, *instances: object) -> None:
+    """rollback_quiet, then reload what the rollback expired so the caller can keep reading it.
+
+    A rollback expires the objects loaded in that transaction. An async session cannot load an
+    expired attribute on access (MissingGreenlet), so code that goes on using an object after a
+    caught error, such as a delivered order after a failed reward step, refreshes it here first.
+    """
+    await rollback_quiet(session)
+    for instance in instances:
+        await session.refresh(instance)
+
+
 async def recover_session(session: AsyncSession | None) -> None:
     """Heal a session that is stuck needing rollback before the next query.
 

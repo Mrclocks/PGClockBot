@@ -3931,10 +3931,19 @@ const root = document.getElementById('upd-root');
   const remoteVerEl = document.getElementById('upd-remote-ver');
   const localVerEl = document.getElementById('upd-local-ver');
   const localBox = document.getElementById('upd-local-box');
-  const remoteBox = document.getElementById('upd-remote-box');
+  const hero = document.getElementById('upd-hero');
+  const arrowEl = document.getElementById('upd-arrow');
+  const remoteCap = document.getElementById('upd-remote-cap');
+  const channelSeg = document.getElementById('upd-channel-seg');
+  const channelLabelEl = document.getElementById('upd-channel-label');
+  const idleNote = document.getElementById('upd-idle-note');
   const changelogRoot = document.getElementById('upd-changelog');
   const changelogBlocks = document.getElementById('upd-changelog-blocks');
   const changelogTitle = document.getElementById('upd-changelog-title');
+  const changelogCount = document.getElementById('upd-changelog-count');
+  const changelogMore = document.getElementById('upd-changelog-more');
+  const NOTE_LIMIT = 5;
+  const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
   let timer = null;
   let waitingRestart = false;
   let sawDown = false;
@@ -3996,8 +4005,28 @@ const root = document.getElementById('upd-root');
     if (!on) setBlockLeave(false);
   }
 
+  function faNum(n){
+    return String(n).replace(/[0-9]/g, function (d) { return FA_DIGITS[Number(d)]; });
+  }
+
+  // The version card's colour is its state: brand (update waiting or running), ok, warn or err.
+  function setTone(tone){
+    if (hero) hero.dataset.tone = tone;
+  }
+
+  function syncChannelSeg(){
+    if (!channelSeg || !channelSelect) return;
+    channelSeg.querySelectorAll('button[data-channel]').forEach(function (btn) {
+      const on = btn.dataset.channel === channelSelect.value;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
+      btn.disabled = channelSelect.disabled;
+    });
+  }
+
   function setBusy(busy, label){
     if (startBtn) {
+      startBtn.hidden = false;
       if (busy) {
         startBtn.disabled = true;
         startBtn.textContent = label || 'در حال اجرا…';
@@ -4007,45 +4036,46 @@ const root = document.getElementById('upd-root');
       } else {
         const retry = label === 'تلاش دوباره';
         startBtn.disabled = !canStart && !retry;
-        startBtn.textContent = retry ? 'تلاش دوباره' : (canStart ? 'شروع آپدیت' : 'آپدیتی نیست');
+        startBtn.hidden = !canStart && !retry;
+        startBtn.textContent = retry ? 'تلاش دوباره' : ('نصب v' + targetRemote);
       }
     }
     if (channelSelect) channelSelect.disabled = !!busy || channelBusy;
+    syncChannelSeg();
     if (busy) setBlockLeave(true);
   }
 
+  // Old → new while an update waits or runs; only the installed version otherwise.
+  function setVersionView(upgrading, caption, version){
+    if (localBox) localBox.hidden = !upgrading;
+    if (arrowEl) arrowEl.hidden = !upgrading;
+    if (remoteCap) remoteCap.textContent = caption;
+    if (remoteVerEl && version) remoteVerEl.textContent = 'v' + version;
+  }
 
-  function setMetaTone(available){
-    if (localBox) {
-      localBox.classList.toggle('update-meta-err', !!available);
-      localBox.classList.toggle('update-meta-ok', !available);
-    }
-    if (remoteBox) {
-      remoteBox.classList.toggle('update-meta-ok', !!available);
-      remoteBox.classList.toggle('update-meta-err', false);
-    }
+  function noteRow(item, index){
+    const tag = item.topic ? '<span class="upd-tag">' + escapeHtml(item.topic) + '</span>' : '';
+    const refs = (item.refs || []).length ? ' <bdi dir="ltr">' + escapeHtml(item.refs.join(' ')) + '</bdi>' : '';
+    return '<div class="upd-note-row" data-tone="' + escapeHtml(item.tone || 'topic') + '"' +
+      (index >= NOTE_LIMIT ? ' data-more hidden' : '') + '>' + tag + '<p>' + escapeHtml(item.text) + refs + '</p></div>';
   }
 
   function renderChangelog(cl){
     if (!changelogRoot || !changelogBlocks) return;
-    const has = !!(cl && cl.has_notes && (cl.blocks || []).length);
-    changelogRoot.hidden = !has;
+    const blocks = (cl && cl.has_notes && cl.blocks) || [];
+    changelogRoot.hidden = !blocks.length;
     if (changelogTitle && cl && cl.title) changelogTitle.textContent = cl.title;
-    if (!has) {
-      changelogBlocks.innerHTML = '';
-      return;
-    }
-    changelogBlocks.innerHTML = (cl.blocks || []).map(function (block) {
-      const notes = (block.notes || []).map(function (n) {
-        return '<li>' + escapeHtml(n) + '</li>';
-      }).join('');
-      return (
-        '<div class="update-changelog-block">' +
-          '<strong class="update-changelog-ver" dir="ltr">v' + escapeHtml(block.version) + '</strong>' +
-          '<ul class="update-changelog-list">' + notes + '</ul>' +
-        '</div>'
-      );
+    let index = 0;
+    changelogBlocks.innerHTML = blocks.map(function (block) {
+      const head = blocks.length > 1 ? '<p class="upd-notes-ver" dir="ltr">v' + escapeHtml(block.version) + '</p>' : '';
+      return head + (block.items || []).map(function (item) { return noteRow(item, index++); }).join('');
     }).join('');
+    if (changelogCount) changelogCount.textContent = index ? faNum(index) + ' تغییر' : '';
+    if (changelogMore) {
+      changelogMore.hidden = index <= NOTE_LIMIT;
+      changelogMore.setAttribute('aria-expanded', 'false');
+      changelogMore.textContent = 'نمایش همهٔ ' + faNum(index) + ' تغییر';
+    }
   }
 
   function applyChannelPayload(data){
@@ -4063,10 +4093,11 @@ const root = document.getElementById('upd-root');
     if (localVerEl && data.local_version) {
       localVerEl.textContent = 'v' + data.local_version;
     }
-    if (remoteVerEl) {
-      remoteVerEl.textContent = targetRemote ? ('v' + targetRemote) : '—';
-    }
-    setMetaTone(!!info.update_available && !migrationBlocked);
+    const upgrading = !!info.update_available && !migrationBlocked;
+    setVersionView(upgrading, upgrading ? 'نسخهٔ جدید' : 'نسخهٔ نصب‌شده',
+      upgrading ? targetRemote : data.local_version);
+    if (idleNote) idleNote.hidden = !upgrading;
+    if (channelLabelEl) channelLabelEl.textContent = chLabel;
     if (migrationFlash) {
       if (pre.blocked) {
         migrationFlash.hidden = false;
@@ -4083,29 +4114,25 @@ const root = document.getElementById('upd-root');
     }
     if (versionFlash && root.dataset.showOps !== '1') {
       // Migration error already lives in #upd-migration-flash — never mirror it here.
-      if (migrationBlocked) {
-        versionFlash.hidden = true;
-        versionFlash.textContent = '';
-      } else {
-        versionFlash.hidden = false;
-        versionFlash.className = 'flash ' + (checkTone === 'ok' ? 'ok' : (checkTone === 'err' ? 'err' : 'warn'));
-        if (checkMsg) {
-          versionFlash.textContent = checkMsg;
-        } else if (info.update_available) {
-          versionFlash.textContent = 'برای کانال ' + chLabel + ' آپدیت جدید هست: ' +
-            (info.version || data.local_version || '') + ' → ' + (info.remote_version || '');
-        } else if (info.checked && !info.update_available) {
-          versionFlash.textContent = 'برای کانال ' + chLabel + ' آپدیت جدیدی نیست — روی آخرین نسخه هستید.';
-        } else {
-          versionFlash.textContent = info.label || ('بررسی آپدیت کانال ' + chLabel + ' ناموفق');
-        }
-      }
+      // The version card shows every other result; only a failed check is written here.
+      const failed = !migrationBlocked && checkTone === 'err';
+      versionFlash.hidden = !failed;
+      versionFlash.textContent = failed ? (checkMsg || info.label || ('بررسی آپدیت کانال ' + chLabel + ' ناموفق')) : '';
     }
     if (stateEl && root.dataset.showOps !== '1') {
-      if (migrationBlocked) stateEl.textContent = pre.label || 'مایگریشن ناسازگار';
-      else if (info.update_available) stateEl.textContent = 'آپدیت کانال ' + chLabel + ' آماده است';
-      else if (info.checked) stateEl.textContent = 'آخرین نسخه کانال ' + chLabel;
-      else stateEl.textContent = info.label || '';
+      if (migrationBlocked) {
+        stateEl.textContent = pre.label || 'مایگریشن ناسازگار';
+        setTone('warn');
+      } else if (info.update_available) {
+        stateEl.textContent = 'آپدیت تازه آماده است';
+        setTone('brand');
+      } else if (info.checked) {
+        stateEl.textContent = 'روی آخرین نسخه هستید';
+        setTone('ok');
+      } else {
+        stateEl.textContent = info.label || ('بررسی آپدیت کانال ' + chLabel + ' ناموفق');
+        setTone('warn');
+      }
     }
     renderChangelog(data.changelog);
     // Header badge follows DEPLOYED_CHANNEL only — do not flip it on dropdown change.
@@ -4118,6 +4145,7 @@ const root = document.getElementById('upd-root');
     setBusy(true, 'در حال راه‌اندازی مجدد…');
     if (stateEl) stateEl.textContent = (extra || RESTART_MSG);
     if (stepEl) stepEl.textContent = 'راه‌اندازی مجدد سرویس';
+    setTone('brand');
     if (fill) fill.style.setProperty('--p', '98');
     if (percentEl) percentEl.textContent = '۹۸٪';
   }
@@ -4219,14 +4247,19 @@ const root = document.getElementById('upd-root');
       if (stateEl) stateEl.textContent = canStart ? 'آپدیت آماده است' : 'آماده';
       return;
     }
-    if (st.state === 'running' || st.state === 'error' || st.restart_required) showOps(true);
+    const failed = st.state === 'error' || st.restart_required;
+    if (st.state === 'running' || failed) {
+      showOps(true);
+      setTone(failed ? 'err' : 'brand');
+      setVersionView(true, failed ? 'نصب نشد' : 'در حال نصب', st.to_version || targetRemote);
+    }
     const pct = Number(st.percent || 0);
     fill.style.setProperty('--p', String(pct));
-    if (percentEl) percentEl.textContent = pct + '٪';
+    if (percentEl) percentEl.textContent = faNum(pct) + '٪';
     if (stepEl) {
-      stepEl.textContent = (st.state === 'error' || st.restart_required)
+      stepEl.textContent = failed
         ? 'خطا — دوباره تلاش کنید'
-        : (st.state === 'running' ? 'در حال اعمال…' : 'آماده');
+        : (st.state === 'running' ? (st.step || 'در حال اعمال…') : 'آماده');
     }
     if (stateEl) stateEl.textContent = st.message || st.state || '';
     if (st.state === 'running') {
@@ -4326,6 +4359,7 @@ const root = document.getElementById('upd-root');
       const data = await readUpdateResponse(res);
       if (!data.ok) {
         if (stateEl) stateEl.textContent = data.error || 'شروع آپدیت ممکن نشد';
+        setTone('err');
         canStart = true;
         setBusy(false, 'تلاش دوباره');
         return;
@@ -4334,6 +4368,7 @@ const root = document.getElementById('upd-root');
       startPolling();
     } catch (e) {
       if (stateEl) stateEl.textContent = 'خطا در شروع آپدیت — اتصال یا نشست را بررسی کنید';
+      setTone('err');
       canStart = true;
       setBusy(false, 'تلاش دوباره');
     }
@@ -4354,16 +4389,14 @@ const root = document.getElementById('upd-root');
       const nextLabel = next === 'dev' ? 'توسعه' : 'پایدار';
       channelBusy = true;
       channelSelect.disabled = true;
+      syncChannelSeg();
       if (startBtn) {
         startBtn.disabled = true;
         startBtn.textContent = 'در حال بررسی…';
       }
+      if (versionFlash) versionFlash.hidden = true;
       if (stateEl) stateEl.textContent = 'در حال بررسی آپدیت کانال ' + nextLabel + '…';
-      if (versionFlash) {
-        versionFlash.hidden = false;
-        versionFlash.className = 'flash warn';
-        versionFlash.textContent = 'کانال به «' + nextLabel + '» تغییر کرد — در حال بررسی آپدیت این کانال…';
-      }
+      setTone('warn');
       try {
         const tok = csrfToken();
         const res = await fetch('/update/channel', {
@@ -4377,7 +4410,6 @@ const root = document.getElementById('upd-root');
           channelSelect.value = prev;
           if (versionFlash) {
             versionFlash.hidden = false;
-            versionFlash.className = 'flash err';
             versionFlash.textContent = data.error || 'تغییر کانال ممکن نشد';
           }
           if (stateEl) stateEl.textContent = data.error || 'تغییر کانال ممکن نشد';
@@ -4389,7 +4421,6 @@ const root = document.getElementById('upd-root');
         channelSelect.value = prev;
         if (versionFlash) {
           versionFlash.hidden = false;
-          versionFlash.className = 'flash err';
           versionFlash.textContent = 'خطا در بررسی آپدیت کانال — اتصال یا نشست را بررسی کنید';
         }
         if (stateEl) stateEl.textContent = 'خطا در تغییر کانال — اتصال یا نشست را بررسی کنید';
@@ -4397,7 +4428,24 @@ const root = document.getElementById('upd-root');
       } finally {
         channelBusy = false;
         channelSelect.disabled = false;
+        syncChannelSeg();
       }
+    });
+  }
+  if (channelSeg && channelSelect) {
+    channelSeg.addEventListener('click', function (e) {
+      const btn = e.target.closest('button[data-channel]');
+      if (!btn || channelSelect.disabled || btn.dataset.channel === channelSelect.value) return;
+      channelSelect.value = btn.dataset.channel;
+      syncChannelSeg();
+      channelSelect.dispatchEvent(new Event('change'));
+    });
+  }
+  if (changelogMore && changelogBlocks) {
+    changelogMore.addEventListener('click', function () {
+      changelogBlocks.querySelectorAll('[data-more]').forEach(function (row) { row.hidden = false; });
+      changelogMore.hidden = true;
+      changelogMore.setAttribute('aria-expanded', 'true');
     });
   }
 

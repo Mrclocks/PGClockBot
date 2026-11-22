@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, CashbackBudget, CashbackGrant, CashbackRule, Order, OrderStatus
 from app.py_compat import StrEnum
 from app.services.customer_notice_buttons import customer_notice_markup
-from app.services.db_safe import rollback_quiet
+from app.services.db_safe import rollback_and_reload, rollback_quiet
 from app.services.formatting import format_toman
 from app.services.platform_identity import deliverable_telegram_id
 from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_user
@@ -287,21 +287,31 @@ async def mature_grants(session: AsyncSession, *, now: datetime | None = None) -
         .where(CashbackGrant.status == str(GrantStatus.PENDING), CashbackGrant.available_at <= now)
         .order_by(CashbackGrant.id).limit(MATURE_BATCH)
     )).all()
-    credited: list[CashbackGrant] = []
-    for grant in due:
+    credited_ids: list[int] = []
+    for grant_id in [int(grant.id) for grant in due]:
         try:
-            if not await _claim_status(session, grant, frm=GrantStatus.PENDING, to=GrantStatus.AVAILABLE, at=now):
+            # Read from the identity map; only a rollback for an earlier grant makes this a query.
+            grant = await session.get(CashbackGrant, grant_id)
+            if grant is None or not await _claim_status(
+                session, grant, frm=GrantStatus.PENDING, to=GrantStatus.AVAILABLE, at=now
+            ):
                 continue
             user = await session.get(BotUser, int(grant.user_id))
             # One commit for the claim and the credit: a failure rolls both back.
             await credit_wallet(session, user, int(grant.amount), f"کش‌بک {grant_label(grant)}",
-                                shop_id=grant.shop_id, commit=True, idempotency_key=f"cashback:{int(grant.id)}")
-            credited.append(grant)
+                                shop_id=grant.shop_id, commit=True, idempotency_key=f"cashback:{grant_id}")
+            credited_ids.append(grant_id)
         except Exception:  # noqa: BLE001 - per-row isolation in a background job; the row stays pending
-            logger.warning("cashback credit failed grant=%s", grant.id, exc_info=True)
+            logger.warning("cashback credit failed grant=%s", grant_id, exc_info=True)
             await rollback_quiet(session)
-    await notify_credited(session, credited)
-    return len(credited)
+    if credited_ids:
+        # Fresh rows: a later grant's rollback expired the ones already credited.
+        credited = list(await session.scalars(
+            select(CashbackGrant).where(CashbackGrant.id.in_(credited_ids)).order_by(CashbackGrant.id)
+            .execution_options(populate_existing=True)
+        ))
+        await notify_credited(session, credited)
+    return len(credited_ids)
 
 
 def grant_label(grant: CashbackGrant) -> str:
@@ -410,7 +420,7 @@ async def grant_after_delivery(session: AsyncSession, order: Order) -> None:
         await grant_for_order(session, order)
     except Exception:  # noqa: BLE001 - optional reward after a committed delivery; logged
         logger.warning("cashback grant failed order=%s", order_id, exc_info=True)
-        await rollback_quiet(session)
+        await rollback_and_reload(session, order)  # the caller still reads the delivered order
 
 
 async def reverse_after_refund(session: AsyncSession, *, service_id: int | None = None,
