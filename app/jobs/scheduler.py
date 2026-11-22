@@ -41,6 +41,7 @@ from app.services.alert_thresholds import (
     traffic_threshold,
 )
 from app.services.daily_report_delivery import deliver_daily_reports
+from app.services.job_trigger import register_job_runner
 from app.services.service_period import period_usage
 from app.services.formatting import parse_expire
 from app.services.first_use_nudge import CHECK_INTERVAL_MINUTES as FIRST_USE_CHECK_MINUTES
@@ -701,7 +702,17 @@ def start_background_scheduler() -> None:
     if not scheduler.running:
         install_job_error_handler()
         scheduler.start()
+        register_job_runner(_run_job_now)
         logger.info("Background scheduler started")
+
+
+def _run_job_now(job_id: str) -> bool:
+    """Move a registered job's next run to now (``coalesce`` and ``max_instances=1`` still apply)."""
+    job = scheduler.get_job(job_id)
+    if job is None:
+        return False
+    job.modify(next_run_time=datetime.now(timezone.utc))
+    return True
 
 
 def start_scheduler(bot: Bot) -> None:
@@ -763,5 +774,6 @@ def start_scheduler(bot: Bot) -> None:
 
 
 def stop_scheduler() -> None:
+    register_job_runner(None)
     if scheduler.running:
         scheduler.shutdown(wait=False)
