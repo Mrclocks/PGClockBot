@@ -46,20 +46,13 @@ from app.services.resellers import (
     setup_is_complete,
 )
 from app.services.setup_wizard import (
-    begin_setup,
-    current_setup_values,
     ensure_setup_gate_token,
     ensure_web_secret,
     is_local_setup_client,
     is_setup_complete,
-    mark_setup_complete,
     normalize_webhook_base_url,
     normalize_webhook_path,
     resolve_bot_update_mode,
-    setup_finish_login_url,
-    setup_pg_access_audit,
-    wizard_panel_url_hint,
-    parse_admin_ids,
     revoke_setup_gate,
     rotate_setup_gate_token,
     setup_gate_cookie_max_age,
@@ -122,8 +115,6 @@ from app.services.service_actions_page import clamp_service_action_numbers, serv
 from app.services.web_auth import (
     admin_session_version,
     load_web_admin,
-    save_web_admin,
-    validate_password_strength,
     verify_password_hash,
     verify_web_admin,
 )
@@ -156,6 +147,7 @@ from app.api.panel_brand_pages import register_panel_brand_pages
 from app.api.trial_users_pages import register_trial_users_pages
 from app.api.gift_code_pages import register_gift_code_pages
 from app.api.plan_pages import register_plan_pages
+from app.api.setup_pages import register_setup_pages
 from app.api.update_routes import register_update_routes
 from app.api.user_list_pages import register_user_list_pages
 from app.api.order_review_pages import register_order_review_pages
@@ -1781,284 +1773,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             headers={"Cache-Control": "public, max-age=3600"},
         )
 
-    # -------- Setup wizard --------
-    def _setup_https_ready() -> bool:
-        try:
-            from app.services.ssl_certs import https_is_active
-
-            return bool(https_is_active())
-        except Exception:
-            return False
-
-    async def _setup_page(
-        request: Request,
-        *,
-        step: int = 0,
-        err: str | None = None,
-        ok: str | None = None,
-        show_done: bool = False,
-        pg_audit: dict | None = None,
-    ):
-        begin_setup()
-        values = current_setup_values()
-        from app.services.security_policy import is_placeholder_bot_token
-
-        has_bot_token = bool((values.get("BOT_TOKEN") or "").strip()) and not is_placeholder_bot_token(
-            values.get("BOT_TOKEN")
-        )
-        has_pg_password = bool((values.get("PG_PASSWORD") or "").strip())
-        has_pg_api_key = bool((values.get("PG_API_KEY") or "").strip())
-        # Never echo live secrets back into the HTML source — a re-run of the
-        # wizard (e.g. to change one unrelated field) must not require
-        # re-typing the bot token / PG password, but it also must not leak
-        # them in the page source. Leave both blank; the empty-field-keeps-
-        # previous-value logic lives in setup_bot()/setup_other().
-        display_values = dict(values)
-        display_values["BOT_TOKEN"] = ""
-        display_values["PG_PASSWORD"] = ""
-        display_values["PG_API_KEY"] = ""
-        if pg_audit is None and (show_done or step >= 4):
-            try:
-                pg_audit = await setup_pg_access_audit()
-            except Exception:
-                pg_audit = None
-        return render(
-            request,
-            "setup.html",
-            {
-                "values": display_values,
-                "has_bot_token": has_bot_token,
-                "has_pg_password": has_pg_password,
-                "has_pg_api_key": has_pg_api_key,
-                "initial_step": step,
-                "show_done": show_done,
-                "flash_err": err or request.query_params.get("err"),
-                "flash_ok": ok or request.query_params.get("ok"),
-                "panel_url": wizard_panel_url_hint(values.get("WEB_PORT", "9000")),
-                "finish_login_url": setup_finish_login_url(),
-                "https_ready": _setup_https_ready(),
-                "bot_username": (values.get("BOT_USERNAME") or "").lstrip("@"),
-                "pg_audit": pg_audit,
-            },
-        )
-
-    def _setup_wants_json(request: Request) -> bool:
-        return (request.headers.get("x-requested-with") or "").strip() == "setup-probe"
-
-    @app.get("/setup", response_class=HTMLResponse)
-    async def setup_page(request: Request):
-        if is_setup_complete():
-            return RedirectResponse("/", status_code=303)
-        step = 0
-        try:
-            step = int(request.query_params.get("step") or "0")
-        except ValueError:
-            step = 0
-        show_done = step >= 4
-        return await _setup_page(request, step=step if step < 4 else 4, show_done=show_done)
-
-    @app.post("/setup/admin")
-    async def setup_admin(
-        request: Request,
-        username: str = Form(...),
-        password: str = Form(...),
-        password_confirm: str = Form(...),
-    ):
-        if is_setup_complete():
-            return RedirectResponse("/", status_code=303)
-        begin_setup()
-        user = (username or "").strip() or "admin"
-        p1 = password or ""
-        p2 = password_confirm or ""
-        if p1 != p2:
-            return await _setup_page(request, step=1, err="رمز عبور و تکرار آن یکسان نیستند.")
-        ok, msg = validate_password_strength(p1)
-        if not ok:
-            return await _setup_page(request, step=1, err=msg)
-        try:
-            save_web_admin(user, p1)
-        except ValueError as e:
-            return await _setup_page(request, step=1, err=str(e))
-        ensure_web_secret()
-        update_env_keys({"WEB_ADMIN_USER": user})
-        return RedirectResponse("/setup?step=2", status_code=303)
-
-    @app.post("/setup/bot")
-    async def setup_bot(
-        request: Request,
-        bot_token: str = Form(...),
-        bot_username: str = Form(""),
-        admin_ids: str = Form(...),
-    ):
-        if is_setup_complete():
-            return RedirectResponse("/", status_code=303)
-        begin_setup()
-        from app.services.security_policy import is_placeholder_bot_token
-
-        token = (bot_token or "").strip()
-        uname = (bot_username or "").strip().lstrip("@")
-        ids_raw = (admin_ids or "").strip()
-        if not token:
-            # Wizard never re-displays the saved token (see _setup_page) — an
-            # empty submit here means "keep the existing one", not "clear it".
-            existing = (current_setup_values().get("BOT_TOKEN") or "").strip()
-            if existing and not is_placeholder_bot_token(existing):
-                token = existing
-            else:
-                return await _setup_page(request, step=2, err="توکن ربات الزامی است.")
-        if is_placeholder_bot_token(token):
-            return await _setup_page(request, step=2, err="توکن ربات نامعتبر است — یک توکن واقعی از BotFather وارد کنید.")
-        if not uname:
-            return await _setup_page(request, step=2, err="نام کاربری ربات الزامی است.")
-        try:
-            ids = parse_admin_ids(ids_raw)
-        except ValueError:
-            return await _setup_page(request, step=2, err="آیدی ادمین‌ها باید عدد باشد (با کاما جدا کنید).")
-        if not ids:
-            return await _setup_page(request, step=2, err="حداقل یک آیدی ادمین وارد کنید.")
-        update_env_keys(
-            {
-                "BOT_TOKEN": token,
-                "BOT_USERNAME": uname,
-                "ADMIN_IDS": ",".join(str(i) for i in ids),
-            }
-        )
-        ensure_web_secret()
-        return RedirectResponse("/setup?step=3", status_code=303)
-
-    @app.post("/setup/other")
-    async def setup_other(
-        request: Request,
-        pg_base_url: str = Form(...),
-        pg_subscription_path: str = Form("/sub"),
-        pg_username: str = Form(""),
-        pg_password: str = Form(""),
-        pg_api_key: str = Form(""),
-        clear_pg_api_key: str = Form(""),
-        web_port: str = Form("9000"),
-        public_base_url: str = Form(""),
-        currency: str = Form("تومان"),
-    ):
-        async def fail(err: str):
-            if _setup_wants_json(request):
-                return JSONResponse({"ok": False, "error": err}, status_code=400)
-            return await _setup_page(request, step=3, err=err)
-
-        if is_setup_complete():
-            if _setup_wants_json(request):
-                return JSONResponse({"ok": False, "error": "راه‌اندازی قبلاً کامل شده است"}, status_code=400)
-            return RedirectResponse("/", status_code=303)
-        begin_setup()
-        try:
-            sub_path = normalize_pg_subscription_path(pg_subscription_path)
-        except ValueError as exc:
-            return await fail(str(exc))
-        base = normalize_pg_base_url((pg_base_url or "").strip())
-        if not base:
-            return await fail("آدرس پاسارگارد الزامی است.")
-        try:
-            base = await asyncio.to_thread(assert_safe_pg_base_url, base)
-        except UnsafePgUrlError as exc:
-            return await fail(str(exc))
-        if not (pg_username or "").strip():
-            return await fail("نام کاربری پاسارگارد الزامی است.")
-        current_vals = current_setup_values()
-        clear_key = str(clear_pg_api_key or "").strip().lower() in {
-            "1",
-            "on",
-            "true",
-            "yes",
-        }
-        raw_key = (pg_api_key or "").replace("\r", "").strip()
-        if clear_key:
-            resolved_api_key = ""
-        elif raw_key:
-            if len(raw_key) < 16:
-                return await fail(
-                    "کلید API پاسارگارد کوتاه است — مقدار کامل را از پنل پاسارگارد کپی کنید."
-                )
-            resolved_api_key = raw_key
-        else:
-            # Empty = keep previously saved key (never echoed in HTML).
-            resolved_api_key = (current_vals.get("PG_API_KEY") or "").strip()
-        if not (pg_password or "").strip():
-            # Wizard never re-displays the saved password (see _setup_page) —
-            # an empty submit here means "keep the existing one".
-            existing_pw = (current_vals.get("PG_PASSWORD") or "").strip()
-            if existing_pw:
-                pg_password = existing_pw
-            elif not resolved_api_key:
-                return await fail(
-                    "رمز یا کلید API پاسارگارد الزامی است "
-                    "(حداقل یکی برای ادمین متصل)."
-                )
-        port = (web_port or "9000").strip()
-        try:
-            port_n = int(port)
-            if port_n < 1 or port_n > 65535:
-                raise ValueError
-        except ValueError:
-            return await fail("پورت وب نامعتبر است.")
-        # Hybrid: probe credentials + role before saving (fail closed on bad login).
-        from app.services.pg_access import (
-            clear_platform_pg_capability_cache,
-            resolve_platform_pg_capabilities,
-        )
-
-        caps = await resolve_platform_pg_capabilities(
-            username=(pg_username or "").strip(),
-            password=(pg_password or "").strip() or None,
-            api_key=resolved_api_key or None,
-            base_url=base,
-            use_cache=False,
-        )
-        if not caps.get("ok"):
-            detail = caps.get("error") or "نامعتبر"
-            return await fail(
-                f"ورود به پاسارگارد ناموفق بود: {detail}. "
-                "علت محتمل: آدرس، نام کاربری، رمز یا کلید API اشتباه. "
-                "راه حل: اعتبارنامه همان ادمین متصل در پاسارگارد را وارد کنید "
-                "(لزوماً owner پاسارگارد نیست)."
-            )
-        ensure_web_secret()
-        pub = (public_base_url or "").strip().rstrip("/")
-        if pub.startswith("https://"):
-            pub = "http://" + pub[len("https://") :]
-        env_update: dict[str, str | int | None] = {
-            "PG_BASE_URL": base,
-            "PG_SUBSCRIPTION_PATH": sub_path,
-            "PG_USERNAME": (pg_username or "").strip(),
-            "PG_PASSWORD": (pg_password or "").strip(),
-            "PG_API_KEY": resolved_api_key,
-            "WEB_PORT": str(port_n),
-            "PUBLIC_BASE_URL": pub,
-            "CURRENCY": (currency or "").strip() or "تومان",
-        }
-        update_env_keys(env_update)
-        clear_platform_pg_capability_cache()
-        if _setup_wants_json(request):
-            return JSONResponse({"ok": True, "next": "/setup?step=4"})
-        return RedirectResponse("/setup?step=4", status_code=303)
-
-    @app.post("/setup/finish")
-    async def setup_finish(request: Request):
-        mark_setup_complete()
-        ensure_web_secret()
-        from app.services.service_control import schedule_panel_restart
-        from app.services.setup_wizard import force_http_login_url, trusted_finish_next
-
-        schedule_panel_restart(delay_sec=2.5, reason="setup wizard finished")
-        # Prefer an explicit next from the wizard page (matches the displayed
-        # panel URL). Coerce to http only when TLS is not live yet; install-time
-        # SSL already serves HTTPS so we must not downgrade the login URL.
-        next_url = ""
-        try:
-            form = await request.form()
-            next_url = str(form.get("next") or "").strip()
-        except Exception:
-            next_url = ""
-        next_url = trusted_finish_next(next_url, request_host=request.url.hostname or "")
-        return RedirectResponse(force_http_login_url(next_url), status_code=303)
+    _setup_page = register_setup_pages(app, render=render)
 
     @app.get("/", response_class=HTMLResponse)
     async def root(request: Request):

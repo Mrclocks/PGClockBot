@@ -108,8 +108,9 @@ class SetupWizardTemplateMaskingTests(unittest.TestCase):
 class SetupBotEmptyTokenKeepsPreviousTests(unittest.IsolatedAsyncioTestCase):
     async def _call_setup_bot(self, *, submitted_token: str, existing_token: str):
         import app.api.app as app_module
+        import app.api.setup_pages as routes_module
 
-        # setup_bot is a closure inside create_api_app(); reach it through the
+        # setup_bot is registered by create_api_app(); reach it through the
         # actual FastAPI app instance instead of re-implementing its logic.
         route = None
         app = app_module.create_api_app()
@@ -137,12 +138,12 @@ class SetupBotEmptyTokenKeepsPreviousTests(unittest.IsolatedAsyncioTestCase):
                 return self._form_data
 
         with (
-            patch.object(app_module, "is_setup_complete", return_value=False),
-            patch.object(app_module, "begin_setup", return_value=None),
-            patch.object(app_module, "update_env_keys", return_value=None) as mocked_save,
-            patch.object(app_module, "ensure_web_secret", return_value="x" * 32),
+            patch.object(routes_module, "is_setup_complete", return_value=False),
+            patch.object(routes_module, "begin_setup", return_value=None),
+            patch.object(routes_module, "update_env_keys", return_value=None) as mocked_save,
+            patch.object(routes_module, "ensure_web_secret", return_value="x" * 32),
             patch.object(
-                app_module,
+                routes_module,
                 "current_setup_values",
                 return_value={"BOT_TOKEN": existing_token},
             ),
