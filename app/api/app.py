@@ -145,6 +145,7 @@ from app.api.reseller_finance_pages import register_reseller_finance_pages
 from app.api.billing_report_pages import register_billing_report_pages
 from app.api.child_pricing_pages import register_child_pricing_pages
 from app.api.shop_points_pages import register_shop_points_pages
+from app.api.support_settings_pages import register_support_settings_pages
 from app.api.shop_customer_block_pages import register_shop_customer_block_pages
 from app.api.mobile_bar_settings import register_mobile_bar_settings
 from app.api.panel_brand_pages import register_panel_brand_pages
@@ -2604,88 +2605,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     register_update_routes(app, require_admin=require_admin)
 
-    @app.get("/notifications", response_class=HTMLResponse)
-    async def notifications_page(staff: dict = Depends(require_admin)):
-        return RedirectResponse("/settings?tab=notifications", status_code=303)
-
-    @app.post("/notifications")
-    async def notifications_save(
-        request: Request,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from app.services.notifications import save_notify_prefs
-
-        form = await request.form()
-        await save_notify_prefs(session, dict(form))
-        return RedirectResponse("/settings?tab=notifications&saved=1", status_code=303)
-
-    @app.post("/supports/save")
-    async def supports_save(
-        request: Request,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from urllib.parse import quote
-
-        from app.services.support_contacts import contacts_from_form_json, save_support_contacts
-
-        form = await request.form()
-        raw = form.get("support_contacts")
-        if raw is not None:
-            contacts, err = contacts_from_form_json(str(raw))
-            if err:
-                return RedirectResponse(
-                    f"/tickets?supports=1&stab=contacts&err={quote(err)}",
-                    status_code=303,
-                )
-            await save_support_contacts(session, contacts or [])
-            return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
-
-        # Legacy single-row upsert (bot / older clients)
-        from app.services.button_styles import parse_item_button_style_form
-        from app.services.support_contacts import upsert_support_contact
-
-        contact_id = str(form.get("id") or "").strip() or None
-        title = str(form.get("title") or "").strip()
-        telegram = str(form.get("telegram") or "").strip()
-        try:
-            sort = int(str(form.get("sort") or "0").strip() or "0")
-        except ValueError:
-            sort = 0
-        enabled = str(form.get("enabled") or "") in {"1", "on", "true", "yes"}
-        if contact_id and "enabled" not in form:
-            enabled = False
-        button_style = parse_item_button_style_form(form)
-        _, err = await upsert_support_contact(
-            session,
-            contact_id=contact_id,
-            title=title,
-            telegram=telegram,
-            sort=sort,
-            enabled=enabled,
-            button_style=button_style,
-        )
-        if err:
-            return RedirectResponse(
-                f"/tickets?supports=1&stab=contacts&err={quote(err)}",
-                status_code=303,
-            )
-        return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
-
-    @app.post("/supports/delete")
-    async def supports_delete(
-        request: Request,
-        staff: dict = Depends(require_admin),
-        session: AsyncSession = Depends(get_db),
-    ):
-        from app.services.support_contacts import delete_support_contact
-
-        form = await request.form()
-        contact_id = str(form.get("id") or "").strip()
-        if contact_id:
-            await delete_support_contact(session, contact_id)
-        return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
+    register_support_settings_pages(app, get_db=get_db, require_admin=require_admin)
 
     def _menu_tab_context(values: dict) -> dict:
         from app.bot.keyboards import DEFAULT_ACTIVE_MENU_ORDER, DEFAULT_MENU_ORDER

@@ -593,5 +593,6 @@ tests/test_error_handling_rules.py
 tests/test_plan_pages_routes.py
 tests/test_delivery_rewards_after_db_error.py
 tests/test_delivery_completes_after_reward_failure.py
+tests/test_support_settings_routes.py
 tests/test_update_routes_behavior.py
 tests/test_finance_receipt_suggestions.py
