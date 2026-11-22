@@ -1,13 +1,16 @@
-"""The «ابزار و پاکسازی» area: its list page and the owner's «سلامت سیستم» page."""
+"""The «ابزار و پاکسازی» area: its list page, and the owner's «سلامت سیستم» page with its re-run buttons."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
+from urllib.parse import quote
+
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.stuck_work import RERUN_PATH, request_rerun, stuck_group
 from app.services.system_health import collect_health
 from app.services.tools_nav import HEALTH_HREF, TOOLS_LIST_HREF, tool_sections, tools_hub_sections
 
@@ -27,5 +30,16 @@ def register_tools_pages(
     async def system_health_page(
         request: Request, staff: dict = Depends(require_admin), session: AsyncSession = Depends(get_db)
     ) -> HTMLResponse:
-        groups = await collect_health(session)
+        groups = (*await collect_health(session), await stuck_group(session))
         return render(request, "system_health.html", {"staff": staff, "groups": groups})
+
+    @app.post(RERUN_PATH + "/{key}")
+    async def system_health_rerun(
+        key: str, staff: dict = Depends(require_admin), session: AsyncSession = Depends(get_db)
+    ) -> RedirectResponse:
+        try:
+            kind = await request_rerun(session, staff, key)
+        except ValueError as exc:
+            return RedirectResponse(f"{HEALTH_HREF}?err={quote(str(exc))}", status_code=303)
+        done = f"«{kind.label}» همین حالا دوباره اجرا می‌شود؛ چند ثانیهٔ دیگر صفحه را تازه کنید"
+        return RedirectResponse(f"{HEALTH_HREF}?ok={quote(done)}", status_code=303)

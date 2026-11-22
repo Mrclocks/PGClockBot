@@ -31,7 +31,8 @@ class HealthPageTests(RoutesHarness):
         with patch.object(health, "bot_status", AsyncMock(return_value={"state": "ok", "username": "shopbot"})):
             response = await self.get(OWNER_SESSION)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([key for key, _ in ROW.findall(response.text)], list(health.CHECKS))
+        stuck = ["settlements", "deliveries", "freezes", "cashback", "transfers"]
+        self.assertEqual([key for key, _ in ROW.findall(response.text)], [*health.CHECKS, *stuck])
         self.assertIn('<a class="page-back" href="/tools"', response.text)
         self.assertIn('href="/tools/health"', (await self.get(OWNER_SESSION, "/tools")).text)
 

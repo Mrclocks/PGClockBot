@@ -67,6 +67,8 @@ class HealthItem:
     tone: str
     summary: str
     href: str = ""
+    # A POST path that fixes the line (behind a confirm dialog); a line has a link or an action, not both.
+    action: str = ""
 
     @property
     def tone_label(self) -> str:
