@@ -2712,3 +2712,30 @@ class SwitchRevert(Base):
     scenario: Mapped[str | None] = mapped_column(String(24), nullable=True)
     status: Mapped[str] = mapped_column(String(16), server_default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OrderDiscount(Base):
+    """One reduction on one order: where it came from, what it referred to and how much.
+
+    Every reduction source writes its own line (a code, a loyalty or gift entitlement, a
+    random draw, an automatic rule), so reports and per-customer limits read one table. The
+    order's own ``discount_amount`` stays the total the customer saw. ``shop_key`` is 0 for the
+    platform shop. ``released_at`` is set when an unpaid order gives the reduction back.
+    """
+
+    __tablename__ = "order_discounts"
+    __table_args__ = (
+        UniqueConstraint("order_id", "source", name="uq_order_discounts_order_source"),
+        Index("ix_order_discounts_shop_source_ref", "shop_key", "source", "source_ref"),
+        Index("ix_order_discounts_shop_user", "shop_key", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
+    shop_key: Mapped[int] = mapped_column(Integer, server_default="0")
+    user_id: Mapped[int] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(String(16))
+    source_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    amount: Mapped[int] = mapped_column(Integer)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

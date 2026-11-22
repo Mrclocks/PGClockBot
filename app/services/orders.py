@@ -53,6 +53,7 @@ from app.services.pasarguard import (
 )
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
 from app.services.random_discounts import apply_random_discount
+from app.services.order_discounts import record_code_discount, release_order_discounts
 from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
 from app.services.cashback import grant_after_delivery
@@ -628,6 +629,7 @@ async def apply_discount_to_order(
         order.discount_code = used_code
         order.amount = max(0, base - discount)
         await session.flush()
+        await record_code_discount(session, order, amount=discount)
     await session.commit()
     await session.refresh(order)
     return order
@@ -690,6 +692,7 @@ async def _apply_new_order_discount(
         order.amount = max(0, int(order.amount) - discount)
         order.discount_amount = int(order.discount_amount or 0) + discount
         order.discount_code = used_code
+        await record_code_discount(session, order, amount=discount)
         if automatic:
             await apply_random_discount(session, order)
     except ValueError:
@@ -1203,6 +1206,8 @@ async def create_wholesale_order(
     )
     session.add(order)
     await ensure_member(session, user_id, shop_rid)
+    await session.flush()
+    await record_code_discount(session, order, amount=discount)
     await apply_random_discount(session, order)
     await session.commit()
     await session.refresh(order)
@@ -1653,19 +1658,31 @@ async def _release_discount_code(session: AsyncSession, code: str | None, *, ord
     )
 
 
+async def _release_reserved_discount(session: AsyncSession, order: Order) -> None:
+    """Give back the code or loyalty entitlement an unpaid order holds and release its ledger lines.
+
+    The order's amounts are left alone; nothing is committed.
+    """
+    if order.discount_code:
+        if str(order.discount_code).upper().startswith("LOY"):
+            from app.services.loyalty import release_loyalty_discount_for_order
+
+            await release_loyalty_discount_for_order(session, order)
+        else:
+            await _release_discount_code(session, order.discount_code, order=order)
+    await release_order_discounts(session, int(order.id))
+
+
 async def _release_order_discount(session: AsyncSession, order: Order) -> None:
-    """Release both shop DiscountCode uses and loyalty entitlements for an unpaid order."""
+    """Undo the code reduction of an order that stays payable (a rejected or failed attempt).
+
+    A random draw is kept: its amount is reserved for this order until the window ends.
+    """
     if order.random_discount_id is not None:
         return
-    code = order.discount_code
-    if not code:
+    if not order.discount_code:
         return
-    if str(code).upper().startswith("LOY"):
-        from app.services.loyalty import release_loyalty_discount_for_order
-
-        await release_loyalty_discount_for_order(session, order)
-    else:
-        await _release_discount_code(session, code, order=order)
+    await _release_reserved_discount(session, order)
     order.amount = int(order.amount) + int(order.discount_amount or 0)
     order.discount_amount = 0
     order.discount_code = None
@@ -1781,13 +1798,7 @@ async def release_unpaid_order_holds(session: AsyncSession, order: Order, *, rea
     application. Call it only after the caller's own atomic claim moved the order to cancelled,
     so two runs never release twice.
     """
-    if order.discount_code:
-        if str(order.discount_code).upper().startswith("LOY"):
-            from app.services.loyalty import release_loyalty_discount_for_order
-
-            await release_loyalty_discount_for_order(session, order)
-        else:
-            await _release_discount_code(session, order.discount_code, order=order)
+    await _release_reserved_discount(session, order)
     # Always attempt trial release (create_order never sets note="trial:…").
     await _release_trial_claim_for_order(session, order)
     await discard_unsold_custom_plan(session, order)
@@ -2303,13 +2314,7 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
         .execution_options(synchronize_session=False)
     )
     await session.refresh(order)
-    if order.discount_code:
-        from app.services.loyalty import release_loyalty_discount_for_order
-
-        if str(order.discount_code).upper().startswith("LOY"):
-            await release_loyalty_discount_for_order(session, order)
-        else:
-            await _release_discount_code(session, order.discount_code, order=order)
+    await _release_reserved_discount(session, order)
     await _release_trial_claim_for_order(session, order)
     await discard_unsold_custom_plan(session, order)
     if (order.note or "").startswith("reseller_app:"):
