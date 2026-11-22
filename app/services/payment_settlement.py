@@ -1346,12 +1346,14 @@ async def recover_stuck_psp_settlements(
         )
     ).scalars().all()
     settled = 0
-    for settlement in rows:
+    for settlement_id in [int(row.id) for row in rows]:
         try:
-            if await _recover_one_stuck_settlement(session, settlement):
+            # Read from the identity map; only a rollback for an earlier row makes this a query.
+            settlement = await session.get(PaymentSettlement, settlement_id)
+            if settlement is not None and await _recover_one_stuck_settlement(session, settlement):
                 settled += 1
         except Exception:
-            logger.exception("psp stuck settlement recovery failed settlement=%s", settlement.id)
+            logger.exception("psp stuck settlement recovery failed settlement=%s", settlement_id)
             await rollback_quiet(session)
     return settled
 

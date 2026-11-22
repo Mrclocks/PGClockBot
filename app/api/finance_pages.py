@@ -477,16 +477,16 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                     if p.status != "pending" or not p.receipt_file_id:
                         continue
                     try:
-                        matches[int(p.id)] = await suggest_receipt_matches(
-                            session,
-                            payment=p,
-                            window_minutes=window,
-                            reseller_id=rid_scope,
-                        )
-                    except Exception:
-                        from app.services.db_safe import rollback_quiet
-
-                        await rollback_quiet(session)
+                        # A savepoint: a failed suggestion must not expire the rows the page still renders.
+                        async with session.begin_nested():
+                            matches[int(p.id)] = await suggest_receipt_matches(
+                                session,
+                                payment=p,
+                                window_minutes=window,
+                                reseller_id=rid_scope,
+                            )
+                    except Exception:  # noqa: BLE001 - suggestions are optional; the page shows the payment without them
+                        logger.warning("receipt match suggestion failed payment=%s", p.id, exc_info=True)
                         continue
                 ctx["receipt_matches"] = matches
 
