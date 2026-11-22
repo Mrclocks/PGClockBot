@@ -608,3 +608,4 @@ tests/test_maintenance_tools.py
 tests/test_restart_and_resync.py
 tests/test_trial_retrial.py
 tests/test_install_repair.py
+tests/test_lite_mode.py

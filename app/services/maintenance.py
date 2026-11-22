@@ -38,6 +38,7 @@ from app.services.reseller_bots import clear_reseller_token_cache, get_reseller_
 from app.services.service_control import schedule_panel_restart
 from app.services.service_import import clear_identity_cache
 from app.services.install_repair import CONFIRM_PHRASE, STEP_LABELS, last_repair, repair_running
+from app.services.lite_mode import lite_mode_on
 from app.services.service_resync import last_resync, resync_running
 from app.services.staff_audit import actor_from_staff, add_staff_action
 from app.services.system_health import NEUTRAL, OK, WARN, HealthGroup, HealthItem
@@ -52,6 +53,11 @@ CLEAR_CACHES_PATH = MAINTENANCE_PATH + "/clear-caches"
 RESTART_PATH = MAINTENANCE_PATH + "/restart"
 RESYNC_PATH = MAINTENANCE_PATH + "/resync"
 REPAIR_PATH = MAINTENANCE_PATH + "/repair"
+LITE_ON_PATH = MAINTENANCE_PATH + "/lite-mode/on"
+LITE_OFF_PATH = MAINTENANCE_PATH + "/lite-mode/off"
+LITE_ON_CONFIRM = ("حالت سبک روشن شود؟ هشدارهای پنل، یادآوری اولین استفاده، پاکسازی‌های خودکار و عکس پروفایل "
+                   "ربات کمتر اجرا می‌شوند. پرداخت، تحویل، تمدید، پیام مشتری و بکاپ مثل قبل می‌مانند.")
+LITE_OFF_CONFIRM = "حالت سبک خاموش شود؟ همهٔ کارها دوباره با فاصلهٔ عادی خودشان اجرا می‌شوند."
 REPAIR_CONFIRM = ("نسخهٔ فعلی پنل دوباره از کانال آپدیت نصب شود؟ اول یک بکاپ کامل گرفته می‌شود؛ بعد فایل‌ها و "
                   "پکیج‌ها دوباره نصب می‌شوند و پنل چند لحظه قطع می‌شود. اگر نسخهٔ جدیدتری باشد، تعمیر انجام نمی‌شود.")
 RESTART_DELAY_SECONDS = 2.5
@@ -234,6 +240,14 @@ def _repair_line(*, blocked: bool) -> HealthItem:
                       confirm=REPAIR_CONFIRM, confirm_title="تعمیر نصب", confirm_phrase=CONFIRM_PHRASE)
 
 
+def _lite_line(enabled: bool) -> HealthItem:
+    if enabled:
+        return HealthItem("lite", "حالت سبک", "time", "", "روشن؛ کارهای جانبی کمتر اجرا می‌شوند",
+                          action=LITE_OFF_PATH, confirm=LITE_OFF_CONFIRM, confirm_title="خاموش کردن حالت سبک")
+    return HealthItem("lite", "حالت سبک", "time", "", "خاموش؛ همهٔ کارها با فاصلهٔ عادی",
+                      action=LITE_ON_PATH, confirm=LITE_ON_CONFIRM, confirm_title="روشن کردن حالت سبک")
+
+
 async def maintenance_group(session: AsyncSession) -> HealthGroup:
     """The tools of the page, each with what it acts on now."""
     manager = get_reseller_bot_manager()
@@ -248,5 +262,7 @@ async def maintenance_group(session: AsyncSession) -> HealthGroup:
     caches = HealthItem("caches", "کش‌های پنل", "queue", "", "تنظیمات، منو، ظاهر و داده‌های موقت پاسارگارد",
                         action=CLEAR_CACHES_PATH, confirm=CLEAR_CACHES_CONFIRM,
                         confirm_title="پاک کردن کش‌ها")
+    lite = _lite_line(await lite_mode_on(session))
     restart = await _restart_line()
-    return HealthGroup("نگهداری", (bots, caches, _resync_line(), restart, _repair_line(blocked=not restart.action)))
+    return HealthGroup("نگهداری", (bots, caches, lite, _resync_line(), restart,
+                                    _repair_line(blocked=not restart.action)))

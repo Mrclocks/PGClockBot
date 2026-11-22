@@ -1,4 +1,4 @@
-"""Ask the background scheduler to run one of its jobs now.
+"""Ask the background scheduler to run one of its jobs now, or to space one out.
 
 The scheduler lives in ``app.jobs``, which services and routes must not import. It registers how to run a job
 here when it starts; a route asks through ``run_job_now``. The job then runs exactly as on its timer: the
@@ -26,3 +26,20 @@ def run_job_now(job_id: str) -> bool:
     if _runner is None:
         return False
     return _runner(job_id)
+
+
+_interval_setter: Callable[[str, int | None], bool] | None = None
+
+
+def register_job_interval_setter(setter: Callable[[str, int | None], bool] | None) -> None:
+    """Called by the scheduler when it starts (and with None when it stops)."""
+    global _interval_setter
+    _interval_setter = setter
+
+
+def set_job_interval(job_id: str, seconds: int | None) -> bool:
+    """Run the job every ``seconds`` (never more often than its own interval), or on its own interval again with
+    None; False when the scheduler is not running or has no such job."""
+    if _interval_setter is None:
+        return False
+    return _interval_setter(job_id, seconds)
