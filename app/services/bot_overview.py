@@ -138,6 +138,11 @@ async def period_kpis(
 _bot_status_cache: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
 
 
+def clear_bot_status_cache() -> None:
+    """Forget every cached bot probe (the «پاک کردن کش‌ها» tool); the next page asks Telegram again."""
+    _bot_status_cache.clear()
+
+
 def _cache_key(token: str) -> str:
     # The token itself never becomes a dict key that could end up in a dump or log.
     return hashlib.sha256(token.encode()).hexdigest()

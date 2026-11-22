@@ -602,3 +602,11 @@ tests/test_discount_rule_pages.py
 tests/test_coupon_programs.py
 tests/test_discount_budget_winback.py
 tests/test_connection_status_interval_bot.py
+tests/test_tools_area.py
+tests/test_system_health.py
+tests/test_stuck_work.py
+tests/test_maintenance_tools.py
+tests/test_restart_and_resync.py
+tests/test_trial_retrial.py
+tests/test_install_repair.py
+tests/test_lite_mode.py

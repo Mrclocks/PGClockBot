@@ -864,6 +864,22 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .hub-row:is(:hover, :focus-visible, :active)::before,
 .ds .hub-row:is(:hover, :focus-visible, :active) + .hub-row::before { opacity: 0; }
 .ds .hub-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+/* Status list (system health): a row without a page to open is not a button, so it does not light up. */
+.ds .status-hub div.hub-row:hover { background: none; }
+.ds .status-hub .hub-row .badge { flex: 0 0 auto; }
+.ds .status-hub .hub-chev { min-width: var(--ico-sm); }
+/* A row that runs an action is a button inside its form: it keeps the row's look and the divider between rows. */
+.ds .status-hub .hub-row-form { margin: 0; }
+.ds .status-hub button.hub-row { width: 100%; border: 0; background: none; font: inherit; text-align: start; cursor: pointer; }
+.ds .status-hub .hub-row-form + .hub-row::before,
+.ds .status-hub .hub-row + .hub-row-form > .hub-row::before,
+.ds .status-hub .hub-row-form + .hub-row-form > .hub-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  inset-inline: calc(var(--g3) + var(--cmp-h) + var(--g3)) var(--g3);
+  border-top: 1px solid var(--border);
+}
 .ds .hub-ico {
   display: grid;
   place-items: center;

@@ -68,6 +68,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("broadcast_links", "دکمهٔ لینک بیرونی زیر پیام‌های فروشگاه"),
     ("trial_users", "مشاهدهٔ کاربران تست و خریداران"),
     ("trial_users_manage", "پیام به کاربران تست"),
+    ("trial_reset", "اجازهٔ تست دوباره به کاربران تست بدون خرید"),
     ("catalog_discounts", "تخفیف و کاهش قیمت فروشگاه"),
     ("random_discounts", "تخفیف تصادفی فروشگاه"),
     ("gift_codes", "کد هدیه و کد تخفیف فروشگاه"),
@@ -111,7 +112,7 @@ class FeaturePermGroup:
 FEATURE_PERM_LAYOUT: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
     ("فروش و سفارش", False, ("dashboard", "plans", "orders", "payments", "stats", "custom_service_name")),
     ("مشتریان", False, ("tickets", "customer_notes", "customer_services", "service_import_assign", "demo_users",
-                        "trial_users", "trial_users_manage", "customers_block", "customers_approve")),
+                        "trial_users", "trial_users_manage", "trial_reset", "customers_block", "customers_approve")),
     ("بازاریابی و وفاداری", False, ("campaigns", "broadcast", "broadcast_links", "catalog_discounts", "random_discounts", "gift_codes", "cashback",
                                    "discount_rules", "loyalty")),
     ("فروشگاه و فنی", False, ("shop_settings", "miniapp", "service_import", "connection_status",
