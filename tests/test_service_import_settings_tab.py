@@ -136,6 +136,17 @@ class FreezeSettingsPageTests(TabHarness):
         self.assertEqual((owner["service_freeze_enabled"], owner["service_freeze_plans"]), ("0", ""))
         self.assertEqual((owner["service_transfer_enabled"], owner["service_transfer_plans"]), ("0", ""))
 
+    async def test_each_action_is_one_card_with_its_title_and_switch_in_the_header(self):
+        page = (await self.call(OWNER_SESSION, "GET", "/settings?tab=service_actions")).text
+        for title, switch_id in (("توقف موقت سرویس", "sf-enabled"), ("انتقال سرویس", "st-enabled")):
+            card = page.split(f'<strong>{title}</strong>', 1)[0].rsplit('<div class="ds-card">', 1)[1]
+            self.assertIn('class="ui-switch-row ds-switch ds-toggle-head"', card, title)
+            head = page.split(f'<strong>{title}</strong>', 1)[1].split("</label>", 1)[0]
+            self.assertIn(f'id="{switch_id}" data-ds-submit-on-change', head, title)
+            body = page.split(f'<div class="ds-toggle-body" data-ds-show-when="#{switch_id}:1"', 1)[1][:10]
+            self.assertTrue(body.startswith(" hidden"), f"{title}: the body stays closed while the switch is off")
+        self.assertNotIn("ds-sec-head", page.split('id="settings-form"', 1)[1].split("</form>", 1)[0])
+
     async def test_out_of_range_numbers_are_stored_as_the_limit(self):
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
             "s_service_freeze_enabled": "1", "s_service_freeze_max_days": "900",

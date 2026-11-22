@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import row_actions, page_header, act_label, empty_state %}
-{% from "_ds.html" import ds_switch, ds_sec, ds_head_switch, ds_modal_head, ds_foot %}
+{% from "_ds.html" import ds_switch, ds_sec, ds_toggle_sec, ds_modal_head, ds_foot %}
 {% set event_labels = {'new': 'تازه', 'renew': 'تمدید', 'addon': 'اضافه', 'topup': 'شارژ کیف پول'} %}
 
 {# Rule form body; key makes the ids unique when several rule modals share the page. #}
@@ -88,28 +88,24 @@
 
 <form method="post" action="/cashback/settings" class="form-stack ds-page-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  {% set enabled_switch %}{{ ds_head_switch('enabled', 'کش‌بک روشن', 'cb-enabled', settings.enabled) }}{% endset %}
-  {% call ds_sec('کش‌بک', side=enabled_switch) %}
-    <div class="form-stack" data-ds-show-when="#cb-enabled:1"{% if not settings.enabled %} hidden{% endif %}>
-      <p class="ds-desc">بخشی از مبلغ خرید بعد از تحویل به کیف پول مشتری در همین فروشگاه برمی‌گردد.</p>
-      <div class="ds-grid-2">
-        <label class="form-field">ترکیب قانون‌ها
-          <select name="combine">
-            <option value="best" {% if settings.combine == 'best' %}selected{% endif %}>بهترین قانون</option>
-            <option value="sum" {% if settings.combine == 'sum' %}selected{% endif %}>جمع قانون‌ها</option>
-          </select>
-        </label>
-        <label class="form-field">دورهٔ انتظار
-          <span class="ds-unit"><input name="hold_hours" type="number" min="0" max="2160" inputmode="numeric" dir="ltr" value="{{ settings.hold_hours }}" /><span class="ds-unit-label">ساعت</span></span>
-          <small class="muted">تا این مدت بعد از تحویل، کش‌بک قابل خرج نیست</small>
-        </label>
-        <label class="form-field">بودجهٔ ماهانه
-          <span class="ds-unit"><input name="monthly_budget" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ settings.monthly_budget }}" /><span class="ds-unit-label">تومان</span></span>
-          <small class="muted">۰ یعنی بدون سقف · مصرف این ماه: <bdi dir="ltr">{{ budget_used | money }}</bdi></small>
-        </label>
-      </div>
-      <div class="actions"><button class="btn" type="submit">ذخیرهٔ تنظیمات</button></div>
+  {% call ds_toggle_sec('کش‌بک', 'بخشی از مبلغ خرید بعد از تحویل به کیف پول مشتری در همین فروشگاه برمی‌گردد.', 'enabled', 'cb-enabled', settings.enabled) %}
+    <div class="ds-grid-2">
+      <label class="form-field">ترکیب قانون‌ها
+        <select name="combine">
+          <option value="best" {% if settings.combine == 'best' %}selected{% endif %}>بهترین قانون</option>
+          <option value="sum" {% if settings.combine == 'sum' %}selected{% endif %}>جمع قانون‌ها</option>
+        </select>
+      </label>
+      <label class="form-field">دورهٔ انتظار
+        <span class="ds-unit"><input name="hold_hours" type="number" min="0" max="2160" inputmode="numeric" dir="ltr" value="{{ settings.hold_hours }}" /><span class="ds-unit-label">ساعت</span></span>
+        <small class="muted">تا این مدت بعد از تحویل، کش‌بک قابل خرج نیست</small>
+      </label>
+      <label class="form-field">بودجهٔ ماهانه
+        <span class="ds-unit"><input name="monthly_budget" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ settings.monthly_budget }}" /><span class="ds-unit-label">تومان</span></span>
+        <small class="muted">۰ یعنی بدون سقف · مصرف این ماه: <bdi dir="ltr">{{ budget_used | money }}</bdi></small>
+      </label>
     </div>
+    <div class="actions"><button class="btn" type="submit">ذخیرهٔ تنظیمات</button></div>
   {% endcall %}
 </form>
 
