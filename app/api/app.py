@@ -5,7 +5,7 @@ import logging
 import time
 from functools import partial
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, BadTimeSignature, URLSafeTimedSerializer
+from jinja2 import pass_context
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -229,7 +230,21 @@ except Exception:
     templates.env.globals["deployed_channel"] = "main"
     templates.env.globals["deployed_channel_label"] = "پایدار"
 templates.env.globals["order_status_fa"] = order_status_fa
-templates.env.globals["panel_sidebar"] = sidebar_for_template
+
+
+@pass_context
+def _panel_sidebar(
+    context: Any, staff: Any, identity: Any, is_owner: bool, marketing_sections: Any, path: str, tab: str
+) -> Any:
+    # base.html passes the same six arguments as earlier releases and the tools menu comes from the page
+    # context: an update writes the new templates before the panel restarts, and the old process must
+    # still be able to render them.
+    return sidebar_for_template(
+        staff, identity, is_owner, marketing_sections, path, tab, tool_sections=context.get("tool_sections") or ()
+    )
+
+
+templates.env.globals["panel_sidebar"] = _panel_sidebar
 templates.env.globals["panel_dock"] = build_dock
 templates.env.globals["nav_dot_labels"] = NAV_DOT_LABELS
 templates.env.globals["feature_perm_groups"] = feature_perm_groups
