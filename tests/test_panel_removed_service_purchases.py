@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.models import Base, BotUser, DeliveryFailure, Order
-from app.services import ux20
+from app.services import delivery_failures as ux20
 from app.services.pasarguard import PasarGuardError
 from app.services.service_addons import KIND_VOLUME, validate_addon_selection
 from app.services.service_renewals import SERVICE_REMOVED_FROM_PANEL, validate_renewal_selection
