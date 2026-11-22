@@ -14,6 +14,7 @@ from typing import Any
 
 from app.services.authz import authz_from_staff, can_shop
 from app.services.cashback_rules import cashback_scope
+from app.services.discount_rule_admin import discount_rule_scope
 from app.services.funnel_access import funnel_shop_scope
 from app.services.gift_codes import gift_code_scope
 from app.services.platform_identity import is_explicit_owner_staff
@@ -26,6 +27,7 @@ DISCOUNTS = "discounts"
 RANDOM_DISCOUNTS = "random_discounts"
 GIFT_CODES = "gift_codes"
 CASHBACK = "cashback"
+DISCOUNT_RULES = "discount_rules"
 FUNNEL = "funnel"
 CAMPAIGNS = "campaigns"
 TRIAL_USERS = "trial_users"
@@ -48,6 +50,7 @@ _DISCOUNT_SECTION = MarketingSection(DISCOUNTS, "تخفیف‌ها", "/catalog-d
 _RANDOM_DISCOUNT_SECTION = MarketingSection(RANDOM_DISCOUNTS, "تخفیف تصادفی", "/random-discounts")
 _GIFT_CODE_SECTION = MarketingSection(GIFT_CODES, "کد هدیه", "/gift-codes")
 _CASHBACK_SECTION = MarketingSection(CASHBACK, "کش‌بک", "/cashback")
+_DISCOUNT_RULES_SECTION = MarketingSection(DISCOUNT_RULES, "تخفیف خودکار", "/discount-rules")
 _FUNNEL_SECTION = MarketingSection(FUNNEL, "رفتار کاربر", "/funnel")
 _CAMPAIGN_SECTION = MarketingSection(CAMPAIGNS, "کمپین هدفمند", "/campaigns")
 _TRIAL_USERS_SECTION = MarketingSection(TRIAL_USERS, "کاربران تست", "/trial-users")
@@ -82,6 +85,15 @@ def _can_open_cashback(staff: Mapping[str, Any]) -> bool:
     """Same rule as the cashback page and its POST routes (``cashback_scope``)."""
     try:
         cashback_scope(staff)
+    except PermissionError:
+        return False
+    return True
+
+
+def _can_open_discount_rules(staff: Mapping[str, Any]) -> bool:
+    """Same rule as the automatic discount page and its POST routes (``discount_rule_scope``)."""
+    try:
+        discount_rule_scope(staff)
     except PermissionError:
         return False
     return True
@@ -134,6 +146,8 @@ def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSectio
         sections.extend(_CLUB_SECTIONS)
     if _can_open_feature(staff, "catalog_discounts"):
         sections.append(_DISCOUNT_SECTION)
+    if _can_open_discount_rules(staff):
+        sections.append(_DISCOUNT_RULES_SECTION)
     if _can_open_feature(staff, "random_discounts"):
         sections.append(_RANDOM_DISCOUNT_SECTION)
     if _can_open_gift_codes(staff):
@@ -170,7 +184,7 @@ class MarketingGroup:
 # (panel_nav.BROADCAST_KEY), and campaigns open from the group-message page for staff who may open it.
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("club", "باشگاه مشتریان", (CLUB, CLUB_TRANSACTIONS)),
-    ("offers", "تخفیف و کد هدیه", (DISCOUNTS, RANDOM_DISCOUNTS, GIFT_CODES, CASHBACK)),
+    ("offers", "تخفیف و کد هدیه", (DISCOUNTS, DISCOUNT_RULES, RANDOM_DISCOUNTS, GIFT_CODES, CASHBACK)),
     ("campaigns", "کمپین‌ها", (CAMPAIGNS,)),
     ("trials", "کاربران تست", (TRIAL_USERS,)),
     ("funnel", "رفتار کاربر", (FUNNEL,)),
@@ -197,6 +211,7 @@ SECTION_DESCRIPTIONS: dict[str, str] = {
     CLUB: "امتیاز، سطح‌ها، جوایز و دعوت دوستان",
     CLUB_TRANSACTIONS: "تعدیل دستی و آخرین تراکنش‌های امتیاز",
     DISCOUNTS: "تخفیف درصدی یا مبلغی روی پلن‌ها",
+    DISCOUNT_RULES: "اولین خرید، مشتری قبلی، برگشتی و تمدید زودهنگام",
     RANDOM_DISCOUNTS: "مبلغ نهایی متفاوت برای هر سفارش",
     GIFT_CODES: "کد شارژ کیف پول یا تخفیف برای کاربران",
     CASHBACK: "برگشت بخشی از مبلغ خرید به کیف پول",
@@ -210,6 +225,7 @@ SECTION_ICONS: dict[str, str] = {
     CLUB: "loyalty",
     CLUB_TRANSACTIONS: "receipt",
     DISCOUNTS: "discounts",
+    DISCOUNT_RULES: "discounts",
     RANDOM_DISCOUNTS: "discounts",
     GIFT_CODES: "gift",
     CASHBACK: "wallet",

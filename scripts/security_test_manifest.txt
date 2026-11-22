@@ -597,3 +597,5 @@ tests/test_support_settings_routes.py
 tests/test_update_routes_behavior.py
 tests/test_finance_receipt_suggestions.py
 tests/test_order_discount_ledger.py
+tests/test_discount_rules.py
+tests/test_discount_rule_pages.py

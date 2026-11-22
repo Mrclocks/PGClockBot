@@ -54,6 +54,7 @@ from app.services.pasarguard import (
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
 from app.services.random_discounts import apply_random_discount
 from app.services.order_discounts import record_code_discount, release_order_discounts
+from app.services.discount_rules import apply_automatic_discounts, release_rule_discount, replace_rule_with_code
 from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
 from app.services.cashback import grant_after_delivery
@@ -625,6 +626,7 @@ async def apply_discount_to_order(
             discount, used_code = await _reserve_discount_code(session, code, base, order=order)
         if not used_code:
             raise ValueError("کد تخفیف نامعتبر است")
+        await replace_rule_with_code(session, int(order.id), discount)
         order.discount_amount = discount
         order.discount_code = used_code
         order.amount = max(0, base - discount)
@@ -693,8 +695,7 @@ async def _apply_new_order_discount(
         order.discount_amount = int(order.discount_amount or 0) + discount
         order.discount_code = used_code
         await record_code_discount(session, order, amount=discount)
-        if automatic:
-            await apply_random_discount(session, order)
+        await apply_automatic_discounts(session, order, random=automatic)
     except ValueError:
         await session.rollback()
         raise
@@ -1670,6 +1671,7 @@ async def _release_reserved_discount(session: AsyncSession, order: Order) -> Non
             await release_loyalty_discount_for_order(session, order)
         else:
             await _release_discount_code(session, order.discount_code, order=order)
+    await release_rule_discount(session, int(order.id))
     await release_order_discounts(session, int(order.id))
 
 
@@ -2805,7 +2807,7 @@ async def renew_service_with_plan(
             if (existing.user_id, existing.service_id, existing.plan_id, existing.reseller_id) != (user_id, service.id, plan.id, shop_rid):
                 raise ValueError("درخواست تمدید نامعتبر است") from None
             return existing
-    await apply_random_discount(session, order)
+    await apply_automatic_discounts(session, order)
     if commit:
         await session.commit()
         await session.refresh(order)
