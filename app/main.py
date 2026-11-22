@@ -16,7 +16,7 @@ from app.config import get_settings
 from app.db.models import Plan
 from app.db.session import SessionLocal, init_db
 from app.services.bot_updates import get_update_scheduler
-from app.jobs.scheduler import start_background_scheduler, start_scheduler, stop_scheduler
+from app.jobs.scheduler import run_lite_mode_apply, start_background_scheduler, start_scheduler, stop_scheduler
 from app.services.home_overview import close_bot_probe_client
 from app.services.pasarguard import get_pg
 from app.services.shop_bot_webhook import shop_webhook_config
@@ -137,6 +137,8 @@ def main() -> None:
             start_background_scheduler()
         except Exception:
             logger.exception("Background scheduler failed to start")
+        else:
+            await run_lite_mode_apply()
 
         poll_task = None
         pg_warmup_task = None
@@ -181,6 +183,9 @@ def main() -> None:
                     start_scheduler(bot)
                 except Exception:
                     logger.exception("Scheduler failed to start")
+                else:
+                    # The bot's jobs were just added on their own timers.
+                    await run_lite_mode_apply()
 
                 async def _pg_warmup() -> None:
                     try:

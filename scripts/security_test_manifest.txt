@@ -604,3 +604,11 @@ tests/test_discount_budget_winback.py
 #
 # No renewal or pack is sold for a service the panel removed; retrying its paid order says why.
 tests/test_panel_removed_service_purchases.py
+tests/test_tools_area.py
+tests/test_system_health.py
+tests/test_stuck_work.py
+tests/test_maintenance_tools.py
+tests/test_restart_and_resync.py
+tests/test_trial_retrial.py
+tests/test_install_repair.py
+tests/test_lite_mode.py

@@ -25,6 +25,45 @@
 </div>
 {%- endmacro %}
 
+{# A status list (DESIGN_SYSTEM.md §6-2, «فهرست وضعیت»): the list rows of settings_hub with a status badge at the end.
+   ``groups`` hold ``items`` with label, icon, summary, tone (ok, warn, err, neutral), tone_label, badge_class and an optional href;
+   a row with a page to fix it links there, a row with an ``action`` is a button that posts it after the confirm
+   dialog, and any other row is plain text. #}
+{% macro status_hub(groups, tone='brand') -%}
+<div class="settings-hub settings-hub--{{ tone }} status-hub">
+  {%- for group in groups %}
+  <section class="hub-group" aria-labelledby="status-group-{{ loop.index }}">
+    <h2 class="hub-group-title" id="status-group-{{ loop.index }}">{{ group.label }}</h2>
+    <div class="hub-list">
+      {%- for item in group["items"] %}
+      {%- set tag = 'a' if item.href else ('button' if item.action else 'div') %}
+      {%- if item.action %}
+      <form method="post" action="{{ item.action }}" class="hub-row-form"
+            data-confirm="{{ item.confirm or ('«' ~ item.label ~ '» همین حالا دوباره اجرا شود؟ کار همان است که خودکار هم انجام می‌شود.') }}"
+            data-confirm-title="{{ item.confirm_title or 'اجرای دوباره' }}" data-confirm-label="اجرا شود"
+            {%- if item.confirm_phrase %} data-confirm-warn="1" data-confirm-phrase="{{ item.confirm_phrase }}" data-confirm-phrase-label="برای تأیید بنویسید: {{ item.confirm_phrase }}"{% endif %}>
+        {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
+      {%- endif %}
+      <{{ tag }} class="hub-row"{% if item.href %} href="{{ item.href }}"{% endif %}{% if item.action %} type="submit"{% endif %} data-health="{{ item.key }}" data-tone="{{ item.tone }}">
+        <span class="hub-ico" aria-hidden="true">{{ icon(item.icon) }}</span>
+        <span class="hub-text">
+          <span class="hub-label">{{ item.label }}</span>
+          <span class="hub-desc">{{ item.summary }}</span>
+        </span>
+        {%- if item.tone_label %}<span class="badge {{ item.badge_class }}">{{ item.tone_label }}</span>{% endif %}
+        {#- The arrow's place is kept on rows without a page, so every badge lines up. #}
+        <span class="hub-chev" aria-hidden="true">{% if item.href or item.action %}{{ icon('chev') }}{% endif %}</span>
+      </{{ tag }}>
+      {%- if item.action %}
+      </form>
+      {%- endif %}
+      {%- endfor %}
+    </div>
+  </section>
+  {%- endfor %}
+</div>
+{%- endmacro %}
+
 {# The settings menu beside every page of an area on a wide screen (DESIGN_SYSTEM.md §6-2): the list's groups and rows,
    compact, the open page marked. ``nav`` comes from settings_nav() / system_settings_nav(). Below the desktop width
    it is hidden and the page keeps its back button to the list. #}

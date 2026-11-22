@@ -67,6 +67,9 @@ ACTION_LABELS = {
     "free_checkout": "تحویل رایگان سفارش",
     "setting_on": "روشن کردن تنظیم",
     "setting_off": "خاموش کردن تنظیم",
+    "job_rerun": "اجرای دوبارهٔ کار پس‌زمینه",
+    "maintenance_run": "ابزار نگهداری",
+    "trial_reset": "اجازهٔ تست دوباره",
 }
 
 TARGET_LABELS = {
@@ -77,6 +80,7 @@ TARGET_LABELS = {
     "payment": "پرداخت",
     "order": "سفارش",
     "setting": "تنظیم",
+    "job": "کار پس‌زمینه",
 }
 
 

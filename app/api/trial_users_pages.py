@@ -13,7 +13,7 @@ from app.services.db_safe import recover_session
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
 from app.services.table_bulk import parse_bulk_ids, redirect_bulk, sanitize_return_to
-from app.services.trial_user_actions import block_trial_users, message_trial_users
+from app.services.trial_user_actions import block_trial_users, message_trial_users, reset_trials
 from app.services.trial_users import (
     FILTER_LABELS,
     list_trial_users,
@@ -39,7 +39,8 @@ def trial_users_scope(staff: dict, permission: str = VIEW_PERMISSION) -> int | N
         raise HTTPException(403) from None
 
 
-BULK_ACTIONS = frozenset({"block", "unblock", "message"})
+BULK_ACTIONS = frozenset({"block", "unblock", "message", "retrial"})
+RETRIAL_PERMISSION = "trial_reset"
 NO_SELECTION = "هیچ کاربری انتخاب نشده"
 
 
@@ -91,6 +92,7 @@ def register_trial_users_pages(
                 "q": search,
                 "can_message": can_shop(authz_from_staff(staff), MANAGE_PERMISSION),
                 "can_block": can_shop(authz_from_staff(staff), MANAGE_PERMISSION) and is_explicit_owner_staff(staff),
+                "can_retrial": can_shop(authz_from_staff(staff), RETRIAL_PERMISSION),
                 "return_to": request.url.path + (f"?{request.url.query}" if request.url.query else ""),
                 "settings_href": trial_settings_href(staff),
                 "flash_ok": params.get("ok"),
@@ -104,9 +106,9 @@ def register_trial_users_pages(
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ) -> Response:
-        shop_id = trial_users_scope(staff, MANAGE_PERMISSION)
         form = await request.form()
         action = str(form.get("action") or "").strip()
+        shop_id = trial_users_scope(staff, RETRIAL_PERMISSION if action == "retrial" else MANAGE_PERMISSION)
         return_to = sanitize_return_to(str(form.get("return_to") or TRIAL_USERS_PATH), default=TRIAL_USERS_PATH)
         ids = parse_bulk_ids(form.getlist("ids"))
         if action not in BULK_ACTIONS:
@@ -123,6 +125,12 @@ def register_trial_users_pages(
 async def _run_action(
     session: AsyncSession, staff: dict, shop_id: int | None, action: str, ids: list[int], form, return_to: str,
 ) -> RedirectResponse:
+    if action == "retrial":
+        retrial = await reset_trials(session, staff=staff, shop_id=shop_id, user_ids=ids)
+        if not retrial.reset:
+            return redirect_bulk(return_to, err="هیچ‌کدام شرط تست دوباره را نداشتند: بدون خرید، مسدود نبودن و تمام شدن تست")
+        suffix = f" · {retrial.refused} رد شد" if retrial.refused else ""
+        return redirect_bulk(return_to, ok=f"{retrial.reset} کاربر می‌توانند دوباره تست بگیرند{suffix}")
     if action == "message":
         text = str(form.get("reason") or form.get("confirm_reason") or "")
         campaign = await message_trial_users(session, staff=staff, shop_id=shop_id, user_ids=ids, text=text)
