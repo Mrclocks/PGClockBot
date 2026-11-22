@@ -605,3 +605,4 @@ tests/test_tools_area.py
 tests/test_system_health.py
 tests/test_stuck_work.py
 tests/test_maintenance_tools.py
+tests/test_restart_and_resync.py

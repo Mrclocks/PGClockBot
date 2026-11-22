@@ -461,6 +461,11 @@ def _restore_is_active() -> bool:
     return bool(status.get("state") == "running" or status.get("awaiting_restart"))
 
 
+def restore_in_progress() -> bool:
+    """A restore is running or waiting for its restart; nothing else may restart the panel meanwhile."""
+    return _restore_is_active() or _restore_thread_alive()
+
+
 def prune_backups(keep: int) -> int:
     """Keep exactly the ``keep`` newest backups and delete the rest; returns how many were removed.
 

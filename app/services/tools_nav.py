@@ -55,7 +55,7 @@ _HEALTH = ToolSection(
 )
 _MAINTENANCE = ToolSection(
     MAINTENANCE, "نگهداری سرور", MAINTENANCE_HREF,
-    "اتصال دوبارهٔ ربات‌ها و پاک کردن کش‌ها", "sliders",
+    "ربات‌ها، کش، همگام‌سازی و راه‌اندازی مجدد", "sliders",
 )
 _BACKUP = ToolSection(
     BACKUP, "بکاپ", "/settings?tab=backup",
