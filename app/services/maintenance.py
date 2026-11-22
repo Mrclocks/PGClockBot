@@ -227,7 +227,7 @@ def _repair_line(*, blocked: bool) -> HealthItem:
     run = last_repair()
     if repair_running() and run is not None:
         return HealthItem("repair", "تعمیر نصب", "download", NEUTRAL, STEP_LABELS[run.step])
-    summary, tone = "نسخهٔ فعلی دوباره نصب می‌شود؛ قبلش بکاپ کامل گرفته می‌شود", ""
+    summary, tone = "نصب دوبارهٔ همین نسخه، بعد از بکاپ کامل", ""
     if run is not None and run.error:
         summary, tone = run.error, WARN
     return HealthItem("repair", "تعمیر نصب", "download", tone, summary, action="" if blocked else REPAIR_PATH,
