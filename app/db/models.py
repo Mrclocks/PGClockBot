@@ -2728,6 +2728,16 @@ class OrderDiscount(Base):
         UniqueConstraint("order_id", "source", name="uq_order_discounts_order_source"),
         Index("ix_order_discounts_shop_source_ref", "shop_key", "source", "source_ref"),
         Index("ix_order_discounts_shop_user", "shop_key", "user_id"),
+        # A once-per-customer reduction (first purchase, a rule's per-customer slot) is held by
+        # at most one live line, so two concurrent checkouts cannot both take it.
+        Index(
+            "uq_order_discounts_live_claim",
+            "shop_key",
+            "user_id",
+            "claim_key",
+            unique=True,
+            postgresql_where=text("claim_key IS NOT NULL AND released_at IS NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -2737,5 +2747,40 @@ class OrderDiscount(Base):
     source: Mapped[str] = mapped_column(String(16))
     source_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
     amount: Mapped[int] = mapped_column(Integer)
+    claim_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DiscountRule(Base):
+    """A shop's automatic checkout discount: who gets it, on what, and how much.
+
+    Rules apply when an order is created, without a code; the best matching rule of the
+    order's shop wins. ``audience`` picks the customers (all, first purchase, repeat buyers,
+    returning after ``audience_days`` without a purchase, or renewals within
+    ``audience_days`` of expiry). ``used_count`` is claimed atomically against ``max_uses``
+    and given back when an unpaid order is cancelled. ``shop_id`` NULL is the platform shop.
+    """
+
+    __tablename__ = "discount_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    audience: Mapped[str] = mapped_column(String(16), default="all", server_default="all")
+    min_purchases: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    audience_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    events: Mapped[str] = mapped_column(String(64), default="new", server_default="new")
+    plan_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mode: Mapped[str] = mapped_column(String(16), default="percent", server_default="percent")
+    percent_bps: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    fixed_amount: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    max_per_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    min_order_amount: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    customer_max_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

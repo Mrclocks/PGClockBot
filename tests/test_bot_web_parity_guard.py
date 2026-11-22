@@ -75,6 +75,7 @@ MARKETING_PARTLY_IN_BOT: dict[str, str] = {
 
 MARKETING_WEB_ONLY: dict[str, str] = {
     marketing_nav.RANDOM_DISCOUNTS: "مدیریت بازه و محافظت مبلغ در وب؛ اعمال خودکار و استفاده از کد در ربات و مینی‌اپ",
+    marketing_nav.DISCOUNT_RULES: "قانون‌ها و کوپن‌های خودکار فقط در وب؛ اعمال خودکار و انتخاب کوپن در ربات و مینی‌اپ",
 }
 
 # Owner-bot settings that are not fields of the web settings tabs, and where the web edits them.

@@ -49,8 +49,13 @@ async def code_source(session: AsyncSession, code: str) -> str:
 
 async def record_order_discount(
     session: AsyncSession, order: Order, *, source: str, amount: int, source_ref: str | None = None,
+    claim_key: str | None = None,
 ) -> bool:
-    """Add the line for ``source`` on ``order`` inside the caller's transaction; False if it exists."""
+    """Add the line for ``source`` on ``order`` inside the caller's transaction.
+
+    False when the order already has a line for ``source``, or another live line of the same
+    customer and shop holds ``claim_key``.
+    """
     if source not in SOURCES:
         raise ValueError(f"unknown discount source: {source}")
     if type(amount) is not int or amount <= 0:
@@ -60,7 +65,7 @@ async def record_order_discount(
         async with session.begin_nested():
             session.add(OrderDiscount(
                 order_id=int(order.id), shop_key=order_shop_key(order), user_id=int(order.user_id),
-                source=source, source_ref=ref, amount=amount,
+                source=source, source_ref=ref, amount=amount, claim_key=claim_key,
             ))
             await session.flush()
     except IntegrityError:
