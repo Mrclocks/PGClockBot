@@ -602,3 +602,4 @@ tests/test_discount_rule_pages.py
 tests/test_coupon_programs.py
 tests/test_discount_budget_winback.py
 tests/test_tools_area.py
+tests/test_system_health.py
