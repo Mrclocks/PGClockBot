@@ -72,6 +72,8 @@ class HealthItem:
     # The confirm dialog's question for ``action``; empty uses the re-run wording.
     confirm: str = ""
     confirm_title: str = ""
+    # A word the owner must type in the confirm dialog (risky tools); the route checks it again.
+    confirm_phrase: str = ""
 
     @property
     def tone_label(self) -> str:

@@ -133,6 +133,7 @@ from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
 from app.api.marketing_pages import register_marketing_pages
 from app.api.tools_pages import register_tools_pages
+from app.api.maintenance_pages import register_maintenance_pages
 from app.api.panel_search_pages import register_panel_search_pages
 from app.api.order_purge_pages import register_order_purge_pages
 from app.api.cleanup_settings_pages import register_cleanup_settings_pages
@@ -1665,6 +1666,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_tools_pages(
         app, render=render, require_staff=require_staff, require_admin=require_admin, get_db=get_db
     )
+    register_maintenance_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_order_purge_pages(app, require_staff=require_staff, get_db=get_db)
     register_cleanup_settings_pages(app, require_staff=require_staff, get_db=get_db)
     register_staff_audit_pages(app, render=render, require_staff=require_staff, get_db=get_db)

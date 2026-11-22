@@ -40,7 +40,8 @@
       {%- if item.action %}
       <form method="post" action="{{ item.action }}" class="hub-row-form"
             data-confirm="{{ item.confirm or ('«' ~ item.label ~ '» همین حالا دوباره اجرا شود؟ کار همان است که خودکار هم انجام می‌شود.') }}"
-            data-confirm-title="{{ item.confirm_title or 'اجرای دوباره' }}" data-confirm-label="اجرا شود">
+            data-confirm-title="{{ item.confirm_title or 'اجرای دوباره' }}" data-confirm-label="اجرا شود"
+            {%- if item.confirm_phrase %} data-confirm-warn="1" data-confirm-phrase="{{ item.confirm_phrase }}" data-confirm-phrase-label="برای تأیید بنویسید: {{ item.confirm_phrase }}"{% endif %}>
         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
       {%- endif %}
       <{{ tag }} class="hub-row"{% if item.href %} href="{{ item.href }}"{% endif %}{% if item.action %} type="submit"{% endif %} data-health="{{ item.key }}" data-tone="{{ item.tone }}">

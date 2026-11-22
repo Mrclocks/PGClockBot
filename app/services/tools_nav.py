@@ -57,7 +57,7 @@ _HEALTH = ToolSection(
 )
 _MAINTENANCE = ToolSection(
     MAINTENANCE, "نگهداری سرور", MAINTENANCE_HREF,
-    "ربات‌ها، کش، همگام‌سازی و راه‌اندازی مجدد", "sliders",
+    "ربات‌ها، کش، همگام‌سازی، راه‌اندازی مجدد و تعمیر نصب", "sliders",
 )
 # The trial users page filtered to the customers who never bought: the round runs from its bulk bar.
 _RETRIAL = ToolSection(
