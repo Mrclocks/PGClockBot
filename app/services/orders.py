@@ -58,6 +58,7 @@ from app.services.discount_rules import apply_automatic_discounts, release_rule_
 from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
 from app.services.cashback import grant_after_delivery
+from app.services.coupon_programs import issue_after_delivery, issue_referral_reward
 from app.services.cashback_topup import grant_after_topup
 from app.services.payg_gate import (
     SHORTFALL_FOR_CUSTOMER,
@@ -172,6 +173,41 @@ async def _apply_renewal_noting_outcome(
         raise
 
 
+async def _referred_buyer(session: AsyncSession, order: Order) -> BotUser | None:
+    """The buyer when ``order`` is a paid, non-trial purchase in the shop that referred them."""
+    if is_mutation_order_note(_order_note(order)) or int(order.amount or 0) <= 0:
+        return None
+    # Prefer already-loaded relationship; never trigger async lazy-load.
+    buyer = order.__dict__.get("user")
+    if buyer is None:
+        buyer = await session.get(BotUser, order.user_id)
+    shop_id = int(order.reseller_id) if order.reseller_id else None
+    # Only a purchase in the shop the referral was made in pays that shop's bonus.
+    if not buyer or not is_referral_of_shop(buyer, shop_id):
+        return None
+    if order.plan_id:
+        from app.db.models import Plan
+
+        plan = await session.get(Plan, int(order.plan_id))
+        if plan is not None and bool(getattr(plan, "is_trial", False)):
+            return None
+    return buyer
+
+
+async def _issue_referrer_coupon(session: AsyncSession, order: Order) -> None:
+    """Best effort after delivery: the referrer's coupon for the friend's first purchase."""
+    try:
+        buyer = await _referred_buyer(session, order)
+        referrer = await session.get(BotUser, int(buyer.referred_by_id)) if buyer is not None else None
+    except Exception:  # noqa: BLE001 - optional reward after a committed delivery; logged and rolled back
+        logger.warning("referrer coupon lookup failed order=%s", order.id, exc_info=True)
+        await rollback_and_reload(session, order)
+        return
+    if buyer is not None and referrer is not None:
+        shop_id = int(order.reseller_id) if order.reseller_id else None
+        await issue_referral_reward(session, referrer=referrer, buyer=buyer, shop_id=shop_id, keep=(order,))
+
+
 async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None:
     """Credit referrer wallet once after invitee's first successful purchase delivery.
 
@@ -180,25 +216,10 @@ async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None
     spendable platform balance. Skips renewals, reseller fees, trials, and
     zero-amount orders. Idempotent via wallet reason.
     """
-    note = _order_note(order)
-    if is_mutation_order_note(note):
-        return
-    if int(order.amount or 0) <= 0:
-        return
-    # Prefer already-loaded relationship; never trigger async lazy-load.
-    buyer = order.__dict__.get("user")
+    buyer = await _referred_buyer(session, order)
     if buyer is None:
-        buyer = await session.get(BotUser, order.user_id)
-    shop_id = int(order.reseller_id) if order.reseller_id else None
-    # Only a purchase in the shop the referral was made in pays that shop's bonus.
-    if not buyer or not is_referral_of_shop(buyer, shop_id):
         return
-    if order.plan_id:
-        from app.db.models import Plan
-
-        plan = await session.get(Plan, int(order.plan_id))
-        if plan is not None and bool(getattr(plan, "is_trial", False)):
-            return
+    shop_id = int(order.reseller_id) if order.reseller_id else None
     from app.services.users import get_setting
 
     # 0 pins the platform's setting; None would read the settings of the bot in use.
@@ -2672,6 +2693,8 @@ async def deliver_order(
             logger.warning("loyalty on_order_delivered failed order=%s", order_id, exc_info=True)
             await rollback_and_reload(session, order)
         await grant_after_delivery(session, order)
+        await issue_after_delivery(session, order)
+        await _issue_referrer_coupon(session, order)
         await record_order_funnel(session, order, STEP_DELIVERED, key=f"delivered:order:{order.id}")
         return order
     except Exception as exc:
@@ -3038,6 +3061,7 @@ async def _notify_renewal_delivered(session: AsyncSession, order: Order) -> None
     except Exception:
         logger.warning("loyalty on_order_delivered renew failed order=%s", order.id, exc_info=True)
     await grant_after_delivery(session, order)
+    await issue_after_delivery(session, order)
     await queue_auto_renew_offer(session, order)
 
 

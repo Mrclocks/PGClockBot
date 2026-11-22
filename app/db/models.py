@@ -1980,6 +1980,13 @@ class LoyaltyDiscountEntitlement(Base):
     __tablename__ = "loyalty_discount_entitlements"
     __table_args__ = (
         UniqueConstraint("code", name="uq_loyalty_discount_code"),
+        # An automatic coupon (next purchase, referral) is issued once per event key.
+        Index(
+            "uq_loyalty_discount_issue_key",
+            "issue_key",
+            unique=True,
+            postgresql_where=text("issue_key IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -1996,6 +2003,7 @@ class LoyaltyDiscountEntitlement(Base):
         ForeignKey("lucky_wheel_spins.id"), nullable=True, index=True
     )
     code: Mapped[str] = mapped_column(String(64), index=True)
+    issue_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     percent: Mapped[int] = mapped_column(Integer)
     min_purchase_toman: Mapped[int] = mapped_column(Integer, default=0)
     max_discount_toman: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -2784,3 +2792,27 @@ class DiscountRule(Base):
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CouponProgram(Base):
+    """A shop's automatic personal coupon: issued on an event, used like a loyalty discount.
+
+    ``trigger`` is ``next_purchase`` (after a delivered purchase), ``referral_welcome`` (to a
+    customer who joined through a referral link) or ``referral_reward`` (to the referrer after
+    the friend's first delivered purchase). One row per shop and trigger; ``shop_key`` is 0 for
+    the platform shop.
+    """
+
+    __tablename__ = "coupon_programs"
+    __table_args__ = (UniqueConstraint("shop_key", "trigger", name="uq_coupon_programs_shop_trigger"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_key: Mapped[int] = mapped_column(Integer, server_default="0")
+    trigger: Mapped[str] = mapped_column(String(24))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    percent: Mapped[int] = mapped_column(Integer, default=10, server_default="10")
+    max_discount: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    min_purchase: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    valid_days: Mapped[int] = mapped_column(Integer, default=14, server_default="14")
+    monthly_cap: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

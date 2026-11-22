@@ -24,6 +24,15 @@ from app.services.discount_rule_admin import (
     save_rule,
     set_rule_enabled,
 )
+from app.services.coupon_programs import (
+    MAX_MONTHLY_CAP,
+    MAX_PERCENT as MAX_COUPON_PERCENT,
+    MAX_VALID_DAYS,
+    TRIGGERS,
+    ProgramInput,
+    load_programs,
+    save_program,
+)
 from app.services.discount_rules import AUDIENCES, EVENTS, MAX_REDUCTION_BPS
 from app.services.gift_codes import gift_code_plan_options
 from app.services.numbers import parse_int
@@ -96,6 +105,18 @@ def rule_from_form(form: Any, *, now: datetime) -> RuleInput:
     )
 
 
+def program_from_form(form: Any) -> ProgramInput:
+    """The submitted coupon program; raises ``ValueError`` (safe to show)."""
+    return ProgramInput(
+        enabled=bool(form.get("enabled")),
+        percent=int(_int(form, "percent", label="درصد", upper=MAX_COUPON_PERCENT) or 0),
+        max_discount=_int(form, "max_discount", label="سقف تخفیف", optional=True) or None,
+        min_purchase=int(_int(form, "min_purchase", label="حداقل خرید") or 0),
+        valid_days=int(_int(form, "valid_days", label="مدت اعتبار", upper=MAX_VALID_DAYS) or 0),
+        monthly_cap=_int(form, "monthly_cap", label="سقف ماهانه", upper=MAX_MONTHLY_CAP, optional=True) or None,
+    )
+
+
 def register_discount_rule_pages(app: FastAPI, *, render: Callable, require_staff: Callable, get_db: Callable) -> None:
     @app.get(PAGE, response_class=HTMLResponse)
     async def discount_rules_page(
@@ -110,6 +131,7 @@ def register_discount_rule_pages(app: FastAPI, *, render: Callable, require_staf
             "staff": staff, "rules": rules,
             "plans": await gift_code_plan_options(session, shop_id=shop_id),
             "views": {rule.id: rule_view(rule, now=now) for rule in rules},
+            "programs": await load_programs(session, shop_id), "triggers": TRIGGERS,
             "flash_ok": request.query_params.get("ok"), "flash_err": request.query_params.get("err"),
         })
 
@@ -154,6 +176,15 @@ def _register_rule_routes(app: FastAPI, *, form_action: Callable, require_staff:
         async def action(shop_id: int | None, form: Any) -> str:
             await set_rule_enabled(session, shop_id, rule_id, bool(form.get("enabled")))
             return "وضعیت قانون ذخیره شد"
+        return await form_action(request, staff, action)
+
+    @app.post(PAGE + "/coupons/{trigger}")
+    async def coupon_program_save(
+        trigger: str, request: Request, staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db),
+    ) -> RedirectResponse:
+        async def action(shop_id: int | None, form: Any) -> str:
+            await save_program(session, shop_id, trigger, program_from_form(form))
+            return "کوپن خودکار ذخیره شد"
         return await form_action(request, staff, action)
 
     @app.post(PAGE + "/rules/{rule_id}/delete")

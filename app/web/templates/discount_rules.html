@@ -93,6 +93,48 @@
 {% endcall %}
 {% endmacro %}
 
+{% set trigger_hints = {
+  'next_purchase': 'بعد از هر خرید یا تمدید تحویل‌شده، یک کوپن برای خرید بعدی به مشتری داده می‌شود.',
+  'referral_welcome': 'مشتری‌ای که با لینک دعوت وارد فروشگاه می‌شود، یک کوپن خوش‌آمد می‌گیرد.',
+  'referral_reward': 'بعد از اولین خرید تحویل‌شدهٔ دوست، معرف یک کوپن می‌گیرد.',
+} %}
+
+{% macro coupon_modal(trigger, label, p) %}
+<div class="ui-modal ds" id="modal-dr-coupon-{{ trigger }}" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-dr-coupon-{{ trigger }}-title">
+    {{ ds_modal_head('gift', label, 'modal-dr-coupon-' ~ trigger ~ '-title') }}
+    <form method="post" action="/discount-rules/coupons/{{ trigger }}" class="form-stack ds-body">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% call ds_sec('کوپن', extra_class='ds-sec-first') %}
+        <div class="ds-rows">{{ ds_switch('enabled', 'فعال', trigger_hints[trigger], p.enabled if p else false) }}</div>
+        <div class="ds-grid-2">
+          <label class="form-field">درصد
+            <span class="ds-unit"><input name="percent" type="number" min="1" max="90" inputmode="numeric" dir="ltr" required value="{{ p.percent if p else 10 }}" /><span class="ds-unit-label">٪</span></span>
+          </label>
+          <label class="form-field">سقف تخفیف
+            <span class="ds-unit"><input name="max_discount" type="number" data-money min="0" inputmode="numeric" dir="ltr" placeholder="بدون سقف" value="{{ p.max_discount if p and p.max_discount is not none else '' }}" /><span class="ds-unit-label">تومان</span></span>
+          </label>
+          <label class="form-field">حداقل خرید
+            <span class="ds-unit"><input name="min_purchase" type="number" data-money min="0" inputmode="numeric" dir="ltr" value="{{ p.min_purchase if p else 0 }}" /><span class="ds-unit-label">تومان</span></span>
+          </label>
+          <label class="form-field">مدت اعتبار
+            <span class="ds-unit"><input name="valid_days" type="number" min="1" max="365" inputmode="numeric" dir="ltr" required value="{{ p.valid_days if p else 14 }}" /><span class="ds-unit-label">روز</span></span>
+          </label>
+          {% if trigger == 'referral_reward' %}
+          <label class="form-field">سقف کوپن هر معرف در ماه
+            <input name="monthly_cap" type="number" min="0" max="1000" inputmode="numeric" dir="ltr" placeholder="بدون سقف" value="{{ p.monthly_cap if p and p.monthly_cap is not none else '' }}" />
+          </label>
+          {% endif %}
+        </div>
+      {% endcall %}
+      <div class="ds-note">کوپن شخصی و یک‌بارمصرف است و هنگام پرداخت در بخش «کد تخفیف» به مشتری نشان داده می‌شود.</div>
+      {{ ds_foot('ذخیره') }}
+    </form>
+  </div>
+</div>
+{% endmacro %}
+
 {% macro rule_modal(r) %}
 {% set key = r.id if r else 'new' %}
 <div class="ui-modal ds" id="modal-dr-rule-{{ key }}" hidden>
@@ -162,8 +204,36 @@
     </tbody>
   </table></div>
 </div>
+
+<div class="card card-flush">
+  <div class="card-flush-head"><h2>کوپن‌های خودکار</h2></div>
+  <div class="table-wrap"><table class="table-compact table-list-sm">
+    <thead><tr>
+      <th>کوپن</th><th>مقدار</th><th class="col-hide-sm">اعتبار</th><th class="col-status">وضعیت</th>
+      <th class="col-actions"><span class="sr-only">اقدام</span></th>
+      <th class="li-head" scope="col"><span class="li-count">{{ triggers | length | num }} کوپن</span></th>
+    </tr></thead>
+    <tbody>
+    {% for trigger, label in triggers.items() %}
+      {% set p = programs.get(trigger) %}
+      <tr>
+        <td class="li-title"><span>{{ label }}</span></td>
+        <td class="cell-tight li-value">{% if p %}<bdi dir="ltr">{{ p.percent | num }}%</bdi>{% else %}—{% endif %}</td>
+        <td class="col-hide-sm li-sub">{% if p %}{{ p.valid_days | num }} روز{% else %}—{% endif %}</td>
+        <td class="cell-tight li-badge"><span class="badge {{ 'ok' if p and p.enabled else 'neutral' }}">{{ 'روشن' if p and p.enabled else 'خاموش' }}</span></td>
+        <td class="col-actions">
+          {% call row_actions() %}
+          <button type="button" class="btn btn-sm" data-modal-open="modal-dr-coupon-{{ trigger }}" aria-label="تنظیم {{ label }}">تنظیم</button>
+          {% endcall %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
 </div>
 
 {{ rule_modal(none) }}
 {% for r in rules %}{{ rule_modal(r) }}{% endfor %}
+{% for trigger, label in triggers.items() %}{{ coupon_modal(trigger, label, programs.get(trigger)) }}{% endfor %}
 {% endblock %}
