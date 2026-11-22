@@ -37,6 +37,7 @@ from app.services.release_notes import clear_remote_notes_cache
 from app.services.reseller_bots import clear_reseller_token_cache, get_reseller_bot_manager
 from app.services.service_control import schedule_panel_restart
 from app.services.service_import import clear_identity_cache
+from app.services.install_repair import CONFIRM_PHRASE, STEP_LABELS, last_repair, repair_running
 from app.services.service_resync import last_resync, resync_running
 from app.services.staff_audit import actor_from_staff, add_staff_action
 from app.services.system_health import NEUTRAL, OK, WARN, HealthGroup, HealthItem
@@ -50,6 +51,9 @@ RECONNECT_PATH = MAINTENANCE_PATH + "/reconnect-bots"
 CLEAR_CACHES_PATH = MAINTENANCE_PATH + "/clear-caches"
 RESTART_PATH = MAINTENANCE_PATH + "/restart"
 RESYNC_PATH = MAINTENANCE_PATH + "/resync"
+REPAIR_PATH = MAINTENANCE_PATH + "/repair"
+REPAIR_CONFIRM = ("نسخهٔ فعلی پنل دوباره از کانال آپدیت نصب شود؟ اول یک بکاپ کامل گرفته می‌شود؛ بعد فایل‌ها و "
+                  "پکیج‌ها دوباره نصب می‌شوند و پنل چند لحظه قطع می‌شود. اگر نسخهٔ جدیدتری باشد، تعمیر انجام نمی‌شود.")
 RESTART_DELAY_SECONDS = 2.5
 RESTART_CONFIRM = ("پنل و ربات‌ها چند ثانیه قطع و دوباره روشن شوند؟ کاری که همین حالا در جریان است تمام نمی‌شود و "
                    "بعد از روشن شدن ادامه پیدا می‌کند.")
@@ -219,6 +223,17 @@ def _resync_line() -> HealthItem:
                       confirm=RESYNC_CONFIRM, confirm_title="همگام‌سازی با پنل")
 
 
+def _repair_line(*, blocked: bool) -> HealthItem:
+    run = last_repair()
+    if repair_running() and run is not None:
+        return HealthItem("repair", "تعمیر نصب", "download", NEUTRAL, STEP_LABELS[run.step])
+    summary, tone = "نسخهٔ فعلی دوباره نصب می‌شود؛ قبلش بکاپ کامل گرفته می‌شود", ""
+    if run is not None and run.error:
+        summary, tone = run.error, WARN
+    return HealthItem("repair", "تعمیر نصب", "download", tone, summary, action="" if blocked else REPAIR_PATH,
+                      confirm=REPAIR_CONFIRM, confirm_title="تعمیر نصب", confirm_phrase=CONFIRM_PHRASE)
+
+
 async def maintenance_group(session: AsyncSession) -> HealthGroup:
     """The tools of the page, each with what it acts on now."""
     manager = get_reseller_bot_manager()
@@ -233,4 +248,5 @@ async def maintenance_group(session: AsyncSession) -> HealthGroup:
     caches = HealthItem("caches", "کش‌های پنل", "queue", "", "تنظیمات، منو، ظاهر و داده‌های موقت پاسارگارد",
                         action=CLEAR_CACHES_PATH, confirm=CLEAR_CACHES_CONFIRM,
                         confirm_title="پاک کردن کش‌ها")
-    return HealthGroup("نگهداری", (bots, caches, _resync_line(), await _restart_line()))
+    restart = await _restart_line()
+    return HealthGroup("نگهداری", (bots, caches, _resync_line(), restart, _repair_line(blocked=not restart.action)))
