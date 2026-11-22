@@ -16,6 +16,7 @@ from app.db.models import (
     RandomDiscount, RandomDiscountDraw, RandomDiscountReservation,
 )
 from app.services.authz import authz_from_staff, can_shop
+from app.services.order_discounts import SOURCE_RANDOM, record_order_discount
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.users import current_shop_reseller_id
 
@@ -367,6 +368,7 @@ async def _allocate_draw(session: AsyncSession, order: Order, policy: RandomDisc
     if policy.mode == "code":
         order.discount_code = policy.code
     await session.flush()
+    await record_order_discount(session, order, source=SOURCE_RANDOM, amount=reduction, source_ref=str(policy.id))
 
 
 def _has_ordinary_discount(order: Order) -> bool:

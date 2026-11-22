@@ -596,3 +596,4 @@ tests/test_delivery_completes_after_reward_failure.py
 tests/test_support_settings_routes.py
 tests/test_update_routes_behavior.py
 tests/test_finance_receipt_suggestions.py
+tests/test_order_discount_ledger.py

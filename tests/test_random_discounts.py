@@ -27,6 +27,7 @@ from app.services.orders import (
 from app.services.random_discounts import (
     RandomDiscountInput, apply_random_discount, create_random_discount, stop_random_discount,
 )
+from app.services.order_discounts import live_order_discounts
 from app.services.service_addons import create_addon_order
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
 from tests.postgres_support import scoped_async_engine
@@ -106,6 +107,18 @@ class RandomDiscountTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(order.amount + order.discount_amount, 1000)
             self.assertEqual(order.random_discount_amount, order.discount_amount)
         self.assertIn("تخفیف تصادفی", await checkout_summary(self.session, orders[0], currency="تومان"))
+
+    async def test_draw_records_one_random_ledger_line_and_cancel_releases_it(self) -> None:
+        policy = await self.policy()
+        order = await create_order(self.session, user_id=1, plan_id=1)
+        self.assertTrue(await apply_random_discount(self.session, order))
+        await self.session.commit()
+        lines = await live_order_discounts(self.session, order.id)
+        self.assertEqual([(line.source, line.source_ref, line.amount) for line in lines],
+                         [("random", str(policy.id), order.discount_amount)])
+        await cancel_order(self.session, order)
+        await self.session.commit()
+        self.assertEqual(await live_order_discounts(self.session, order.id), [])
 
     async def test_exhaustion_never_repeats_or_exceeds_discount_range(self) -> None:
         await self.policy(minimum=10, maximum=11)
