@@ -29,6 +29,7 @@ from app.api.guide_media_pages import guides_media_view, register_guide_media_pa
 from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.panel_nav import DOT_LABELS as NAV_DOT_LABELS
 from app.services.panel_nav import build_dock, sidebar_for_template
+from app.services.tools_nav import tool_sections
 from app.services.resellers import feature_perm_groups
 from app.services.user_card import can_open_user_card
 from app.services.reseller_bots import schedule_shop_menu_sync
@@ -122,6 +123,8 @@ from app.api.random_discounts import register_random_discounts
 from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
 from app.api.marketing_pages import register_marketing_pages
+from app.api.tools_pages import register_tools_pages
+from app.api.maintenance_pages import register_maintenance_pages
 from app.api.panel_search_pages import register_panel_search_pages
 from app.api.order_purge_pages import register_order_purge_pages
 from app.api.cleanup_settings_pages import register_cleanup_settings_pages
@@ -407,6 +410,8 @@ def render(request: Request, name: str, context: dict | None = None, status_code
         except Exception:
             logging.getLogger(__name__).warning("marketing nav resolution failed", exc_info=True)
             ctx["marketing_sections"] = ()
+    if ctx.get("staff") and "tool_sections" not in ctx:
+        ctx["tool_sections"] = tool_sections(ctx.get("staff"))
     response = templates.TemplateResponse(request, name, ctx, status_code=status_code)
     try:
         from app.services.csrf import CSRF_COOKIE, ensure_csrf_token
@@ -1650,6 +1655,10 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_panel_search_pages(app, require_staff=require_staff)
     register_marketing_pages(app, render=render, require_staff=require_staff)
+    register_tools_pages(
+        app, render=render, require_staff=require_staff, require_admin=require_admin, get_db=get_db
+    )
+    register_maintenance_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     register_order_purge_pages(app, require_staff=require_staff, get_db=get_db)
     register_cleanup_settings_pages(app, require_staff=require_staff, get_db=get_db)
     register_staff_audit_pages(app, render=render, require_staff=require_staff, get_db=get_db)

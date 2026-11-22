@@ -628,6 +628,12 @@ def _thread_alive() -> bool:
     return bool(t is not None and t.is_alive())
 
 
+def update_in_progress() -> bool:
+    """An update is running or waiting for its restart; a manual restart would cut it."""
+    status = resolve_stale_update_status()
+    return _thread_alive() or status.get("state") == "running" or bool(status.get("awaiting_restart"))
+
+
 def _start_update_thread(target_version: str | None) -> dict[str, Any]:
     global _THREAD
     with _LOCK:

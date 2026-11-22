@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_header, act_label %}
+{% from "_settings_hub.html" import status_hub %}
+{% block title %}سلامت سیستم{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
+{% block content %}
+<div class="ds">
+{% call(slot) page_header('pulse', 'سلامت سیستم', back='/tools', back_label='ابزار و پاکسازی') %}
+  {%- if slot == 'primary' %}
+  <a class="btn btn-ghost page-act-icon" href="/tools/health">{{ act_label('تازه‌سازی', icon_name='refresh') }}</a>
+  {%- endif %}
+{% endcall %}
+{{ status_hub(groups) }}
+</div>
+{% endblock %}

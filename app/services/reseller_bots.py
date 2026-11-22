@@ -192,6 +192,10 @@ class ResellerBotManager:
         if pid is not None:
             await self.stop_reseller(int(pid))
 
+    def running_count(self) -> int:
+        """Shop bots this process is running now (polling or on a webhook)."""
+        return len(self._bots)
+
     async def restart_reseller_profile(self, profile_id: int) -> bool:
         async with SessionLocal() as session:
             row = await session.get(ResellerProfile, profile_id)

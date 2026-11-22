@@ -18,6 +18,7 @@ def sidebar(
     add_rep: bool = False,
     manage_rep: bool = False,
     marketing: tuple[str, ...] = (),
+    tools: tuple[tuple[str, str], ...] = (),
     path: str = "/home",
     tab: str = "",
 ) -> dict[str, list[tuple[str, str]]]:
@@ -30,12 +31,14 @@ def sidebar(
         can_add_representative=add_rep,
         can_manage_representatives=manage_rep,
         marketing_hrefs=marketing,
+        tool_links=tools,
     )
     return {s.key: [(i.label, i.href) for i in s.items] for s in build_sidebar(viewer, path=path, tab=tab)}
 
 
 def owner_sidebar(**kw) -> dict[str, list[tuple[str, str]]]:
-    return sidebar(pg=ALL_PG, owner=True, manage_rep=True, marketing=("/loyalty?tab=overview",), **kw)
+    return sidebar(pg=ALL_PG, owner=True, manage_rep=True, marketing=("/loyalty?tab=overview",),
+                   tools=(("پاکسازی سرویس‌ها", "/service-cleanup"),), **kw)
 
 
 def labels(section: list[tuple[str, str]]) -> list[str]:

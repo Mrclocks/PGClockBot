@@ -95,7 +95,6 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
             "inbox.html",
         ):
             self.assertTrue((root / name).is_file(), name)
-        self.assertFalse((root / "tools.html").is_file())
         self.assertFalse((root / "_home_inbox.html").is_file())
         self.assertTrue((root / "gift_codes.html").is_file())
         self.assertFalse((root / "magic_links.html").is_file())
