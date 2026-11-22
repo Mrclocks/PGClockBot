@@ -38,16 +38,16 @@ class ToolSection:
 
 _SERVICE_CLEANUP = ToolSection(
     SERVICE_CLEANUP, "پاکسازی سرویس‌ها", "/service-cleanup",
-    "حذف خودکار سرویس‌های منقضی و تمام‌شده، با هشدار و معافیت", "trash",
+    "حذف خودکار سرویس‌های منقضی و بی‌حجم", "trash",
 )
 # The cleanup tab of the finance settings modal (finance_pages opens it from ``settings=cleanup``).
 _ORDER_CLEANUP = ToolSection(
     ORDER_CLEANUP, "پاکسازی سفارش‌ها", "/finance?tab=orders&settings=cleanup",
-    "حذف سفارش‌ها و پرداخت‌های رهاشده با قوانین زمان‌دار", "cart",
+    "حذف سفارش‌ها و پرداخت‌های رهاشده", "cart",
 )
 _BACKUP = ToolSection(
     BACKUP, "بکاپ", "/settings?tab=backup",
-    "ساخت و بازگردانی بکاپ و بکاپ زمان‌بندی‌شده", "download",
+    "ساخت، بازگردانی و بکاپ زمان‌بندی‌شده", "download",
 )
 
 # (group label, section keys in display order); a group with none of them is left out.
