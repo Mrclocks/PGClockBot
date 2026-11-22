@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-from app.services.panel_nav import NavViewer, build_sidebar
+from app.services.panel_nav import TOOLS_KEY, NavViewer, build_sidebar
 from app.services.resellers import RESELLER_SETTINGS_TABS
 from app.services.settings_search import SettingsSearchEntry, search_settings
 from app.services.settings_tab_groups import group_settings_tabs
@@ -110,6 +110,10 @@ def search_entries(viewer: NavViewer) -> list[SettingsSearchEntry]:
     # Modal settings (payment, support, referral) come before the long text and colour tabs.
     entries += _modal_entries({urlsplit(item.href).path: item.label for _, item in items})
     keys = {item.key for _, item in items}
+    # Each tool under the name of its area, as it sits in the area's list.
+    entries += [
+        _entry(label, item.label, href) for _, item in items if item.key == TOOLS_KEY for label, href in viewer.tool_links
+    ]
     if "bot_settings" in keys:
         entries += _settings_tab_entries(OWNER_SETTINGS_BASE, SETTINGS_TABS, "تنظیمات ربات")
     if "shop_settings" in keys:

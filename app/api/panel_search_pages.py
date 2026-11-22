@@ -13,6 +13,7 @@ from app.services.panel_nav import viewer_from_context
 from app.services.panel_search import panel_search
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.settings_search import SEARCH_QUERY_MAX_LEN
+from app.services.tools_nav import tool_sections
 
 SEARCH_PATH = "/panel-search"
 
@@ -28,6 +29,7 @@ def register_panel_search_pages(app: FastAPI, *, require_staff: Callable) -> Non
             hierarchy_identity(staff),
             is_owner=is_explicit_owner_staff(staff),
             marketing_sections=marketing_sections(staff),
+            tool_sections=tool_sections(staff),
         )
         hits = panel_search(viewer, q)
         return JSONResponse(

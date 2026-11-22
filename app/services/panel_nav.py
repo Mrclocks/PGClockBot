@@ -38,6 +38,12 @@ BROADCAST_KEY = "broadcast"
 BROADCAST_HREFS: tuple[str, ...] = ("/broadcast", "/shop-broadcast")
 # Campaigns were merged into group messages: their page lights the group-message entry, not «بازاریابی».
 CAMPAIGNS_HREF = "/campaigns"
+TOOLS_KEY = "tools"
+# The tools entry opens the list of the «ابزار و پاکسازی» area (app/api/tools_pages.py); its pages light it too.
+TOOLS_LIST_HREF = "/tools"
+TOOLS_ACTIVE_PREFIXES: tuple[str, ...] = (TOOLS_LIST_HREF, "/service-cleanup")
+# Bar keys saved by an older release, read as the entry that replaced them.
+LEGACY_DOCK_KEYS: dict[str, str] = {"service_cleanup": TOOLS_KEY}
 
 # Phone bottom bar: dashboard and plans, then the most used pages the viewer may open. The action center
 # is not here: it has its own button with a count in the phone header.
@@ -73,6 +79,8 @@ class NavViewer:
     can_add_representative: bool
     can_manage_representatives: bool
     marketing_hrefs: tuple[str, ...] = ()
+    # (label, href) of each tool the viewer may open; the sidebar entry and the panel search read it.
+    tool_links: tuple[tuple[str, str], ...] = ()
 
     @property
     def is_admin(self) -> bool:
@@ -101,6 +109,7 @@ def viewer_from_context(
     *,
     is_owner: bool,
     marketing_sections: Iterable[Any] = (),
+    tool_sections: Iterable[Any] = (),
 ) -> NavViewer:
     staff = staff or {}
     identity = identity or {}
@@ -112,6 +121,7 @@ def viewer_from_context(
         can_add_representative=bool(identity.get("can_add_representative")),
         can_manage_representatives=bool(identity.get("can_manage_representatives")),
         marketing_hrefs=tuple(str(s.href) for s in marketing_sections),
+        tool_links=tuple((str(s.label), str(s.href)) for s in tool_sections),
     )
 
 
@@ -236,8 +246,8 @@ _SHOP_ITEMS: tuple[_ItemSpec, ...] = (
     # Placeholders: href and visibility come from marketing_nav (see _broadcast_item and _marketing_item).
     _ItemSpec(BROADCAST_KEY, "پیام گروهی", "", "broadcast", lambda v: False, lambda loc: False),
     _ItemSpec(MARKETING_KEY, "بازاریابی", "", "megaphone", lambda v: False, lambda loc: False),
-    _ItemSpec("service_cleanup", "پاکسازی سرویس‌ها", "/service-cleanup", "trash",
-              lambda v: v.is_owner or "service_cleanup" in v.perms, _starts("/service-cleanup")),
+    # Placeholder: visibility comes from tools_nav (see _tools_item).
+    _ItemSpec(TOOLS_KEY, "ابزار و پاکسازی", TOOLS_LIST_HREF, "tools", lambda v: False, lambda loc: False, short="ابزار"),
     _ItemSpec("staff_actions", "گزارش کارکنان", "/staff-actions", "receipt",
               lambda v: v.is_owner or v.role in ("reseller", "principal"), _starts("/staff-actions")),
     _ItemSpec("bot_settings", "تنظیمات ربات", "/settings", "bot", _owner, _bot_settings_active),
@@ -290,9 +300,18 @@ def _marketing_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> Nav
     return NavItem(spec.key, spec.label, MARKETING_LIST_HREF, spec.icon, active)
 
 
+def _tools_item(spec: _ItemSpec, viewer: NavViewer, loc: NavLocation) -> NavItem | None:
+    """One entry for the «ابزار و پاکسازی» area when the viewer may open at least one of its tools."""
+    if not viewer.tool_links:
+        return None
+    active = loc.path.startswith(TOOLS_ACTIVE_PREFIXES)
+    return NavItem(spec.key, spec.label, spec.href, spec.icon, active, short=spec.short)
+
+
 _DYNAMIC_ITEMS: dict[str, Callable[[_ItemSpec, NavViewer, NavLocation], NavItem | None]] = {
     BROADCAST_KEY: _broadcast_item,
     MARKETING_KEY: _marketing_item,
+    TOOLS_KEY: _tools_item,
 }
 
 
@@ -395,7 +414,11 @@ def sidebar_for_template(
     marketing_sections: Iterable[Any],
     path: str,
     tab: str,
+    tool_sections: Iterable[Any] = (),
 ) -> tuple[NavSection, ...]:
     """Jinja entry point used by ``base.html``."""
-    viewer = viewer_from_context(staff, identity, is_owner=is_owner, marketing_sections=marketing_sections or ())
+    viewer = viewer_from_context(
+        staff, identity, is_owner=is_owner, marketing_sections=marketing_sections or (),
+        tool_sections=tool_sections or (),
+    )
     return build_sidebar(viewer, path=path, tab=tab)
