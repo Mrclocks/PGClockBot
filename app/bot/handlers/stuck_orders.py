@@ -22,6 +22,7 @@ from app.db.models import BotUser, DeliveryFailure, Order, Plan
 from app.services import bot_feedback_texts as feedback
 from app.services.formatting import format_message, format_toman, format_user_label, info_block, kv_line, order_status_fa
 from app.services.notifications import customer_markup
+from app.services.pasarguard import PasarGuardError
 from app.services.redact import operator_error, redact
 from app.services.shop_scope import ShopScopeError, assert_order_retry_in_scope, is_platform_admin, resolve_shop_scope_id
 from app.services.stuck_order_resolution import (
@@ -255,7 +256,8 @@ async def retry_order(
     except DeliveryNotRetryable as exc:
         await callback.answer(str(exc)[:190], show_alert=True)
         return
-    except ValueError as exc:
+    except (ValueError, PasarGuardError) as exc:
+        # Any panel failure is shown to staff; the failure itself is already recorded on the order.
         await session.rollback()
         logger.warning("bot delivery retry refused order=%s", order_id, exc_info=True)
         await callback.answer(operator_error(exc, prefix="تلاش مجدد ناموفق", limit=150), show_alert=True)

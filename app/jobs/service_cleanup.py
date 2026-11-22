@@ -4,14 +4,31 @@ from __future__ import annotations
 
 import logging
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.session import SessionLocal
-from app.services.service_cleanup import KIND_TIME, KIND_VOLUME, enabled_scopes
-from app.services.service_cleanup_delete import DELETE_BATCH, delete_due_services
+from app.services.service_cleanup import KIND_TIME, KIND_VOLUME, CleanupPolicy, enabled_scopes
+from app.services.service_cleanup_delete import DELETE_BATCH, DeleteResult, delete_due_services
 from app.services.service_cleanup_notices import SCAN_BATCH, scan_notices
 
 logger = logging.getLogger(__name__)
 
-MAX_BATCHES_PER_SCOPE = 5  # a larger backlog of warnings is finished by the next runs
+MAX_BATCHES_PER_SCOPE = 5  # a larger backlog of warnings or deletions is finished by the next runs
+
+
+async def _delete_batches(session: AsyncSession, shop_id: int | None, policy: CleanupPolicy, kind: str) -> DeleteResult:
+    """Delete in id order, batch after batch, so services that must wait never hold back the ones after them."""
+    deleted = skipped = failed = 0
+    after_id = 0
+    for _ in range(MAX_BATCHES_PER_SCOPE):
+        outcome = await delete_due_services(
+            session, shop_id=shop_id, policy=policy, kind=kind, limit=DELETE_BATCH, after_id=after_id
+        )
+        deleted, skipped, failed = deleted + outcome.deleted, skipped + outcome.skipped, failed + outcome.failed
+        if outcome.next_after_id is None:
+            break
+        after_id = outcome.next_after_id
+    return DeleteResult(deleted=deleted, skipped=skipped, failed=failed)
 
 
 async def run_service_cleanup() -> None:
@@ -26,7 +43,7 @@ async def run_service_cleanup() -> None:
                             result = await scan_notices(session, shop_id=shop_id, policy=policy, kind=kind)
                             if result.queued + result.reset < SCAN_BATCH:
                                 break
-                        outcome = await delete_due_services(session, shop_id=shop_id, policy=policy, kind=kind, limit=DELETE_BATCH)
+                        outcome = await _delete_batches(session, shop_id, policy, kind)
                         if outcome.deleted or outcome.failed:
                             logger.info(
                                 "service cleanup shop=%s kind=%s deleted=%s failed=%s skipped=%s",

@@ -459,6 +459,12 @@ function escapeHtml(value) {
         if (form.hasAttribute('data-confirm') || form.id === 'confirm-form') return;
         if (side && side.contains(form)) setOpen(false, true);
         arm();
+        /* Listeners after this one (the Persian validator, upload XHR) may still
+           cancel the submit; then no navigation follows and the clock would
+           cover the page forever. Re-check once dispatch has finished. */
+        setTimeout(function () {
+          if (e.defaultPrevented) disarm();
+        }, 0);
       }, true);
       window.addEventListener('pageshow', function () {
         disarm();

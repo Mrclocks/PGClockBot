@@ -171,5 +171,14 @@ class StuckOrdersBotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(order.status, "paid")
 
 
+    async def test_retry_reports_a_panel_failure_instead_of_a_generic_error(self) -> None:
+        from app.services.pasarguard import PasarGuardError
+
+        with patch.object(stuck, "retry_delivery", AsyncMock(side_effect=PasarGuardError("bad gateway", 502))):
+            callback, _, _ = await self.press("stk:r:11", staff=SHOP_STAFF)
+        self.assertTrue(callback.answer.await_args.kwargs["show_alert"])
+        self.assertIn("تلاش مجدد ناموفق", callback.answer.await_args.args[0])
+
+
 if __name__ == "__main__":
     unittest.main()

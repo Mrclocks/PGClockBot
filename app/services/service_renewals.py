@@ -31,6 +31,9 @@ from app.services.service_freeze_guard import assert_not_frozen
 from app.services.service_live_info import validate_service_info
 
 GB = 1024**3
+SERVICE_REMOVED_FROM_PANEL = (
+    "این سرویس از پنل حذف شده است؛ تمدید یا افزایش آن ممکن نیست. برای بررسی با پشتیبانی تماس بگیرید."
+)
 PREVIEW_NOTICE = "پیش‌نمایش بر اساس مانده فعلی است؛ مصرف و گذشت زمان تا اجرای تمدید از مانده کم می‌شود."
 
 
@@ -282,6 +285,16 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
     }
 
 
+def assert_service_on_panel(service: Any) -> None:
+    """Refuse to sell a renewal or a pack for a service the panel confirmed it no longer has.
+
+    The flag is set only after a clean 404 (see ``service_panel_presence``); taking money for it
+    would only end in a paid order that can never be delivered.
+    """
+    if getattr(service, "panel_missing_at", None) is not None:
+        raise ValueError(SERVICE_REMOVED_FROM_PANEL)
+
+
 async def assert_service_quota_available(session, service_id: int):
     from app.services.service_cancellations import lock_service_mutation
     await lock_service_mutation(session, service_id)
@@ -302,6 +315,7 @@ async def validate_renewal_selection(session, *, user_id, service, plan, shop_id
     if not service.pg_user_id or (service.remark or "").strip() == "linked":
         raise ValueError("تمدید این سرویس از این مسیر ممکن نیست")
     await assert_not_frozen(session, service.id)
+    assert_service_on_panel(service)
     from app.services.service_automation import service_shop_id
     if await service_shop_id(session, service) != shop_id:
         raise ValueError("سرویس این فروشگاه نیست")
