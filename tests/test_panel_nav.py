@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from app.api.app import create_api_app, templates
 from app.services.guide_catalog import TOPICS
 from app.services.marketing_nav import MarketingSection
+from app.services.tools_nav import ToolSection
 from app.services.panel_nav import (
     DOCK_SLOTS,
     MINIAPP_OWNER_SHORTCUTS,
@@ -25,12 +26,14 @@ ALL_PG = frozenset({"pg_overview", "pg_users", "pg_admins", "pg_nodes", "pg_grou
 
 
 def viewer(role: str = "admin", *, perms: tuple[str, ...] = (), pg: frozenset[str] = frozenset(), owner: bool = False,
-           add_rep: bool = False, manage_rep: bool = False, marketing: tuple[str, ...] = ()) -> NavViewer:
+           add_rep: bool = False, manage_rep: bool = False, marketing: tuple[str, ...] = (),
+           tools: tuple[tuple[str, str], ...] = ()) -> NavViewer:
     return NavViewer(role=role, perms=frozenset(perms), pg_perms=pg, is_owner=owner, can_add_representative=add_rep,
-                     can_manage_representatives=manage_rep, marketing_hrefs=marketing)
+                     can_manage_representatives=manage_rep, marketing_hrefs=marketing, tool_links=tools)
 
 
-OWNER = viewer(pg=ALL_PG, owner=True, manage_rep=True, marketing=("/loyalty?tab=overview", "/broadcast"))
+OWNER = viewer(pg=ALL_PG, owner=True, manage_rep=True, marketing=("/loyalty?tab=overview", "/broadcast"),
+               tools=(("پاکسازی سرویس‌ها", "/service-cleanup"), ("بکاپ", "/settings?tab=backup")))
 RESELLER = viewer("reseller", perms=("dashboard", "orders", "plans", "tickets", "shop_settings"), add_rep=True,
                   marketing=("/catalog-discounts",))
 PG_STAFF = viewer("pg_staff", pg=frozenset({"pg_users", "pg_hosts"}))
@@ -49,7 +52,7 @@ class SidebarPerRoleTests(unittest.TestCase):
         nav = labels(OWNER)
         self.assertEqual(nav["system"], ["داشبورد", "مرکز اقدام", "تنظیمات سیستم"])
         self.assertEqual(nav["shop"], ["نمای کلی فروشگاه", "کاربران ربات", "نمایندگان", "مالی", "پلن‌ها", "پشتیبانی",
-                                       "پیام گروهی", "بازاریابی", "پاکسازی سرویس‌ها", "گزارش کارکنان", "تنظیمات ربات"])
+                                       "پیام گروهی", "بازاریابی", "ابزار و پاکسازی", "گزارش کارکنان", "تنظیمات ربات"])
         self.assertEqual(nav["pg"][0], "نمای کلی پاسارگارد")
         self.assertEqual(nav["pg"][-1], "تست اتصال سرویس")
 
@@ -174,9 +177,10 @@ class RenderedSidebarTests(unittest.TestCase):
             self.assertIn(f'data-nav-collapse="{key}" aria-expanded="false"', html)
             self.assertIn(f'id="nav-panel-{key}"', html)
 
-    def test_service_cleanup_sidebar_item_has_an_icon(self) -> None:
-        html = self.render({"role": "admin", "permissions": []}, {"kind": "owner"}, is_owner=True)
-        link = re.search(r'<a href="/service-cleanup" class="nav-item[^"]*"[^>]*>.*?</a>', html, re.S)
+    def test_tools_sidebar_item_has_an_icon(self) -> None:
+        tools = (ToolSection("service_cleanup", "پاکسازی سرویس‌ها", "/service-cleanup", "", "trash"),)
+        html = self.render({"role": "admin", "permissions": []}, {"kind": "owner"}, is_owner=True, tool_sections=tools)
+        link = re.search(r'<a href="/tools" class="nav-item[^"]*"[^>]*>.*?</a>', html, re.S)
         self.assertIsNotNone(link)
         self.assertRegex(link.group(0), r'<svg class="nav-ico"[^>]*>\s*<path ')
 
