@@ -37,8 +37,7 @@ def upgrade() -> None:
     if sa.inspect(bind).has_table(PROGRAMS) and "inactive_days" not in {
         c["name"] for c in sa.inspect(bind).get_columns(PROGRAMS)
     }:
-        with op.batch_alter_table(PROGRAMS) as batch:
-            batch.add_column(sa.Column("inactive_days", sa.Integer(), nullable=False, server_default=sa.text("0")))
+        op.add_column(PROGRAMS, sa.Column("inactive_days", sa.Integer(), nullable=False, server_default=sa.text("0")))
 
 
 def downgrade() -> None:
@@ -46,7 +45,6 @@ def downgrade() -> None:
     if sa.inspect(bind).has_table(PROGRAMS) and "inactive_days" in {
         c["name"] for c in sa.inspect(bind).get_columns(PROGRAMS)
     }:
-        with op.batch_alter_table(PROGRAMS) as batch:
-            batch.drop_column("inactive_days")
+        op.drop_column(PROGRAMS, "inactive_days")
     if sa.inspect(bind).has_table(BUDGETS):
         op.drop_table(BUDGETS)
