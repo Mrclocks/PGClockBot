@@ -159,7 +159,7 @@ async def maintenance_group(session: AsyncSession) -> HealthGroup:
     manager = get_reseller_bot_manager()
     active = int(await session.scalar(select(func.count()).select_from(_active_shops_query().subquery())) or 0)
     if manager is None:
-        bots = HealthItem("bots", "ربات فروشگاه‌ها", "bot", NEUTRAL, "ربات فروشگاه‌ها در این پنل اجرا نمی‌شوند")
+        bots = HealthItem("bots", "ربات فروشگاه‌ها", "bot", NEUTRAL, "در این پنل اجرا نمی‌شوند")
     else:
         tone, summary = _bots_summary(manager.running_count(), active)
         action = "" if reconnect_running() or not active else RECONNECT_PATH
