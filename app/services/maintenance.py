@@ -230,7 +230,7 @@ async def maintenance_group(session: AsyncSession) -> HealthGroup:
         action = "" if reconnect_running() or not active else RECONNECT_PATH
         bots = HealthItem("bots", "ربات فروشگاه‌ها", "bot", tone, summary, action=action, confirm=RECONNECT_CONFIRM,
                            confirm_title="اتصال دوبارهٔ ربات‌ها")
-    caches = HealthItem("caches", "کش‌های پنل", "refresh", "", "تنظیمات، منو، ظاهر و داده‌های موقت پاسارگارد",
+    caches = HealthItem("caches", "کش‌های پنل", "queue", "", "تنظیمات، منو، ظاهر و داده‌های موقت پاسارگارد",
                         action=CLEAR_CACHES_PATH, confirm=CLEAR_CACHES_CONFIRM,
                         confirm_title="پاک کردن کش‌ها")
     return HealthGroup("نگهداری", (bots, caches, _resync_line(), await _restart_line()))
