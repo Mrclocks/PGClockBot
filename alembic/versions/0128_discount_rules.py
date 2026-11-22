@@ -27,15 +27,11 @@ CLAIM_INDEX = "uq_order_discounts_live_claim"
 LIVE_CLAIM = sa.text("claim_key IS NOT NULL AND released_at IS NULL")
 
 
-def _fk(bind: sa.Connection) -> list:
-    return [] if bind.dialect.name == "sqlite" else [sa.ForeignKey("bot_users.id")]
-
-
-def _create_rules(bind: sa.Connection) -> None:
+def _create_rules() -> None:
     op.create_table(
         RULES,
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("shop_id", sa.Integer(), *_fk(bind), nullable=True),
+        sa.Column("shop_id", sa.Integer(), sa.ForeignKey("bot_users.id"), nullable=True),
         sa.Column("name", sa.String(128), nullable=False),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column("audience", sa.String(16), nullable=False, server_default=sa.text("'all'")),
@@ -61,16 +57,15 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     if not inspector.has_table(RULES):
-        _create_rules(bind)
+        _create_rules()
     if "ix_discount_rules_shop_id" not in {i["name"] for i in sa.inspect(bind).get_indexes(RULES)}:
         op.create_index("ix_discount_rules_shop_id", RULES, ["shop_id"])
     if "claim_key" not in {c["name"] for c in inspector.get_columns(LEDGER)}:
-        with op.batch_alter_table(LEDGER) as batch:
-            batch.add_column(sa.Column("claim_key", sa.String(32), nullable=True))
+        op.add_column(LEDGER, sa.Column("claim_key", sa.String(32), nullable=True))
     if CLAIM_INDEX not in {i["name"] for i in sa.inspect(bind).get_indexes(LEDGER)}:
         op.create_index(
             CLAIM_INDEX, LEDGER, ["shop_key", "user_id", "claim_key"], unique=True,
-            sqlite_where=LIVE_CLAIM, postgresql_where=LIVE_CLAIM,
+            postgresql_where=LIVE_CLAIM,
         )
 
 
@@ -81,7 +76,6 @@ def downgrade() -> None:
         if CLAIM_INDEX in {i["name"] for i in inspector.get_indexes(LEDGER)}:
             op.drop_index(CLAIM_INDEX, table_name=LEDGER)
         if "claim_key" in {c["name"] for c in sa.inspect(bind).get_columns(LEDGER)}:
-            with op.batch_alter_table(LEDGER) as batch:
-                batch.drop_column("claim_key")
+            op.drop_column(LEDGER, "claim_key")
     if sa.inspect(bind).has_table(RULES):
         op.drop_table(RULES)

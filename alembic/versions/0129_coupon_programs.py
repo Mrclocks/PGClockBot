@@ -47,11 +47,10 @@ def upgrade() -> None:
     if not sa.inspect(bind).has_table(ENTITLEMENTS):
         return
     if "issue_key" not in {c["name"] for c in sa.inspect(bind).get_columns(ENTITLEMENTS)}:
-        with op.batch_alter_table(ENTITLEMENTS) as batch:
-            batch.add_column(sa.Column("issue_key", sa.String(64), nullable=True))
+        op.add_column(ENTITLEMENTS, sa.Column("issue_key", sa.String(64), nullable=True))
     if ISSUE_INDEX not in {i["name"] for i in sa.inspect(bind).get_indexes(ENTITLEMENTS)}:
         op.create_index(ISSUE_INDEX, ENTITLEMENTS, ["issue_key"], unique=True,
-                        sqlite_where=HAS_KEY, postgresql_where=HAS_KEY)
+                        postgresql_where=HAS_KEY)
 
 
 def downgrade() -> None:
@@ -60,7 +59,6 @@ def downgrade() -> None:
         if ISSUE_INDEX in {i["name"] for i in sa.inspect(bind).get_indexes(ENTITLEMENTS)}:
             op.drop_index(ISSUE_INDEX, table_name=ENTITLEMENTS)
         if "issue_key" in {c["name"] for c in sa.inspect(bind).get_columns(ENTITLEMENTS)}:
-            with op.batch_alter_table(ENTITLEMENTS) as batch:
-                batch.drop_column("issue_key")
+            op.drop_column(ENTITLEMENTS, "issue_key")
     if sa.inspect(bind).has_table(PROGRAMS):
         op.drop_table(PROGRAMS)
