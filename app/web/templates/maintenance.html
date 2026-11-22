@@ -10,6 +10,10 @@
   <a class="btn btn-ghost page-act-icon" href="/tools/maintenance">{{ act_label('تازه‌سازی', icon_name='refresh') }}</a>
   {%- endif %}
 {% endcall %}
+{%- if restarting_from %}
+<div class="ds-note" role="status" data-restart-wait="{{ restarting_from }}">پنل در حال راه‌اندازی مجدد است؛ این صفحه وقتی پنل دوباره روشن شد خودش تازه می‌شود.</div>
+<script src="/static/restart-wait.js?v={{ asset_v('restart-wait.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
+{%- endif %}
 {{ status_hub(groups) }}
 </div>
 {% endblock %}
