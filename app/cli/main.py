@@ -54,20 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     rst.add_argument("--env", action="store_true", help="Also restore .env")
     rst.add_argument("--no-restart", action="store_true", help="Do not schedule service restart")
 
-    mig = sub.add_parser("migrate", help="Apply Alembic migrations (or SQLite→PG ETL)")
-    mig.add_argument(
-        "--from-sqlite",
-        action="store_true",
-        help="Run SQLite→PostgreSQL data migration",
-    )
-    mig.add_argument("--source", default="", help="Source SQLite DATABASE_URL")
-    mig.add_argument("--target", default="", help="Target PostgreSQL DATABASE_URL")
-    mig.add_argument("-y", "--yes", action="store_true", help="Skip ETL confirmation")
-    mig.add_argument(
-        "--skip-schema",
-        action="store_true",
-        help="Skip alembic upgrade on ETL target",
-    )
+    sub.add_parser("migrate", help="Apply Alembic migrations")
 
     rev = sub.add_parser("shop-review", help="List or assign services whose selling shop is unknown")
     rev.add_argument("action", choices=("list", "assign"))
@@ -150,14 +137,7 @@ def main(argv: list[str] | None = None) -> int:
         if cmd == "migrate":
             from app.cli.migrate_cmds import cmd_migrate
 
-            return cmd_migrate(
-                ctx,
-                from_sqlite=bool(args.from_sqlite),
-                source=args.source,
-                target=args.target,
-                yes=bool(args.yes),
-                skip_schema=bool(args.skip_schema),
-            )
+            return cmd_migrate(ctx)
         if cmd == "shop-review":
             from app.cli.shop_review_cmds import cmd_shop_review_assign, cmd_shop_review_list
 

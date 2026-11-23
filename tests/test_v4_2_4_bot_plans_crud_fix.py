@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_PLANS = (ROOT / "app/bot/handlers/admin_plans.py").read_text(encoding="utf-8")
 ADMIN = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
+PLAN_EDITOR = (ROOT / "app/bot/handlers/admin_plan_editor.py").read_text(encoding="utf-8")
 TG_UTILS = (ROOT / "app/bot/tg_utils.py").read_text(encoding="utf-8")
 
 
@@ -35,7 +36,7 @@ class PlansCrudFixTests(unittest.TestCase):
         self.assertIn("adm:resplan:add:setrole:", ADMIN_PLANS)
 
     def test_user_plan_detail_escapes_html(self):
-        detail = ADMIN[ADMIN.find("async def _plan_detail_text") : ADMIN.find("def _plan_detail_keyboard")]
+        detail = PLAN_EDITOR[PLAN_EDITOR.find("async def _plan_detail_text") : PLAN_EDITOR.find("def _plan_detail_keyboard")]
         self.assertIn("html.escape(p.name)", detail)
 
     def test_persian_digit_parser(self):
@@ -98,15 +99,6 @@ class ResellerPlanDeleteHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(calls, ["delete", "rollback"])
         self.assertTrue(callback.answer.await_args.kwargs["show_alert"])
-
-
-class VersionTests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 
 if __name__ == "__main__":

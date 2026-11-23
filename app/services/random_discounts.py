@@ -16,6 +16,7 @@ from app.db.models import (
     RandomDiscount, RandomDiscountDraw, RandomDiscountReservation,
 )
 from app.services.authz import authz_from_staff, can_shop
+from app.services.order_discounts import SOURCE_RANDOM, record_order_discount
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.users import current_shop_reseller_id
 
@@ -188,14 +189,6 @@ async def _policy_for_order(session: AsyncSession, order: Order, code: str | Non
         normalized = "".join(code.split()).upper()
         query = query.where(RandomDiscount.mode == "code", RandomDiscount.code == normalized)
     return await session.scalar(query.limit(1))
-
-
-async def _begin_sqlite_transaction(session: AsyncSession) -> None:
-    connection = await session.connection()
-    if connection.dialect.name == "sqlite":
-        raw = await connection.get_raw_connection()
-        if not raw.driver_connection.in_transaction:
-            await connection.exec_driver_sql("BEGIN")
 
 
 async def _existing_draw(session: AsyncSession, order: Order, code: str | None) -> bool:
@@ -375,6 +368,7 @@ async def _allocate_draw(session: AsyncSession, order: Order, policy: RandomDisc
     if policy.mode == "code":
         order.discount_code = policy.code
     await session.flush()
+    await record_order_discount(session, order, source=SOURCE_RANDOM, amount=reduction, source_ref=str(policy.id))
 
 
 def _has_ordinary_discount(order: Order) -> bool:
@@ -413,7 +407,6 @@ async def apply_random_discount(session: AsyncSession, order: Order, *, code: st
         raise ValueError("سفارش این فروشگاه یافت نشد")
     if await _is_exempt_from_discount(session, order, policy, code):
         return False
-    await _begin_sqlite_transaction(session)
     try:
         async with session.begin_nested():
             locked = await session.execute(update(RandomDiscount).where(

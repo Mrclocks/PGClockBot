@@ -51,7 +51,6 @@ pgclock backup [--note TEXT] [--no-env]
 pgclock backup --list
 pgclock restore <backup_id> [--yes] [--env] [--no-restart]
 pgclock migrate                    # alembic upgrade head
-pgclock migrate --from-sqlite --source 'sqlite+aiosqlite:///…' --target 'postgresql+asyncpg://…' -y
 pgclock doctor
 ```
 

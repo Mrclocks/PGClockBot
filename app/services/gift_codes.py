@@ -226,7 +226,7 @@ async def _assert_gift_code_available(session: AsyncSession, code: str, *, shop_
 async def create_gift_code(
     session: AsyncSession, *, code=None, note=None, reseller_id=None, audit: StaffActor | None = None, **rules
 ) -> ChargeCode:
-    from app.services.ux20 import generate_charge_code, normalize_charge_code
+    from app.services.charge_codes import generate_charge_code, normalize_charge_code
 
     values = validate_rules(**rules)
     if values["expires_at"] and values["expires_at"] <= datetime.now(timezone.utc):
@@ -290,7 +290,7 @@ async def claim_use(
     shop_id: int | None,
     kind: str,
 ) -> None:
-    """The code UPDATE serializes claims on both PostgreSQL and SQLite.
+    """The code UPDATE row lock serializes concurrent claims of one code.
 
     Caller must wrap the claim and entitlement in one savepoint/transaction.
     Check user counts AFTER taking the code lock, so parallel requests see

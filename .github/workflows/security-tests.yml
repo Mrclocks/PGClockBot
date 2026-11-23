@@ -4,10 +4,9 @@ name: Security regression tests
 # suite on every push and pull request, so a future patch can never silently
 # reintroduce one of the issues fixed in the 2026-08 security audit.
 #
-# The full test suite (tests/) is intentionally NOT run here — it also
-# contains a long tail of pre-existing, unrelated UI/version-pin tests that
-# would make this signal noisy. See scripts/security_test_manifest.txt for
-# the curated file list and scripts/run_security_tests.sh for the runner.
+# The whole of tests/ runs in full-tests.yml; this curated subset stays as a
+# fast, separate signal. See scripts/security_test_manifest.txt for the file
+# list and scripts/run_security_tests.sh for the runner.
 
 on:
   push:
@@ -17,6 +16,23 @@ on:
 jobs:
   security-tests:
     runs-on: ubuntu-latest
+    # Database tests run against a real PostgreSQL server (tests/postgres_support.py).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: pgclock_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/pgclock_test
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +47,19 @@ jobs:
 
       - name: Run curated security regression suite
         run: bash scripts/run_security_tests.sh
+
+  # PostgreSQL is the only supported database: see scripts/postgres_only_check.py.
+  postgres-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Block references to other database engines
+        run: python scripts/postgres_only_check.py
 
   # The installer runs the panel on Python 3.10–3.12: newer-only code must not ship.
   oldest-python:
@@ -50,7 +79,8 @@ jobs:
 
       - name: Compile every module and import the app
         env:
-          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          # Importing builds the engine but opens no connection; no server is needed.
+          DATABASE_URL: "postgresql+asyncpg://pgclock:import-check@127.0.0.1:5432/pgclock"
         run: |
           python -m compileall -q app alembic scripts run.py
           python -c "import app.main, app.bot, app.api.app"

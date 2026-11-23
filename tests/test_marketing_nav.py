@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from fastapi import HTTPException
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -20,10 +18,12 @@ from app.services.authz import authz_from_staff, can_shop
 from app.api.shop_broadcast_pages import shop_broadcast_scope
 from app.services.marketing_nav import (
     BROADCAST,
+    group_message_page,
     CAMPAIGNS,
     CASHBACK,
     CLUB,
     CLUB_TRANSACTIONS,
+    DISCOUNT_RULES,
     DISCOUNTS,
     FUNNEL,
     GIFT_CODES,
@@ -125,7 +125,8 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
     def test_owner_sees_every_section_in_order(self):
         self.assertEqual(
             _keys(OWNER),
-            [CLUB, CLUB_TRANSACTIONS, DISCOUNTS, RANDOM_DISCOUNTS, GIFT_CODES, CASHBACK, CAMPAIGNS, TRIAL_USERS, FUNNEL, BROADCAST],
+            [CLUB, CLUB_TRANSACTIONS, DISCOUNTS, DISCOUNT_RULES, RANDOM_DISCOUNTS, GIFT_CODES, CASHBACK, CAMPAIGNS, TRIAL_USERS,
+             FUNNEL, BROADCAST],
         )
 
     def test_legacy_admin_without_owner_principal_gets_no_tenant_sections(self):
@@ -136,6 +137,7 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
             _keys(_reseller(["loyalty", "campaigns"])),
             [CLUB, CLUB_TRANSACTIONS, CAMPAIGNS],
         )
+        # Group messages need their own permission; campaigns alone do not open them.
         self.assertEqual(_keys(_reseller(["campaigns"])), [CAMPAIGNS])
         self.assertEqual(_keys(_reseller(["loyalty"])), [CLUB, CLUB_TRANSACTIONS])
 
@@ -221,9 +223,17 @@ class MarketingGroupsTests(unittest.TestCase):
     def test_eight_pages_become_five_topics(self):
         groups = marketing_groups(marketing_sections(OWNER))
         self.assertEqual([g.label for g in groups],
-                         ["باشگاه مشتریان", "تخفیف و کد هدیه", "پیام و کمپین", "کاربران تست", "رفتار کاربر"])
+                         ["باشگاه مشتریان", "تخفیف و کد هدیه", "کاربران تست", "رفتار کاربر"])
         keys = [s.key for g in groups for s in g.sections]
-        self.assertEqual(sorted(keys), sorted(s.key for s in marketing_sections(OWNER)))
+        # Group messages (and the campaigns merged into them) have their own sidebar entry, not a list row.
+        expected = [s.key for s in marketing_sections(OWNER) if s.key not in (BROADCAST, SHOP_BROADCAST, CAMPAIGNS)]
+        self.assertEqual(sorted(keys), sorted(expected))
+
+    def test_campaigns_are_listed_only_for_staff_without_group_messages(self):
+        alone = marketing_groups(marketing_sections(_reseller(["campaigns"])))
+        self.assertEqual([s.key for g in alone for s in g.sections], [CAMPAIGNS])
+        with_group_messages = marketing_groups(marketing_sections(_reseller(["campaigns", "broadcast"])))
+        self.assertNotIn(CAMPAIGNS, [s.key for g in with_group_messages for s in g.sections])
 
     def test_a_topic_without_allowed_pages_is_left_out(self):
         groups = marketing_groups(marketing_sections(_reseller(["campaigns", "loyalty"])))
@@ -277,12 +287,13 @@ def _page(name: str, path: str, staff: dict, **extra) -> str:
 class MarketingNavRenderedPageTests(unittest.TestCase):
     """The real ``render()`` path: the sidebar entry and the way back to the list follow the role."""
 
-    def test_owner_gets_sidebar_entry_and_way_back_on_broadcast(self):
+    def test_owner_gets_both_sidebar_entries_and_broadcast_is_a_top_level_page(self):
         html = _page("broadcast.html", "/broadcast", OWNER)
         self.assertIn('<a href="/marketing" class="nav-item', html)
-        self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', html)
+        self.assertIn('<a href="/broadcast" class="nav-item', html)
+        self.assertNotIn('aria-label="بازگشت به بازاریابی"', html)
 
-    def test_reseller_with_campaigns_only_gets_no_broadcast_or_club_links(self):
+    def test_reseller_with_campaigns_only_returns_to_the_marketing_list(self):
         staff = _reseller(["campaigns"])
         html = _page(
             "customer_features.html",
@@ -295,8 +306,30 @@ class MarketingNavRenderedPageTests(unittest.TestCase):
             limit=10,
             campaigns=[],
             mode="campaigns",
+            group_page=group_message_page(staff),
         )
         self.assertIn('href="/marketing" aria-label="بازگشت به بازاریابی"', html)
+        self.assertNotIn('href="/shop-broadcast"', html)
+        self.assertNotIn('href="/broadcast"', html)
+
+    def test_reseller_with_group_messages_returns_there_from_campaigns(self):
+        staff = _reseller(["campaigns", "broadcast"])
+        self.assertEqual(group_message_page(staff), "/shop-broadcast")
+        self.assertEqual(group_message_page(OWNER), "/broadcast")
+        html = _page(
+            "customer_features.html",
+            "/campaigns",
+            staff,
+            audiences={},
+            audience="trial",
+            days=7,
+            count=0,
+            limit=10,
+            campaigns=[],
+            mode="campaigns",
+            group_page="/shop-broadcast",
+        )
+        self.assertIn('href="/shop-broadcast" aria-label="بازگشت به پیام گروهی"', html)
         self.assertNotIn('href="/broadcast"', html)
         self.assertNotIn('href="/loyalty', html)
 

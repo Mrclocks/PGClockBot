@@ -69,7 +69,7 @@ class DailyReportCatalogTests(unittest.TestCase):
         self.assertIn("daily_report", settings)
         shop = (ROOT / "app/web/templates/shop_settings.html").read_text(encoding="utf-8")
         self.assertIn("daily_report", shop)
-        sched = (ROOT / "app/jobs/scheduler.py").read_text(encoding="utf-8")
+        sched = (ROOT / "app/services/daily_report_delivery.py").read_text(encoding="utf-8")
         self.assertIn("shop_daily_report_chat_ids", sched)
         self.assertIn("ACTOR_SHOP", sched)
         self.assertIn("open_notify_bot_for_reseller", sched)

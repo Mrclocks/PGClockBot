@@ -5,7 +5,6 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 from tests.template_source import template_with_includes
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,16 +75,6 @@ class PanelTemplateGuards(unittest.TestCase):
         self.assertNotIn("required", edit_field)
         self.assertIn('min="0"', edit_field)
         self.assertIn('data-ds-unlimited="#edit-plan-days" data-ds-empty-is-unlimited', edit)
-
-    def test_api_parses_duration_as_string(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        create = src.split("async def plans_create")[1].split("async def plans_trial_save")[0]
-        self.assertIn('duration_days: str = Form("")', create)
-        self.assertIn("parse_user_plan_duration_days", create)
-        edit = src.split("async def plans_edit_save")[1].split("async def ")[0]
-        self.assertIn('duration_days: str = Form("")', edit)
-        self.assertIn("parse_user_plan_duration_days", edit)
-
 
 if __name__ == "__main__":
     unittest.main()

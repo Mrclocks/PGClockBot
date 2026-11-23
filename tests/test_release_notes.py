@@ -194,7 +194,7 @@ class ReleaseNotesTests(unittest.TestCase):
 
     def test_update_template_simplified(self):
         src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
-        self.assertIn("update-changelog", src)
+        self.assertIn("upd-changelog", src)
         self.assertNotIn("rollback", src)
         self.assertIn("settings-card", src)
         self.assertIn("upd-start", src)

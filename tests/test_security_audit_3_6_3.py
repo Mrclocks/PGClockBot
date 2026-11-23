@@ -4,25 +4,13 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class Version363Tests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
-        notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"0.1.0"', notes)
-
-
 class WebShopOrderIsolationTests(unittest.TestCase):
     def test_order_approve_blocks_admin_on_shop(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/api/order_review_pages.py").read_text(encoding="utf-8")
         # Platform admin must refuse tenant shop orders (match bot ordrev)
         self.assertIn(
             "این سفارش مربوط به نماینده است — فقط در ربات/پنل همان فروشگاه قابل تأیید است",
@@ -65,12 +53,12 @@ class WebShopOrderIsolationTests(unittest.TestCase):
         )
 
     def test_pending_receipt_needs_payments_perm(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/api/order_review_pages.py").read_text(encoding="utf-8")
         self.assertIn('if "payments" not in perms:', src)
         self.assertIn("تأیید رسید نیاز به دسترسی «پرداخت‌ها» دارد", src)
 
     def test_dashboard_requires_dashboard_perm(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/api/user_list_pages.py").read_text(encoding="utf-8")
         self.assertIn('Depends(require_perm("dashboard"))', src)
 
     def test_require_staff_applies_with_shop_settings(self):

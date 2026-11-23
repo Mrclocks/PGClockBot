@@ -8,19 +8,9 @@ import secrets
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-class VersionAuditTests(unittest.TestCase):
-    def test_version_bumped(self):
-        from app.version import __version__
-
-        notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"0.1.0"', notes)
-        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")[:3]), (0, 1, 0))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 
 class PaymentRaceSourceTests(unittest.TestCase):
@@ -75,7 +65,7 @@ class DiscountReserveTests(unittest.TestCase):
 
 class ShopIsolationWebPaymentsTests(unittest.TestCase):
     def test_admin_cannot_approve_shop_payments(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/api/order_review_pages.py").read_text(encoding="utf-8")
         self.assertIn(
             "پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود",
             src,

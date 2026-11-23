@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot import keyboards as kb
 from app.bot.handlers import reseller_customer_services as shop_services

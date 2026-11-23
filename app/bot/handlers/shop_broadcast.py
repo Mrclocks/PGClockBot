@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 
 from aiogram import F, Router
@@ -10,14 +11,19 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.broadcast_segments import SHOP_LIST, SHOP_PICK, TARGETED_LABEL, TITLE, targeted_keyboard
 from app.bot.reseller_hub_groups import back_callback_for
+from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
 from app.services.broadcast import clear_broadcast_history, delete_broadcast_log, list_broadcast_history
+from app.services.broadcast_audience import describe, make_spec
 from app.services.broadcast_queue import STATUS_LABELS, cancel_broadcast
+from app.bot.message_button_picker import ask_for_buttons, register_flow
+from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard
 from app.services.redact import user_safe_error
+from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.services.shop_broadcast import (
-    SHOP_AUDIENCE_LABELS,
     clean_shop_broadcast_text,
     new_shop_request_key,
     queue_shop_broadcast,
@@ -29,12 +35,13 @@ logger = logging.getLogger(__name__)
 router = Router(name="shop_broadcast")
 
 CB_HUB = "shp:bc:hub"
-CB_AUD_ALL = "shp:bc:aud:all"
+CB_AUD_ALL = f"{SHOP_PICK}all"
 CB_HIST = "shp:bc:hist"
 CB_CONFIRM = "shp:bc:go"
 CB_CANCEL_PREFIX = "shp:bc:x:"
 CB_DELETE_PREFIX = "shp:bc:d:"
 CB_CLEAR = "shp:bc:clr"
+FLOW = "shop_broadcast"
 HISTORY_LIMIT = 8
 
 
@@ -43,7 +50,7 @@ class ShopBroadcastStates(StatesGroup):
     confirm = State()
 
 
-async def _shop_id(
+async def resolve_shop_id(
     session: AsyncSession,
     db_user: BotUser,
     *,
@@ -65,13 +72,33 @@ async def _shop_id(
     return int(owner_id)
 
 
-def _hub_keyboard(ui: dict) -> InlineKeyboardMarkup:
-    from app.bot.nav_inline import _ikb, _pack_hub_keyboard
+async def shop_has_campaigns(
+    session: AsyncSession, db_user: BotUser, *, reseller_owner_id: int | None
+) -> bool:
+    """Whether the staff member may see the shop's campaign list (``campaigns`` permission)."""
+    from app.bot.auth import can_shop_feature
+    from app.services.reseller_access import load_reseller_actor
+
+    _owner_id, profile = await load_reseller_actor(
+        session, db_user, is_reseller_bot=True, reseller_owner_id=reseller_owner_id
+    )
+    return bool(profile) and can_shop_feature("campaigns", profile=profile, db_user=db_user)
+
+
+def _hub_keyboard(ui: dict, *, campaigns: bool = True) -> InlineKeyboardMarkup:
+    from app.bot.nav_inline import _ikb, _pack_hub_keyboard, _reseller_entry_buttons, _t
 
     buttons = [
         _ikb(
             "همهٔ مشتریان",
             callback_data=CB_AUD_ALL,
+            ui=ui,
+            style_id="res_broadcast",
+            style_fallback="primary",
+        ),
+        _ikb(
+            TARGETED_LABEL,
+            callback_data=SHOP_LIST,
             ui=ui,
             style_id="res_broadcast",
             style_fallback="primary",
@@ -84,6 +111,9 @@ def _hub_keyboard(ui: dict) -> InlineKeyboardMarkup:
             style_fallback="secondary",
         ),
     ]
+    if campaigns:
+        # The campaign list (automatic and earlier campaigns) lives under group messages.
+        buttons.extend(_reseller_entry_buttons([("res_campaigns", _t(ui, "btn_res_campaigns"))], ui, {}))
     return _pack_hub_keyboard(buttons, ui, back_callback=back_callback_for("res_broadcast"))
 
 
@@ -160,11 +190,9 @@ async def open_shop_broadcast_hub(
     reseller_owner_id: int | None = None,
     push: bool = True,
 ) -> None:
-    from app.bot.nav_chrome import with_caption
     from app.bot.nav_inline import present_nav_panel
-    from app.bot.screen_registry import screen_caption, screen_heading
 
-    shop_id = await _shop_id(
+    shop_id = await resolve_shop_id(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if shop_id is None:
@@ -177,7 +205,9 @@ async def open_shop_broadcast_hub(
     await present_nav_panel(
         message,
         text=body or "📢 پیام گروهی به مشتریان فروشگاه",
-        inline=_hub_keyboard(ui),
+        inline=_hub_keyboard(
+            ui, campaigns=await shop_has_campaigns(session, db_user, reseller_owner_id=reseller_owner_id)
+        ),
         state=state,
         push=push,
     )
@@ -192,7 +222,7 @@ async def cb_hub(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> None:
-    shop_id = await _shop_id(
+    shop_id = await resolve_shop_id(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if shop_id is None:
@@ -211,7 +241,34 @@ async def cb_hub(
         )
 
 
-@router.callback_query(F.data == CB_AUD_ALL)
+@router.callback_query(F.data == SHOP_LIST)
+async def cb_segments(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
+    shop_id = await resolve_shop_id(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if shop_id is None:
+        await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        markup = targeted_keyboard(
+            shop_id=shop_id, pick_prefix=SHOP_PICK, back=CB_HUB, ui=await get_all_settings(session)
+        )
+        await safe_edit_text(callback.message, TITLE, reply_markup=markup)
+
+
+def _audience_label(segment: str, shop_id: int) -> str:
+    """The audience as the confirm card names it; ValueError for a segment this shop may not use."""
+    return describe(make_spec(segment, shop_id=shop_id))
+
+
+@router.callback_query(F.data.startswith(SHOP_PICK))
 async def cb_audience(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -222,19 +279,24 @@ async def cb_audience(
 ) -> None:
     from app.bot.nav_input import ask_text
 
-    shop_id = await _shop_id(
+    shop_id = await resolve_shop_id(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if shop_id is None:
         await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         return
+    segment = (callback.data or "")[len(SHOP_PICK):]
+    try:
+        label = html.escape(_audience_label(segment, shop_id))
+    except ValueError:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
     await callback.answer()
     await state.update_data(
-        shop_broadcast_audience="all",
+        shop_broadcast_audience=segment,
         shop_broadcast_shop_id=shop_id,
         shop_broadcast_request_key=new_shop_request_key(),
     )
-    label = SHOP_AUDIENCE_LABELS["all"]
     if callback.message:
         await callback.message.edit_text(
             f"📢 مخاطب: <b>{label}</b>\nمتن پیام را بفرستید.\nبرای لغو: انصراف"
@@ -261,7 +323,7 @@ async def on_text(
     from app.bot import keyboards as kb
     from app.bot.nav_input import try_legacy_cancel
 
-    shop_id = await _shop_id(
+    shop_id = await resolve_shop_id(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     data = await state.get_data()
@@ -287,15 +349,49 @@ async def on_text(
         await message.answer(f"⚠️ {user_safe_error(exc)}")
         return
     await state.update_data(shop_broadcast_text=body)
+    await ask_for_buttons(message, state, flow=FLOW, shop_id=shop_id)
+
+
+async def _confirm_with_buttons(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    buttons: list[ButtonInput],
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    **_: object,
+) -> None:
+    """After the buttons step: the message with its buttons as customers will get it, then «تأیید»."""
+    message = callback.message
+    shop_id = await resolve_shop_id(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    data = await state.get_data()
+    if not isinstance(message, Message) or shop_id is None or data.get("shop_broadcast_shop_id") != shop_id:
+        await state.clear()
+        return
+    try:
+        stored = await broadcast_buttons(session, buttons, shop_id=shop_id)
+    except ValueError as exc:
+        await state.clear()
+        await message.answer(f"⚠️ {user_safe_error(exc)}")
+        return
+    body = str(data.get("shop_broadcast_text") or "")
+    await state.update_data(shop_broadcast_buttons=stored)
     await state.set_state(ShopBroadcastStates.confirm)
     ui = await get_all_settings(session)
-    preview = shop_broadcast_html_snippet(body, limit=500)
-    if len(body) > 500:
-        preview += "…"
+    preview = shop_broadcast_html_snippet(body, limit=500) + ("…" if len(body) > 500 else "")
+    rows = preview_keyboard(stored)
+    if rows:
+        # The buttons exactly as customers will get them, under the message preview.
+        await message.answer(preview, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    segment = str(data.get("shop_broadcast_audience") or "all")
     await message.answer(
-        f"تأیید ارسال به <b>{SHOP_AUDIENCE_LABELS['all']}</b>؟\n\n{preview}",
+        f"تأیید ارسال به <b>{html.escape(_audience_label(segment, shop_id))}</b>؟\n\n{preview}",
         reply_markup=_confirm_keyboard(ui),
     )
+
+
+register_flow(FLOW, _confirm_with_buttons)
 
 
 @router.callback_query(F.data == CB_CONFIRM, ShopBroadcastStates.confirm)
@@ -307,7 +403,7 @@ async def cb_confirm(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> None:
-    shop_id = await _shop_id(
+    shop_id = await resolve_shop_id(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     data = await state.get_data()
@@ -325,6 +421,8 @@ async def cb_confirm(
             text=text,
             created_by=str(db_user.telegram_id),
             request_key=request_key,
+            buttons=data.get("shop_broadcast_buttons"),
+            audience=make_spec(str(data.get("shop_broadcast_audience") or "all"), shop_id=shop_id),
         )
     except ValueError as exc:
         await session.rollback()
@@ -357,7 +455,7 @@ async def cb_history(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> None:
-    shop_id = await _shop_id(
+    shop_id = await resolve_shop_id(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if shop_id is None:
@@ -384,7 +482,7 @@ async def cb_cancel_row(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> None:
-    shop_id = await _shop_id(
+    shop_id = await resolve_shop_id(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     log_id = _parse_log_id(callback.data or "", CB_CANCEL_PREFIX)
@@ -405,7 +503,7 @@ async def cb_delete_row(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> None:
-    shop_id = await _shop_id(
+    shop_id = await resolve_shop_id(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     log_id = _parse_log_id(callback.data or "", CB_DELETE_PREFIX)
@@ -426,7 +524,7 @@ async def cb_clear(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> None:
-    shop_id = await _shop_id(
+    shop_id = await resolve_shop_id(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if shop_id is None:

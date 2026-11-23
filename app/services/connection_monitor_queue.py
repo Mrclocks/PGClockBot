@@ -12,7 +12,8 @@ from app.services.connection_monitor_access import MonitorAccess, active_monitor
 from app.services.connection_monitor_claims import eligible_monitor_account
 from app.services.connection_monitor_settings import LOCAL_PROBE_ID
 from app.services.connection_monitor_snapshots import stored_utc
-from app.services.connection_status_types import FRESHNESS, require_aware
+from app.services.connection_monitor_timing import monitor_timing
+from app.services.connection_status_types import require_aware
 
 
 MANUAL_COOLDOWN = timedelta(seconds=60)
@@ -48,7 +49,8 @@ async def _manual_queue_rejection(session: AsyncSession, access: MonitorAccess, 
     if row is None:
         return QUEUE_UNAVAILABLE
     synced_at = stored_utc(row[0])
-    if synced_at is None or not (synced_at > now - FRESHNESS and synced_at <= now):
+    freshness = (await monitor_timing(session)).freshness
+    if synced_at is None or not (synced_at > now - freshness and synced_at <= now):
         return QUEUE_RUNTIME_PENDING
     return QUEUE_UNAVAILABLE
 
@@ -58,9 +60,10 @@ async def queue_manual_check(session: AsyncSession, access: MonitorAccess, *, ta
     if type(target_id) is not int or not 1 <= target_id <= 2147483647:
         raise ValueError(QUEUE_UNAVAILABLE)
     await require_monitor_owner(session, access)
+    freshness = (await monitor_timing(session)).freshness
     ready = exists(select(ConnectionMonitorState.id).where(
         ConnectionMonitorState.reseller_id.is_(None), ConnectionMonitorState.probe_id == LOCAL_PROBE_ID,
-        ConnectionMonitorState.enabled.is_(True), ConnectionMonitorState.catalog_synced_at > now - FRESHNESS,
+        ConnectionMonitorState.enabled.is_(True), ConnectionMonitorState.catalog_synced_at > now - freshness,
         ConnectionMonitorState.catalog_synced_at <= now,
         ConnectionMonitorState.pg_user_id.is_not(None), ConnectionMonitorState.subscription_token_enc.is_not(None),
         ConnectionMonitorState.account_revision != "", eligible_monitor_account(),

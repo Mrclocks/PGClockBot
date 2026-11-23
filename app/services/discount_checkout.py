@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Order, OrderStatus
 from app.services.db_safe import rollback_quiet
 from app.services.orders import apply_discount_to_order, cancel_order, create_order, pay_with_wallet
-from app.services.ux20 import redeem_charge_code
+from app.services.charge_codes import redeem_charge_code
 from app.services.wallet import get_wallet_balance
 
 CODE_MAX_LENGTH = 64
@@ -191,7 +191,7 @@ async def redeem_wallet_code(session: AsyncSession, *, user: BotUser, code: obje
         record_code_failure(user_id)
         raise CodeError(str(exc) or "کد نامعتبر است") from exc
     except OperationalError as exc:
-        # SQLite refuses a second concurrent writer; nothing was credited, the customer may retry.
+        # A transient database error (lost connection, lock timeout); nothing was credited, the customer may retry.
         await rollback_quiet(session)
         raise CodeError("سرور مشغول است؛ چند ثانیه بعد دوباره تلاش کنید") from exc
     return amount, int(balance)

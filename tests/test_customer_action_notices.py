@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramNetworkError, TelegramRetryAfter
 from sqlalchemy import select

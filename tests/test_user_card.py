@@ -12,13 +12,14 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.user_pages import register_user_pages
 from app.db.models import Base, BotUser, BotUserShop, Order, Plan, ShopWallet, UserService
 from app.services.formatting import format_money, format_number
 from app.services.user_card import build_user_card
 from app.services.users_ops import expire_tone
+from tests.postgres_support import scoped_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
@@ -32,7 +33,7 @@ def shop_staff(shop_id: int) -> dict[str, Any]:
 
 class UserCardTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

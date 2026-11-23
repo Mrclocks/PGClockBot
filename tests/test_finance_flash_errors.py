@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from unittest.mock import AsyncMock, patch
 from urllib.parse import parse_qs, urlsplit
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +27,7 @@ class FinanceFlashErrorTests(RoutesHarness):
 
     async def _flash(self, action: str, failure: Exception) -> str:
         target = "approve_payment" if action == "approve" else "reject_payment"
-        with patch(f"app.api.app.{target}", AsyncMock(side_effect=failure)):
+        with patch(f"app.api.order_review_pages.{target}", AsyncMock(side_effect=failure)):
             response = await self.call(OWNER_SESSION, "POST", f"/payments/51/{action}")
         return parse_qs(urlsplit(response.headers["location"]).query).get("err", [""])[0]
 

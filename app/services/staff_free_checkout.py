@@ -13,7 +13,9 @@ from __future__ import annotations
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pasarguard import failure_text
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentMethod, PaymentStatus
+from app.services.payment_decision_audit import record_free_checkout
 from app.services.bot_principal_identity import resolve_bot_org_principal
 from app.services.org_principals import is_owner_principal
 from app.services.orders import (
@@ -126,6 +128,7 @@ async def claim_staff_free_order(session: AsyncSession, order: Order, *, actor_i
             review_note=f"staff free checkout by user {int(actor_id)}",
         )
     )
+    await record_free_checkout(session, order, actor_id=int(actor_id))
     await session.commit()
     await session.refresh(order)
     return order
@@ -148,7 +151,7 @@ async def deliver_staff_free_order(
     except Exception as exc:
         # Every delivery failure is settled (cancelled or queued for staff) and returned.
         stuck = await settle_failed_free_delivery(
-            session, order, attempt=attempt, error=str(exc), reopen=False
+            session, order, attempt=attempt, error=failure_text(exc), reopen=False
         )
         return None, stuck, exc
 

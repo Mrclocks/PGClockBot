@@ -1163,7 +1163,7 @@ async def redeem_reward(
             raise ValueError("این جایزه فعال نیست")
         return existing
 
-    # Lock reward row when supported (SQLite ignores / may no-op)
+    # Lock the reward row so concurrent redemptions see each other.
     try:
         reward = (
             await session.execute(

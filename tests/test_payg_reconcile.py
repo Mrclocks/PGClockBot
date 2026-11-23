@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import (
     Base,
@@ -26,6 +26,7 @@ from app.db.models import (
 )
 from app.services.payg_pricing import GB, ChargeEvent
 from app.services.payg_reconcile import Paid, panel_user, run_payg_reconcile, uncovered_changes
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP = 5
@@ -89,7 +90,7 @@ class ReconcileCase(unittest.IsolatedAsyncioTestCase):
     upfront = True
 
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -235,7 +236,7 @@ class MigrationTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(module)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         self.addCleanup(engine.dispose)
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))
@@ -256,7 +257,7 @@ class BaselineMigrationTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(module)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         self.addCleanup(engine.dispose)
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE reseller_profiles (id INTEGER PRIMARY KEY, user_id INTEGER)"))

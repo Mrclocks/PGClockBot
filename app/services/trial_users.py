@@ -111,13 +111,14 @@ def trial_orders_subquery(shop_id: int | None):
     )
 
 
-def _is_buyer_clause(shop_id: int | None, user_column) -> ColumnElement[bool]:
+def is_buyer_clause(shop_id: int | None, user_column) -> ColumnElement[bool]:
+    """The customer bought from this shop at least once (a delivered paid order that is not a trial)."""
     purchase = aliased(Order)
     return exists(select(purchase.id).where(purchase.user_id == user_column, _purchase_clause(purchase, shop_id)))
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
-    # SQLite returns naive values for timezone-aware columns.
+    # Stored timestamps are UTC; a naive value (from Python code or a test) is read as UTC.
     if value is None:
         return None
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
@@ -140,7 +141,7 @@ async def trial_summary(session: AsyncSession, *, shop_id: int | None) -> TrialS
     total = await session.scalar(select(func.count()).select_from(trials)) or 0
     buyers = (
         await session.scalar(
-            select(func.count()).select_from(trials).where(_is_buyer_clause(shop_id, trials.c.user_id))
+            select(func.count()).select_from(trials).where(is_buyer_clause(shop_id, trials.c.user_id))
         )
         or 0
     )
@@ -212,9 +213,9 @@ async def list_trial_users(
         .outerjoin(UserService, UserService.id == Order.service_id)
     )
     if trial_filter == "buyers":
-        query = query.where(_is_buyer_clause(shop_id, BotUser.id))
+        query = query.where(is_buyer_clause(shop_id, BotUser.id))
     elif trial_filter == "non_buyers":
-        query = query.where(~_is_buyer_clause(shop_id, BotUser.id))
+        query = query.where(~is_buyer_clause(shop_id, BotUser.id))
     term = search.strip()[:MAX_SEARCH_LENGTH]
     if term:
         pattern = f"%{_escape_like(term.lower().lstrip('@'))}%"

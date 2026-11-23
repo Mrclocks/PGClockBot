@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest import mock
 
 import httpx
 from fastapi import FastAPI
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services.order_purge import (
     KEY_AUTO,
@@ -28,6 +26,7 @@ from app.services.order_purge import (
     run_purge,
     save_rules,
 )
+from tests.postgres_support import scoped_async_engine
 
 SHOP_A = 81
 SHOP_B = 82
@@ -77,10 +76,7 @@ class PurgeDbHarness(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         from app.db.models import BotUser
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'purge.db'}", connect_args={"timeout": 15}
-        )
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -92,7 +88,6 @@ class PurgeDbHarness(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _order(self, status: str, *, shop: int | None = SHOP_A, created=OLD, payment_status: str | None = "approved") -> tuple[int, int | None]:
         from app.db.models import Order, Payment
@@ -133,7 +128,7 @@ class PurgeTests(PurgeDbHarness):
             session.add_all([service, code])
             await session.flush()
             session.add_all([
-                PaymentSettlement(payment_id=payment_id, tenant_key="t", channel="psp", provider="x", amount=1000,
+                PaymentSettlement(payment_id=payment_id, tenant_key=SHOP_A, channel="psp", provider="x", amount=1000,
                                   idempotency_key="k1", status="settled"),
                 PaymentReviewMessage(bot_id=1, chat_id=1, message_id=1, payment_id=payment_id, text="t", is_photo=False),
                 PaymentReceiptFingerprint(payment_id=payment_id),
@@ -190,7 +185,7 @@ class PurgeTests(PurgeDbHarness):
                     session.add(PaymentVoid(payment_id=payment_id, actor="a", reason="r", status="processing"))
                 else:
                     session.add(PaymentSettlement(
-                        payment_id=payment_id, tenant_key="t", channel="psp", provider="x", amount=1000,
+                        payment_id=payment_id, tenant_key=SHOP_A, channel="psp", provider="x", amount=1000,
                         idempotency_key=f"g{index}", status="awaiting" if extra == "awaiting" else "failed",
                         error_message=None if extra == "awaiting" else "review:payment_not_pending",
                     ))

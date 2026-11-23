@@ -7,13 +7,11 @@ exactly as they were; an admin that is already gone (404) lets the cleanup finis
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services.pasarguard import PasarGuardError
 from app.services.resellers import (
@@ -23,6 +21,7 @@ from app.services.resellers import (
     assert_platform_may_delete_pg_admins,
     revoke_reseller,
 )
+from tests.postgres_support import scoped_async_engine
 
 ALLOW_CHECK = "app.services.resellers.assert_platform_may_delete_pg_admins"
 
@@ -32,15 +31,13 @@ class RevokeResellerPanelAdminTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401  (registers every table on Base.metadata)
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'revoke.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _seed_shop(
         self, *, with_child: bool = False, pg_admins: tuple[bool, bool] = (True, True)

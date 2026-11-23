@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, CustomerNotice, ResellerProfile, UserService
@@ -22,6 +19,7 @@ from app.services.pasarguard import PasarGuardError
 from app.services.customer_action_notices import CLEANUP_NOTICE_TEXTS, deliver_notice, notice_text
 from app.services.service_cleanup import KIND_TIME, KIND_VOLUME, CleanupPolicy
 from app.services.users import clear_settings_cache
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 NOW = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)
 SHOP = 5
@@ -55,8 +53,7 @@ def user_info(*, expire: datetime | None = None, status: str = "expired", data_l
 
 class NoticeCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'n.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -73,7 +70,6 @@ class NoticeCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
         clear_settings_cache()
 
     async def add(self, service_id: int, owner: int = 20, shop: int | None = SHOP, **fields) -> None:
@@ -306,6 +302,7 @@ class NoticeTextTests(NoticeCase):
                 self.assertIn("2026-11-17", text, action)
 
     async def test_a_cleanup_warning_carries_a_renew_button_and_other_notices_do_not(self) -> None:
+        """A renewal notice has nothing to renew: it points to the customer's services and support instead."""
         sent = []
 
         class Bot:
@@ -320,8 +317,10 @@ class NoticeTextTests(NoticeCase):
                 row = CustomerNotice(id=1, shop_id=SHOP, bot_user_id=20, telegram_id=120, action=action, service_name="s",
                                      reason="2026-11-17", service_id=7)
                 await deliver_notice(session, bot_for, row)
-        self.assertEqual(sent[0].inline_keyboard[0][0].callback_data, "svc:renew:7")
-        self.assertIsNone(sent[1])
+        self.assertEqual(sent[0].inline_keyboard[0][0].callback_data, "nto:svc:renew:7")
+        renewed = [b.callback_data for row in sent[1].inline_keyboard for b in row]
+        self.assertNotIn("nto:svc:renew:7", renewed)
+        self.assertIn("nto:svc:list", renewed)
 
 
 class ScopesTests(NoticeCase):
@@ -355,7 +354,7 @@ class VolumeStageMigrationTests(unittest.TestCase):
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         self.addCleanup(engine.dispose)
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE user_services (id INTEGER PRIMARY KEY)"))
@@ -381,7 +380,7 @@ class WarnedAtMigrationTests(unittest.TestCase):
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         self.addCleanup(engine.dispose)
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE user_services (id INTEGER PRIMARY KEY, cleanup_warn_stage INTEGER, cleanup_volume_warn_stage INTEGER)"))
@@ -407,7 +406,7 @@ class WarnedAtMigrationTests(unittest.TestCase):
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         self.addCleanup(engine.dispose)
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE user_services (id INTEGER PRIMARY KEY, cleanup_warn_stage INTEGER, cleanup_volume_warn_stage INTEGER)"))

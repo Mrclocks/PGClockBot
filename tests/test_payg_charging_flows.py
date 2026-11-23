@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.payg_plan_form import payg_rate_and_settings
 from app.db.models import (
@@ -33,6 +33,7 @@ from app.services.payg_gate import (
 )
 from app.services.payg_pricing import GB, ChargeEvent
 from app.services.provision_gate import ProvisionError
+from tests.postgres_support import scoped_async_engine
 
 SHOP = 5
 DAY = 86400
@@ -64,7 +65,7 @@ class DeliveryCase(unittest.IsolatedAsyncioTestCase):
     wallet = 50_000
 
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

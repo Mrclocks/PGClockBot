@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, PgAdminSubscription, ResellerPlan
 from app.services.billing_suspend import _set_admin_enabled
 from app.services.pg_admin_subscription import _apply_pg_capacity
 from app.services.resellers import provision_reseller
+from tests.postgres_support import scoped_async_engine
 
 GB = 1024**3
 ADMIN_FIELDS = {
@@ -73,8 +70,7 @@ class FakePasarGuard:
 
 class ProvisionCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'p.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -88,7 +84,6 @@ class ProvisionCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def sell_others(self, gb: int) -> None:
         async with self.Session() as session:

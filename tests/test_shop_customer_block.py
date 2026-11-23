@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,7 +11,7 @@ import httpx
 import sqlalchemy as sa
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services.shop_customer_block import (
     ACCOUNT_BLOCKED_MESSAGE,
@@ -25,6 +24,7 @@ from app.services.shop_customer_block import (
     shop_block_form_context,
 )
 from app.services.shop_manual_adjust import ManualAdjustError
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP_A = 81
@@ -56,10 +56,7 @@ class BlockDbHarness(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         from app.db.models import BotUser, BotUserShop, ResellerProfile
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'block.db'}", connect_args={"timeout": 15}
-        )
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -81,7 +78,6 @@ class BlockDbHarness(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _set(self, staff: dict, customer_id: int, blocked: bool, reason: str = "abusive messages") -> bool:
         async with self.Session() as session:
@@ -242,15 +238,15 @@ class ShopBlockMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("shop_block", ROOT / "alembic/versions/0081_shop_customer_block.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
-            conn.execute(sa.text("CREATE TABLE bot_user_shops (id INTEGER PRIMARY KEY, bot_user_id INTEGER NOT NULL, shop_id INTEGER, created_at TIMESTAMP)"))
+            conn.execute(sa.text("CREATE TABLE bot_user_shops (id SERIAL PRIMARY KEY, bot_user_id INTEGER NOT NULL, shop_id INTEGER, created_at TIMESTAMP)"))
             conn.execute(sa.text("CREATE UNIQUE INDEX uq_bot_user_shops_shop ON bot_user_shops (bot_user_id, shop_id) WHERE shop_id IS NOT NULL"))
             conn.execute(sa.text("INSERT INTO bot_user_shops (bot_user_id, shop_id) VALUES (1, 5)"))
             migration.upgrade()
             migration.upgrade()
             self.assertEqual(conn.execute(sa.text("SELECT is_blocked FROM bot_user_shops")).scalar(), 0)
-            with self.assertRaises(sa.exc.IntegrityError):
+            with self.assertRaises(sa.exc.IntegrityError), conn.begin_nested():
                 conn.execute(sa.text("INSERT INTO bot_user_shops (bot_user_id, shop_id) VALUES (1, 5)"))
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             migration.downgrade()

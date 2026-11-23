@@ -27,6 +27,7 @@ from app.services.shop_points_adjust import shop_points_form_context
 from app.services.shop_wallet_adjust import shop_wallet_form_context
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
 from app.services.pg_access import staff_user_actions
+from app.services.quick_links import service_renew_links
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.service_import_assign import may_assign_existing_services
 from app.services.resellers import list_active_reseller_plans
@@ -326,6 +327,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "display_wallet": display_wallet,
             "display_points": display_points,
             "services": snaps,
+            "renew_links": await service_renew_links(session, [snap.service for snap in snaps]),
             "can_view_services": can_view_services,
             "wallet_txs": wallet_txs,
             "wallet_nonce": secrets.token_hex(8),
@@ -601,6 +603,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.notifications import actor_label_from_staff
+        from app.services.message_buttons import form_inputs
         from app.services.users_quick import send_staff_dm
 
         loaded = await _require_scoped_user(session, staff, user_id)
@@ -617,6 +620,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 shop_id=resolve_shop_scope_id(staff),
                 actor=actor_label_from_staff(staff),
                 sender_tg=int(staff.get("telegram_id") or 0),
+                buttons=form_inputs(form),
             )
             await session.commit()
         except ValueError as e:

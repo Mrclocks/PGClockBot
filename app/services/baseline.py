@@ -6,7 +6,6 @@ import hashlib
 import json
 import logging
 import shutil
-import sqlite3
 import subprocess
 import tempfile
 import zipfile
@@ -14,10 +13,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.config import DATA_DIR, ROOT_DIR, get_settings
+from app.config import DATA_DIR, ROOT_DIR
 from app.services.backup import (
+    DB_ENGINE,
+    POSTGRES_DUMP_MEMBER,
     create_backup,
-    sqlite_db_path,
     validate_backup_archive,
 )
 from app.services.updates import local_version
@@ -101,7 +101,6 @@ def create_phase0_baseline(
     except OSError:
         pass
 
-    settings = get_settings()
     git = git_identity()
 
     backup = create_backup(
@@ -112,20 +111,6 @@ def create_phase0_baseline(
     backup_zip = Path(backup["path"])
     baseline_zip = root / backup_zip.name
     shutil.copy2(backup_zip, baseline_zip)
-
-    db_src = sqlite_db_path()
-    db_dest = root / "bot.db"
-    if db_src.is_file():
-        from app.services.backup import _safe_copy_sqlite
-
-        _safe_copy_sqlite(db_src, db_dest)
-        db_meta: dict[str, Any] = {
-            "path": "bot.db",
-            "sha256": _sha256(db_dest),
-            "size": db_dest.stat().st_size,
-        }
-    else:
-        db_meta = {"path": "bot.db", "missing": True}
 
     config_dir = root / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -174,14 +159,7 @@ def create_phase0_baseline(
         "app_version": local_version() or __version__,
         "module_version": __version__,
         "git": git,
-        "database_url_dialect": (
-            "postgresql"
-            if "postgresql" in (settings.database_url or "")
-            else "sqlite"
-            if "sqlite" in (settings.database_url or "")
-            else "unknown"
-        ),
-        "sqlite_db_path": str(db_src),
+        "database_url_dialect": DB_ENGINE,
         "backup": {
             "id": backup.get("id"),
             "filename": baseline_zip.name,
@@ -190,7 +168,6 @@ def create_phase0_baseline(
             "file_count": backup.get("file_count"),
             "include_env": backup.get("include_env"),
         },
-        "sqlite_copy": db_meta,
         "config_files": config_files,
         "restore_verification": None,
     }
@@ -230,8 +207,7 @@ def verify_restore_procedure(zip_path: Path) -> dict[str, Any]:
         "validated": ok,
         "validate_error": err if not ok else "",
         "checked_at": _now_iso(),
-        "sqlite_ok": False,
-        "tables_sample": {},
+        "engine": DB_ENGINE,
         "has_web_admin": False,
         "has_env": False,
     }
@@ -244,35 +220,11 @@ def verify_restore_procedure(zip_path: Path) -> dict[str, Any]:
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(extract)
 
-        db_path = extract / "data" / "bot.db"
-        if not db_path.is_file():
-            pg_dump = extract / "data" / "postgres.dump"
-            if pg_dump.is_file():
-                result["ok"] = True
-                result["engine"] = "postgresql"
-                result["postgres_dump_size"] = pg_dump.stat().st_size
-                return result
+        pg_dump = extract / POSTGRES_DUMP_MEMBER
+        if not pg_dump.is_file():
             result["validate_error"] = "no database artifact in archive"
             return result
-
-        conn = sqlite3.connect(str(db_path))
-        try:
-            tables = {
-                r[0]
-                for r in conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                ).fetchall()
-            }
-            sample: dict[str, int] = {}
-            for t in ("bot_users", "settings", "orders", "reseller_profiles", "pg_staff_access"):
-                if t in tables:
-                    sample[t] = int(conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0])
-            result["tables_sample"] = sample
-            result["sqlite_ok"] = True
-            result["engine"] = "sqlite"
-        finally:
-            conn.close()
-
+        result["postgres_dump_size"] = pg_dump.stat().st_size
         result["has_web_admin"] = (extract / "data" / "web_admin.json").is_file()
         result["has_env"] = (extract / "env" / ".env").is_file()
         result["manifest_magic"] = manifest.get("magic")

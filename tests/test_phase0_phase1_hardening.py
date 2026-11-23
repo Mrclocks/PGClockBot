@@ -120,7 +120,7 @@ class WalletPayAtomicSourceTests(unittest.TestCase):
 
 class ChargeCodeScopeSourceTests(unittest.TestCase):
     def test_uses_current_shop_and_credit_wallet(self):
-        src = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/services/charge_codes.py").read_text(encoding="utf-8")
         fn = src[
             src.find("async def redeem_charge_code") : src.find("async def create_charge_code")
         ]

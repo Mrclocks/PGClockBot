@@ -7,18 +7,19 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, PgAdminSubscription, ResellerPlan, ResellerProfile
 from app.services.billing import GB
 from app.services.reseller_package import renew_package
 from app.services.reseller_packs import PACK_EXPIRED, buy_addon_pack
 from app.services.reseller_shop_gates import SHOP_INACTIVE, SUB_EXPIRED, SUB_NEEDS_ACTIVE
+from tests.postgres_support import scoped_async_engine
 
 
 class Phase1SafetyGateTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

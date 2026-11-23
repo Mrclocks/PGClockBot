@@ -108,7 +108,8 @@ class WiringTests(unittest.TestCase):
 
     def test_broadcast_caption_uses_small_muted(self):
         src = Path("app/web/templates/broadcast.html").read_text(encoding="utf-8")
-        self.assertIn('<small class="muted">گروه دریافت‌کننده', src)
+        # Field hints under the audience filters are small muted text, like every other form.
+        self.assertIn('<small class="muted">خالی بماند: بدون این شرط</small>', src)
 
     def test_ram_percent_in_ring_amount_under_title(self):
         home = Path("app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")

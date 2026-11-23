@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, PgAdminSubscription, ResellerPlan
 from app.services.billing import GB
@@ -18,14 +18,22 @@ from app.services.pg_admin_subscription import (
     record_unit_extra,
     renew_subscription,
 )
+from tests.postgres_support import scoped_async_engine
 
 
 class Phase5FailClosedTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        # The subscriptions below point at plan 1.
+        async with self.Session() as session:
+            session.add(ResellerPlan(
+                id=1, name="timed", plan_kind="subscription", billing_mode="fixed",
+                duration_days=30, included_users=10, included_gb=100, price=100_000, is_active=True,
+            ))
+            await session.commit()
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
@@ -119,10 +127,6 @@ class Phase5FailClosedTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             session.add_all([
                 BotUser(id=3, telegram_id=33, referral_code="s3", role="reseller", wallet_balance=1_000_000),
-                ResellerPlan(
-                    id=1, name="timed", plan_kind="subscription", billing_mode="fixed",
-                    duration_days=30, included_users=10, included_gb=100, price=100_000, is_active=True,
-                ),
                 ResellerPlan(
                     id=2, name="forever", plan_kind="subscription", billing_mode="fixed",
                     duration_days=0, included_users=10, included_gb=100, price=200_000, is_active=True,

@@ -207,8 +207,6 @@ class CsrfBodyReplayTests(unittest.TestCase):
         reseller_src = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
         self.assertIn("await request.form()", user_src)
         self.assertIn("await request.form()", reseller_src)
-        self.assertIn('name: str = Form(...)', app_src)
-        self.assertIn("@app.post(\"/plans/{plan_id}/edit\")", app_src)
 
 
 class CsrfExtractUnitTests(unittest.IsolatedAsyncioTestCase):

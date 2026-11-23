@@ -7,7 +7,6 @@ panel.css and panel.js.
 from __future__ import annotations
 
 import asyncio
-import os
 import socket
 import threading
 import time
@@ -15,7 +14,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import uvicorn
 from fastapi import FastAPI

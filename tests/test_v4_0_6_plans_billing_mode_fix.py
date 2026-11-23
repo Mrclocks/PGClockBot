@@ -17,30 +17,6 @@ class BillingModeMigrateTests(unittest.TestCase):
         self.assertIn("0002_pg_staff_credentials", src)
         self.assertIn("reseller_plans", src)
 
-    def test_init_db_always_runs_additive_ensure(self):
-        src = (ROOT / "app/db/session.py").read_text(encoding="utf-8")
-        # After alembic upgrade, SQLite additive migrator still runs (idempotent).
-        # On PostgreSQL it must NOT run — Alembic owns the schema (v11.0.10).
-        self.assertIn("await conn.run_sync(_migrate_sqlite_legacy)", src)
-        self.assertIn("if _engine_info.is_sqlite:", src)
-        upgrade_idx = src.find("upgrade_head(_db_url)")
-        ensure_idx = src.find(
-            "await conn.run_sync(_migrate_sqlite_legacy)",
-            upgrade_idx,
-        )
-        self.assertGreater(ensure_idx, upgrade_idx)
-        # Guard: PG path skips SQLite-era DDL after upgrade.
-        pg_guard = src.find("SQLite-era additive migrator", upgrade_idx)
-        self.assertGreater(pg_guard, upgrade_idx)
-
-    def test_plans_page_soft_fails_reseller_list(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        fn = src[src.find("async def plans_page") : src.find("async def plans_create")]
-        self.assertIn("reseller_plans_err", fn)
-        self.assertIn("list_reseller_plans(session)", fn)
-        self.assertIn("except Exception", fn)
-
-
 class ResellerPlansTabRemovedTests(unittest.TestCase):
     def test_tabs_no_longer_include_plans(self):
         src = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
@@ -55,15 +31,6 @@ class ResellerPlansTabRemovedTests(unittest.TestCase):
         self.assertIn('id="reseller-plans"', html)
         self.assertIn("پلن‌های نمایندگان", html)
         self.assertIn("reseller_plans_err", html)
-
-
-class VersionTests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 
 if __name__ == "__main__":

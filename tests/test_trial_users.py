@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from datetime import timedelta
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import FastAPI

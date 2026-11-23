@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from tests.postgres_support import scoped_async_engine
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ["ALLOW_SETTLEMENT_MOCK"] = "1"
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -112,7 +112,7 @@ class SettlementWiringTests(unittest.TestCase):
 
 class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
         from app.db import Base
         import app.db.models  # noqa: F401
@@ -123,8 +123,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
         get_settings.cache_clear()
 
         self._tmp = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmp.name) / "t.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(
@@ -355,7 +354,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
                 )
 
             # Correct shop secret + payment_id works (approve stubbed)
-            async def _fake_approve(session, payment, reviewer_tg=0):
+            async def _fake_approve(session, payment, reviewer_tg=0, **_kwargs):
                 payment.status = PaymentStatus.APPROVED.value
                 await session.commit()
                 return None
@@ -525,7 +524,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
             await session.refresh(settlement)
             await session.refresh(payment)
 
-            async def _boom(session, payment, reviewer_tg=0):
+            async def _boom(session, payment, reviewer_tg=0, **_kwargs):
                 raise ValueError("تحویل ناموفق تست")
 
             orig = ps.approve_payment
@@ -547,7 +546,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payment.status, PaymentStatus.PENDING.value)
 
             # Retry after fix succeeds and settles.
-            async def _ok(session, payment, reviewer_tg=0):
+            async def _ok(session, payment, reviewer_tg=0, **_kwargs):
                 payment.status = PaymentStatus.APPROVED.value
                 await session.commit()
                 return None
@@ -612,7 +611,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
             sig = sign_payload("dup-secret-16chars", body)
             calls = {"n": 0}
 
-            async def _ok(session, payment, reviewer_tg=0):
+            async def _ok(session, payment, reviewer_tg=0, **_kwargs):
                 calls["n"] += 1
                 if payment.status != PaymentStatus.APPROVED.value:
                     payment.status = PaymentStatus.APPROVED.value
@@ -830,7 +829,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
         approve_calls = {"n": 0}
         gate = asyncio.Event()
 
-        async def _counting_approve(session, payment, reviewer_tg=0):
+        async def _counting_approve(session, payment, reviewer_tg=0, **_kwargs):
             approve_calls["n"] += 1
             # Hold claim so the peer session can attempt settle concurrently.
             await gate.wait()

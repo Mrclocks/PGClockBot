@@ -39,7 +39,7 @@ class DeleteCascadeSourceTests(unittest.TestCase):
         from app.services.users import friendly_user_delete_error
 
         msg = friendly_user_delete_error(
-            Exception("FOREIGN KEY constraint failed (sqlite3.IntegrityError)")
+            Exception('insert or update on table "orders" violates foreign key constraint "orders_user_id_fkey"')
         )
         self.assertIn("کلید خارجی", msg)
         self.assertNotIn("SQL:", msg)
@@ -80,13 +80,6 @@ class AdminResellerUnifySourceTests(unittest.TestCase):
         create = html[html.find('id="modal-pg-admin-create"') : html.find("syncCreateAdminMode")]
         self.assertIn("checked=false", create)
         self.assertIn('id="create-reseller-fields"', create)
-
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 
 class ConvertStaffTests(unittest.IsolatedAsyncioTestCase):

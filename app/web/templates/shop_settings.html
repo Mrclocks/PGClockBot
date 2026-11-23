@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
-{% from "_settings_hub.html" import settings_hub, settings_area_header %}
+{% from "_settings_hub.html" import settings_hub, settings_area_header, settings_menu, settings_open_first %}
 {% from "_shop_settings_tabs.html" import shop_settings_tabs %}
 {% block title %}تنظیمات فروشگاه{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
@@ -9,8 +9,11 @@
 {% set is_hub = not request.query_params.get('tab') %}
 {{ settings_area_header(tab_nav|default(()), tab, '/shop-settings', 'تنظیمات فروشگاه', 'bot-settings', help='settings-bot', is_hub=is_hub) }}
 {% if is_hub %}
-{{ settings_hub(hub_sections(tab_nav, '/shop-settings', area_icon='bot')) }}
+{% set hub_rows = hub_sections(tab_nav, '/shop-settings', area_icon='bot') %}
+{{ settings_open_first(hub_rows, nonce=csp_nonce) }}
+{{ settings_hub(hub_rows) }}
 {% else %}
+{% if tab_nav is defined and tab_nav %}{{ settings_menu(settings_nav(tab_nav, '/shop-settings', tab, area_icon='bot')) }}{% endif %}
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path, tab_nav|default(none)) }}
 
 <div class="settings-layout">
@@ -143,6 +146,9 @@
     {% set reset_action = '/shop-settings?tab=colors' %}
     {% include "_settings_reset_defaults.html" %}
 
+  {% elif tab == 'service_actions' %}
+    {% set settings_action = '/shop-settings?tab=service_actions' %}
+    {% include "_settings_service_actions.html" %}
   {% else %}
     {% if tab == 'service_import' %}
       {% include "_settings_service_import.html" %}

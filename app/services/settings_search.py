@@ -36,7 +36,7 @@ def normalize_search_text(text: str) -> str:
     return " ".join(folded.split())
 
 
-def _is_close_word(word: str, haystack: str) -> bool:
+def is_close_word(word: str, haystack: str) -> bool:
     """True when ``word`` is a near miss of a whole word in ``haystack`` (one typo)."""
     if len(word) < FUZZY_MIN_WORD_LEN:
         return False
@@ -55,7 +55,7 @@ def _match_tier(words: list[str], label: str, where: str) -> int | None:
     if all(w in label or w in where for w in words):
         return 1
     both = f"{label} {where}"
-    if all(w in both or _is_close_word(w, both) for w in words):
+    if all(w in both or is_close_word(w, both) for w in words):
         return 2
     return None
 

@@ -10,9 +10,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import Message
 
 from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
+from app.bot import message_button_picker as picker
 from app.bot.handlers import admin, reply_nav
 from app.bot.handlers.admin import AdminStates
 from app.bot.handlers.reseller import ResellerStates
@@ -86,15 +88,19 @@ async def _send_dm_as_owner(target: BotUser, card: str, *, can_manage_reps: bool
     session = MagicMock()
     session.get = AsyncMock(return_value=target)
     session.commit = AsyncMock()
-    message = MagicMock()
+    message = MagicMock(spec=Message)
     message.text = "تست"
     message.answer = AsyncMock()
     send_dm = AsyncMock()
+    edit = AsyncMock()
     reseller_card = AsyncMock(return_value=("reseller card", None))
     user_card = AsyncMock(return_value=("user card", None))
     finish = AsyncMock()
     with ExitStack() as stack:
         stack.enter_context(patch("app.bot.auth.require_bot_owner", AsyncMock(return_value=True)))
+        stack.enter_context(patch.object(admin, "require_bot_owner", AsyncMock(return_value=True)))
+        stack.enter_context(patch.object(picker, "finish_text_step", AsyncMock()))
+        stack.enter_context(patch.object(admin, "safe_edit_text", edit))
         stack.enter_context(patch.object(admin, "_is_admin", return_value=True))
         stack.enter_context(
             patch.object(
@@ -111,7 +117,11 @@ async def _send_dm_as_owner(target: BotUser, card: str, *, can_manage_reps: bool
         await admin.adm_users_message_send(
             message, state=state, session=session, db_user=_owner()
         )
-    message.finish = finish  # the one in-place outcome
+        if await state.get_state() == picker.PickerStates.picking.state:
+            # The panel asks whether to add buttons; answer «ارسال بدون دکمه».
+            await admin._send_admin_dm(MagicMock(message=message), state, session, _owner(), [])
+    message.finish = finish  # an outcome shown in place of the prompt (refusals)
+    message.edit = edit  # the person's card shown again after sending
     return send_dm, reseller_card, user_card, message
 
 
@@ -133,7 +143,7 @@ class ResellerMessageTests(unittest.TestCase):
         self.assertEqual(send_dm.await_args.kwargs["actor"], "Support Team (@pg_support)")
         reseller_card.assert_awaited_once()
         user_card.assert_not_awaited()
-        self.assertIn("reseller card", message.finish.await_args.kwargs["text"])
+        self.assertIn("reseller card", message.edit.await_args.args[1])
         message.answer.assert_not_awaited()
 
     def test_reseller_message_target_rejects_non_reseller(self) -> None:

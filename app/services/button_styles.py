@@ -34,6 +34,8 @@ STYLE_ALIASES: dict[str, str] = {
     "adm_plan_add": "adm_plans_add",
     "adm_plan_custom": "shop_kind_custom",
     "adm_plan_trial": "shop_kind_trial",
+    # «دریافت تست» on the main keyboard takes the trial plan colour, like the home offer button.
+    "trial": "shop_kind_trial",
     # Legacy settings hub key (pre-8.2.1 «سرویس و دسترسی») → دسترسی
     "adm_st_service": "adm_st_access",
 }
@@ -124,7 +126,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "buy_continue", "label": "ادامه خرید / تأیید پلن", "group": "فروشگاه", "default": "primary"},
     {"id": "force_join_check", "label": "عضو شدم (کانال اجباری)", "group": "فروشگاه", "default": "primary"},
     {"id": "guides", "label": "آموزش اتصال (فهرست)", "group": "فروشگاه", "default": "primary"},
-    {"id": "one_tap_renew", "label": "تمدید یک‌ضربی (هشدار انقضا)", "group": "فروشگاه", "default": "primary"},
+    {"id": "one_tap_renew", "label": "تمدید سرویس (هشدارها)", "group": "فروشگاه", "default": "primary"},
     # Terms/rules accept buttons — own group (also editable on تنظیمات ← قوانین)
     {"id": "terms_entry", "label": "موافقم (قوانین ورود)", "group": "قوانین", "default": "primary"},
     {"id": "terms_buy_user", "label": "موافقم (قوانین خرید کاربر)", "group": "قوانین", "default": "primary"},
@@ -200,6 +202,9 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_trial_users", "label": "کاربران تست (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_broadcast_history", "label": "تاریخچهٔ ارسال‌ها (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_staff_audit", "label": "گزارش کارکنان (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_quick_links", "label": "لینک‌های سریع (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_command_center", "label": "مرکز فرمان (ادمین)", "group": "منوی ادمین", "default": "primary"},
+    {"id": "adm_search", "label": "جستجو (ادمین)", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_service_shop_review", "label": "تعیین فروشگاه سرویس", "group": "منوی ادمین", "default": ""},
     {"id": "adm_discounts", "label": "تخفیف‌ها (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_funnel", "label": "رفتار کاربر (ادمین)", "group": "منوی ادمین", "default": ""},
@@ -257,6 +262,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "backup_create_noenv", "label": "بکاپ بدون .env (قدیمی)", "group": "بکاپ", "default": "primary"},
     {"id": "backup_upload", "label": "آپلود فایل بکاپ", "group": "بکاپ", "default": ""},
     {"id": "backup_refresh", "label": "تازه‌سازی لیست بکاپ", "group": "بکاپ", "default": ""},
+    {"id": "backup_settings", "label": "تنظیمات بکاپ", "group": "بکاپ", "default": ""},
     # Broadcast audience
     {"id": "bc_aud_all", "label": "همگانی: همه", "group": "پیام همگانی", "default": ""},
     {"id": "bc_aud_users", "label": "همگانی: کاربران", "group": "پیام همگانی", "default": ""},
@@ -289,6 +295,9 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "res_child_pricing", "label": "قیمت زیرمجموعه", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_trial_users", "label": "کاربران تست (نماینده)", "group": "منوی نماینده", "default": ""},
     {"id": "res_staff_audit", "label": "گزارش کارکنان (نماینده)", "group": "منوی نماینده", "default": ""},
+    {"id": "res_quick_links", "label": "لینک‌های سریع (نماینده)", "group": "منوی نماینده", "default": ""},
+    {"id": "res_command_center", "label": "مرکز فرمان (نماینده)", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_search", "label": "جستجو (نماینده)", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_gift_codes", "label": "کد هدیه (نماینده)", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_campaigns", "label": "کمپین‌ها (نماینده)", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_discounts", "label": "تخفیف‌ها (نماینده)", "group": "منوی نماینده", "default": "primary"},

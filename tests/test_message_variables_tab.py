@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import os
+import re
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -130,8 +129,10 @@ class SettingsPagesTests(unittest.TestCase):
         self.assertIn('href="/message-variables"', texts)
 
     def test_no_settings_page_links_to_it_from_its_header(self):
+        # The desktop settings menu lists every page of the area, the variables page included; the header and the
+        # tab row above the page still do not.
         for tab in ("messages", "welcome"):
-            head = self._owner_page(tab).split("settings-layout", 1)[0]
+            head = re.sub(r'<nav class="settings-nav.*?</nav>', "", self._owner_page(tab), flags=re.S).split("settings-layout", 1)[0]
             self.assertNotIn('href="/message-variables"', head, tab)
 
     def test_shop_list_has_the_row_for_a_shop_with_the_right_and_not_without(self):

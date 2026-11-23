@@ -15,9 +15,12 @@ from app.services.authz import authz_from_staff, can_shop
 from app.services.dashboard_trend import empty_trend, own_account_summary, sales_trend
 from app.services.host_gauges import gauges_json, local_host_gauges
 from app.services.home_overview import build_home_overview, reseller_shop_summary
+from app.services.inbox_entries import inbox_entries
+from app.services.panel_inbox import build_inbox_context
 from app.services import pg_link_health
 from app.services.pg_read_cache import NODE_LIST_MAX_AGE_SEC
 from app.services.pg_read_resilience import circuit_status
+from app.services.quick_links import quick_links_page
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 from app.services.secret_box import reveal_bot_token
 
@@ -85,7 +88,7 @@ _EMPTY_ACTION = {
 
 async def _safe_funnel(session: AsyncSession, *, reseller_id: int | None):
     from app.services.db_safe import rollback_quiet
-    from app.services.ux20 import funnel_summary
+    from app.services.funnel_metrics import funnel_summary
 
     try:
         return await funnel_summary(session, reseller_id=reseller_id, days=7)
@@ -117,6 +120,13 @@ async def _safe_trend(*, reseller_id: int | None):
         return empty_trend(7)
 
 
+def _header_links(ctx: dict, staff: dict | None) -> dict:
+    """Links the dashboard header offers this staff member: KPI cards and the quick links page."""
+    ctx["kpi_links"] = kpi_links(staff)
+    ctx["quick_links_page"] = quick_links_page(staff)
+    return ctx
+
+
 def kpi_links(staff: dict | None) -> dict[str, bool]:
     """Which KPI cards may link to their page: only staff who can open that page get a link."""
     if not staff:
@@ -127,7 +137,7 @@ def kpi_links(staff: dict | None) -> dict[str, bool]:
 
 async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None, expire_days: int = 3):
     from app.services.db_safe import rollback_quiet
-    from app.services.ux20 import build_action_center
+    from app.services.action_center import build_action_center
 
     try:
         return await build_action_center(
@@ -182,7 +192,7 @@ async def _safe_pg_health(*, reseller_user_id: int | None = None, session: Async
     """Display-only PG reachability — never used for allow/deny (stats reuse: pg_reachability_max_age)."""
     from app.services.db_safe import rollback_quiet
     from app.services.panel_display_timeout import display_await
-    from app.services.ux20 import check_pg_connection
+    from app.services.action_center import check_pg_connection
 
     async def _probe():
         try:
@@ -358,7 +368,8 @@ async def _owner_home_context(staff: dict, session: AsyncSession):
     await recover_session(session)
     show_pg_nodes = "pg_nodes" in (staff.get("pg_permissions") or [])
     # Settings come from a short in-process cache; everything slow below runs at the same time.
-    funnel_enabled, expire_days = _ops_options(await _safe_settings(session, reseller_id=None))
+    ui = await _safe_settings(session, reseller_id=None)
+    funnel_enabled, expire_days = _ops_options(ui)
 
     async def overview_then_health() -> tuple[dict, dict]:
         # The health probe follows the overview so it reuses the system stats the overview just read.
@@ -483,7 +494,7 @@ async def _warn_capacity(session: AsyncSession, profile, pg_limits: dict | None)
     if not pg_limits:
         return
     try:
-        from app.services.ux20 import maybe_warn_reseller_capacity
+        from app.services.reseller_capacity_warn import maybe_warn_reseller_capacity
 
         await maybe_warn_reseller_capacity(session, profile, pg_limits)
     except Exception:
@@ -499,7 +510,8 @@ async def _shop_home_context(staff: dict, session: AsyncSession, rid: int):
     await recover_session(session)
     profile = await _shop_profile(session, rid)
     bot_setup_needed = bot_needs_setup(profile)
-    funnel_enabled, expire_days = _ops_options(await _safe_settings(session, reseller_id=rid))
+    ui = await _safe_settings(session, reseller_id=rid)
+    funnel_enabled, expire_days = _ops_options(ui)
     # Only the shop stats use the request session; the bot probe needs none and the rest open their own.
     stats, bot, (pg_limits, pg_health), (funnel, periods, action_center), trend = await asyncio.gather(
         _shop_stats(session, rid, bot_setup_needed=bot_setup_needed),
@@ -577,6 +589,26 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         mark(request, "page_data")
         return render(request, "inbox.html", _flash_from_query(request, ctx))
 
+    @app.get("/inbox/panel", response_class=HTMLResponse)
+    async def inbox_panel(
+        request: Request,
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Body of the header's action-center modal: the same items as /inbox, as rows."""
+        ctx = await build_inbox_context(session, request, staff)
+        response = render(
+            request,
+            "_inbox_modal_body.html",
+            {
+                "staff": staff,
+                "entries": inbox_entries(ctx),
+                "hidden_count": int(ctx.get("inbox_hidden_by_dismiss") or 0),
+            },
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.post("/inbox/dismiss")
     async def inbox_dismiss(
         request: Request,
@@ -634,7 +666,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             return result
         template, ctx = result
         ctx = dict(ctx)
-        ctx["kpi_links"] = kpi_links(ctx.get("staff"))
+        _header_links(ctx, ctx.get("staff"))
         # Body fragment must never re-trigger defer (no nested fetch loop).
         ctx["widgets_deferred"] = False
         if as_body_fragment:
@@ -679,7 +711,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 return result
             template, ctx = result
             ctx = dict(ctx)
-            ctx["kpi_links"] = kpi_links(staff)
+            _header_links(ctx, staff)
             ctx["widgets_deferred"] = True
             ctx["widgets_body_url"] = "/home/body"
             # Intentionally not dashboard_degraded — shell is planned, not failed.
@@ -699,7 +731,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             return result
         template, ctx = result
         ctx = dict(ctx)
-        ctx["kpi_links"] = kpi_links(staff)
+        _header_links(ctx, staff)
         ctx["widgets_deferred"] = False
         return render(request, template, _flash_from_query(request, ctx))
 

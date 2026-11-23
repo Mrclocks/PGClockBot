@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
 SHOP_USERS = {"role": "reseller", "bot_user_id": 10, "permissions": ["dashboard"]}

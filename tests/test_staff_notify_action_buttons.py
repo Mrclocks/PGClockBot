@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot import keyboards as kb
 from app.db.models import Base, BotUser, Order, Payment, PaymentReviewMessage, PaymentStatus
@@ -21,6 +21,7 @@ from app.services.notifications import (
 )
 from app.services.payment_review_actions import execute_payment_legacy_ok
 from app.services.payment_review_diag import diagnose_payment_review
+from tests.postgres_support import scoped_async_engine
 
 
 def _callbacks(markup) -> list[str]:
@@ -37,7 +38,7 @@ def _urls(markup) -> list[str]:
 
 class StaffNotifyActionButtonsTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -227,7 +228,7 @@ class PendingApprovalNoticeCommitTests(unittest.IsolatedAsyncioTestCase):
     """notify_pending_approval may commit review-message rows; payment status must stay put."""
 
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

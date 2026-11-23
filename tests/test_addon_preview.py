@@ -17,6 +17,7 @@ from app.services.service_addons import (
     addon_terms,
     calculate_addon_preview,
 )
+from tests.postgres_support import scoped_sync_engine
 
 GB = 1024**3
 DAY = 86400
@@ -103,7 +104,7 @@ def load_migration():
 class AddonRequestKeyMigrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.migration = load_migration()
-        self.engine = sa.create_engine("sqlite://")
+        self.engine = scoped_sync_engine()
         with self.engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE orders (id INTEGER PRIMARY KEY)"))
 

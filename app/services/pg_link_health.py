@@ -24,6 +24,8 @@ from zoneinfo import ZoneInfo
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import pg_link_timing
+
 WINDOW_SEC = 3600.0
 PERSIST_WINDOW_SEC = 86400.0
 PERSIST_INTERVAL_SEC = 60.0
@@ -181,6 +183,7 @@ def snapshot(circuit: dict[str, Any] | None = None) -> dict[str, Any]:
         "budget_exhaustion_total": _stats.budget_total,
         "budget_exhaustion_label": BUDGET_EXHAUSTION_LABEL,
         "circuit": circuit or {"paused": False, "retry_in_sec": 0, "pause_count": 0},
+        "timing": pg_link_timing.snapshot(),
         "from_prior_boot": False,
         "prior_boot_note": PRIOR_BOOT_NOTE,
     }

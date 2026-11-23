@@ -8,7 +8,7 @@ id: start
 
 ## نصب سریع
 
-روی اوبونتو ۲۲٫۰۴ یا جدیدتر (کانال **پایدار / main**، نسخهٔ `0.6`):
+روی اوبونتو ۲۲٫۰۴ یا جدیدتر (کانال **پایدار / main**، نسخهٔ `0.5`):
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)

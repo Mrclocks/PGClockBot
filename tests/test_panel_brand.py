@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 import tempfile
 import unittest
@@ -11,13 +10,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import Depends, FastAPI, Request
 from PIL import Image
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.panel_brand_pages import MAX_BODY_BYTES, register_panel_brand_pages
 from app.db import Base
@@ -41,6 +39,7 @@ from app.services.panel_brand import (
     process_logo,
     save_brand,
 )
+from tests.postgres_support import scoped_async_engine
 
 OWNER = {
     "role": "admin",
@@ -175,7 +174,7 @@ class BrandStoreTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         self.root = Path(self._tmpdir.name)
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{self.root / 'brand.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

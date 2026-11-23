@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,7 +14,7 @@ import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.shop_credit_pages import credit_change_from_form
 from app.db.models import Base, BotUser, CreditEvent, ResellerPlan, ResellerProfile, ShopCreditAccount
@@ -36,6 +35,7 @@ from app.services.shop_credit import (
     set_credit_limit,
     set_credit_status,
 )
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 11, 8, tzinfo=timezone.utc)
@@ -75,8 +75,7 @@ class LimitTests(unittest.TestCase):
 
 class CreditCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'c.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -96,7 +95,6 @@ class CreditCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def wallet(self, uid: int = 5) -> int:
         async with self.Session() as session:
@@ -228,7 +226,7 @@ class MigrationTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(module)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         self.addCleanup(engine.dispose)
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))

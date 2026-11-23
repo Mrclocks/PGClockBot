@@ -6,20 +6,21 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, ChargeCode, DiscountCode, Plan
 from app.services.gift_codes import create_gift_code
 from app.services.orders import apply_discount_to_order, cancel_order, create_order
 from app.services.random_discounts import RandomDiscountInput, create_random_discount, stop_random_discount
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 SHOP = {"role": "reseller", "bot_user_id": 2, "permissions": ["random_discounts"]}
 
 
 class RandomDiscountCodeNamespaceTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

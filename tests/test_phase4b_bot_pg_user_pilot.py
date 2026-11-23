@@ -8,13 +8,13 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tests.reason_support import ReasonedState
 from app.db import Base
 import app.db.models  # noqa: F401
 from app.db.models import BotUser, ResellerProfile, Role
-from app.services.bot_pg_user_pilot import (
+from app.services.bot_pg_user_authz import (
     authorize_bot_pg_user_op,
     callback_carries_identity_tamper,
     parse_pg_user_callback_id,
@@ -27,6 +27,7 @@ from app.services.org_principals import (
 from app.services.pg_access import map_pg_role_to_features
 from app.services.pg_user_scope import pg_user_in_staff_scope
 from app.services.platform_identity import is_explicit_owner_staff
+from tests.postgres_support import scoped_async_engine
 
 
 def _pg_user(uid: int, owner: str) -> dict:
@@ -87,7 +88,7 @@ def _fake_pg(users: dict[int, dict]):
 
 class Phase4BBotPgUserPilotTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -12,14 +10,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
-from app.db.models import BotUser, Order, Payment, Role
+from app.db.models import BotUser, Order, Payment, ResellerProfile, ResellerSetting, Role, Setting
 from app.services import crypto_rates as cr
 from app.services import url_safety
 from app.services.crypto_rates import (
@@ -40,6 +37,7 @@ from app.services.crypto_rates import (
 )
 from app.services.url_safety import UnsafeUrlError, ensure_host_resolves_public, validate_public_https_url
 from app.services.users import DEFAULT_SETTINGS, SETTING_GROUPS
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
@@ -278,10 +276,50 @@ class RefreshTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(current_rate(config, 2))
 
 
+class ApiRateScopeTests(unittest.IsolatedAsyncioTestCase):
+    """The rate job only loads the settings of scopes that saved the API mode."""
+
+    async def asyncSetUp(self) -> None:
+        self.engine = scoped_async_engine()
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+
+    async def asyncTearDown(self) -> None:
+        await self.engine.dispose()
+
+    async def _shop(self, session, n: int, *, active: bool = True, mode: str | None = None) -> int:
+        owner = BotUser(telegram_id=1000 + n, username=f"s{n}", full_name="Shop", role=Role.RESELLER.value,
+                        referral_code=f"S{n}")
+        session.add(owner)
+        await session.flush()
+        session.add(ResellerProfile(user_id=owner.id, is_active=active))
+        if mode is not None:
+            session.add(ResellerSetting(reseller_user_id=owner.id, key="crypto_rate_mode", value=mode))
+        await session.flush()
+        return owner.id
+
+    async def test_only_active_api_mode_shops_and_platform_are_listed(self) -> None:
+        async with self.Session() as session:
+            api_shop = await self._shop(session, 1, mode=" API ")
+            await self._shop(session, 2, mode="manual")
+            await self._shop(session, 3)
+            await self._shop(session, 4, active=False, mode="api")
+            session.add(Setting(key="crypto_rate_mode", value="api"))
+            await session.commit()
+            self.assertEqual(await cr.api_rate_scopes(session), [None, api_shop])
+
+    async def test_nothing_is_listed_when_no_scope_uses_the_api(self) -> None:
+        async with self.Session() as session:
+            await self._shop(session, 1, mode="off")
+            session.add(Setting(key="crypto_rate_mode", value="manual"))
+            await session.commit()
+            self.assertEqual(await cr.api_rate_scopes(session), [])
+
+
 class PaymentQuoteTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'c.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -290,7 +328,6 @@ class PaymentQuoteTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _payment(self, session, *, status: str = "pending") -> Payment:
         self.counter = getattr(self, "counter", 0) + 1
@@ -455,7 +492,7 @@ class MigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("crypto_quote_migration", ROOT / "alembic/versions/0076_payment_crypto_quote.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text("CREATE TABLE payments (id INTEGER PRIMARY KEY, amount INTEGER)"))
             conn.execute(text("INSERT INTO payments VALUES (1, 985000)"))

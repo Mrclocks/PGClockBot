@@ -1,3 +1,4 @@
+{% from "_message_buttons.html" import button_list %}
 {# A customer's name in any panel table opens the read-only user card. Import with context, because whether the
    name is a link depends on the signed-in staff:
      {% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
@@ -69,6 +70,11 @@
         <label class="form-field"><span>متن پیام <span class="ds-req" aria-hidden="true">*</span></span>
           <textarea name="body" rows="6" required maxlength="2000" placeholder="پیام کوتاه پشتیبانی…"></textarea>
         </label>
+        <div class="form-field">
+          <span>دکمه‌های زیر پیام (اختیاری، تا ۴ دکمه)</span>
+          {{ button_list(message_button_dm_groups, message_button_styles) }}
+          <small class="muted">«تمدید سرویس» نزدیک‌ترین سرویسِ رو به پایانِ همین کاربر را تمدید می‌کند؛ لینک فقط اگر اجازه‌اش را داشته باشید.</small>
+        </div>
       {% endcall %}
       {{ ds_foot('ارسال') }}
     </form>
@@ -76,6 +82,7 @@
 </div>
 {% endif %}
 <script src="/static/user-card-actions.js?v={{ asset_v('user-card-actions.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
+<script src="/static/message-buttons.js?v={{ asset_v('message-buttons.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 <script src="/static/user-message.js?v={{ asset_v('user-message.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 {% endif %}
 {% endmacro %}

@@ -1,4 +1,4 @@
-"""Guard: product installer must never scaffold SQLite for fresh installs."""
+"""Guard: the installer provisions PostgreSQL for every install."""
 
 from __future__ import annotations
 
@@ -11,10 +11,6 @@ def test_pgclock_install_requires_postgresql_scaffold():
     src = (ROOT / "pgclock.sh").read_text(encoding="utf-8")
     assert "ensure_postgresql" in src
     assert "scripts/setup_postgres.sh" in src
-    # Old zero-config SQLite fallback must stay gone.
-    assert "sqlite+aiosqlite:///{Path.cwd()" not in src
-    assert 'or f"sqlite+aiosqlite:///' not in src
-    assert "SQLite for zero-config labs" not in src
     # v11.0.12: install postgresql-common before server (pg_lsclusters).
     assert "postgresql-common" in src
     assert "pg_lsclusters" in src

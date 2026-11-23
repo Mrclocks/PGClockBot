@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
@@ -27,6 +24,7 @@ from app.services.users import clear_settings_cache, set_settings_bulk
 from tests.test_service_import import ImportCase
 from tests.test_service_import_settings_tab import TabHarness
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION
+from tests.postgres_support import scoped_sync_engine
 
 APPROVAL = {"service_import_enabled": "1", "service_import_mode": "approval"}
 
@@ -332,13 +330,12 @@ class MigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("requests_migration", path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        with tempfile.TemporaryDirectory() as tmp:
-            engine = sa.create_engine(f"sqlite:///{Path(tmp) / 'm.db'}")
-            with engine.begin() as conn:
-                conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))
-                conn.execute(sa.text("INSERT INTO bot_users (id) VALUES (1)"))
-                with Operations.context(MigrationContext.configure(conn)):
-                    fn(module, conn)
+        engine = scoped_sync_engine()
+        with engine.begin() as conn:
+            conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))
+            conn.execute(sa.text("INSERT INTO bot_users (id) VALUES (1)"))
+            with Operations.context(MigrationContext.configure(conn)):
+                fn(module, conn)
 
     def test_upgrade_is_idempotent_and_downgrade_removes_the_table(self):
         def check(module, conn):
@@ -351,7 +348,7 @@ class MigrationTests(unittest.TestCase):
                 "INSERT INTO service_import_requests (bot_user_id, panel_user_id, panel_username, expires_at) "
                 "VALUES (1, 5, 'u', '2030-01-01')"
             ))
-            with self.assertRaises(sa.exc.IntegrityError):
+            with self.assertRaises(sa.exc.IntegrityError), conn.begin_nested():
                 conn.execute(sa.text(
                     "INSERT INTO service_import_requests (bot_user_id, panel_user_id, panel_username, expires_at) "
                     "VALUES (1, 5, 'u', '2030-01-01')"

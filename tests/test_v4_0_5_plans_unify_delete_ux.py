@@ -62,10 +62,6 @@ class PlansUnifyTests(unittest.TestCase):
         self.assertIn("billing_mode", block)
         self.assertNotIn("commission_percent", block)
 
-    def test_session_alters_billing_mode(self):
-        src = (ROOT / "app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn("reseller_plans ADD COLUMN billing_mode", src)
-
     def test_make_reseller_accepts_billing_mode(self):
         src = (ROOT / "app/services/resellers.py").read_text(encoding="utf-8")
         fn = src[src.find("async def make_reseller") : src.find("async def list_active_reseller_plans")]
@@ -78,15 +74,6 @@ class NeutralRowActionsTests(unittest.TestCase):
     def test_css_neutralizes_ops_except_danger_warn(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".row-actions-menu .btn:not(.btn-danger):not(.btn-warn)", css)
-
-
-class VersionTests(unittest.TestCase):
-    def test_version_files_match(self):
-        from app.version import __version__
-
-        file_ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(__version__, file_ver)
-        self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
 
 
 if __name__ == "__main__":

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import re
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.api.app import templates
 from app.services.notifications import PLATFORM_NOTIFY_PREFS, SYSTEM_NOTIFY_KEYS, shop_notify_catalog

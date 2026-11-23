@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -47,6 +47,7 @@ from app.services.principal_web_identity import (
 )
 from app.services.pg_access import enrich_staff_pg_from_role, map_pg_role_to_features
 from app.services.secret_box import encrypt_secret
+from tests.postgres_support import scoped_async_engine
 
 
 _PG_PASSWORD = "AaBb12!@CdEf"
@@ -87,7 +88,7 @@ def _level1_staff(principal: OrgPrincipal, owner: OrgPrincipal) -> dict:
 
 class Phase2DLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

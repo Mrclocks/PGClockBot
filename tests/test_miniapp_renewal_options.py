@@ -3,29 +3,35 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import httpx
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_renewal import register_miniapp_renewal
 from app.db.models import Base, BotUser, Plan, PlanCategory, UserService
+from tests.postgres_support import add_rows, scoped_async_engine
 
 SHOP = 900
 
 
+
+# A used-up service (expired, unlimited volume): nothing would carry over, so every category is offered.
+USED_UP = {"quota_synced_at": datetime.now(timezone.utc), "quota_status": "expired", "quota_data_limit_bytes": 0}
+
 class RenewalOptionsTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.addAsyncCleanup(self.engine.dispose)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
         self.addAsyncCleanup(self.session.close)
         self.user = BotUser(id=1, telegram_id=100, referral_code="u1", role="user")
-        self.session.add_all([
+        await add_rows(self.session, [
             self.user,
             BotUser(id=2, telegram_id=200, referral_code="u2", role="user"),
             BotUser(id=SHOP, telegram_id=9000, referral_code="shop", role="reseller"),
@@ -40,8 +46,8 @@ class RenewalOptionsTests(unittest.IsolatedAsyncioTestCase):
                  owner_reseller_id=SHOP, is_active=True),
         ])
         await self.session.flush()
-        self.session.add_all([
-            UserService(id=70, bot_user_id=1, plan_id=1, pg_username="me70"),
+        await add_rows(self.session, [
+            UserService(id=70, bot_user_id=1, plan_id=1, pg_username="me70", **USED_UP),
             UserService(id=71, bot_user_id=2, plan_id=1, pg_username="other71"),
             UserService(id=72, bot_user_id=1, plan_id=1, pg_username="linked72", remark="linked"),
             UserService(id=73, bot_user_id=1, plan_id=5, pg_username="shop73", shop_id=SHOP),

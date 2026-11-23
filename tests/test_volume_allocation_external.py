@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import importlib.util
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, PgAdminSubscription, ResellerProfile, Role, UserService
@@ -23,29 +20,27 @@ from app.services.volume_allocation_external import (
     IN_CHUNK,
     PAGE_SIZE,
     PanelListingIncomplete,
+    PanelUserLimit,
     compute_external_bytes,
     due_shop_ids,
     external_sync_is_stale,
     list_panel_users_for_admin,
     run_external_allocation_sync,
 )
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class ExternalHarness(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'ext.db'}"
-        )
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _shop(self, shop_id: int = 10, *, ceiling_gb: int = 10) -> ResellerProfile:
         async with self.Session() as session:
@@ -92,7 +87,24 @@ def _users(n: int, gb: int = 1, start: int = 1) -> list[dict]:
     return [{"id": i, "username": f"p{i}", "data_limit": gb * GB} for i in range(start, start + n)]
 
 
+def _limits(rows: list[dict]) -> list[PanelUserLimit]:
+    return [user for user in map(PanelUserLimit.from_row, rows) if user is not None]
+
+
 class PaginationAndMatchTests(ExternalHarness):
+    async def test_only_id_name_and_limit_are_kept_from_each_panel_row(self) -> None:
+        rows = [
+            {"id": 7, "username": " Mixed ", "data_limit": 3 * GB, "links": ["x" * 4096], "proxies": {"vless": {}}},
+            {"id": True, "username": "bool-id", "data_limit": GB},
+            {"id": "8", "username": "text-id", "data_limit": GB},
+            {"id": 9, "username": "negative", "data_limit": -5},
+        ]
+        pg = AsyncMock(get_users=_paged(rows))
+        self.assertEqual(
+            await list_panel_users_for_admin(pg, "admin10"),
+            [PanelUserLimit(7, "mixed", 3 * GB), PanelUserLimit(9, "negative", 0)],
+        )
+
     async def test_every_page_is_collected(self) -> None:
         pg = AsyncMock(get_users=_paged(_users(PAGE_SIZE + 3), total=PAGE_SIZE + 3))
         self.assertEqual(len(await list_panel_users_for_admin(pg, "admin10")), PAGE_SIZE + 3)
@@ -106,6 +118,8 @@ class PaginationAndMatchTests(ExternalHarness):
         await self._shop()
         async with self.Session() as session:
             session.add(BotUser(id=1, telegram_id=1, role=Role.USER.value, referral_code="u1"))
+            session.add(BotUser(id=20, telegram_id=1020, role=Role.RESELLER.value, referral_code="s20"))
+            await session.flush()
             session.add_all(
                 [
                     UserService(bot_user_id=1, pg_user_id=1, pg_username="local-one", shop_id=10,
@@ -119,18 +133,18 @@ class PaginationAndMatchTests(ExternalHarness):
                 ]
             )
             await session.commit()
-            panel = [
+            panel = _limits([
                 {"id": 1, "username": "local-one", "data_limit": GB},
-                {"id": 2, "username": "local-two", "data_limit": GB},
+                {"id": 2, "username": "Local-Two ", "data_limit": GB},
                 {"id": 99, "username": "panel-only", "data_limit": 4 * GB},
                 {"id": 100, "username": "unlimited", "data_limit": 0},
-            ]
+            ])
             self.assertEqual(await compute_external_bytes(session, shop_id=10, panel_users=panel), 4 * GB)
 
     async def test_large_lists_are_matched_in_chunks(self) -> None:
         await self._shop()
         async with self.Session() as session:
-            panel = _users(IN_CHUNK * 2 + 5)
+            panel = _limits(_users(IN_CHUNK * 2 + 5))
             self.assertEqual(
                 await compute_external_bytes(session, shop_id=10, panel_users=panel), (IN_CHUNK * 2 + 5) * GB
             )
@@ -216,16 +230,16 @@ class MigrationTests(unittest.TestCase):
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(
                 text(
                     "CREATE TABLE reseller_profiles ("
                     "id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, "
-                    "allow_volume_oversell BOOLEAN NOT NULL DEFAULT 1)"
+                    "allow_volume_oversell BOOLEAN NOT NULL DEFAULT true)"
                 )
             )
-            conn.execute(text("INSERT INTO reseller_profiles VALUES (1, 10, 1)"))
+            conn.execute(text("INSERT INTO reseller_profiles VALUES (1, 10, true)"))
             with Operations.context(MigrationContext.configure(conn)):
                 migration.upgrade()
                 migration.upgrade()

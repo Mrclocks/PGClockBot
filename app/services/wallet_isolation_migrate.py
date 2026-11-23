@@ -29,7 +29,7 @@ from app.db.models import (
     ShopWallet,
     WalletTransaction,
 )
-from app.services.ux20 import MAX_CHARGE_CODE_AMOUNT, MAX_CHARGE_CODE_USES
+from app.services.charge_codes import MAX_CHARGE_CODE_AMOUNT, MAX_CHARGE_CODE_USES
 
 logger = logging.getLogger(__name__)
 

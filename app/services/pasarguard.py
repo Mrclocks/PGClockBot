@@ -23,6 +23,7 @@ from app.services.pg_http_rebuild import (
     note_http_transport_failure,
 )
 from app.services.pg_link_health import failure_kind
+from app.services.pg_link_timing import attach_trace
 from app.services.pg_read_resilience import (
     DNS_CACHE_TTL_SEC,
     note_successful_panel_contact,
@@ -79,6 +80,7 @@ def new_panel_http_client(base_url: str, *, timeout: httpx.Timeout = PG_HTTP_TIM
         # Never follow redirects with Bearer tokens (SSRF / credential forwarding)
         follow_redirects=False,
         transport=httpx.AsyncHTTPTransport(retries=PG_CONNECT_RETRIES, limits=PG_HTTP_LIMITS),
+        event_hooks={"request": [attach_trace]},
     )
 
 
@@ -171,6 +173,33 @@ class PasarGuardError(Exception):
         detail = _pg_error_detail(self.body)
         base = detail or str(self.args[0] if self.args else "") or (fallback or "خطای پاسارگارد")
         return friendly_pg_error(base, status_code=self.status_code)[:500]
+
+
+def _panel_error(exc: BaseException) -> PasarGuardError | None:
+    """The PasarGuard error itself, or the one a service re-raised it from."""
+    for candidate in (exc, exc.__cause__):
+        if isinstance(candidate, PasarGuardError):
+            return candidate
+    return None
+
+
+def failure_text(exc: BaseException) -> str:
+    """``str(exc)`` plus the panel's own reason for a PasarGuard refusal, for staff failure records.
+
+    «POST /api/user/from_template failed (422)» alone does not say which field the panel refused.
+    """
+    text = str(exc)
+    panel = _panel_error(exc)
+    detail = panel.detail() if panel is not None else None
+    if detail and detail not in text:
+        return f"{text}: {detail}"
+    return text
+
+
+def is_panel_rejection(exc: BaseException) -> bool:
+    """True when PasarGuard refused the request body (HTTP 422): sending it again fails the same way."""
+    panel = _panel_error(exc)
+    return panel is not None and panel.status_code == 422
 
 
 def is_pg_not_found(exc: BaseException) -> bool:
@@ -528,6 +557,7 @@ class PasarGuardClient:
                         _remember_api_base(configured, base)
                         return
             except Exception:
+                logger.debug("panel API base probe failed base=%s", base, exc_info=True)
                 continue
 
     async def ensure_token(self) -> str:
@@ -744,6 +774,12 @@ class PasarGuardClient:
     async def get_users(self, *, cache_max_age: float | None = None, last_good_ok: bool = False, **params: Any) -> dict:
         return await self._display_read(
             "/api/users", params=params, cache_max_age=cache_max_age, last_good_ok=last_good_ok
+        )
+
+    async def list_users_by_ids(self, ids: list[int]) -> Any:
+        """Users with these panel ids, read fresh for background jobs and kept out of the read cache."""
+        return await self.request(
+            "GET", "/api/users", params={"ids": list(ids), "limit": len(ids), "offset": 0}, use_cache=False,
         )
 
     async def get_user_by_username(self, username: str) -> dict:

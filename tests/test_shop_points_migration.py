@@ -9,6 +9,7 @@ from pathlib import Path
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from tests.postgres_support import scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -23,7 +24,7 @@ def _load_migration():
 class ShopPointsMigrationTests(unittest.TestCase):
     def setUp(self):
         self.migration = _load_migration()
-        self.engine = sa.create_engine("sqlite:///:memory:")
+        self.engine = scoped_sync_engine()
         self.addCleanup(self.engine.dispose)
         with self.engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY, reseller_id INTEGER, points_balance INTEGER DEFAULT 0)"))

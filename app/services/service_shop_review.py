@@ -58,19 +58,23 @@ async def list_services_under_review(session: AsyncSession, *, limit: int = REVI
     ]
 
 
+SHOP_NOT_FOUND = "فروشگاه یافت نشد"
+NOT_UNDER_REVIEW = "این سرویس در انتظار تعیین فروشگاه نیست"
+
+
 async def assign_service_shop(session: AsyncSession, service_id: int, shop_id: int | None) -> UserService:
     """Give a service under review its shop (None = platform); a second call is refused."""
     if shop_id is not None:
         profile = await session.scalar(select(ResellerProfile.id).where(ResellerProfile.user_id == int(shop_id)))
         if profile is None:
-            raise ValueError("فروشگاه یافت نشد")
+            raise ValueError(SHOP_NOT_FOUND)
     claimed = await session.execute(
         update(UserService)
         .where(UserService.id == int(service_id), UserService.shop_needs_review.is_(True))
         .values(shop_id=int(shop_id) if shop_id else None, shop_needs_review=False)
     )
     if claimed.rowcount != 1:
-        raise ValueError("این سرویس در انتظار تعیین فروشگاه نیست")
+        raise ValueError(NOT_UNDER_REVIEW)
     service = await session.get(UserService, int(service_id))
     await ensure_member(session, int(service.bot_user_id), shop_id)
     await session.commit()

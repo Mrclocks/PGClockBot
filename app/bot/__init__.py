@@ -109,6 +109,7 @@ def bot_routers() -> list[Router]:
     from app.bot.handlers import (
         admin,
         admin_backup,
+        admin_broadcast_confirm,
         admin_plans,
         admin_resplan_payg,
         admin_pg_hosts,
@@ -131,14 +132,20 @@ def bot_routers() -> list[Router]:
         connection_status,
         customer_orders,
         custom_service_name,
+        service_freeze,
+        service_transfer,
         entry_approval,
         guide_editor,
+        payment_destinations_editor,
         loyalty,
         nav_hubs,
         notice_panels,
         marketing_tools,
         cashback_tools,
         child_pricing_bot,
+        command_center,
+        command_schedules,
+        command_switches,
         shop_credit_bot,
         nav_marketing,
         shop_broadcast,
@@ -148,6 +155,7 @@ def bot_routers() -> list[Router]:
         plan_catalog_manage,
         psp_check,
         purchase_contact,
+        quick_links_view,
         reply_nav,
         reseller,
         reseller_capacity_buy,
@@ -171,6 +179,7 @@ def bot_routers() -> list[Router]:
         staff_audit_view,
         stuck_orders,
         subscription_lookup,
+        trial_menu,
         trial_users_view,
         stale_menu,
         start,
@@ -183,6 +192,7 @@ def bot_routers() -> list[Router]:
     from app.bot import nav_input as nav_input_mod
     from app.bot import staff_cancel as _staff_cancel  # noqa: F401 — cancel registry
     from app.bot.handlers import guides
+    from app.bot import broadcast_segments, message_button_picker
 
     return [
         # The menu editor's text input comes first: a typed button name such as «👍 کاربران» or
@@ -199,6 +209,8 @@ def bot_routers() -> list[Router]:
         entry_approval.router,
         connection_status.router,
         connection_status_admin.router,
+        # «دریافت تست» is a menu label too; before the FSM parsers that would read it as input.
+        trial_menu.router,
         # Reply-keyboard nav early so menu labels win over FSM amount parsers
         reply_nav.router,
         notice_panels.router,
@@ -212,10 +224,16 @@ def bot_routers() -> list[Router]:
         shop_credit_bot.router,
         shop_broadcast.router,
         nav_input_mod.router,
+        # Its typed query is matched before other input steps; menu labels there are search words.
+        command_center.router,
+        command_switches.router,
+        command_schedules.router,
         connection_status_admin_input.router,
         purchase_contact.router,
         loyalty.router,
         custom_service_name.router,
+        service_freeze.router,
+        service_transfer.router,
         shop.router,
         staff_free_checkout.router,
         action_reason.router,
@@ -237,6 +255,10 @@ def bot_routers() -> list[Router]:
         stuck_orders.router,
         trial_users_view.router,
         staff_audit_view.router,
+        admin_broadcast_confirm.router,
+        broadcast_segments.router,
+        message_button_picker.router,
+        quick_links_view.router,
         service_shop_review_view.router,
         payg_charge_review.router,
         service_cleanup_bot.router,
@@ -256,6 +278,8 @@ def bot_routers() -> list[Router]:
         button_colors.shop_router,
         guide_editor.owner_router,
         guide_editor.shop_router,
+        payment_destinations_editor.owner_router,
+        payment_destinations_editor.shop_router,
         admin_backup.router,
         admin_pg_users.router,
         admin_pg_nodes.router,
@@ -310,6 +334,7 @@ def create_dispatcher() -> Dispatcher:
         connection_status_admin_input,
         catalog_row_editor,
         guide_editor,
+        payment_destinations_editor,
         reseller_plan_extra_packs_admin,
         screen_editor,
     )
@@ -326,6 +351,7 @@ def create_dispatcher() -> Dispatcher:
         admin_wallet_adjust.router,
         button_colors.owner_router,
         guide_editor.owner_router,
+        payment_destinations_editor.owner_router,
         screen_editor.owner_router,
         catalog_row_editor.owner_router,
         admin_plans.router,

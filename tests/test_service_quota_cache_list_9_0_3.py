@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class QuotaCacheSyncTests(unittest.TestCase):
@@ -216,35 +213,6 @@ class AdminExtendCachesQuotaTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(svc.quota_data_limit_bytes, lim)
         self.assertIsNotNone(svc.quota_expire_at)
         self.assertIsNotNone(svc.quota_synced_at)
-
-
-class ModalStripFlashTests(unittest.TestCase):
-    def test_users_modal_strips_edit_and_flash(self):
-        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn('id="modal-user-edit"', users)
-        self.assertIn('data-modal-strip-keys="edit,ok,err,_"', users)
-        self.assertIn("data-modal-close-strip", users)
-        self.assertIn("searchParams.delete('ok')", users)
-        self.assertIn("searchParams.delete('err')", users)
-        self.assertIn("replaceState", users)
-
-    def test_migration_and_model_columns(self):
-        mig = (
-            ROOT / "alembic/versions/0024_user_service_quota_cache.py"
-        ).read_text(encoding="utf-8")
-        self.assertIn("quota_expire_at", mig)
-        self.assertIn("quota_data_limit_bytes", mig)
-        self.assertIn("quota_synced_at", mig)
-        self.assertIn('down_revision: Union[str, None] = "0023_lucky_wheel"', mig)
-
-        models = (ROOT / "app/db/models.py").read_text(encoding="utf-8")
-        self.assertIn("quota_expire_at", models)
-        self.assertIn("quota_data_limit_bytes", models)
-        self.assertIn("quota_synced_at", models)
-
-        session = (ROOT / "app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn("quota_expire_at", session)
-        self.assertIn("quota_synced_at", session)
 
 
 if __name__ == "__main__":

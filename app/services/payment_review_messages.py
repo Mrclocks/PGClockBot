@@ -9,7 +9,6 @@ from aiogram import Bot
 from aiogram.types import Message
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -28,11 +27,10 @@ async def remember_review_message(
     if not isinstance(bot.id, int) or not isinstance(message.message_id, int):
         return
     is_photo = bool(getattr(message, "photo", None))
-    insert = pg_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
     # Fan-out and the first callback can register the same message concurrently.
     # Keep the original pending card and avoid poisoning either transaction.
     await session.execute(
-        insert(PaymentReviewMessage).values(
+        pg_insert(PaymentReviewMessage).values(
             bot_id=bot.id, chat_id=message.chat.id, message_id=message.message_id,
             payment_id=payment_id,
             text=getattr(message, "html_caption" if is_photo else "html_text", "") or "",

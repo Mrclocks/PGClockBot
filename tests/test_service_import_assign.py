@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 from datetime import datetime, timezone
 from urllib.parse import unquote
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select, update
 

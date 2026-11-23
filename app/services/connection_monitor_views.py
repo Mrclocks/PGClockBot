@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,9 +12,11 @@ from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, Con
 from app.services.connection_monitor_access import MonitorAccess, require_monitor_owner
 from app.services.connection_monitor_settings import LOCAL_PROBE_ID, MonitorSettings, monitor_settings
 from app.services.connection_monitor_snapshots import snapshot_health, stored_utc
+from app.services.connection_monitor_timing import DEFAULT_TIMING, MonitorTiming, monitor_timing
 from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorIssue
 from app.services.connection_status_policy import aggregate_host, is_fresh
 from app.services.connection_status_types import (
+    FRESHNESS,
     SLOW_DELAY_MS,
     ConnectionStatus,
     EndpointIdentity,
@@ -47,10 +49,12 @@ class MonitorAdminPage:
     targets: tuple[MonitorTargetView, ...]
     next_id: int | None
     stop_reason: str | None = None
+    timing: MonitorTiming = DEFAULT_TIMING
 
 
 def target_health(target: ConnectionMonitorTarget, snapshots: tuple[ConnectionMonitorSnapshot, ...], *,
-                  runtime_ready: bool, now: datetime, runtime_enabled: bool = True) -> HostHealth:
+                  runtime_ready: bool, now: datetime, runtime_enabled: bool = True,
+                  freshness: timedelta = FRESHNESS) -> HostHealth:
     checked_at = last_target_check(target, snapshots)
     if not target.test_enabled or not runtime_enabled:
         return HostHealth(ConnectionStatus.PAUSED, checked_at, None, 0, target.endpoint_count)
@@ -63,7 +67,7 @@ def target_health(target: ConnectionMonitorTarget, snapshots: tuple[ConnectionMo
         return HostHealth(ConnectionStatus.UNKNOWN, None, None, len(current), target.endpoint_count)
     states = tuple(snapshot_health(row) for row in current)
     expected = tuple(EndpointIdentity(row.endpoint_key, target.generation) for row in current)
-    return replace(aggregate_host(states, expected=expected, now=now), checked_at=checked_at)
+    return replace(aggregate_host(states, expected=expected, now=now, freshness=freshness), checked_at=checked_at)
 
 
 def last_target_check(target: ConnectionMonitorTarget, snapshots: tuple[ConnectionMonitorSnapshot, ...]) -> datetime | None:
@@ -72,12 +76,12 @@ def last_target_check(target: ConnectionMonitorTarget, snapshots: tuple[Connecti
 
 
 def target_reason(target: ConnectionMonitorTarget, snapshots: tuple[ConnectionMonitorSnapshot, ...], *,
-                  health: HostHealth, runtime_ready: bool, now: datetime) -> str | None:
+                  health: HostHealth, runtime_ready: bool, now: datetime, freshness: timedelta = FRESHNESS) -> str | None:
     if health.status == ConnectionStatus.PAUSED:
         return MonitorReason.PAUSED
     if target.generation and not runtime_ready:
         return MonitorReason.CATALOG_UNAVAILABLE
-    if health.checked_at is not None and not is_fresh(health.checked_at, now=now):
+    if health.checked_at is not None and not is_fresh(health.checked_at, now=now, freshness=freshness):
         return MonitorReason.STALE
     current = tuple(row for row in snapshots if row.generation == target.generation)
     reasons = [row.reason for row in current if row.status != ConnectionStatus.HEALTHY and row.reason in SAFE_REASON_CODES]
@@ -92,7 +96,8 @@ def target_reason(target: ConnectionMonitorTarget, snapshots: tuple[ConnectionMo
 
 
 async def target_views(session: AsyncSession, targets: list[ConnectionMonitorTarget], *,
-                       runtime_ready: bool, now: datetime, runtime_enabled: bool = True) -> tuple[MonitorTargetView, ...]:
+                       runtime_ready: bool, now: datetime, runtime_enabled: bool = True,
+                       freshness: timedelta = FRESHNESS) -> tuple[MonitorTargetView, ...]:
     if len(targets) > PAGE_SIZE:
         raise ValueError("Invalid monitoring page")
     rows = (await session.scalars(select(ConnectionMonitorSnapshot).where(
@@ -105,8 +110,9 @@ async def target_views(session: AsyncSession, targets: list[ConnectionMonitorTar
     views = []
     for target in targets:
         snapshots = tuple(by_target.get(target.id, ()))
-        health = target_health(target, snapshots, runtime_ready=runtime_ready, now=now, runtime_enabled=runtime_enabled)
-        reason = target_reason(target, snapshots, health=health, runtime_ready=runtime_ready, now=now)
+        health = target_health(target, snapshots, runtime_ready=runtime_ready, now=now, runtime_enabled=runtime_enabled,
+                               freshness=freshness)
+        reason = target_reason(target, snapshots, health=health, runtime_ready=runtime_ready, now=now, freshness=freshness)
         views.append(MonitorTargetView(target.id, target.subscription_key, target.config_name, target.public_name, target.display_order,
                                        target.test_enabled, target.is_public, target.manual_pending, health, reason))
     return tuple(views)
@@ -122,8 +128,12 @@ async def monitor_admin_page(session: AsyncSession, access: MonitorAccess, *, no
     state = await session.scalar(select(ConnectionMonitorState).where(
         ConnectionMonitorState.id == settings.id, ConnectionMonitorState.reseller_id.is_(None),
     ).limit(1))
-    ready = state is not None and settings.enabled and is_fresh(stored_utc(state.catalog_synced_at), now=now)
-    views = await target_views(session, targets[:PAGE_SIZE], runtime_ready=ready, now=now, runtime_enabled=settings.enabled)
+    timing = await monitor_timing(session)
+    ready = state is not None and settings.enabled and is_fresh(
+        stored_utc(state.catalog_synced_at), now=now, freshness=timing.freshness,
+    )
+    views = await target_views(session, targets[:PAGE_SIZE], runtime_ready=ready, now=now, runtime_enabled=settings.enabled,
+                               freshness=timing.freshness)
     stop_reason = None
     if not settings.enabled:
         stop_reason = await session.scalar(select(ConnectionMonitorSnapshot.reason).where(
@@ -132,7 +142,7 @@ async def monitor_admin_page(session: AsyncSession, access: MonitorAccess, *, no
         ).limit(1))
     await session.commit()
     return MonitorAdminPage(
-        settings, views, views[-1].id if len(targets) > PAGE_SIZE else None, stop_reason,
+        settings, views, views[-1].id if len(targets) > PAGE_SIZE else None, stop_reason, timing,
     )
 
 
@@ -148,7 +158,11 @@ async def monitor_target_view(session: AsyncSession, access: MonitorAccess, *, t
     state = await session.scalar(select(ConnectionMonitorState).where(
         ConnectionMonitorState.reseller_id.is_(None), ConnectionMonitorState.probe_id == LOCAL_PROBE_ID,
     ).limit(1))
-    ready = state is not None and state.enabled and is_fresh(stored_utc(state.catalog_synced_at), now=now)
-    view = (await target_views(session, [target], runtime_ready=ready, now=now, runtime_enabled=state is not None and state.enabled))[0]
+    timing = await monitor_timing(session)
+    ready = state is not None and state.enabled and is_fresh(
+        stored_utc(state.catalog_synced_at), now=now, freshness=timing.freshness,
+    )
+    view = (await target_views(session, [target], runtime_ready=ready, now=now,
+                               runtime_enabled=state is not None and state.enabled, freshness=timing.freshness))[0]
     await session.commit()
     return view

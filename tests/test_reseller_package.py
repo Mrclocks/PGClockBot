@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, PgAdminSubscription, ResellerPlan, ResellerProfile, WalletTransaction
 from app.services.billing import GB
@@ -21,6 +21,7 @@ from app.services.reseller_package import (
     package_overview,
     renew_package,
 )
+from tests.postgres_support import scoped_async_engine
 
 PERMS = '["orders","payments"]'
 BRONZE, SILVER, GOLD_PERMS, TINY, PAYG, OTHER_ROLE = 1, 2, 3, 4, 5, 6
@@ -37,7 +38,7 @@ def plan(plan_id: int, name: str, *, users: int, gb: int, price: int, **extra) -
 
 class ResellerPackageTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

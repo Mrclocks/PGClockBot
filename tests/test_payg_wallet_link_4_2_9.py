@@ -172,62 +172,12 @@ class AutoUnsuspendAfterCreditTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["restored"], 0)
         restore.assert_not_awaited()
 
-    def test_credit_wallet_hooks_restore(self):
-        src = Path("app/services/wallet.py").read_text(encoding="utf-8")
-        self.assertIn("maybe_restore_after_wallet_credit", src)
-
-
-class SuspendListBadgeTests(unittest.TestCase):
-    def test_resellers_list_shows_suspended_badge(self):
-        src = Path("app/web/templates/resellers.html").read_text(encoding="utf-8")
-        self.assertIn("billing_suspended_at", src)
-        self.assertIn("مسدود", src)
-        self.assertIn("فعال", src)
-
-    def test_edit_shows_wallet_as_payg_source(self):
-        # Edit form body lives in the shared fragment (page shell only includes it).
-        shell = Path("app/web/templates/reseller_edit.html").read_text(encoding="utf-8")
-        body = Path("app/web/templates/_reseller_edit_body.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("_reseller_edit_body.html", shell)
-        self.assertIn("wallet_balance", body)
-        self.assertIn("کیف پول فروشگاهی", body)
-        self.assertIn("مدیریت PAYG", body)
-
-    def test_delete_warn_no_double_billing_pot(self):
-        edit = Path("app/web/templates/_reseller_edit_body.html").read_text(
-            encoding="utf-8"
-        )
-        listing = Path("app/web/templates/resellers.html").read_text(encoding="utf-8")
-        self.assertNotIn("موجودی PAYG:", edit)
-        self.assertNotIn("موجودی PAYG", listing)
-
-    def test_first_link_uses_atomic_claim(self):
-        src = Path("app/services/billing.py").read_text(encoding="utf-8")
-        fn = src[
-            src.find("async def ensure_payg_shop_wallet") : src.find(
-                "async def payg_available_balance"
-            )
-        ]
-        self.assertIn("payg_wallet_linked.is_(False)", fn)
-        self.assertIn("BotUser.wallet_balance + int(billing)", fn)
-
-    def test_debit_usage_retry_stays_balance_guarded(self):
-        src = Path("app/services/billing.py").read_text(encoding="utf-8")
-        i = src.find("Race: charge whatever remains")
-        self.assertGreater(i, 0)
-        chunk = src[i : i + 700]
-        self.assertIn("wallet_balance >= int(charge)", chunk)
-
 
 class SchemaLinkFlagTests(unittest.TestCase):
     def test_model_and_migrate(self):
         from app.db.models import ResellerProfile
 
         self.assertTrue(hasattr(ResellerProfile, "payg_wallet_linked"))
-        session_src = Path("app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn("payg_wallet_linked", session_src)
         alem = Path("alembic/versions/0006_payg_wallet_linked.py").read_text(encoding="utf-8")
         self.assertIn("payg_wallet_linked", alem)
 

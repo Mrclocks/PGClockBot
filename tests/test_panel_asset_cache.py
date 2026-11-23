@@ -47,11 +47,9 @@ class StaticAssetUrlTests(unittest.TestCase):
         self.assertEqual(asset_version("../.env", fallback="0.0.0"), "0.0.0")
 
     def test_base_page_links_the_current_stylesheets(self) -> None:
-        import os
         import re
         from types import SimpleNamespace
 
-        os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
         from app.api.app import templates
         from app.services.panel_assets import asset_version
 

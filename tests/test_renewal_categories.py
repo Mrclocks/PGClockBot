@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +13,7 @@ from app.bot.panel_history import panel_history
 from app.db.models import BotUser, Plan, PlanCategory, UserService
 from app.services.service_renewals import renewal_choices
 from tests.chat_sim import ChatSim
+from tests.postgres_support import add_rows
 
 BACK = "بازگشت"
 
@@ -19,6 +21,10 @@ BACK = "بازگشت"
 def _plan(plan_id: int, category_id: int | None, *, gb: float = 50, days: int = 30) -> SimpleNamespace:
     return SimpleNamespace(id=plan_id, category_id=category_id, data_limit_gb=gb, duration_days=days)
 
+
+
+# A used-up service (expired, unlimited volume): nothing would carry over, so every category is offered.
+USED_UP = {"quota_synced_at": datetime.now(timezone.utc), "quota_status": "expired", "quota_data_limit_bytes": 0}
 
 class ChoicesTests(unittest.TestCase):
     def test_the_current_plan_comes_first_and_categories_keep_only_listed_ones(self) -> None:
@@ -50,7 +56,7 @@ class _RenewalFlow(unittest.IsolatedAsyncioTestCase):
         await self.sim.type("/start")
         async with self.sim.Session() as session:
             me = await session.scalar(select(BotUser).where(BotUser.telegram_id == 5901))
-            session.add_all([
+            await add_rows(session, [
                 BotUser(id=950, telegram_id=9500, referral_code="shop950", role="reseller"),
                 BotUser(id=951, telegram_id=9510, referral_code="other951"),
                 PlanCategory(id=10, name="اقتصادی", owner_reseller_id=None, audience="users"),
@@ -66,7 +72,7 @@ class _RenewalFlow(unittest.IsolatedAsyncioTestCase):
             ])
             await session.flush()
             session.add_all([
-                UserService(id=70, bot_user_id=me.id, plan_id=1, pg_username="me70"),
+                UserService(id=70, bot_user_id=me.id, plan_id=1, pg_username="me70", **USED_UP),
                 UserService(id=71, bot_user_id=951, plan_id=1, pg_username="other71"),
             ])
             await session.commit()

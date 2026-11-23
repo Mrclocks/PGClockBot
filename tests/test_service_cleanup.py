@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
-import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
@@ -21,6 +19,7 @@ from app.services import service_cleanup as cleanup
 from app.services.service_cleanup import CleanupPolicy, CleanupPolicyError
 from app.services.users import clear_settings_cache
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarness
+from tests.postgres_support import scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)
@@ -62,7 +61,6 @@ class CleanupCase(RoutesHarness):
         await super().asyncSetUp()
         clear_settings_cache()
         self.addCleanup(clear_settings_cache)
-        self.db_path = Path(self._tmp.name) / "u.db"
         async with AsyncSession(bind=self.engine, expire_on_commit=False) as session:
             session.add_all([
                 BotUser(id=6, telegram_id=106, referral_code="shop6", role="reseller"),
@@ -250,11 +248,11 @@ class CleanupMigrationTests(unittest.TestCase):
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         self.addCleanup(engine.dispose)
         new = set(migration.COLUMNS)
         with engine.begin() as conn:
-            conn.execute(sa.text("CREATE TABLE user_services (id INTEGER PRIMARY KEY, shop_id INTEGER, quota_expire_at DATETIME)"))
+            conn.execute(sa.text("CREATE TABLE user_services (id INTEGER PRIMARY KEY, shop_id INTEGER, quota_expire_at TIMESTAMPTZ)"))
             conn.execute(sa.text("INSERT INTO user_services (id, shop_id) VALUES (1, NULL)"))
             for down in (False, False, True):
                 with Operations.context(MigrationContext.configure(conn)):

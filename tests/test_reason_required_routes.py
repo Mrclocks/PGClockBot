@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from unittest.mock import AsyncMock, patch
 from urllib.parse import unquote
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from tests.test_customer_services_web_permission import (
     CUSTOMER_ID,

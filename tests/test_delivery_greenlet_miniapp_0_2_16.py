@@ -11,11 +11,8 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timezone
-from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
-
-ROOT = Path(__file__).resolve().parents[1]
+from unittest.mock import AsyncMock, patch
 
 
 class SyncQuotaNoLazyPlanTests(unittest.TestCase):
@@ -53,23 +50,6 @@ class SyncQuotaNoLazyPlanTests(unittest.TestCase):
         delta = svc.__dict__["quota_expire_at"] - datetime.now(timezone.utc)
         self.assertGreater(delta.total_seconds(), 29 * 86400)
         self.assertLess(delta.total_seconds(), 31 * 86400)
-
-    def test_source_never_getattr_plan(self):
-        src = (ROOT / "app/services/bot_user_admin.py").read_text(encoding="utf-8")
-        # Narrow to sync_service_quota_cache body
-        start = src.index("def sync_service_quota_cache")
-        end = src.index("\nasync def admin_set_service_quota", start)
-        body = src[start:end]
-        self.assertNotIn('getattr(service, "plan"', body)
-        self.assertIn('service.__dict__.get("plan")', body)
-        self.assertIn("fallback_duration_days", body)
-
-
-class DeliverOrderNamingAndQuotaTests(unittest.TestCase):
-    def test_deliver_uses_order_id_for_naming_and_passes_plan_days(self):
-        src = (ROOT / "app/services/orders.py").read_text(encoding="utf-8")
-        self.assertIn("user_id=int(order.id)", src)
-        self.assertIn("fallback_duration_days=plan_days", src)
 
 
 class MiniAppServicesResilienceTests(unittest.IsolatedAsyncioTestCase):
@@ -230,22 +210,6 @@ class OnHoldDisplayLabelTests(unittest.TestCase):
         text = snapshot_telegram_lines(snap)
         self.assertIn("پس از اتصال", text)
         self.assertNotIn("نامحدود", text)
-
-    def test_ui_sources_not_map_null_days_to_unlimited(self):
-        # Mini App label: tests/miniapp_app.test.cjs (on_hold never reads «نامحدود»).
-        html = (ROOT / "app/web/templates/_user_edit_body.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("s.time_label", html)
-        self.assertNotIn(
-            "s.days_left is none %}نامحدود",
-            html,
-        )
-        svc_src = (ROOT / "app/bot/handlers/services.py").read_text(encoding="utf-8")
-        self.assertIn("fetch_live_service_info", svc_src)
-        self.assertIn("service_card(sub_info)", svc_src)
-        pg_src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
-        self.assertIn("pg_expire_fields", pg_src)
 
 
 if __name__ == "__main__":

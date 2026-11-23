@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from urllib.parse import urlsplit
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

@@ -1,3 +1,14 @@
+/* Text and attribute values written into HTML strings: &, <, >, " and ' become entities. Every
+   part of this file builds markup with it, so no caller escapes only some of them. */
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
   (function(){
     function csrfToken() {
       var meta = document.querySelector('meta[name="csrf-token"]');
@@ -408,6 +419,8 @@
       function isRealInternalNavAnchor(a) {
         if (!a || a.target && a.target !== '' && a.target !== '_self') return false;
         if (a.hasAttribute('download') || a.getAttribute('aria-disabled') === 'true') return false;
+        /* A link that opens a modal (its href is only the fallback without scripts) is not a page change. */
+        if (a.hasAttribute('data-modal-open')) return false;
         const raw = a.getAttribute('href');
         if (!raw || raw.charAt(0) === '#' || raw.indexOf('javascript:') === 0) return false;
         let url;
@@ -446,6 +459,12 @@
         if (form.hasAttribute('data-confirm') || form.id === 'confirm-form') return;
         if (side && side.contains(form)) setOpen(false, true);
         arm();
+        /* Listeners after this one (the Persian validator, upload XHR) may still
+           cancel the submit; then no navigation follows and the clock would
+           cover the page forever. Re-check once dispatch has finished. */
+        setTimeout(function () {
+          if (e.defaultPrevented) disarm();
+        }, 0);
       }, true);
       window.addEventListener('pageshow', function () {
         disarm();
@@ -2034,29 +2053,21 @@
         const link = entry && entry.link ? String(entry.link) : '';
         const title = entry && entry.title ? String(entry.title) : '';
         const req = !entry || entry.required !== false;
-        function attrEsc(v) {
-          return String(v == null ? '' : v)
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-        }
         return (
           '<div class="force-channel-row">' +
             '<label class="form-field force-channel-title-wrap">عنوان دکمه اینلاین' +
               '<input type="text" class="force-channel-title" placeholder="مثلاً کانال اخبار" value="' +
-                attrEsc(title) + '" autocomplete="off" />' +
+                escapeHtml(title) + '" autocomplete="off" />' +
               '<small class="muted">متنی که روی دکمه عضویت در ربات دیده می‌شود</small>' +
             '</label>' +
             '<label class="form-field force-channel-id-wrap">شناسه کانال' +
               '<input type="text" class="force-channel-id" dir="ltr" placeholder="@channel یا -100… یا t.me/c/…" value="' +
-                attrEsc(id) + '" autocomplete="off" />' +
+                escapeHtml(id) + '" autocomplete="off" />' +
               '<small class="muted">برای تأیید عضویت: @username یا −100… — ربات باید ادمین کانال باشد</small>' +
             '</label>' +
             '<label class="form-field force-channel-link-wrap">لینک دکمه / دعوت' +
               '<input type="text" class="force-channel-link" dir="ltr" placeholder="https://t.me/+… یا t.me/channel" value="' +
-                attrEsc(link) + '" autocomplete="off" />' +
+                escapeHtml(link) + '" autocomplete="off" />' +
               '<small class="muted">لینک روی دکمه اینلاین؛ کانال خصوصی حتماً لینک دعوت (+…) بگذارید</small>' +
             '</label>' +
             '<div class="force-channel-foot">' +
@@ -2492,7 +2503,7 @@
            report "too short" even after a valid reason was typed. */
         reasonSlot.innerHTML =
           '<label class="form-field" id="confirm-reason-wrap">' +
-            '<span id="confirm-reason-label">' + String(label).replace(/</g, '&lt;') + '</span>' +
+            '<span id="confirm-reason-label">' + escapeHtml(label) + '</span>' +
             '<textarea id="confirm-reason" name="confirm_reason" rows="3" ' +
               'placeholder="حداقل ' + min + ' کاراکتر" autocomplete="off"></textarea>' +
           '</label>';
@@ -2514,9 +2525,9 @@
         reasonSlot.hidden = false;
         reasonSlot.innerHTML =
           '<label class="form-field" id="confirm-phrase-wrap">' +
-            '<span id="confirm-phrase-label">' + label.replace(/</g, '&lt;') + '</span>' +
+            '<span id="confirm-phrase-label">' + escapeHtml(label) + '</span>' +
             '<input id="confirm-phrase" name="confirm_phrase" type="text" autocomplete="off" ' +
-              'spellcheck="false" dir="ltr" placeholder="' + phrase.replace(/"/g, '&quot;') + '" />' +
+              'spellcheck="false" dir="ltr" placeholder="' + escapeHtml(phrase) + '" />' +
           '</label>';
         const input = document.getElementById('confirm-phrase');
         if (submitBtn) submitBtn.disabled = true;
@@ -3007,6 +3018,11 @@
         if (!btn) return;
         e.preventDefault();
         openDismiss(btn.getAttribute('data-inbox-dismiss'), btn.getAttribute('data-inbox-entity') || '');
+        /* From the header's action-center modal the dismiss dialog takes its place, like any modal opened
+           from a fragment modal. */
+        const host = btn.closest('.ui-modal');
+        const hostClose = host && host !== modal ? host.querySelector('[data-modal-close]') : null;
+        if (hostClose) setTimeout(() => { hostClose.click(); }, 0);
       });
 
       const resetForm = document.getElementById('form-inbox-dismiss-reset');
@@ -3029,14 +3045,6 @@
     (function () {
       function uid() {
         return 'pd' + Math.random().toString(36).slice(2, 10);
-      }
-      function attrEsc(v) {
-        return String(v == null ? '' : v)
-          .replace(/&/g, '&amp;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
       }
       function parseJson(raw) {
         try {
@@ -3093,14 +3101,14 @@
         const provider = item.provider || 'zarinpal';
         const keyHint = item.has_secret ? '•••••••• ذخیره شده؛ برای تغییر بنویسید' : 'وارد کنید';
         return (
-          '<div class="pay-dest-row" data-pay-dest-row' + saved + ' data-pay-dest-id="' + attrEsc(id) + '">' +
+          '<div class="pay-dest-row" data-pay-dest-row' + saved + ' data-pay-dest-id="' + escapeHtml(id) + '">' +
             '<div class="pay-dest-fields">' +
-              '<label>نام درگاه<input type="text" class="pay-dest-psp-name" maxlength="64" value="' + attrEsc(item.name) + '" autocomplete="off" /></label>' +
+              '<label>نام درگاه<input type="text" class="pay-dest-psp-name" maxlength="64" value="' + escapeHtml(item.name) + '" autocomplete="off" /></label>' +
               '<label>ارائه‌دهنده<select class="pay-dest-psp-provider">' +
                 optionsHtml([['zarinpal', 'زرین‌پال'], ['sunpay', 'سان‌پی (SunPay)'], ['mock', 'Mock (فقط تست محلی)']], provider) +
               '</select></label>' +
-              '<label>مرچنت / کلید API<input type="password" class="pay-dest-psp-key" dir="ltr" value="" autocomplete="new-password" placeholder="' + attrEsc(keyHint) + '" /></label>' +
-              '<label>آدرس پایه (فقط سان‌پی)<input type="text" class="pay-dest-psp-url" dir="ltr" value="' + attrEsc(item.pay_url) + '" placeholder="https://pay.example.com" autocomplete="off" /></label>' +
+              '<label>مرچنت / کلید API<input type="password" class="pay-dest-psp-key" dir="ltr" value="" autocomplete="new-password" placeholder="' + escapeHtml(keyHint) + '" /></label>' +
+              '<label>آدرس پایه (فقط سان‌پی)<input type="text" class="pay-dest-psp-url" dir="ltr" value="' + escapeHtml(item.pay_url) + '" placeholder="https://pay.example.com" autocomplete="off" /></label>' +
               '<label>روش درخواست سان‌پی<select class="pay-dest-psp-method">' +
                 optionsHtml([['GET', 'GET (مستند)'], ['POST', 'POST']], item.request_method || 'GET') +
               '</select></label>' +
@@ -3129,10 +3137,10 @@
         const styleHtml = styleSelectHtml(storedStyleValue(item), inheritLabel);
         if (kind === 'cards') {
           return (
-            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + attrEsc(id) + '">' +
+            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + escapeHtml(id) + '">' +
               '<div class="pay-dest-fields">' +
-                '<label>شماره کارت<input type="text" class="pay-dest-card-number" dir="ltr" value="' + attrEsc(item.number) + '" autocomplete="off" /></label>' +
-                '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + attrEsc(item.holder) + '" autocomplete="off" /></label>' +
+                '<label>شماره کارت<input type="text" class="pay-dest-card-number" dir="ltr" value="' + escapeHtml(item.number) + '" autocomplete="off" /></label>' +
+                '<label>صاحب کارت<input type="text" class="pay-dest-card-holder" value="' + escapeHtml(item.holder) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
               '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
@@ -3141,10 +3149,10 @@
         }
         if (kind === 'gateways') {
           return (
-            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + attrEsc(id) + '">' +
+            '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + escapeHtml(id) + '">' +
               '<div class="pay-dest-fields">' +
-                '<label>نام درگاه<input type="text" class="pay-dest-gw-name" value="' + attrEsc(item.name) + '" autocomplete="off" /></label>' +
-                '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + attrEsc(item.link) + '" autocomplete="off" /></label>' +
+                '<label>نام درگاه<input type="text" class="pay-dest-gw-name" value="' + escapeHtml(item.name) + '" autocomplete="off" /></label>' +
+                '<label>لینک<input type="text" class="pay-dest-gw-link" dir="ltr" value="' + escapeHtml(item.link) + '" autocomplete="off" /></label>' +
                 styleHtml +
               '</div>' +
               '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
@@ -3152,11 +3160,11 @@
           );
         }
         return (
-          '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + attrEsc(id) + '">' +
+          '<div class="pay-dest-row" data-pay-dest-row data-pay-dest-id="' + escapeHtml(id) + '">' +
             '<div class="pay-dest-fields">' +
-              '<label>رمزارز<input type="text" class="pay-dest-cr-asset" value="' + attrEsc(item.asset || 'USDT') + '" autocomplete="off" /></label>' +
-              '<label>شبکه<input type="text" class="pay-dest-cr-network" value="' + attrEsc(item.network || 'TRC20') + '" autocomplete="off" /></label>' +
-              '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + attrEsc(item.address) + '" autocomplete="off" /></label>' +
+              '<label>رمزارز<input type="text" class="pay-dest-cr-asset" value="' + escapeHtml(item.asset || 'USDT') + '" autocomplete="off" /></label>' +
+              '<label>شبکه<input type="text" class="pay-dest-cr-network" value="' + escapeHtml(item.network || 'TRC20') + '" autocomplete="off" /></label>' +
+              '<label>آدرس<input type="text" class="pay-dest-cr-address" dir="ltr" value="' + escapeHtml(item.address) + '" autocomplete="off" /></label>' +
               styleHtml +
             '</div>' +
             '<button type="button" class="ds-del pay-dest-remove pay-dest-remove-btn" aria-label="حذف"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>' +
@@ -3292,25 +3300,17 @@
         if (styleVal === '') return { button_style: '' };
         return { button_style: styleVal };
       }
-      function esc(v) {
-        return String(v == null ? '' : v)
-          .replace(/&/g, '&amp;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-      }
       function rowHtml(item) {
         const id = (item && item.id) || uid();
         const enabled = !item || item.enabled === undefined || item.enabled === null
           ? true
           : !!item.enabled;
         return (
-          '<div class="pay-dest-row" data-supports-row data-supports-id="' + esc(id) + '">' +
+          '<div class="pay-dest-row" data-supports-row data-supports-id="' + escapeHtml(id) + '">' +
             '<div class="pay-dest-fields supports-fields-grid">' +
-              '<label>عنوان<input type="text" class="supports-title" maxlength="80" value="' + esc(item && item.title) + '" placeholder="مثلاً پشتیبان ربات" autocomplete="off" /></label>' +
-              '<label>آیدی / یوزرنیم تلگرام<input type="text" class="supports-telegram" dir="ltr" value="' + esc(item && item.telegram) + '" placeholder="@username یا 123456789" autocomplete="off" /></label>' +
-              '<label>ترتیب<input type="number" class="supports-sort" dir="ltr" value="' + esc(item && item.sort != null ? item.sort : 0) + '" /></label>' +
+              '<label>عنوان<input type="text" class="supports-title" maxlength="80" value="' + escapeHtml(item && item.title) + '" placeholder="مثلاً پشتیبان ربات" autocomplete="off" /></label>' +
+              '<label>آیدی / یوزرنیم تلگرام<input type="text" class="supports-telegram" dir="ltr" value="' + escapeHtml(item && item.telegram) + '" placeholder="@username یا 123456789" autocomplete="off" /></label>' +
+              '<label>ترتیب<input type="number" class="supports-sort" dir="ltr" value="' + escapeHtml(item && item.sort != null ? item.sort : 0) + '" /></label>' +
               '<label class="support-enabled supports-enabled-field">' +
                 '<span>فعال</span>' +
                 '<span class="ui-switch">' +
@@ -3408,14 +3408,6 @@
           return [];
         }
       }
-      function esc(v) {
-        return String(v == null ? '' : v)
-          .replace(/&/g, '&amp;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-      }
       function styleSelectHtml(cur) {
         const val = cur == null ? 'primary' : String(cur);
         const tone = !val ? 'default' : val;
@@ -3444,8 +3436,8 @@
         const item = link || {};
         return (
           '<div class="guides-link-row" data-guides-link>' +
-            '<label>متن دکمه<input type="text" class="guides-link-label" maxlength="48" value="' + esc(item.label) + '" placeholder="▶️ دیدن ویدیو" autocomplete="off" /></label>' +
-            '<label>لینک<input type="url" class="guides-link-url" dir="ltr" maxlength="512" value="' + esc(item.url) + '" placeholder="https://youtu.be/…" autocomplete="off" /></label>' +
+            '<label>متن دکمه<input type="text" class="guides-link-label" maxlength="48" value="' + escapeHtml(item.label) + '" placeholder="▶️ دیدن ویدیو" autocomplete="off" /></label>' +
+            '<label>لینک<input type="url" class="guides-link-url" dir="ltr" maxlength="512" value="' + escapeHtml(item.url) + '" placeholder="https://youtu.be/…" autocomplete="off" /></label>' +
             '<button type="button" class="icon-btn icon-remove guides-link-remove" aria-label="حذف این لینک" title="حذف این لینک">' +
               '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>' +
             '</button>' +
@@ -3477,14 +3469,14 @@
         const deep = !!(item && item.deep_link);
         const style = item && item.style != null ? item.style : (item && item.button_style != null ? item.button_style : 'primary');
         return (
-          '<div class="pay-dest-row" data-guides-row data-guides-id="' + esc(id) + '">' +
+          '<div class="pay-dest-row" data-guides-row data-guides-id="' + escapeHtml(id) + '">' +
             '<div class="pay-dest-fields supports-fields-grid">' +
-              '<label>عنوان دکمه<input type="text" class="guides-title" maxlength="64" value="' + esc(item && item.title) + '" placeholder="مثلاً V2Box" autocomplete="off" /></label>' +
+              '<label>عنوان دکمه<input type="text" class="guides-title" maxlength="64" value="' + escapeHtml(item && item.title) + '" placeholder="مثلاً V2Box" autocomplete="off" /></label>' +
               '<label>مخاطب<select class="guides-audience">' +
                 '<option value="user"' + (audience === 'user' ? ' selected' : '') + '>کاربران</option>' +
                 '<option value="reseller"' + (audience === 'reseller' ? ' selected' : '') + '>نمایندگان</option>' +
               '</select></label>' +
-              '<label>ترتیب<input type="number" class="guides-sort" dir="ltr" value="' + esc(item && item.sort != null ? item.sort : 0) + '" /></label>' +
+              '<label>ترتیب<input type="number" class="guides-sort" dir="ltr" value="' + escapeHtml(item && item.sort != null ? item.sort : 0) + '" /></label>' +
               '<label class="support-enabled supports-enabled-field">' +
                 '<span>فعال</span>' +
                 '<span class="ui-switch">' +
@@ -3500,7 +3492,7 @@
                 '</span>' +
               '</label>' +
               styleSelectHtml(style) +
-              '<label class="full">متن آموزش<textarea class="guides-body" rows="4" maxlength="4000" placeholder="مراحل اتصال…">' + esc(item && (item.body || item.text)) + '</textarea></label>' +
+              '<label class="full">متن آموزش<textarea class="guides-body" rows="4" maxlength="4000" placeholder="مراحل اتصال…">' + escapeHtml(item && (item.body || item.text)) + '</textarea></label>' +
               linksHtml(item && item.links) +
               '<div class="full guides-media" data-guides-media-slot></div>' +
             '</div>' +
@@ -3945,10 +3937,19 @@ const root = document.getElementById('upd-root');
   const remoteVerEl = document.getElementById('upd-remote-ver');
   const localVerEl = document.getElementById('upd-local-ver');
   const localBox = document.getElementById('upd-local-box');
-  const remoteBox = document.getElementById('upd-remote-box');
+  const hero = document.getElementById('upd-hero');
+  const arrowEl = document.getElementById('upd-arrow');
+  const remoteCap = document.getElementById('upd-remote-cap');
+  const channelSeg = document.getElementById('upd-channel-seg');
+  const channelLabelEl = document.getElementById('upd-channel-label');
+  const idleNote = document.getElementById('upd-idle-note');
   const changelogRoot = document.getElementById('upd-changelog');
   const changelogBlocks = document.getElementById('upd-changelog-blocks');
   const changelogTitle = document.getElementById('upd-changelog-title');
+  const changelogCount = document.getElementById('upd-changelog-count');
+  const changelogMore = document.getElementById('upd-changelog-more');
+  const NOTE_LIMIT = 5;
+  const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
   let timer = null;
   let waitingRestart = false;
   let sawDown = false;
@@ -4010,8 +4011,28 @@ const root = document.getElementById('upd-root');
     if (!on) setBlockLeave(false);
   }
 
+  function faNum(n){
+    return String(n).replace(/[0-9]/g, function (d) { return FA_DIGITS[Number(d)]; });
+  }
+
+  // The version card's colour is its state: brand (update waiting or running), ok, warn or err.
+  function setTone(tone){
+    if (hero) hero.dataset.tone = tone;
+  }
+
+  function syncChannelSeg(){
+    if (!channelSeg || !channelSelect) return;
+    channelSeg.querySelectorAll('button[data-channel]').forEach(function (btn) {
+      const on = btn.dataset.channel === channelSelect.value;
+      btn.classList.toggle('on', on);
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
+      btn.disabled = channelSelect.disabled;
+    });
+  }
+
   function setBusy(busy, label){
     if (startBtn) {
+      startBtn.hidden = false;
       if (busy) {
         startBtn.disabled = true;
         startBtn.textContent = label || 'در حال اجرا…';
@@ -4021,52 +4042,46 @@ const root = document.getElementById('upd-root');
       } else {
         const retry = label === 'تلاش دوباره';
         startBtn.disabled = !canStart && !retry;
-        startBtn.textContent = retry ? 'تلاش دوباره' : (canStart ? 'شروع آپدیت' : 'آپدیتی نیست');
+        startBtn.hidden = !canStart && !retry;
+        startBtn.textContent = retry ? 'تلاش دوباره' : ('نصب v' + targetRemote);
       }
     }
     if (channelSelect) channelSelect.disabled = !!busy || channelBusy;
+    syncChannelSeg();
     if (busy) setBlockLeave(true);
   }
 
-  function escHtml(s){
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  // Old → new while an update waits or runs; only the installed version otherwise.
+  function setVersionView(upgrading, caption, version){
+    if (localBox) localBox.hidden = !upgrading;
+    if (arrowEl) arrowEl.hidden = !upgrading;
+    if (remoteCap) remoteCap.textContent = caption;
+    if (remoteVerEl && version) remoteVerEl.textContent = 'v' + version;
   }
 
-  function setMetaTone(available){
-    if (localBox) {
-      localBox.classList.toggle('update-meta-err', !!available);
-      localBox.classList.toggle('update-meta-ok', !available);
-    }
-    if (remoteBox) {
-      remoteBox.classList.toggle('update-meta-ok', !!available);
-      remoteBox.classList.toggle('update-meta-err', false);
-    }
+  function noteRow(item, index){
+    const tag = item.topic ? '<span class="upd-tag">' + escapeHtml(item.topic) + '</span>' : '';
+    const refs = (item.refs || []).length ? ' <bdi dir="ltr">' + escapeHtml(item.refs.join(' ')) + '</bdi>' : '';
+    return '<div class="upd-note-row" data-tone="' + escapeHtml(item.tone || 'topic') + '"' +
+      (index >= NOTE_LIMIT ? ' data-more hidden' : '') + '>' + tag + '<p>' + escapeHtml(item.text) + refs + '</p></div>';
   }
 
   function renderChangelog(cl){
     if (!changelogRoot || !changelogBlocks) return;
-    const has = !!(cl && cl.has_notes && (cl.blocks || []).length);
-    changelogRoot.hidden = !has;
+    const blocks = (cl && cl.has_notes && cl.blocks) || [];
+    changelogRoot.hidden = !blocks.length;
     if (changelogTitle && cl && cl.title) changelogTitle.textContent = cl.title;
-    if (!has) {
-      changelogBlocks.innerHTML = '';
-      return;
-    }
-    changelogBlocks.innerHTML = (cl.blocks || []).map(function (block) {
-      const notes = (block.notes || []).map(function (n) {
-        return '<li>' + escHtml(n) + '</li>';
-      }).join('');
-      return (
-        '<div class="update-changelog-block">' +
-          '<strong class="update-changelog-ver" dir="ltr">v' + escHtml(block.version) + '</strong>' +
-          '<ul class="update-changelog-list">' + notes + '</ul>' +
-        '</div>'
-      );
+    let index = 0;
+    changelogBlocks.innerHTML = blocks.map(function (block) {
+      const head = blocks.length > 1 ? '<p class="upd-notes-ver" dir="ltr">v' + escapeHtml(block.version) + '</p>' : '';
+      return head + (block.items || []).map(function (item) { return noteRow(item, index++); }).join('');
     }).join('');
+    if (changelogCount) changelogCount.textContent = index ? faNum(index) + ' تغییر' : '';
+    if (changelogMore) {
+      changelogMore.hidden = index <= NOTE_LIMIT;
+      changelogMore.setAttribute('aria-expanded', 'false');
+      changelogMore.textContent = 'نمایش همهٔ ' + faNum(index) + ' تغییر';
+    }
   }
 
   function applyChannelPayload(data){
@@ -4084,10 +4099,11 @@ const root = document.getElementById('upd-root');
     if (localVerEl && data.local_version) {
       localVerEl.textContent = 'v' + data.local_version;
     }
-    if (remoteVerEl) {
-      remoteVerEl.textContent = targetRemote ? ('v' + targetRemote) : '—';
-    }
-    setMetaTone(!!info.update_available && !migrationBlocked);
+    const upgrading = !!info.update_available && !migrationBlocked;
+    setVersionView(upgrading, upgrading ? 'نسخهٔ جدید' : 'نسخهٔ نصب‌شده',
+      upgrading ? targetRemote : data.local_version);
+    if (idleNote) idleNote.hidden = !upgrading;
+    if (channelLabelEl) channelLabelEl.textContent = chLabel;
     if (migrationFlash) {
       if (pre.blocked) {
         migrationFlash.hidden = false;
@@ -4104,29 +4120,25 @@ const root = document.getElementById('upd-root');
     }
     if (versionFlash && root.dataset.showOps !== '1') {
       // Migration error already lives in #upd-migration-flash — never mirror it here.
-      if (migrationBlocked) {
-        versionFlash.hidden = true;
-        versionFlash.textContent = '';
-      } else {
-        versionFlash.hidden = false;
-        versionFlash.className = 'flash ' + (checkTone === 'ok' ? 'ok' : (checkTone === 'err' ? 'err' : 'warn'));
-        if (checkMsg) {
-          versionFlash.textContent = checkMsg;
-        } else if (info.update_available) {
-          versionFlash.textContent = 'برای کانال ' + chLabel + ' آپدیت جدید هست: ' +
-            (info.version || data.local_version || '') + ' → ' + (info.remote_version || '');
-        } else if (info.checked && !info.update_available) {
-          versionFlash.textContent = 'برای کانال ' + chLabel + ' آپدیت جدیدی نیست — روی آخرین نسخه هستید.';
-        } else {
-          versionFlash.textContent = info.label || ('بررسی آپدیت کانال ' + chLabel + ' ناموفق');
-        }
-      }
+      // The version card shows every other result; only a failed check is written here.
+      const failed = !migrationBlocked && checkTone === 'err';
+      versionFlash.hidden = !failed;
+      versionFlash.textContent = failed ? (checkMsg || info.label || ('بررسی آپدیت کانال ' + chLabel + ' ناموفق')) : '';
     }
     if (stateEl && root.dataset.showOps !== '1') {
-      if (migrationBlocked) stateEl.textContent = pre.label || 'مایگریشن ناسازگار';
-      else if (info.update_available) stateEl.textContent = 'آپدیت کانال ' + chLabel + ' آماده است';
-      else if (info.checked) stateEl.textContent = 'آخرین نسخه کانال ' + chLabel;
-      else stateEl.textContent = info.label || '';
+      if (migrationBlocked) {
+        stateEl.textContent = pre.label || 'مایگریشن ناسازگار';
+        setTone('warn');
+      } else if (info.update_available) {
+        stateEl.textContent = 'آپدیت تازه آماده است';
+        setTone('brand');
+      } else if (info.checked) {
+        stateEl.textContent = 'روی آخرین نسخه هستید';
+        setTone('ok');
+      } else {
+        stateEl.textContent = info.label || ('بررسی آپدیت کانال ' + chLabel + ' ناموفق');
+        setTone('warn');
+      }
     }
     renderChangelog(data.changelog);
     // Header badge follows DEPLOYED_CHANNEL only — do not flip it on dropdown change.
@@ -4139,6 +4151,7 @@ const root = document.getElementById('upd-root');
     setBusy(true, 'در حال راه‌اندازی مجدد…');
     if (stateEl) stateEl.textContent = (extra || RESTART_MSG);
     if (stepEl) stepEl.textContent = 'راه‌اندازی مجدد سرویس';
+    setTone('brand');
     if (fill) fill.style.setProperty('--p', '98');
     if (percentEl) percentEl.textContent = '۹۸٪';
   }
@@ -4240,14 +4253,19 @@ const root = document.getElementById('upd-root');
       if (stateEl) stateEl.textContent = canStart ? 'آپدیت آماده است' : 'آماده';
       return;
     }
-    if (st.state === 'running' || st.state === 'error' || st.restart_required) showOps(true);
+    const failed = st.state === 'error' || st.restart_required;
+    if (st.state === 'running' || failed) {
+      showOps(true);
+      setTone(failed ? 'err' : 'brand');
+      setVersionView(true, failed ? 'نصب نشد' : 'در حال نصب', st.to_version || targetRemote);
+    }
     const pct = Number(st.percent || 0);
     fill.style.setProperty('--p', String(pct));
-    if (percentEl) percentEl.textContent = pct + '٪';
+    if (percentEl) percentEl.textContent = faNum(pct) + '٪';
     if (stepEl) {
-      stepEl.textContent = (st.state === 'error' || st.restart_required)
+      stepEl.textContent = failed
         ? 'خطا — دوباره تلاش کنید'
-        : (st.state === 'running' ? 'در حال اعمال…' : 'آماده');
+        : (st.state === 'running' ? (st.step || 'در حال اعمال…') : 'آماده');
     }
     if (stateEl) stateEl.textContent = st.message || st.state || '';
     if (st.state === 'running') {
@@ -4347,6 +4365,7 @@ const root = document.getElementById('upd-root');
       const data = await readUpdateResponse(res);
       if (!data.ok) {
         if (stateEl) stateEl.textContent = data.error || 'شروع آپدیت ممکن نشد';
+        setTone('err');
         canStart = true;
         setBusy(false, 'تلاش دوباره');
         return;
@@ -4355,6 +4374,7 @@ const root = document.getElementById('upd-root');
       startPolling();
     } catch (e) {
       if (stateEl) stateEl.textContent = 'خطا در شروع آپدیت — اتصال یا نشست را بررسی کنید';
+      setTone('err');
       canStart = true;
       setBusy(false, 'تلاش دوباره');
     }
@@ -4375,16 +4395,14 @@ const root = document.getElementById('upd-root');
       const nextLabel = next === 'dev' ? 'توسعه' : 'پایدار';
       channelBusy = true;
       channelSelect.disabled = true;
+      syncChannelSeg();
       if (startBtn) {
         startBtn.disabled = true;
         startBtn.textContent = 'در حال بررسی…';
       }
+      if (versionFlash) versionFlash.hidden = true;
       if (stateEl) stateEl.textContent = 'در حال بررسی آپدیت کانال ' + nextLabel + '…';
-      if (versionFlash) {
-        versionFlash.hidden = false;
-        versionFlash.className = 'flash warn';
-        versionFlash.textContent = 'کانال به «' + nextLabel + '» تغییر کرد — در حال بررسی آپدیت این کانال…';
-      }
+      setTone('warn');
       try {
         const tok = csrfToken();
         const res = await fetch('/update/channel', {
@@ -4398,7 +4416,6 @@ const root = document.getElementById('upd-root');
           channelSelect.value = prev;
           if (versionFlash) {
             versionFlash.hidden = false;
-            versionFlash.className = 'flash err';
             versionFlash.textContent = data.error || 'تغییر کانال ممکن نشد';
           }
           if (stateEl) stateEl.textContent = data.error || 'تغییر کانال ممکن نشد';
@@ -4410,7 +4427,6 @@ const root = document.getElementById('upd-root');
         channelSelect.value = prev;
         if (versionFlash) {
           versionFlash.hidden = false;
-          versionFlash.className = 'flash err';
           versionFlash.textContent = 'خطا در بررسی آپدیت کانال — اتصال یا نشست را بررسی کنید';
         }
         if (stateEl) stateEl.textContent = 'خطا در تغییر کانال — اتصال یا نشست را بررسی کنید';
@@ -4418,7 +4434,24 @@ const root = document.getElementById('upd-root');
       } finally {
         channelBusy = false;
         channelSelect.disabled = false;
+        syncChannelSeg();
       }
+    });
+  }
+  if (channelSeg && channelSelect) {
+    channelSeg.addEventListener('click', function (e) {
+      const btn = e.target.closest('button[data-channel]');
+      if (!btn || channelSelect.disabled || btn.dataset.channel === channelSelect.value) return;
+      channelSelect.value = btn.dataset.channel;
+      syncChannelSeg();
+      channelSelect.dispatchEvent(new Event('change'));
+    });
+  }
+  if (changelogMore && changelogBlocks) {
+    changelogMore.addEventListener('click', function () {
+      changelogBlocks.querySelectorAll('[data-more]').forEach(function (row) { row.hidden = false; });
+      changelogMore.hidden = true;
+      changelogMore.setAttribute('aria-expanded', 'true');
     });
   }
 

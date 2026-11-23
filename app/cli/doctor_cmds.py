@@ -229,8 +229,8 @@ def cmd_doctor(ctx: CliContext) -> int:
         add("cert", "OK", "n/a (https not serving)")
 
     # Database + alembic
-    url = database_url(ctx.root)
     try:
+        url = database_url(ctx.root)
         from app.db.engine_url import parse_engine, to_sync_url
         from sqlalchemy import create_engine, text
 

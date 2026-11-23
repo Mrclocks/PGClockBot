@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from tests.postgres_support import scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -24,7 +25,7 @@ def _load_migration():
 class CampaignRequestKeyMigrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.migration = _load_migration()
-        self.engine = sa.create_engine("sqlite:///:memory:")
+        self.engine = scoped_sync_engine()
         self.addCleanup(self.engine.dispose)
         with self.engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE targeted_campaigns (id INTEGER PRIMARY KEY, text TEXT)"))
@@ -42,7 +43,7 @@ class CampaignRequestKeyMigrationTests(unittest.TestCase):
             conn.execute(sa.text("INSERT INTO targeted_campaigns (id, text, request_key) VALUES (2, 'a', 'k')"))
             conn.execute(sa.text("INSERT INTO targeted_campaigns (id, text) VALUES (3, 'no key')"))
             conn.execute(sa.text("INSERT INTO targeted_campaigns (id, text) VALUES (4, 'no key either')"))
-            with self.assertRaises(sa.exc.IntegrityError):
+            with self.assertRaises(sa.exc.IntegrityError), conn.begin_nested():
                 conn.execute(sa.text("INSERT INTO targeted_campaigns (id, text, request_key) VALUES (5, 'b', 'k')"))
         with self.engine.begin() as conn:
             self._run(conn, down=True)

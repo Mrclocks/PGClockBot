@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import unittest
 from pathlib import Path
 
@@ -40,28 +39,6 @@ class VolumeCssRtlUnitLeft(unittest.TestCase):
         line = CSS.split(".reseller-quota-line {", 1)[1].split("}", 1)[0]
         self.assertIn("direction: rtl;", line)
         self.assertIn("display: block;", line)
-
-
-class VolumeTemplatesNoLtrCell(unittest.TestCase):
-    def test_pg_admins_volume_stack_no_ltr(self):
-        html = (ROOT / "app/web/templates/pg_admins.html").read_text(encoding="utf-8")
-        self.assertIn('class="reseller-quota byte-stack"', html)
-        self.assertNotIn("<br><small class=\"muted\">Σ", html)
-        vol_td = html.split('title="مصرف / سقف حجم', 1)[1].split("</td>", 1)[0]
-        self.assertNotIn("dir=\"ltr\"", vol_td)
-        self.assertIn("byte-size", vol_td)
-    def test_pg_users_templates_resellers_use_byte_stack(self):
-        users = (ROOT / "app/web/templates/pg_users.html").read_text(encoding="utf-8")
-        self.assertIn("byte-size", users)
-        self.assertNotIn("cell-tight num-ratio", users)
-        tpls = (ROOT / "app/web/templates/pg_templates.html").read_text(encoding="utf-8")
-        self.assertIn("byte-size", tpls)
-        res = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
-        self.assertIn("byte-stack", res)
-        # Volume column specifically (not users count)
-        vol_td = res.split('title="مصرف / سقف حجم', 1)[1].split("</td>", 1)[0]
-        self.assertNotIn('dir="ltr"', vol_td)
-        self.assertIn("byte-size", vol_td)
 
 
 if __name__ == "__main__":

@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import re
 import unittest
 from unittest.mock import patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.api.app import templates
 from app.services import home_overview

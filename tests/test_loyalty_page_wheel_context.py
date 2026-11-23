@@ -2,23 +2,21 @@
 
 from __future__ import annotations
 
-import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.services.formatting import format_money
 from app.services.message_variables import template_variable_specs
+from tests.postgres_support import scoped_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "app/web/templates"
 LOYALTY_PAGES = ROOT / "app/api/loyalty_pages.py"
-APP_PY = ROOT / "app/api/app.py"
 CSS = ROOT / "app/web/static/panel.css"
 
 
@@ -91,14 +89,13 @@ def _base_loyalty_ctx(**extra):
 
 class LoyaltyPageRenderTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         from app.db import Base
         import app.db.models  # noqa: F401
 
         self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "loy.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -197,14 +194,6 @@ class PanelStatusPageTests(unittest.TestCase):
         self.assertIn(".panel-status-watermark", css)
         self.assertIn(".panel-status-badge", css)
         self.assertIn("panel-status-card-in", css)
-
-    def test_app_uses_branded_status_not_inline_tahoma(self):
-        src = APP_PY.read_text(encoding="utf-8")
-        self.assertIn("panel_status.html", src)
-        self.assertIn("_status_page", src)
-        self.assertIn("StarletteHTTPException", src)
-        self.assertNotIn("font-family:Tahoma", src)
-        self.assertNotIn("خطای داخلی</title></head><body style=", src)
 
 
 if __name__ == "__main__":

@@ -6,14 +6,12 @@ and never invented owner_principal_id.
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services.shop_scope import (
     ShopScopeError,
@@ -22,6 +20,7 @@ from app.services.shop_scope import (
     bot_user_in_scope,
     resolve_shop_scope_id,
 )
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 
 def _find_route(app: FastAPI, path: str, method: str):
@@ -171,12 +170,17 @@ class RetryDeliveryRouteTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "1d.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        # The orders below belong to buyer 1, plan 1 and shops 10 and 20.
+        await add_shop_users(self.Session, 10, 20)
+        async with self.Session() as session:
+            from app.db.models import BotUser, Plan
+
+            session.add_all([BotUser(id=1, telegram_id=1, referral_code="buyer"), Plan(id=1, name="plan", price=1000)])
+            await session.commit()
 
         from app.api.ux20_pages import register_ux20_pages
 
@@ -194,7 +198,6 @@ class RetryDeliveryRouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _order(self, session, *, reseller_id: int | None):
         from app.db.models import Order, OrderStatus
@@ -296,12 +299,11 @@ class UserWalletRouteScopeTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "1d-users.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, 55)
 
         from app.api.user_pages import register_user_pages
 
@@ -319,7 +321,6 @@ class UserWalletRouteScopeTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _user(self, session, *, reseller_id: int | None, telegram_id: int):
         from app.db.models import BotUser, Role
@@ -413,12 +414,11 @@ class LoyaltyAdjustRouteTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "1d-loyalty.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, 77)
 
         from app.api.loyalty_pages import register_loyalty_pages
 
@@ -434,7 +434,6 @@ class LoyaltyAdjustRouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def test_adjust_other_branch_denied(self) -> None:
         from app.db.models import BotUser, Role

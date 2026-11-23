@@ -79,12 +79,21 @@ def cancel_keyboard(cancel_code: str, *, label: str = "انصراف") -> InlineK
 def _merge_inline(
     cancel_code: str,
     extra: InlineKeyboardMarkup | None,
+    cancel_button: InlineKeyboardButton | None = None,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if extra is not None:
         rows.extend(list(extra.inline_keyboard))
-    rows.extend(cancel_keyboard(cancel_code).inline_keyboard)
+    if cancel_button is not None:
+        rows.append([cancel_button])
+    else:
+        rows.extend(cancel_keyboard(cancel_code).inline_keyboard)
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def cancel_callback(cancel_code: str) -> str:
+    """The callback that leaves a prompt of ``cancel_code`` (for a custom-labelled leave button)."""
+    return f"nv:cancel:{cancel_code}"
 
 
 async def ask_text(
@@ -97,6 +106,7 @@ async def ask_text(
     extra_inline: InlineKeyboardMarkup | None = None,
     edit: bool = False,
     return_to: str | None = None,
+    cancel_button: InlineKeyboardButton | None = None,
     **send_kw: Any,
 ) -> Message | None:
     """Prompt for free text with an inline cancel button; main ReplyKeyboard untouched.
@@ -113,7 +123,9 @@ async def ask_text(
     if cancel_code not in CANCEL_REGISTRY:
         raise KeyError(f"cancel code not registered: {cancel_code!r}")
     await state.set_state(fsm_state)
-    markup = _merge_inline(cancel_code, extra_inline)
+    # ``cancel_button`` (callback ``cancel_callback(cancel_code)``) replaces the «انصراف» row, for a
+    # prompt that is a screen of its own, whose way out reads «بازگشت».
+    markup = _merge_inline(cancel_code, extra_inline, cancel_button)
     msg: Message | None = None
     if isinstance(target, CallbackQuery):
         if not target.message:

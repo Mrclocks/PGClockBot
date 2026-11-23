@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from tests.test_billing_pages_design import OWNER, SHOP, L1, page
 from app.services.cashback_rules import CashbackSettings

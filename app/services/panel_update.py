@@ -17,6 +17,11 @@ from typing import Any
 
 from app.config import DATA_DIR, ROOT_DIR
 from app.services.connection_monitor_install_update import setup_updated_monitor_core
+from app.services.update_database_guard import (
+    UNSUPPORTED_DATABASE_MESSAGE,
+    installed_database_url,
+    is_supported_database_url,
+)
 from app.services.updates import check_github_update, clear_update_cache, is_newer, local_version
 
 logger = logging.getLogger(__name__)
@@ -623,6 +628,12 @@ def _thread_alive() -> bool:
     return bool(t is not None and t.is_alive())
 
 
+def update_in_progress() -> bool:
+    """An update is running or waiting for its restart; a manual restart would cut it."""
+    status = resolve_stale_update_status()
+    return _thread_alive() or status.get("state") == "running" or bool(status.get("awaiting_restart"))
+
+
 def _start_update_thread(target_version: str | None) -> dict[str, Any]:
     global _THREAD
     with _LOCK:
@@ -752,6 +763,9 @@ def resolve_stale_update_status() -> dict[str, Any]:
 
 
 def start_update(target_version: str | None = None) -> dict[str, Any]:
+    if not is_supported_database_url(installed_database_url()):
+        # The new code could not start on this database; refuse before touching anything.
+        return {"ok": False, "error": UNSUPPORTED_DATABASE_MESSAGE, "status": read_status()}
     # Allow retry even if a previous awaiting_restart was stuck.
     st = resolve_stale_update_status()
     if st.get("state") == "running" and _thread_alive():

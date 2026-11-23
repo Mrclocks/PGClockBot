@@ -6,17 +6,18 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import shop
 from app.db.models import Base, BotUser, Order, Plan
 from app.services.checkout_summary import checkout_summary
 from app.services.orders import CUSTOM_ORDER_NOTE
+from tests.postgres_support import scoped_async_engine
 
 
 class _Fixture(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -124,8 +125,7 @@ class PlanPickTests(_Fixture):
         self.session.add(order)
         await self.session.commit()
         show = AsyncMock()
-        with self.patches(create_order=AsyncMock(return_value=order), _show_order_pay=show,
-                          _notify_new_order=AsyncMock()):
+        with self.patches(create_order=AsyncMock(return_value=order), _show_order_pay=show):
             await shop._complete_shop_buy(
                 callback=self.callback("shop:buy:1"), message=None, session=self.session,
                 db_user=SimpleNamespace(id=1, reseller_id=None), state=AsyncMock(), ui={},

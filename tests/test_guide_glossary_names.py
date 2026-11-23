@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.services.guide_catalog import TOPICS
 from app.services.panel_alert_notifications import failures_text

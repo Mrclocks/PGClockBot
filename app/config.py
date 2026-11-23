@@ -141,18 +141,17 @@ class Settings(BaseSettings):
     web_admin_user: str = Field(default="admin", alias="WEB_ADMIN_USER")
     web_admin_password: str = Field(default="", alias="WEB_ADMIN_PASSWORD")
 
-    # Installs always provision local PostgreSQL (or honor PGCLOCK_DATABASE_URL).
-    # SQLite remains only as an in-memory option for unit tests — not for product installs.
-    database_url: str = Field(
-        default=f"sqlite+aiosqlite:///{DATA_DIR / 'bot.db'}",
-        alias="DATABASE_URL",
-    )
+    # PostgreSQL only. The installer writes it (or takes PGCLOCK_DATABASE_URL); there is
+    # no default database, so a missing value fails at startup instead of picking a file.
+    database_url: str = Field(default="", alias="DATABASE_URL")
     db_pool_size: int = Field(default=DB_POOL_SIZE_DEFAULT, alias="DB_POOL_SIZE")
     db_max_overflow: int = Field(default=DB_MAX_OVERFLOW_DEFAULT, alias="DB_MAX_OVERFLOW")
 
     webhook_url: str = Field(default="", alias="WEBHOOK_URL")
     webhook_path: str = Field(default="/telegram/webhook", alias="WEBHOOK_PATH")
     webhook_secret_token: str = Field(default="", alias="WEBHOOK_SECRET_TOKEN")
+    # Opt-in: shop bots receive updates by webhook too (needs WEBHOOK_URL); off keeps them polling.
+    shop_bot_webhook: bool = Field(default=False, alias="SHOP_BOT_WEBHOOK")
     public_base_url: str = Field(default="", alias="PUBLIC_BASE_URL")
     # Optional public docs site (e.g. https://docs.example.com). Empty = same-origin /help/
     docs_base_url: str = Field(default="", alias="DOCS_BASE_URL")

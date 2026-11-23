@@ -2,28 +2,24 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, BotUserShop, Order, OrderStatus, Payment, PaymentStatus, Ticket, UserService
 from app.services.finance_reports import shop_ops_snapshot
-from app.services.ux20 import build_action_center
+from app.services.action_center import build_action_center
+from tests.postgres_support import scoped_async_engine
 
 SHOP_ID, CUSTOMER = 5, 7
 
 
 class DashboardScopeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'd.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -58,7 +54,6 @@ class DashboardScopeTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def center(self, shop: int | None) -> dict[str, str]:
         async with self.Session() as session:

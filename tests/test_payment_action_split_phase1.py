@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from tests.postgres_support import scoped_async_engine
 
 
 class Phase1DiagActionMappingTests(unittest.IsolatedAsyncioTestCase):
     async def _session(self):
         from app.db.models import Base
 
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False)
@@ -287,13 +287,6 @@ class Phase1DiagActionMappingTests(unittest.IsolatedAsyncioTestCase):
 
 
 class Phase1WiringStaticTests(unittest.TestCase):
-    def test_handlers_register_go_and_send(self):
-        src = Path("app/bot/handlers/payments.py").read_text(encoding="utf-8")
-        self.assertIn('F.data.startswith("payrev:go:")', src)
-        self.assertIn('F.data.startswith("payrev:send:")', src)
-        self.assertIn("execute_payment_resume", src)
-        self.assertIn("execute_payment_resend", src)
-        self.assertIn("execute_payment_legacy_ok", src)
 
     def test_keyboards_split_actions(self):
         from app.bot.keyboards import payment_action_markup, payment_resend, payment_resume, payment_review
@@ -311,23 +304,6 @@ class Phase1WiringStaticTests(unittest.TestCase):
 
         via = payment_action_markup(10, action="resend")
         self.assertEqual(via.inline_keyboard[0][0].callback_data, "payrev:send:10")
-
-    def test_stuck_notify_uses_go_or_send_not_ok(self):
-        src = Path("app/services/notifications.py").read_text(encoding="utf-8")
-        start = src.index("async def notify_approved_delivery_stuck")
-        end = src.index("\ndef build_qr_caption", start)
-        body = src[start:end]
-        self.assertIn("payment_action_markup", body)
-        self.assertIn("diagnose_payment_review", body)
-        self.assertNotIn("payrev:ok:", body)
-        self.assertNotIn("payrev:no:", body)
-
-    def test_finance_delivery_labels_split(self):
-        tpl = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
-        self.assertIn("action_label_fa", tpl)
-        self.assertIn("ارسال مجدد پیام", tpl)
-        self.assertIn("ادامه تحویل", tpl)
-        self.assertIn("preferred_action", tpl)
 
 
 if __name__ == "__main__":

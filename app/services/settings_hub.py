@@ -1,8 +1,9 @@
-"""The list page of a settings area (DESIGN_SYSTEM.md §6-2).
+"""The list page of a settings area and its desktop menu (DESIGN_SYSTEM.md §6-2).
 
 A settings area opens on a list: one titled card per group and one row per settings page, each with an icon
-and a one-line description. The rows come from the same grouped tabs the role already holds
-(``settings_tab_groups.group_settings_tabs``), so the list never shows a page the role may not open.
+and a one-line description. On a wide screen the same rows are a menu beside every page of the area. The rows
+come from the same grouped tabs the role already holds (``settings_tab_groups.group_settings_tabs``), so neither
+shows a page the role may not open.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ TAB_DESCRIPTIONS: dict[str, str] = {
     "brand": "رنگ و لوگوی فروشگاه",
     "menu": "چیدمان و ترتیب دکمه‌های منوی اصلی",
     "miniapp": "ظاهر و فعال بودن مینی‌اپ",
-    "links": "دکمه‌های لینک کانال، پشتیبانی و راهنما",
+    "links": "لینک مستقیم تمدید، کیف پول، پشتیبانی، کانفیگ و کد هدیه برای فرستادن به مشتری",
     "messages": "متن پیام‌هایی که ربات می‌فرستد",
     "buttons": "متن و رنگ دکمه‌های ربات",
     "colors": "رنگ دکمه‌های ربات",
@@ -36,6 +37,8 @@ TAB_DESCRIPTIONS: dict[str, str] = {
     "guides": "آموزش اتصال برای هر سیستم‌عامل",
     "limits": "قوانین خرید و محدودیت‌های فروش",
     "service_import": "افزودن سرویس‌های قبلی کاربران",
+    "service_actions": "کارهایی که مشتری خودش روی سرویسش انجام می‌دهد: توقف موقت و انتقال به مشتری دیگر",
+    "customer_services": "افزودن سرویس قبلی، توقف موقت و انتقال سرویس توسط مشتری",
     "notifications": "هشدارهای ربات به ادمین‌ها",
     "daily_report": "گزارش روزانهٔ فروش",
     "bot": "توکن و اتصال ربات اختصاصی فروشگاه",
@@ -61,6 +64,8 @@ TAB_ICONS: dict[str, str] = {
     "guides": "help",
     "limits": "shield",
     "service_import": "download",
+    "service_actions": "time",
+    "customer_services": "download",
     "notifications": "inbox",
     "daily_report": "sales",
     "bot": "bot",
@@ -99,6 +104,14 @@ class HubRow:
 class HubSection:
     label: str
     rows: tuple[HubRow, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SettingsNav:
+    """The menu beside a settings page: the area's rows and the one that is open (``""`` on the list itself)."""
+
+    sections: tuple[HubSection, ...]
+    active_href: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,3 +173,35 @@ def system_hub_sections() -> tuple[HubSection, ...]:
     return hub_sections(
         system_settings_groups(), "/settings", area_icon="gear", descriptions=SYSTEM_DESCRIPTIONS, icons=SYSTEM_ICONS
     )
+
+
+def settings_nav(
+    groups: tuple[SettingsTabGroup, ...],
+    base: str,
+    active: str,
+    *,
+    area_icon: str,
+    descriptions: dict[str, str] | None = None,
+    icons: dict[str, str] | None = None,
+) -> SettingsNav:
+    """The area's rows for the desktop menu, with the entry of ``active`` (a tab or a section of it) marked."""
+    place = settings_place(groups, active)
+    return SettingsNav(
+        sections=hub_sections(groups, base, area_icon=area_icon, descriptions=descriptions, icons=icons),
+        active_href=tab_href(place.tab, base) if place else "",
+    )
+
+
+def system_settings_nav(active: str) -> SettingsNav:
+    return settings_nav(
+        system_settings_groups(active), "/settings", active,
+        area_icon="gear", descriptions=SYSTEM_DESCRIPTIONS, icons=SYSTEM_ICONS,
+    )
+
+
+def first_settings_href(sections: tuple[HubSection, ...]) -> str:
+    """The page a desktop opens instead of the list: the first row of the first group, if any."""
+    for section in sections:
+        for row in section.rows:
+            return row.href
+    return ""

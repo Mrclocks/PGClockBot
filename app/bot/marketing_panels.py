@@ -131,7 +131,11 @@ def campaigns_panel(
     back_callback: str = MARKETING_HUB_CALLBACK,
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Recent campaigns with start/pause; ``action_prefix`` is ``adm`` (platform) or ``res`` (shop bot)."""
-    lines = ["📣 <b>کمپین‌های هدفمند</b>", "وضعیت آخرین کمپین‌ها؛ ساخت کمپین از وب‌پنل انجام می‌شود.", ""]
+    lines = [
+        "📣 <b>کمپین‌ها</b>",
+        "کمپین‌های خودکار (اطلاع تغییر قیمت، کاربران تست) و قبلی. پیام هدفمند تازه از «🎯 مخاطبان هدفمند» در پیام گروهی.",
+        "",
+    ]
     rows: list[list[InlineKeyboardButton]] = []
     for campaign in campaigns:
         counts = progress.get(campaign.id, {})
