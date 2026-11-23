@@ -6,11 +6,12 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.db.models import Base, BotUser, Order, OrderStatus, Plan
+from app.db.models import BotUser, Order, OrderStatus, Plan
 from app.services.orders import deliver_order
 from app.services.pasarguard import PasarGuardError, explain_missing_group
+from tests.postgres_support import scoped_async_engine
 
 
 class ExplainMissingGroupTests(unittest.TestCase):
@@ -29,9 +30,7 @@ class ExplainMissingGroupTests(unittest.TestCase):
 
 class GroupPlanDeliveryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-        async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        self.engine = scoped_async_engine()
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
         buyer = BotUser(telegram_id=92001, referral_code="grp-buyer")
         plan = Plan(name="Monthly", price=100, pg_group_ids="4,9")
