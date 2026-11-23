@@ -324,6 +324,23 @@ def build_user_create_payload(
     return payload
 
 
+def explain_missing_group(exc: PasarGuardError, group_ids: list[int]) -> PasarGuardError:
+    """Name the plan's group ids when the panel answers 404 «Group not found».
+
+    The status code and body are kept so callers still see a definite refusal.
+    Any other error is returned unchanged.
+    """
+    text = f"{exc.detail() or ''} {exc}".lower()
+    if exc.status_code != 404 or "group" not in text:
+        return exc
+    ids = ", ".join(str(g) for g in group_ids)
+    return PasarGuardError(
+        f"گروه پلن در پاسارگارد پیدا نشد (شناسه‌ها: {ids}) — پلن را با گروه‌های فعلی پنل دوباره ذخیره کنید",
+        exc.status_code,
+        exc.body,
+    )
+
+
 def build_user_modify_payload(
     *,
     username: str | None = None,

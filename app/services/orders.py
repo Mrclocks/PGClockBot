@@ -38,6 +38,7 @@ from app.db.models import (
 from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
 from app.services.pasarguard import (
     PasarGuardError,
+    explain_missing_group,
     extract_sub_token,
     get_pg,
     parse_group_ids,
@@ -2464,15 +2465,18 @@ async def deliver_order(
                 }
                 pg_user = await pg.create_user_from_template(payload)
             else:
-                pg_user = await pg.create_user(
-                    build_user_create_payload(
-                        username=username,
-                        group_ids=group_ids or [],
-                        data_limit=data_limit,
-                        expire_ts=expire,
-                        note=note,
+                try:
+                    pg_user = await pg.create_user(
+                        build_user_create_payload(
+                            username=username,
+                            group_ids=group_ids or [],
+                            data_limit=data_limit,
+                            expire_ts=expire,
+                            note=note,
+                        )
                     )
-                )
+                except PasarGuardError as exc:
+                    raise explain_missing_group(exc, group_ids or []) from exc
             return pg_user
 
         async def _create_one(index: int) -> UserService:
