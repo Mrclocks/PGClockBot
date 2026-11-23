@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.db import Base
 from app.db.models import BotUser, Order, OrderStatus, Plan, ResellerProfile, UserService
 from app.services import custom_service_name as naming
-from app.services.orders import create_with_name_fallback, deliver_order, generate_pg_username
+from app.services.orders import chosen_name_variant, create_with_name_fallback, deliver_order, generate_pg_username
 from app.services.pasarguard import PasarGuardError
 
 ENABLED = {naming.SETTING_KEY: "1"}
@@ -153,16 +153,41 @@ class StoredNameTests(NameFixture):
         self.assertEqual(username, "clk_ali")
         self.assertEqual(order.requested_username, "ali")
 
-    async def test_a_username_already_in_use_gets_a_random_ending(self) -> None:
+    async def test_a_username_already_in_use_gets_a_number_after_the_suffix(self) -> None:
         self.session.add(UserService(bot_user_id=self.other.id, pg_username="CLK_ali"))
         await self.session.commit()
         order = await self.order(self.buyer)
 
-        with patch("app.services.orders._random_alnum", return_value="x7k2"):
-            username = await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
+        username = await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
 
-        self.assertEqual(username, "clk_ali_x7k2")
-        self.assertEqual(order.requested_username, "ali_x7k2")
+        self.assertEqual(username, "clk_ali2")
+        self.assertEqual(order.requested_username, "ali-2")
+
+    async def test_the_number_goes_after_the_plan_suffix_and_counts_up(self) -> None:
+        plan = SimpleNamespace(data_limit_gb=30, pg_username_prefix="vip", pg_username_suffix="_x",
+                               pg_username_pattern=None)
+        with patch("app.services.users.get_all_settings", AsyncMock(return_value={})):
+            first = await generate_pg_username(AsyncMock(), user_id=7, plan=plan, chosen_name="ali-2")
+            third = await generate_pg_username(AsyncMock(), user_id=7, plan=plan, chosen_name="ali-10")
+
+        self.assertEqual(first, "vip_ali_x2")
+        self.assertEqual(third, "vip_ali_x10")
+        self.assertEqual(chosen_name_variant("ali"), "ali-2")
+        self.assertEqual(chosen_name_variant("ali-2"), "ali-3")
+
+    async def test_a_name_taken_twice_gets_the_next_free_number(self) -> None:
+        self.session.add_all(
+            [
+                UserService(bot_user_id=self.other.id, pg_username="clk_ali"),
+                UserService(bot_user_id=self.other.id, pg_username="clk_ali2"),
+            ]
+        )
+        await self.session.commit()
+        order = await self.order(self.buyer)
+
+        username = await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
+
+        self.assertEqual(username, "clk_ali3")
 
     async def test_a_similar_but_different_name_is_free(self) -> None:
         self.session.add(UserService(bot_user_id=self.other.id, pg_username="clk_ali"))
@@ -173,13 +198,13 @@ class StoredNameTests(NameFixture):
             await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="mali"), "clk_mali"
         )
 
-    async def test_a_name_held_by_another_open_order_gets_a_random_ending(self) -> None:
+    async def test_a_name_held_by_another_open_order_gets_a_number(self) -> None:
         await self.order(self.other, requested_username="ali")
         order = await self.order(self.buyer)
 
         await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
 
-        self.assertRegex(order.requested_username, r"^ali_[a-z0-9]{4}$")
+        self.assertRegex(order.requested_username, r"^ali-\d+$")
 
     async def test_a_long_taken_name_stays_within_the_limit(self) -> None:
         wanted = "a" * naming.MAX_LENGTH
@@ -209,7 +234,7 @@ class StoredNameTests(NameFixture):
         await self.session.commit()
         await self.order(self.buyer, requested_username="ali", reseller_id=shop.id)
 
-    async def test_a_lost_race_for_the_name_retries_with_an_ending(self) -> None:
+    async def test_a_lost_race_for_the_name_retries_with_a_number(self) -> None:
         await self.order(self.other, requested_username="ali")
         order = await self.order(self.buyer)
         calls = {"n": 0}
@@ -223,7 +248,7 @@ class StoredNameTests(NameFixture):
         with patch.object(naming, "_name_in_use", first_check_misses):
             await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
 
-        self.assertRegex(order.requested_username, r"^ali_[a-z0-9]{4}$")
+        self.assertRegex(order.requested_username, r"^ali-\d+$")
         # The handler still renders with the buyer it loaded before the lost race.
         self.assertIsNotNone(self.buyer.telegram_id)
 
@@ -258,14 +283,12 @@ class StoredNameTests(NameFixture):
                 ]
             )
         )
-        with patch("app.services.orders.get_pg", return_value=pg), patch(
-            "app.services.orders._random_alnum", return_value="x7k2"
-        ):
+        with patch("app.services.orders.get_pg", return_value=pg):
             delivered = await deliver_order(self.session, order)
 
         self.assertEqual(delivered.status, OrderStatus.DELIVERED.value)
         service = await self.session.get(UserService, delivered.service_id)
-        self.assertEqual(service.pg_username, "clk_ali_x7k2")
+        self.assertEqual(service.pg_username, "clk_ali2")
 
 
 class NameStepHandlerTests(NameFixture):

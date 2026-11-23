@@ -237,7 +237,11 @@ DEFAULT_USERNAME_PREFIX = "clk"
 USERNAME_TAKEN_STATUS = 409
 # Longest buyer-chosen name; a taken name keeps this length after its random ending.
 CHOSEN_NAME_MAX_LENGTH = 20
-CHOSEN_NAME_ENDING_LENGTH = 4
+# A buyer's name is stored as "ali" or, once taken, "ali-2": the "-" cannot occur in a
+# valid name, so the number can go after the shop's suffix instead of inside the name.
+CHOSEN_NAME_NUMBER_SEPARATOR = "-"
+FIRST_TAKEN_NAME_NUMBER = 2
+NAME_FALLBACK_TRIES = 5
 
 
 def _random_alnum(length: int = 8) -> str:
@@ -245,10 +249,20 @@ def _random_alnum(length: int = 8) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+def split_chosen_name(stored: str) -> tuple[str, str]:
+    """``("ali", "2")`` for ``"ali-2"``; ``("ali", "")`` for a name without a number."""
+    base, separator, number = stored.rpartition(CHOSEN_NAME_NUMBER_SEPARATOR)
+    if separator and base and number.isdigit():
+        return base, number
+    return stored, ""
+
+
 def chosen_name_variant(name: str) -> str:
-    """The buyer's name with a short random ending, for when the name is taken."""
-    keep = CHOSEN_NAME_MAX_LENGTH - CHOSEN_NAME_ENDING_LENGTH - 1
-    return f"{name[:keep]}_{_random_alnum(CHOSEN_NAME_ENDING_LENGTH)}"
+    """The buyer's name with the next number ("ali" -> "ali-2" -> "ali-3"), for when it is taken."""
+    base, number = split_chosen_name(name)
+    next_number = str(int(number) + 1 if number else FIRST_TAKEN_NAME_NUMBER)
+    keep = CHOSEN_NAME_MAX_LENGTH - len(CHOSEN_NAME_NUMBER_SEPARATOR) - len(next_number)
+    return f"{base[:keep]}{CHOSEN_NAME_NUMBER_SEPARATOR}{next_number}"
 
 
 PG_USERNAME_MIN_LENGTH = 3
@@ -439,15 +453,18 @@ async def generate_pg_username(
     volume = getattr(plan, "data_limit_gb", None)
     fallback_id = "" if user_id is None else str(user_id)
     tg_fallback = str(getattr(user, "telegram_id", None) or fallback_id)
-    return _random_username(
+    base_name, number = split_chosen_name(chosen_name) if chosen_name else (None, "")
+    built = _random_username(
         prefix=prefix,
         suffix=suffix,
         pattern=pattern,
         user_id=user_id,
         username=getattr(user, "username", None) or tg_fallback,
         plan_volume=f"{volume:g}" if volume is not None and volume > 0 else "unlimited",
-        chosen_name=chosen_name,
+        chosen_name=base_name,
     )
+    # The number of a taken name closes the username, after the shop's suffix.
+    return f"{built[: PG_USERNAME_MAX_LENGTH - len(number)]}{number}"
 
 
 async def list_active_plans(
@@ -2480,10 +2497,17 @@ async def deliver_order(
             note = f"PGClockBot order #{order.id}"
             if qty > 1:
                 note = f"{note} ({index}/{qty})"
+            attempt_name = chosen_name
+
+            async def _next_username() -> str:
+                nonlocal attempt_name
+                attempt_name = chosen_name_variant(attempt_name)
+                return await _username(attempt_name)
+
             pg_user, username = await create_with_name_fallback(
                 lambda name: _create_panel_user(name, note),
                 username,
-                regenerate=(lambda: _username(chosen_name_variant(chosen_name))) if chosen_name else None,
+                regenerate=_next_username if chosen_name else None,
             )
             pg_uid = pg_user.get("id")
             if pg_uid:
@@ -2600,20 +2624,22 @@ async def create_with_name_fallback(
     *,
     regenerate: Callable[[], Awaitable[str]] | None,
 ) -> tuple[dict, str]:
-    """Create the panel user; a chosen name the panel already holds gets a random ending.
+    """Create the panel user; a chosen name the panel already holds gets the next number.
 
     Returns the panel reply and the username actually used. The panel answers 409 before
-    creating anything, so the second call cannot duplicate a user, and a paid order is
+    creating anything, so each retry cannot duplicate a user, and a paid order is
     never left undelivered because of the buyer's name.
     """
-    try:
-        return await create(username), username
-    except PasarGuardError as exc:
-        if regenerate is None or exc.status_code != USERNAME_TAKEN_STATUS:
-            raise
-        logger.info("chosen service name taken on the panel; adding a random ending")
-    generated = await regenerate()
-    return await create(generated), generated
+    candidate = username
+    for attempt in range(NAME_FALLBACK_TRIES + 1):
+        try:
+            return await create(candidate), candidate
+        except PasarGuardError as exc:
+            if regenerate is None or exc.status_code != USERNAME_TAKEN_STATUS or attempt == NAME_FALLBACK_TRIES:
+                raise
+            logger.info("chosen service name taken on the panel; adding a number")
+        candidate = await regenerate()
+    raise AssertionError("unreachable")  # pragma: no cover - the loop returns or raises
 
 
 MIN_TOPUP_AMOUNT = 1000
