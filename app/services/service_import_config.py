@@ -1,4 +1,5 @@
-"""Settings of «افزودن سرویس قبلی»: switch, mode, per-customer cap, allowed paths and panel admins.
+"""Settings of «افزودن سرویس قبلی»: switch, mode, per-customer cap, where the add button is shown,
+the offer's «نمایش نده» button, allowed paths and panel admins.
 
 The subscription paths and the extra panel admins describe the one PasarGuard panel, so only the
 platform Owner can set them. A shop always imports from its own panel admin and never from a list.
@@ -18,6 +19,9 @@ KEY_MODE = "service_import_mode"
 KEY_MAX_PER_USER = "service_import_max_per_user"
 KEY_PATHS = "service_import_paths"
 KEY_ADMINS = "service_import_admins"
+KEY_PLACEMENT = "service_import_button_placement"
+# On: the home offer carries «نمایش نده», which stops the offer for that customer in this shop.
+KEY_OFFER_HIDE_BUTTON = "service_import_offer_hide_button"
 
 PLATFORM_ONLY_KEYS = frozenset({KEY_PATHS, KEY_ADMINS})
 
@@ -33,6 +37,19 @@ MAX_PER_USER_LIMIT = 100_000
 UNLIMITED_VALUE = "unlimited"
 UNLIMITED_WORDS = frozenset({UNLIMITED_VALUE, "نامحدود"})
 MAX_LIST_ITEMS = 10
+
+PLACEMENT_OFFER = "offer"
+PLACEMENT_SERVICES = "services"
+PLACEMENT_BOTH = "both"
+DEFAULT_PLACEMENT = PLACEMENT_BOTH
+# Display order of the choices, with their Persian names (the web select and the bot cycle).
+PLACEMENT_CHOICES: tuple[tuple[str, str], ...] = (
+    (PLACEMENT_OFFER, "پیام ورودی"),
+    (PLACEMENT_SERVICES, "منوی سرویس‌ها"),
+    (PLACEMENT_BOTH, "هر دو"),
+)
+_PLACEMENTS = frozenset(value for value, _label in PLACEMENT_CHOICES)
+_ON_WORDS = frozenset({"1", "true", "yes", "on"})
 _ADMIN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _LIST_SEPARATORS = re.compile(r"[\s,;،]+")
 
@@ -105,6 +122,8 @@ def normalize_setting_value(key: str, value: str) -> str:
     """Canonical stored form of one of this feature's settings (called by the save routes)."""
     if key == KEY_MODE:
         return value if value in MODES else MODE_INSTANT
+    if key == KEY_PLACEMENT:
+        return value if value in _PLACEMENTS else DEFAULT_PLACEMENT
     if key == KEY_MAX_PER_USER:
         # The web field's «نامحدود» button empties the input, as in the gift-code and plan forms.
         return UNLIMITED_VALUE if not str(value).strip() else stored_max_per_user(value)
@@ -119,12 +138,30 @@ def read_settings(values: Mapping[str, str] | None) -> ImportSettings:
     data = values or {}
     mode = data.get(KEY_MODE) or MODE_INSTANT
     return ImportSettings(
-        enabled=str(data.get(KEY_ENABLED, "0")).strip().lower() in {"1", "true", "yes", "on"},
+        enabled=str(data.get(KEY_ENABLED, "0")).strip().lower() in _ON_WORDS,
         mode=mode if mode in MODES else MODE_INSTANT,
         max_per_user=normalize_max_per_user(data.get(KEY_MAX_PER_USER, DEFAULT_MAX_PER_USER)),
         extra_paths=tuple(normalize_paths(data.get(KEY_PATHS))),
         extra_admins=tuple(normalize_admins(data.get(KEY_ADMINS))),
     )
+
+
+def button_placement(values: Mapping[str, str] | None) -> str:
+    """Where the add button is shown; anything unknown reads as both places, the earlier behaviour."""
+    raw = str((values or {}).get(KEY_PLACEMENT) or "").strip()
+    return raw if raw in _PLACEMENTS else DEFAULT_PLACEMENT
+
+
+def shows_in_offer(values: Mapping[str, str] | None) -> bool:
+    return button_placement(values) in {PLACEMENT_OFFER, PLACEMENT_BOTH}
+
+
+def shows_in_services(values: Mapping[str, str] | None) -> bool:
+    return button_placement(values) in {PLACEMENT_SERVICES, PLACEMENT_BOTH}
+
+
+def offer_has_hide_button(values: Mapping[str, str] | None) -> bool:
+    return str((values or {}).get(KEY_OFFER_HIDE_BUTTON, "1")).strip().lower() in _ON_WORDS
 
 
 def allowed_paths(config: ImportSettings) -> tuple[str, ...]:

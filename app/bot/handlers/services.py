@@ -410,9 +410,9 @@ async def svc_list(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
-    from app.bot.service_import_ui import EMPTY_LIST_HINT, empty_services_keyboard, import_enabled
+    from app.bot.service_import_ui import EMPTY_LIST_HINT, empty_services_keyboard, import_in_services
 
-    allow_import = import_enabled(ui)
+    allow_import = import_in_services(ui)
     if not services and not reseller_label:
         if callback.message:
             from app.services.rich_text import outbound_setting_text

@@ -64,6 +64,8 @@ from app.services.service_import_config import (
     KEY_ENABLED as IMPORT_KEY_ENABLED,
     KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
     KEY_MODE as IMPORT_KEY_MODE,
+    KEY_OFFER_HIDE_BUTTON as IMPORT_KEY_OFFER_HIDE_BUTTON,
+    KEY_PLACEMENT as IMPORT_KEY_PLACEMENT,
 )
 from app.services.customer_notice_texts import CLEANUP_BOT_FIELDS, STAFF_ACTION_BOT_FIELDS
 from app.services.settings_message_texts import (
@@ -243,6 +245,8 @@ SECTIONS: dict[str, dict] = {
                 (IMPORT_KEY_ENABLED, "افزودن سرویس قبلی توسط مشتری", "toggle"),
                 (IMPORT_KEY_MODE, "روش پذیرش", "select"),
                 (IMPORT_KEY_MAX_PER_USER, "سقف سرویس هر مشتری", "number"),
+                (IMPORT_KEY_PLACEMENT, "محل دکمهٔ اتصال اشتراک", "select"),
+                (IMPORT_KEY_OFFER_HIDE_BUTTON, "دکمهٔ «نمایش نده» در پیام ورودی", "toggle"),
             ]),
             ("freeze", SERVICE_FREEZE_GROUP, SERVICE_FREEZE_BOT_FIELDS),
             ("transfer", SERVICE_TRANSFER_GROUP, SERVICE_TRANSFER_BOT_FIELDS),

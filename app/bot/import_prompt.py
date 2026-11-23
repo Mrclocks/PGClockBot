@@ -17,19 +17,22 @@ from aiogram.types import (
     RichMessageButton,
 )
 
-from app.bot.service_import_ui import add_existing_row, import_enabled
+from app.bot.service_import_ui import add_existing_row, import_in_offer, import_in_services
 from app.services.button_styles import style_or_none
+from app.services.service_import_config import offer_has_hide_button
 
 logger = logging.getLogger(__name__)
 
 HOME_ADD_CALLBACK = "svc:addh"
-# Offers sent earlier still carry a «نمایش نده» button, so its handler and answer stay.
 HOME_HIDE_CALLBACK = "svc:addx"
 HOME_TRIAL_CALLBACK = "svc:trialh"
 ADD_LABEL = "اتصال اشتراک قبلی"
 TRIAL_LABEL = "دریافت تست"
+HIDE_LABEL = "نمایش نده"
 HIDE_DONE = "این پیام دیگر نمایش داده نمی‌شود."
 HOME_ADD_NOTE = "برای اضافه کردن سرویس قبلی یا از طریق دکمه زیر یا از بخش «سرویس‌های من» اقدام کنید."
+# The add button is not in «سرویس‌های من», so the note does not send the customer there.
+HOME_ADD_ONLY_NOTE = "برای اضافه کردن سرویس قبلی از دکمهٔ زیر اقدام کنید."
 HOME_BOTH_NOTE = "سرویس قبلی خود را اضافه کنید یا یک تست رایگان بگیرید."
 HOME_TRIAL_NOTE = "برای شروع می‌توانید یک تست رایگان بگیرید."
 
@@ -41,20 +44,22 @@ def should_offer_import(
     service here) or a free trial (``trial_available`` already applies the shop's rules) can be offered."""
     if dismissed:
         return False
-    return (import_enabled(ui) and not has_services) or trial_available
+    return (import_in_offer(ui) and not has_services) or trial_available
 
 
-def _offer_note(*, with_import: bool, with_trial: bool) -> str:
+def _offer_note(ui: dict | None, *, with_import: bool, with_trial: bool) -> str:
     if with_import and with_trial:
         return HOME_BOTH_NOTE
-    return HOME_ADD_NOTE if with_import else HOME_TRIAL_NOTE
+    if not with_import:
+        return HOME_TRIAL_NOTE
+    return HOME_ADD_NOTE if import_in_services(ui) else HOME_ADD_ONLY_NOTE
 
 
 def build_import_prompt(
     ui: dict | None, *, trial_available: bool = False, has_services: bool = False
 ) -> InputRichMessage:
     # A customer who owns a service here only reaches this offer for the trial.
-    with_import = import_enabled(ui) and not has_services
+    with_import = import_in_offer(ui) and not has_services
     buttons: list[RichMessageButton] = []
     if with_import:
         # The colour is the admin's «افزودن سرویس قبلی» button colour, like the same button elsewhere.
@@ -63,10 +68,12 @@ def build_import_prompt(
     if trial_available:
         trial_style = style_or_none(ui, "shop_kind_trial", fallback="primary")
         buttons.append(RichMessageButton(text=TRIAL_LABEL, style=trial_style, callback_data=HOME_TRIAL_CALLBACK))
+    if offer_has_hide_button(ui):
+        buttons.append(RichMessageButton(text=HIDE_LABEL, style="danger", callback_data=HOME_HIDE_CALLBACK))
     return InputRichMessage(
         is_rtl=True,
         blocks=[
-            InputRichBlockParagraph(text=_offer_note(with_import=with_import, with_trial=trial_available)),
+            InputRichBlockParagraph(text=_offer_note(ui, with_import=with_import, with_trial=trial_available)),
             InputRichBlockButtons(buttons=buttons, align="center"),
         ],
     )

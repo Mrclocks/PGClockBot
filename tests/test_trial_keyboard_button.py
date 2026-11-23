@@ -245,7 +245,7 @@ class ServiceOwnerTests(TrialCase):
                     self.assertTrue(sent.await_args.kwargs["has_services"])
 
     def test_a_service_owner_offer_carries_no_add_old_service_button(self) -> None:
-        ui = {"service_import_enabled": "1"}
+        ui = {"service_import_enabled": "1", "service_import_offer_hide_button": "0"}
         blocks = import_prompt.build_import_prompt(ui, trial_available=True, has_services=True).blocks
         self.assertEqual([b.callback_data for b in blocks[1].buttons], [import_prompt.HOME_TRIAL_CALLBACK])
         self.assertEqual(blocks[0].text, import_prompt.HOME_TRIAL_NOTE)
