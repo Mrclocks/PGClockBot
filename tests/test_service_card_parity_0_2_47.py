@@ -81,9 +81,10 @@ class SvcCancelOwnershipTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "app.services.service_cancellations.cancellation_status",
+                "app.bot.handlers.services.cancellation_offer",
                 new=AsyncMock(side_effect=ValueError("سرویس یافت نشد")),
             ),
+            patch("app.bot.handlers.services.get_all_settings", new=AsyncMock(return_value={})),
             patch(
                 "app.bot.handlers.services.safe_edit_text",
                 new=AsyncMock(),

@@ -46,7 +46,7 @@ from app.services.rich_text import merge_rich_settings_on_save, prepare_settings
 from app.services.screen_titles import SCREEN_TEXT_TAB, platform_only_screen_text_keys, validate_screen_text_settings
 from app.services.alert_thresholds import normalize_threshold_form
 from app.services.plan_scope import normalize_plan_scopes, scope_selection
-from app.services.service_actions_page import clamp_service_action_numbers, service_actions_context
+from app.services.service_actions_page import SERVICE_ACTION_TABS, normalize_service_action_values, service_actions_context
 from app.services.users import (
     IMAGE_KEYS,
     PLAN_SCOPE_KEYS,
@@ -345,7 +345,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             )
             ctx["notify_items"] = shop_notify_catalog(perms)
             ctx["notify_prefs"] = await get_shop_notify_prefs(session, rid)
-        elif tab == "service_actions":
+        elif tab in SERVICE_ACTION_TABS:
             ctx.update(await service_actions_context(session, rid))
         elif tab == "daily_report":
             from app.services.daily_report import (
@@ -519,7 +519,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                     val = normalize_setting_value(key, val)
                 payload[key] = val
         normalize_threshold_form(payload)
-        clamp_service_action_numbers(payload)
+        normalize_service_action_values(payload)
 
         if tab == "daily_report":
             from app.services.daily_report import (

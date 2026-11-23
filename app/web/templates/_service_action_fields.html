@@ -1,0 +1,51 @@
+{# Fields shared by the customer service-action sections («توقف و انتقال», «لغو سرویس»): a switch value, a plan
+   list and a bounded number. Import «with context»: they read values, plan_scope_choices and service_action_bounds. #}
+{% macro is_on(key) -%}{{ '1' if (values.get(key, '')|string|lower) in ['1', 'true', 'yes', 'on'] else '' }}{%- endmacro %}
+
+{% macro plan_scope_field(key, id_prefix) -%}
+{% set scope = (values.get(key, '') or '')|string|lower %}
+{% set chosen = scope.split(',') %}
+<div class="form-field">
+  <span class="ds-label-text" id="{{ id_prefix }}-label">پلن‌ها</span>
+  <select name="s_{{ key }}_mode" id="{{ id_prefix }}-mode" hidden data-ui-select="1">
+    <option value="some"{% if scope != 'all' %} selected{% endif %}>پلن‌های انتخابی</option>
+    <option value="all"{% if scope == 'all' %} selected{% endif %}>همهٔ پلن‌ها</option>
+  </select>
+  <div class="sales-seg ds-seg" role="radiogroup" aria-labelledby="{{ id_prefix }}-label" data-ds-choice data-ds-target="#{{ id_prefix }}-mode">
+    <button type="button" role="radio" data-value="some">پلن‌های انتخابی</button><button type="button" role="radio" data-value="all">همهٔ پلن‌ها</button>
+  </div>
+  <div class="ds-tags" role="group" aria-labelledby="{{ id_prefix }}-label" data-ds-show-when="#{{ id_prefix }}-mode:some"{% if scope == 'all' %} hidden{% endif %}>
+    {% for choice in plan_scope_choices %}
+    <label class="ds-tag"><input type="checkbox" name="s_{{ key }}" value="{{ choice.plan_id }}"{% if (choice.plan_id|string) in chosen %} checked{% endif %} />{{ ico('check') }}<span dir="auto">{{ choice.name }}</span></label>
+    {% else %}
+    <span class="muted">هنوز پلنی برای فروش ساخته نشده است.</span>
+    {% endfor %}
+  </div>
+  <small class="muted" data-ds-show-when="#{{ id_prefix }}-mode:some"{% if scope == 'all' %} hidden{% endif %}>فقط سرویس‌های پلن‌های انتخاب‌شده؛ تا پلنی انتخاب نکنید، برای هیچ سرویسی فعال نیست.</small>
+  <small class="muted" data-ds-show-when="#{{ id_prefix }}-mode:all"{% if scope != 'all' %} hidden{% endif %}>همهٔ پلن‌ها، از جمله پلن‌هایی که بعداً می‌سازید.</small>
+</div>
+{%- endmacro %}
+
+{% macro number_field(key, label, unit, hint='') -%}
+{% set bounds = service_action_bounds.get(key, (0, 0)) %}
+<label class="form-field">{{ label }}
+  <span class="ds-unit"><input name="s_{{ key }}" type="number" min="{{ bounds[0] }}" max="{{ bounds[1] }}" step="1" inputmode="numeric" dir="ltr" value="{{ values.get(key, '') }}" required /><span class="ds-unit-label">{{ unit }}</span></span>
+  {% if hint %}<small class="muted">{{ hint }}</small>{% endif %}
+</label>
+{%- endmacro %}
+
+{# One choice of a fixed list (DESIGN_SYSTEM.md «انتخاب تک‌گزینه در فرم»): a segmented bar over a hidden select. #}
+{% macro choice_field(key, label, id) -%}
+{% set options = service_action_choices.get(key, ()) %}
+{% set current = (values.get(key, '') or '')|string|lower %}
+<div class="form-field">
+  <span class="ds-label-text" id="{{ id }}-label">{{ label }}</span>
+  <select name="s_{{ key }}" id="{{ id }}" hidden data-ui-select="1">
+    {% for value, text in options %}<option value="{{ value }}"{% if current == value %} selected{% endif %}>{{ text }}</option>{% endfor %}
+  </select>
+  <div class="sales-seg ds-seg" role="radiogroup" aria-labelledby="{{ id }}-label" data-ds-choice data-ds-target="#{{ id }}">
+    {% for value, text in options %}<button type="button" role="radio" data-value="{{ value }}">{{ text }}</button>{% endfor %}
+  </div>
+  {{ caller() if caller is defined else '' }}
+</div>
+{%- endmacro %}

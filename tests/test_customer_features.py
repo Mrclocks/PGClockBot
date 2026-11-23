@@ -24,6 +24,7 @@ from app.services.service_cancellations import approve_cancellation, cancellatio
 from app.services.service_renewals import assert_service_quota_available
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
 from app.services.numbers import to_fa_digits
+from app.services.web_numbers import WEB_NUMBER_FILTERS
 from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -112,7 +113,7 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
         _SETTINGS_CACHE.clear()
 
     async def request(self, service_id=11, shop_id=None):
-        return await request_cancellation(self.session, self.user, service_id, shop_id=shop_id, reason="دیگر نیاز ندارم")
+        return await request_cancellation(self.session, self.user, service_id, shop_id=shop_id, ui={}, reason="دیگر نیاز ندارم")
 
     async def approve(self, request_id, amount=123, shop_id=None):
         return await approve_cancellation(self.session, request_id, shop_id=shop_id, amount=amount, actor="operator", note="تأیید شد")
@@ -217,7 +218,7 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
         for uid, sid, shop in [(4, 11, None), (1, 11, 2), (1, 12, None)]:
             user = await self.session.get(BotUser, uid)
             with self.subTest(uid=uid, sid=sid), self.assertRaises(ValueError):
-                await request_cancellation(self.session, user, sid, shop_id=shop, reason="test")
+                await request_cancellation(self.session, user, sid, shop_id=shop, ui={}, reason="test")
         row = await self.request(12, 2)
         for shop in [None, 3]:
             with self.subTest(shop=shop), self.assertRaises(ValueError):
@@ -240,7 +241,7 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
         await self.session.commit()
         self.assertIsNone(await cancellation_status(self.session, self.other, 11, shop_id=3))
         with self.assertRaises(ValueError):
-            await request_cancellation(self.session, self.other, 11, shop_id=3, reason="درخواست جدید")
+            await request_cancellation(self.session, self.other, 11, shop_id=3, ui={}, reason="درخواست جدید")
         self.assertEqual(await self.session.scalar(select(func.count()).select_from(ServiceCancellation)), 1)
 
     async def test_approved_cancellation_disables_automation_and_blocks_rewards(self):
@@ -457,7 +458,7 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(r.id == row["id"] for r, _ in rows))
         self.assertTrue(all(uname != "mine" for _, uname in rows) or any(uname == "shop-mine" for _, uname in rows))
         env = Environment(loader=FileSystemLoader(str(ROOT / "app/web/templates")), autoescape=select_autoescape())
-        env.filters["fa"] = to_fa_digits
+        env.filters.update(WEB_NUMBER_FILTERS)
         html = env.get_template("_finance_cancellations.html").render(
             cancel_requests=rows,
             cancel_labels={"pending": "در انتظار بررسی", "processing": "…", "review": "…", "approved": "…", "rejected": "…", "withdrawn": "…"},

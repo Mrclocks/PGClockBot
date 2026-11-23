@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.user_errors import domain_error_text
 from app.services.service_period import period_view
 from app.services.catalog_pricing import displayed_quote, price_html, quote_product, sale_price
-from app.bot import keyboards as kb
+from app.bot import cancellation_screen, keyboards as kb
 from app.bot.chat_cleanup import keep_message
 from app.bot.list_pages import page_line, page_number
 from app.bot.renewal_keyboards import (
@@ -28,6 +28,8 @@ from app.db.models import BotUser, UserService
 from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_catalog_plan
 from app.services.pasarguard import absolutize_subscription_url, get_pg
+from app.services.service_cancellation_settings import cancellation_policy
+from app.services.service_cancellations import cancellation_offer, request_cancellation, shows_cancel_button
 from app.services.service_freeze import freeze_button
 from app.services.service_transfer import transfer_button
 from app.services.service_import import is_external_service
@@ -77,60 +79,69 @@ def service_back_markup(service_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, f"svc:view:{int(service_id)}")]])
 
 
-@router.callback_query(F.data.startswith("svc:cancel:"))
+async def _cancellation_offer_view(
+    session: AsyncSession, db_user: BotUser, service_id: int
+) -> tuple[str, InlineKeyboardMarkup]:
+    """The «لغو سرویس» screen of ``service_id``; raises ValueError for a service the customer cannot use."""
+    offer = await cancellation_offer(
+        session, db_user, service_id, shop_id=current_shop_reseller_id(), ui=await get_all_settings(session)
+    )
+    return cancellation_screen.offer_screen(offer, service_id, get_settings().currency)
+
+
+@router.callback_query(F.data.regexp(r"^svc:cancel:\d{1,10}$"))
 async def svc_cancel(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    from app.services.service_cancellations import cancellation_status
-    from app.services.users import current_shop_reseller_id
     try:
-        service_id = int(callback.data.split(":")[-1])
-        status = await cancellation_status(session, db_user, service_id, shop_id=current_shop_reseller_id())
+        text, markup = await _cancellation_offer_view(session, db_user, int(callback.data.split(":")[-1]))
     except ValueError as exc:
         await callback.answer(domain_error_text(exc), show_alert=True)
         return
-    text = "📝 درخواست لغو سرویس\nاپراتور مبلغ اعتبار برگشتی را تعیین می‌کند. پس از تأیید، سرویس غیرفعال و اعتبار به کیف پول همین فروشگاه برمی‌گردد. ثبت درخواست به‌تنهایی سرویس را غیرفعال نمی‌کند."
-    buttons = []
-    if status:
-        text += f"\n\nدرخواست #{status['id']}: {html.escape(status['label'])}"
-        if status["operator_note"]:
-            text += "\n" + html.escape(status["operator_note"])
-        if status["refund_amount"] is not None:
-            text += "\nاعتبار برگشتی: " + format_toman(status["refund_amount"])
-    if not status or status["status"] in {"rejected", "withdrawn"}:
-        buttons.append([InlineKeyboardButton(text="ثبت درخواست و دلیل لغو", callback_data=f"svc:cancelnew:{service_id}")])
-    else:
-        buttons.append([InlineKeyboardButton(text="به‌روزرسانی درخواست", callback_data=f"svc:cancel:{service_id}")])
-    buttons.append([kb.back_button(None, more_callback(service_id))])
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+        await safe_edit_text(callback.message, text, reply_markup=markup)
     await callback.answer()
 
-@router.callback_query(F.data.startswith("svc:cancelnew:"))
+
+@router.callback_query(F.data.regexp(r"^svc:cancelnew:\d{1,10}$"))
 async def svc_cancel_new(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     from app.bot.nav_input import ask_text
-    from app.services.service_cancellations import owned_cancellation_service
-    from app.services.users import current_shop_reseller_id
+
+    service_id = int(callback.data.split(":")[-1])
     try:
-        service_id = int(callback.data.split(":")[-1])
-        await owned_cancellation_service(session, db_user, service_id, current_shop_reseller_id())
+        offer = await cancellation_offer(
+            session, db_user, service_id, shop_id=current_shop_reseller_id(), ui=await get_all_settings(session)
+        )
     except ValueError as exc:
         await callback.answer(domain_error_text(exc), show_alert=True)
         return
-    await state.update_data(cancellation_service_id=service_id)
+    if not offer.can_request:
+        await callback.answer(offer.blocked_reason or feedback.INVALID, show_alert=True)
+        return
+    await state.update_data(cancellation_service_id=service_id, cancellation_reason=None)
     await callback.answer()
     await ask_text(
         callback,
         state,
-        prompt="دلیل درخواست لغو را بنویسید (حداکثر ۱۰۰۰ نویسه).",
+        prompt=cancellation_screen.REASON_PROMPT,
         cancel_code="svc_cnl",
         fsm_state=CancellationStates.reason,
         edit=True,
     )
 
+
+async def _submit_cancellation(
+    session: AsyncSession, db_user: BotUser, service_id: int, reason: str
+) -> str:
+    """Record the request under the shop's settings; the text tells the customer what happened."""
+    row = await request_cancellation(
+        session, db_user, service_id, shop_id=current_shop_reseller_id(), reason=reason,
+        ui=await get_all_settings(session),
+    )
+    return cancellation_screen.result_text(row, get_settings().currency)
+
+
 @router.message(CancellationStates.reason, F.text)
 async def svc_cancel_reason(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext):
     from app.bot.nav_input import finish_text_step, try_legacy_cancel
-    from app.services.service_cancellations import request_cancellation
-    from app.services.users import current_shop_reseller_id
 
     if kb.is_cancel_text(message.text):
         if await try_legacy_cancel(message, state, session, db_user):
@@ -139,27 +150,48 @@ async def svc_cancel_reason(message: Message, session: AsyncSession, db_user: Bo
         await message.answer(feedback.CANCELLED)
         return
     data = await state.get_data()
+    service_id = int(data.get("cancellation_service_id") or 0)
+    reason = (message.text or "").strip()
+    ui = await get_all_settings(session)
     try:
-        row = await request_cancellation(
-            session,
-            db_user,
-            int(data.get("cancellation_service_id") or 0),
-            shop_id=current_shop_reseller_id(),
-            reason=message.text,
-        )
+        if cancellation_policy(ui).is_auto:
+            if not reason or len(reason) > 1000:
+                raise ValueError("دلیل لغو را بین ۱ تا ۱۰۰۰ نویسه بنویسید")
+            offer = await cancellation_offer(session, db_user, service_id, shop_id=current_shop_reseller_id(), ui=ui)
+            if not offer.can_request:
+                raise ValueError(offer.blocked_reason or "درخواست لغو ممکن نیست")
+            # Automatic cancellation cannot be undone, so the customer confirms the amount first.
+            await state.update_data(cancellation_reason=reason)
+            await state.set_state(None)
+            text, markup = cancellation_screen.confirm_screen(offer, service_id, get_settings().currency)
+            await finish_text_step(message, state, text=text, inline=markup)
+            return
+        text = await _submit_cancellation(session, db_user, service_id, reason)
     except ValueError as exc:
         await message.answer(domain_error_text(exc))
         return
     await state.set_state(None)
-    await finish_text_step(
-        message,
-        state,
-        text=(
-            f"درخواست #{row['id']} ثبت شد. نتیجه و اعتبار برگشتی را "
-            "از «درخواست لغو سرویس» ببینید."
-        ),
-        inline=service_back_markup(int(data.get("cancellation_service_id") or 0)),
-    )
+    await finish_text_step(message, state, text=text, inline=service_back_markup(service_id))
+
+
+@router.callback_query(F.data.regexp(r"^svc:cancelok:\d{1,10}$"))
+async def svc_cancel_confirm(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
+    service_id = int(callback.data.split(":")[-1])
+    data = await state.get_data()
+    reason = str(data.get("cancellation_reason") or "")
+    if int(data.get("cancellation_service_id") or 0) != service_id or not reason:
+        await callback.answer("دلیل لغو پیدا نشد؛ دوباره از «لغو سرویس» شروع کنید.", show_alert=True)
+        return
+    try:
+        text = await _submit_cancellation(session, db_user, service_id, reason)
+    except ValueError as exc:
+        await callback.answer(domain_error_text(exc), show_alert=True)
+        return
+    await state.update_data(cancellation_reason=None)
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(callback.message, text, reply_markup=service_back_markup(service_id))
+
 
 @router.callback_query(F.data == "campaign:optout")
 async def campaign_optout(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
@@ -474,13 +506,11 @@ async def _show_missing_service(callback: CallbackQuery, svc: UserService, ui: d
         "📦 سرویس شما",
         f"👤 <code>{html.escape(svc.pg_username or '—')}</code>\n\n📶 وضعیت: <b>{STATUS_LABEL}</b>\n\n{CUSTOMER_TEXT}",
     )
-    markup = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🆘 پشتیبانی", callback_data=SUPPORT_HOME_CALLBACK)],
-            [InlineKeyboardButton(text="📝 درخواست لغو", callback_data=f"svc:cancel:{int(svc.id)}")],
-            [kb.back_button(ui, SERVICES_LIST_CALLBACK)],
-        ]
-    )
+    rows = [[InlineKeyboardButton(text="🆘 پشتیبانی", callback_data=SUPPORT_HOME_CALLBACK)]]
+    if shows_cancel_button(svc, ui):
+        rows.append([InlineKeyboardButton(text="📝 درخواست لغو", callback_data=cancellation_screen.view_callback(svc.id))])
+    rows.append([kb.back_button(ui, SERVICES_LIST_CALLBACK)])
+    markup = InlineKeyboardMarkup(inline_keyboard=rows)
     await safe_edit_text(callback.message, text, reply_markup=markup)
 
 
@@ -1073,7 +1103,8 @@ async def svc_more(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             callback.message,
             format_message("⚙️ گزینه‌های بیشتر", f"سرویس <b>{label}</b>"),
             reply_markup=service_more_keyboard(
-                svc_id, ui, external=is_external_service(svc), wireguard=has_wireguard(info),
+                svc_id, ui, external=is_external_service(svc), cancel=shows_cancel_button(svc, ui),
+                wireguard=has_wireguard(info),
                 freeze=await freeze_button(session, svc, ui),
                 transfer=await transfer_button(session, svc, ui),
             ),
@@ -1177,58 +1208,19 @@ def _register_services_cancel_codes() -> None:
 
     async def _reopen_cancel_panel(message, session, db_user, state, **_kw):
         from app.bot.nav_inline import present_inline_only
-        from app.services.service_cancellations import cancellation_status
-        from app.services.users import current_shop_reseller_id
 
         data = await state.get_data()
         service_id = int(data.get("cancellation_service_id") or 0)
+        back = InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "svc:list")]])
         if not service_id:
-            await present_inline_only(message, text="این سرویس پیدا نشد.", inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "svc:list")]]))
+            await present_inline_only(message, text="این سرویس پیدا نشد.", inline=back)
             return
         try:
-            status = await cancellation_status(
-                session, db_user, service_id, shop_id=current_shop_reseller_id()
-            )
+            text, markup = await _cancellation_offer_view(session, db_user, service_id)
         except ValueError as exc:
-            await present_inline_only(message, text=domain_error_text(exc), inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "svc:list")]]))
+            await present_inline_only(message, text=domain_error_text(exc), inline=back)
             return
-        text = (
-            "📝 درخواست لغو سرویس\n"
-            "اپراتور مبلغ اعتبار برگشتی را تعیین می‌کند. پس از تأیید، سرویس غیرفعال "
-            "و اعتبار به کیف پول همین فروشگاه برمی‌گردد. ثبت درخواست به‌تنهایی "
-            "سرویس را غیرفعال نمی‌کند."
-        )
-        buttons: list[list[InlineKeyboardButton]] = []
-        if status:
-            text += f"\n\nدرخواست #{status['id']}: {html.escape(status['label'])}"
-            if status["operator_note"]:
-                text += "\n" + html.escape(status["operator_note"])
-            if status["refund_amount"] is not None:
-                text += "\nاعتبار برگشتی: " + format_toman(status["refund_amount"])
-        if not status or status["status"] in {"rejected", "withdrawn"}:
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        text="ثبت درخواست و دلیل لغو",
-                        callback_data=f"svc:cancelnew:{service_id}",
-                    )
-                ]
-            )
-        else:
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        text="به‌روزرسانی درخواست",
-                        callback_data=f"svc:cancel:{service_id}",
-                    )
-                ]
-            )
-        buttons.append([kb.back_button(None, more_callback(service_id))])
-        await present_inline_only(
-            message,
-            text=text,
-            inline=InlineKeyboardMarkup(inline_keyboard=buttons),
-        )
+        await present_inline_only(message, text=text, inline=markup)
 
     register_cancel_code("svc_cnl", CancelEntry(reopen=_reopen_cancel_panel))
 

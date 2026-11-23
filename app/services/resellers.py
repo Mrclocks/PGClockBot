@@ -146,6 +146,7 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("limits", "قوانین و محدودیت‌ها"),
     ("service_import", "افزودن سرویس قبلی"),
     ("service_actions", "کارهای مشتری روی سرویس"),
+    ("service_cancel", "لغو سرویس"),
     ("guides", "آموزش اتصال"),
     ("naming", "قالب نام‌گذاری"),
     ("notifications", "هشدارها"),

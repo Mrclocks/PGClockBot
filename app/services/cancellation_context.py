@@ -8,6 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan, ServiceCancellation, UserService
+from app.services.numbers import to_fa_digits
+from app.services.service_cancellation_settings import AUTO_ACTOR
 from app.services.formatting import (
     format_bytes,
     format_expire,
@@ -19,6 +21,7 @@ from app.services.formatting import (
 
 REASON_PREVIEW_LIMIT = 800
 UNLIMITED_LABEL = "نامحدود"
+UNDECIDED_STATUSES = ("pending", "processing", "review")
 
 
 def _volume_label(service: UserService) -> str:
@@ -69,7 +72,22 @@ def cancellation_detail_lines(
     lines.append(kv_line("🕒", "زمان ثبت", _created_label(row.created_at)))
     if row.refund_amount is not None and row.status != "pending":
         lines.append(kv_line("💰", "اعتبار تعیین‌شده", format_toman(int(row.refund_amount), currency)))
+    elif row.status in UNDECIDED_STATUSES and row.suggested_refund is not None:
+        lines.append(kv_line("💡", "مبلغ پیشنهادی", suggestion_label(row, currency)))
+    if row.processed_by == AUTO_ACTOR:
+        lines.append(kv_line("🤖", "تأیید", "خودکار، طبق تنظیمات «لغو سرویس»"))
     return info_block(lines)
+
+
+def suggestion_label(row: ServiceCancellation, currency: str) -> str:
+    """The amount the shop's refund rule gave when the request was made, with what it was based on."""
+    label = format_toman(int(row.suggested_refund or 0), currency)
+    if row.remaining_percent is not None and row.paid_amount is not None:
+        label += (
+            f" ({to_fa_digits(int(row.remaining_percent))}٪ باقی‌مانده از "
+            f"{format_toman(int(row.paid_amount), currency)})"
+        )
+    return label
 
 
 def reason_block(reason: str | None) -> str:

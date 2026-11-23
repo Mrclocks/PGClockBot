@@ -1097,7 +1097,7 @@
     const seq = openSheet("cancellation", "درخواست لغو", R.loadingHtml(2), { serviceId: id });
     try {
       const data = await core.api(`/api/mini/service/${id}/cancellation`);
-      setSheetBody(seq, R.cancellationHtml(data.request, id));
+      setSheetBody(seq, R.cancellationHtml(data.request, id, data.offer));
     } catch (err) {
       setSheetBody(seq, R.errorHtml(err.message));
     }
@@ -1109,11 +1109,14 @@
     const reason = String(form.elements.reason.value || "").trim();
     if (!reason) return;
     await guarded("cancel:" + id, button, async () => {
-      const ok = await core.confirmAction("درخواست لغو این سرویس ثبت شود؟ سرویس تا تأیید اپراتور فعال می‌ماند.");
+      const auto = form.getAttribute("data-auto") === "1";
+      const ok = await core.confirmAction(auto
+        ? "سرویس همین حالا لغو و غیرفعال شود؟ این کار برگشت‌پذیر نیست."
+        : "درخواست لغو این سرویس ثبت شود؟ سرویس تا تأیید اپراتور فعال می‌ماند.");
       if (!ok) return;
       try {
         await core.api(`/api/mini/service/${id}/cancellation`, { method: "POST", body: { reason } });
-        core.toast("درخواست ثبت شد");
+        core.toast(auto ? "سرویس لغو شد" : "درخواست ثبت شد");
         state.details.delete(id);
         showCancellation(id);
         if (state.view === "service" && state.serviceId === id) loadDetail(id);

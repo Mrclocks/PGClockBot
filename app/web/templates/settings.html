@@ -156,6 +156,9 @@
   {% elif tab == 'service_actions' %}
     {% set settings_action = '/settings?tab=service_actions' %}
     {% include "_settings_service_actions.html" %}
+  {% elif tab == 'service_cancel' %}
+    {% set settings_action = '/settings?tab=service_cancel' %}
+    {% include "_settings_service_cancel.html" %}
   {% else %}
     {% if tab == 'service_import' %}
       {% include "_settings_service_import.html" %}

@@ -231,7 +231,7 @@ class ContactAndNoticeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.user.wallet_balance, 1000)
 
     async def request(self, service_id: int = 11, shop_id: int | None = None) -> int:
-        row = await request_cancellation(self.session, self.user, service_id, shop_id=shop_id, reason="<b>دیگر نیاز ندارم</b>")
+        row = await request_cancellation(self.session, self.user, service_id, shop_id=shop_id, ui={}, reason="<b>دیگر نیاز ندارم</b>")
         return row["id"]
 
     async def test_repeated_cancellation_notifies_once_after_committed_claim(self) -> None:
@@ -382,7 +382,7 @@ class ContactAndNoticeTests(unittest.IsolatedAsyncioTestCase):
     async def test_wrong_shop_or_customer_cannot_queue_cancellation_notice(self) -> None:
         for user, service_id, shop_id in [(self.other, 11, None), (self.user, 12, 3)]:
             with self.assertRaises(ValueError):
-                await request_cancellation(self.session, user, service_id, shop_id=shop_id, reason="درخواست")
+                await request_cancellation(self.session, user, service_id, shop_id=shop_id, ui={}, reason="درخواست")
         self.assertEqual(await self.session.scalar(sa.select(sa.func.count()).select_from(ServiceCancellation)), 0)
 
     async def test_notice_review_status_is_visible_in_the_panel(self) -> None:

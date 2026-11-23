@@ -1479,14 +1479,15 @@ def service_card_keyboard(service_id: int, ui: dict | None = None) -> InlineKeyb
 
 @editable_screen("c.service_more")
 def service_more_keyboard(
-    service_id: int, ui: dict | None = None, *, external: bool = False, wireguard: bool = False,
+    service_id: int, ui: dict | None = None, *, external: bool = False, cancel: bool = True, wireguard: bool = False,
     freeze: str | None = None, transfer: str | None = None,
 ) -> InlineKeyboardMarkup:
     """«⚙️ بیشتر» of a service card: refresh, WireGuard, automation, freeze, transfer, cancellation, delete.
 
     The WireGuard button shows only for a service the panel gave a WireGuard address (``wireguard``).
     Cancel sits above delete so destructive delete stays visually separated. A service that was
-    not sold by the bot (``external``) can never be cancelled for a refund, so it has no cancel button.
+    not sold by the bot (``external``) can never be cancelled for a refund, so it has no cancel button;
+    the card also hides it when ``cancel`` is False (the shop turned cancellation off for the service).
     """
     sid = int(service_id)
     rows: list[list[InlineKeyboardButton]] = [
@@ -1505,7 +1506,7 @@ def service_more_keyboard(
         rows.append([_service_button(ui, "btn_svc_transfer", "🔁 انتقال به شخص دیگر", f"svc:trn:{sid}", "svc_auto")])
     elif transfer == "cancel":
         rows.append([_service_button(ui, "btn_svc_transfer_cancel", "✖️ لغو لینک انتقال", f"svc:trnx:{sid}", "svc_auto")])
-    if not external:
+    if cancel and not external:
         rows.append([_service_button(ui, "btn_svc_cancel", "📝 درخواست لغو", f"svc:cancel:{sid}", "svc_cancel")])
     rows.append(
         [_service_button(ui, "btn_svc_delete", "🗑 حذف سرویس", f"svc:delask:{sid}", "svc_delete", style_fallback="danger")]

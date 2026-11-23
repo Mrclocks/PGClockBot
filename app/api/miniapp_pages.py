@@ -17,7 +17,7 @@ import asyncio
 import base64
 import logging
 from datetime import timezone
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -80,6 +80,7 @@ from app.services.miniapp_shop import (
 )
 from app.services.pasarguard import get_pg
 from app.services.service_live_info import fetch_subscription_info, service_info_error, validate_service_info
+from app.services.service_cancellations import CancellationOffer, cancellation_offer, request_cancellation
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import get_wallet_balance
 
@@ -583,21 +584,37 @@ async def _addon_already_ordered(session: AsyncSession, user: BotUser, preview: 
     return order_id is not None
 
 
+def _cancellation_offer_payload(offer: CancellationOffer) -> dict[str, Any]:
+    """Only what the Mini App cancellation sheet shows."""
+    quote = offer.quote
+    return {
+        "can_request": offer.can_request,
+        "blocked_reason": offer.blocked_reason,
+        "auto": offer.policy.is_auto,
+        "refund": offer.policy.refund,
+        "fee_percent": offer.policy.fee_percent,
+        "quote": None if quote is None else {
+            "amount": quote.amount, "paid_amount": quote.paid_amount, "remaining_percent": quote.remaining_percent,
+        },
+    }
+
+
 def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     @app.get("/api/mini/service/{service_id}/cancellation")
     async def mini_cancellation(request: Request, service_id: int, session: AsyncSession = Depends(get_db)):
-        from app.services.service_cancellations import cancellation_status
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
         await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         try:
-            return _no_store({"request": await cancellation_status(session, user, service_id, shop_id=None)})
+            offer = await cancellation_offer(
+                session, user, service_id, shop_id=None, ui=await get_all_settings(session, reseller_id=None)
+            )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from None
+        return _no_store({"request": offer.status, "offer": _cancellation_offer_payload(offer)})
 
     @app.post("/api/mini/service/{service_id}/cancellation")
     async def mini_request_cancellation(request: Request, service_id: int, session: AsyncSession = Depends(get_db)):
-        from app.services.service_cancellations import request_cancellation
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
         await _owned_service_or_404(session, await session.get(UserService, service_id), user)
@@ -605,7 +622,10 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             data = await request.json()
             if not isinstance(data, dict) or not isinstance(data.get("reason"), str):
                 raise ValueError("دلیل لغو را بنویسید")
-            row = await request_cancellation(session, user, service_id, shop_id=None, reason=data["reason"])
+            row = await request_cancellation(
+                session, user, service_id, shop_id=None, reason=data["reason"],
+                ui=await get_all_settings(session, reseller_id=None),
+            )
             return _no_store({"request": row})
         except ValueError:
             await rollback_quiet(session)

@@ -34,11 +34,12 @@ def _notice(
     row: ServiceCancellation, user: BotUser, service: UserService, plan_name: str | None,
 ) -> CancellationNotice:
     details = cancellation_detail_lines(row, user, service, plan_name, currency=get_settings().currency)
-    text = format_message(
-        "📝 درخواست لغو سرویس",
-        f"{details}\n\n{reason_block(row.reason)}\n\n"
-        "برای دیدن جزئیات و تصمیم‌گیری، دکمهٔ «بررسی درخواست» را بزنید.",
-    )
+    if row.status == "approved":
+        # Approved by the shop's automatic setting before staff were told: nothing is left to decide.
+        title, tail = "✅ لغو خودکار سرویس", "سرویس طبق تنظیمات «لغو سرویس» خودکار لغو شد."
+    else:
+        title, tail = "📝 درخواست لغو سرویس", "برای دیدن جزئیات و تصمیم‌گیری، دکمهٔ «بررسی درخواست» را بزنید."
+    text = format_message(title, f"{details}\n\n{reason_block(row.reason)}\n\n{tail}")
     return CancellationNotice(row.id, row.reseller_id, text, int(row.user_id), int(row.service_id))
 
 
