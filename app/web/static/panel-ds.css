@@ -519,14 +519,19 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   position: absolute; inset-inline: 0; top: calc(100% + var(--space-1)); z-index: 60;
   display: flex; flex-direction: column; max-height: min(60vh, 440px); overflow-y: auto; padding: var(--space-0);
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  /* The same lift as the header capsule and the bottom bar. */
+  box-shadow: var(--dock-glass-highlight), var(--dock-shadow);
 }
 :is(.side, .topbar) .side-search-results[hidden] { display: none; }
 :is(.side, .topbar) .side-search-hit {
-  display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: var(--btn-h);
+  position: relative; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: var(--btn-h);
   padding: var(--space-1) var(--space-1_5); border-radius: var(--inner-radius); color: var(--foreground); text-decoration: none;
 }
-:is(.side, .topbar) .side-search-hit + .side-search-hit { box-shadow: 0 -1px 0 color-mix(in srgb, var(--border) 70%, transparent); }
+:is(.side, .topbar) .side-search-hit + .side-search-hit::before {
+  /* A hairline between results, inset like the text: a ring on a rounded row would read as a card edge. */
+  content: ''; position: absolute; top: 0; inset-inline: var(--space-1_5); height: 1px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+}
 :is(.side, .topbar) .side-search-hit:hover, :is(.side, .topbar) .side-search-hit:focus-visible, :is(.side, .topbar) .side-search-hit.is-active {
   background: color-mix(in srgb, var(--brand) 10%, transparent); outline: none;
 }
@@ -612,7 +617,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) {
     border-color: color-mix(in srgb, var(--brand) 60%, transparent);
     background: var(--bg-card);
-    clip-path: inset(0 0 -100vh 0 round calc(var(--dock-inner) / 2));
+    /* Open below and to the sides, so the results' shadow is not cut into a rectangle at the field's edges. */
+    clip-path: inset(0 calc(-1 * var(--space-4)) -100vh calc(-1 * var(--space-4)) round calc(var(--dock-inner) / 2));
     transition:
       clip-path var(--dock-morph) var(--ease-out),
       background-color var(--motion-fast) var(--ease-standard),
