@@ -1,7 +1,7 @@
 """Refund quote stored on each service cancellation request.
 
-Revision ID: 0131_cancellation_refund_quote
-Revises: 0130_discount_budget_winback
+Revision ID: 0132_cancellation_refund_quote
+Revises: 0131_plan_panel_groups
 
 Adds nullable ``paid_amount``, ``remaining_percent`` and ``suggested_refund`` to
 ``service_cancellations``: the shop's refund rule applied when the request was made. Existing
@@ -16,8 +16,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0131_cancellation_refund_quote"
-down_revision: Union[str, None] = "0130_discount_budget_winback"
+revision: str = "0132_cancellation_refund_quote"
+down_revision: Union[str, None] = "0131_plan_panel_groups"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -454,7 +454,7 @@ class SettingsPageTests(RoutesHarness):
 
 class RefundQuoteMigrationTests(unittest.TestCase):
     def test_upgrade_twice_and_downgrade_keep_existing_requests(self) -> None:
-        spec = importlib.util.spec_from_file_location("quote_migration", ROOT / "alembic/versions/0131_cancellation_refund_quote.py")
+        spec = importlib.util.spec_from_file_location("quote_migration", ROOT / "alembic/versions/0132_cancellation_refund_quote.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
         engine = scoped_sync_engine()
