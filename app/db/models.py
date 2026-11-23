@@ -172,6 +172,10 @@ class Plan(Base):
     data_limit_gb: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     pg_template_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     pg_group_ids: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Group mode with no chosen group: PasarGuard gives the user the groups of the shop's admin.
+    pg_panel_groups: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
     # Optional per-plan username naming; NULL/empty → fall back to global settings
     pg_username_prefix: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     pg_username_suffix: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

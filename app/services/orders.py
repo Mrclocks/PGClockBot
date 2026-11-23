@@ -53,6 +53,7 @@ from app.services.pasarguard import (
     user_subscription_url,
 )
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
+from app.services.plan_panel_groups import assert_panel_assigned_group, plan_uses_panel_groups
 from app.services.random_discounts import apply_random_discount
 from app.services.order_discounts import record_code_discount, release_order_discounts
 from app.services.discount_rules import apply_automatic_discounts, release_rule_discount, replace_rule_with_code
@@ -2549,7 +2550,7 @@ async def deliver_order(
         group_ids = None
         if not plan.pg_template_id:
             group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
-            if not group_ids:
+            if not group_ids and not plan_uses_panel_groups(plan):
                 raise ValueError(
                     "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
                 )
@@ -2622,6 +2623,9 @@ async def deliver_order(
             pg_uid = pg_user.get("id")
             if pg_uid:
                 created_pg_ids.append(int(pg_uid))
+            if plan_uses_panel_groups(plan):
+                # After recording the id, so the rollback below deletes the groupless user.
+                assert_panel_assigned_group(pg_user)
             if plan.pg_template_id and _order_note(order) == CUSTOM_ORDER_NOTE and pg_uid:
                 # A template brings its own volume and expiry; the buyer paid for the chosen ones.
                 applied = await pg.modify_user_by_id(
