@@ -28,6 +28,7 @@ from app.services.service_import_config import (
     UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
     UNLIMITED_WORDS as IMPORT_UNLIMITED_WORDS,
 )
+from app.services.service_cancellation_settings import CANCEL_BOUNDS, CHOICES as CANCEL_CHOICES
 from app.services.service_freeze_settings import FREEZE_BOUNDS
 from app.services.service_transfer_settings import TRANSFER_BOUNDS
 from app.services.settings_operation_fields import ALERT_UNIT_OPTIONS, OPERATION_NUMBER_BOUNDS
@@ -65,6 +66,7 @@ NUMBER_BOUNDS: dict[str, tuple[int, int]] = {
     IMPORT_KEY_MAX_PER_USER: (IMPORT_MIN_PER_USER, IMPORT_MAX_PER_USER_LIMIT),
     **FREEZE_BOUNDS,
     **TRANSFER_BOUNDS,
+    **CANCEL_BOUNDS,
     **ENTRY_APPROVAL_NUMBER_BOUNDS,
 }
 
@@ -76,6 +78,7 @@ UNLIMITED_LABEL = "نامحدود"
 SELECT_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
     IMPORT_KEY_MODE: (("instant", "فوری"), ("approval", "با تأیید ادمین")),
+    **CANCEL_CHOICES,
     **ALERT_UNIT_OPTIONS,
     crypto_rates.MODE_KEY: (
         (crypto_rates.MODE_OFF, "خاموش"),

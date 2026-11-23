@@ -2336,6 +2336,10 @@ class ServiceCancellation(Base):
     pg_user_id: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
     refund_amount: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    # The shop's refund rule applied when the request was made; NULL when the panel did not answer.
+    paid_amount: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    remaining_percent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    suggested_refund: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     operator_note: Mapped[str] = mapped_column(Text, default="")
     processed_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)

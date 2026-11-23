@@ -24,7 +24,7 @@ from app.config import get_settings
 from app.db.models import BotUser, ServiceCancellation
 from app.services.user_errors import domain_error_text
 from app.services import bot_feedback_texts as feedback
-from app.services.cancellation_context import cancellation_detail_lines, load_cancellation_parts, reason_block
+from app.services.cancellation_context import cancellation_detail_lines, load_cancellation_parts, reason_block, suggestion_label
 from app.services.formatting import format_message, format_toman
 from app.services.notifications import customer_markup
 from app.services.numbers import normalize_number_text
@@ -168,11 +168,46 @@ async def approve_start(
             await safe_edit_text(callback.message, text, reply_markup=markup)
         return
     await state.update_data(cnrv_id=request_id, cnrv_shop=shop_id)
+    prompt = f"💰 مبلغ اعتبار برگشتی درخواست #{request_id} را به تومان بفرستید (۰ = بدون اعتبار):"
+    suggestion = None
+    if row.suggested_refund is not None:
+        currency = get_settings().currency
+        prompt += f"\n💡 پیشنهاد تنظیمات لغو: {suggestion_label(row, currency)}"
+        suggestion = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+            text=f"💡 همان مبلغ پیشنهادی ({format_toman(int(row.suggested_refund), currency)})",
+            callback_data=f"cnrv:sg:{request_id}",
+        )]])
     await ask_text(
-        callback, state,
-        prompt=f"💰 مبلغ اعتبار برگشتی درخواست #{request_id} را به تومان بفرستید (۰ = بدون اعتبار):",
+        callback, state, prompt=prompt, extra_inline=suggestion,
         cancel_code=CANCEL_CODE, fsm_state=CancelReviewStates.amount, return_to=_view(request_id), edit=True,
     )
+
+
+@router.callback_query(F.data.regexp(rf"^cnrv:sg:{ID}$"))
+async def approve_suggested(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False, reseller_owner_id: int | None = None,
+) -> None:
+    """Confirm screen with the stored suggestion; the amount comes from the request row, not the button."""
+    shop_id = await _gate(callback, session, db_user, APPROVE_PERMISSIONS, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    if shop_id is False:
+        return
+    request_id = int(callback.data.split(":")[2])
+    row = await session.get(ServiceCancellation, request_id)
+    try:
+        assert_cancellation_scope(row, shop_id)
+    except ValueError:
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        return
+    if row.status not in OPEN_FOR_APPROVAL or row.suggested_refund is None:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    await state.set_state(None)
+    await callback.answer()
+    amount = int(row.refund_amount if row.refund_amount is not None else row.suggested_refund)
+    text, markup = await _confirm_view(session, request_id, amount)
+    if callback.message:
+        await safe_edit_text(callback.message, text, reply_markup=markup)
 
 
 async def _confirm_view(session: AsyncSession, request_id: int, amount: int) -> tuple[str, InlineKeyboardMarkup]:

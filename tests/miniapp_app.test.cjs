@@ -327,6 +327,35 @@ test("cancellation request is sent once and operator notes are escaped", async (
   assert.ok(!html.includes('data-form="cancellation"'), "a pending request cannot be filed again");
 });
 
+test("cancellation sheet follows the shop's settings and escapes the server's reason", async () => {
+  let offer = { can_request: true, blocked_reason: null, auto: true, refund: "remaining", fee_percent: 10,
+    quote: { amount: 45000, paid_amount: 100000, remaining_percent: 50 } };
+  const env = await boot({ routes: router([
+    [/GET \/api\/mini\/service\/7\/cancellation/, () => ({ status: 200, body: { request: null, offer } })],
+  ]) });
+  env.mini.app.ACTIONS.cancellation(trigger({ "data-id": 7 }));
+  await settle();
+  let html = env.element("sheet-body").innerHTML;
+  assert.ok(html.includes('data-auto="1"'), "automatic mode is marked on the form for the confirm text");
+  assert.ok(html.includes("۴۵,۰۰۰"), "the quoted amount is shown");
+  assert.ok(html.includes("برگشت‌پذیر نیست"), "automatic cancellation warns that it cannot be undone");
+
+  offer = { can_request: false, blocked_reason: HOSTILE, auto: false, refund: "remaining", fee_percent: 0, quote: null };
+  env.mini.app.ACTIONS.cancellation(trigger({ "data-id": 7 }));
+  await settle();
+  html = env.element("sheet-body").innerHTML;
+  assert.ok(!html.includes('data-form="cancellation"'), "a refused request offers no form");
+  assert.ok(html.includes("&lt;img"));
+  assert.ok(!html.includes("<img src=x"));
+
+  offer = { can_request: true, blocked_reason: null, auto: false, refund: "none", fee_percent: 0, quote: null };
+  env.mini.app.ACTIONS.cancellation(trigger({ "data-id": 7 }));
+  await settle();
+  html = env.element("sheet-body").innerHTML;
+  assert.ok(html.includes("مبلغی برنمی‌گرداند"));
+  assert.ok(html.includes('data-auto="0"'));
+});
+
 test("purchase with a lost response is never retried automatically", async () => {
   let buys = 0;
   const env = await boot({ routes: router([[/POST \/api\/mini\/buy/, () => { buys += 1; throw new Error("lost"); }]]) });

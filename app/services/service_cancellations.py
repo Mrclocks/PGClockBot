@@ -1,16 +1,30 @@
-"""Operator-priced cancellations, serialized with paid service mutations."""
+"""Service cancellations under the shop's cancellation settings, serialized with paid service mutations.
+
+A request records the refund the shop's rule gives at that moment. With manual approval that amount
+is a suggestion the operator may change; with automatic approval the request is approved at once
+with it, unless the amount is over the shop's automatic cap or the panel could not be read, in which
+case it waits for an operator like a manual request.
+"""
 from __future__ import annotations
 
+import logging
 import secrets
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
+import httpx
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, ServiceAutomation, ServiceCancellation, ShopWallet, UserService
 from app.services.cashback import reverse_after_refund
 from app.services.cancellation_customer_notice import notify_cancellation_decision
-from app.services.pasarguard import get_pg, get_pg_for_reseller
+from app.services.cancellation_refund import RefundQuote, outside_window, period_payment, quote_refund, remaining_share
+from app.services.pasarguard import PasarGuardError, get_pg, get_pg_for_reseller
+from app.services.service_cancellation_settings import AUTO_ACTOR, CancellationPolicy, cancellation_policy
 from app.services.service_automation import service_shop_id
 from app.services.service_freeze_guard import assert_not_frozen
 from app.services.service_transfer_guard import assert_not_transferred
@@ -20,6 +34,12 @@ from app.services.wallet import credit_wallet
 STATUS_LABELS = {"pending": "در انتظار بررسی", "processing": "در حال غیرفعال‌سازی", "review": "نیازمند بررسی و تلاش مجدد", "approved": "لغو شد؛ اعتبار به کیف پول همین فروشگاه برگشت", "rejected": "درخواست رد شد", "withdrawn": "درخواست پس گرفته شد"}
 # Operator-facing queue — badge + list filter for items needing human action.
 OPEN_OPERATOR_STATUSES = ("pending", "review")
+# A request in one of these blocks a new one for the same service.
+OPEN_REQUEST_STATUSES = frozenset({"pending", "processing", "review", "approved"})
+DISABLED_MESSAGE = "لغو سرویس برای این سرویس فعال نیست"
+WINDOW_MESSAGE = "مهلت لغو این سرویس تمام شده است"
+
+logger = logging.getLogger(__name__)
 
 
 async def lock_service_mutation(session, service_id):
@@ -55,28 +75,138 @@ async def cancellation_status(session, user, service_id, *, shop_id):
             "operator_note": row.operator_note} if row else None
 
 
-async def request_cancellation(session, user, service_id, *, shop_id, reason):
+@dataclass(frozen=True, slots=True)
+class CancellationOffer:
+    """What the customer's cancellation screen shows for one service."""
+
+    status: dict[str, Any] | None
+    policy: CancellationPolicy
+    # Why a new request cannot be made; None when it can.
+    blocked_reason: str | None
+    # The refund the shop's rule gives now; None when a request cannot be made or the panel did not answer.
+    quote: RefundQuote | None
+
+    @property
+    def can_request(self) -> bool:
+        return self.blocked_reason is None
+
+
+def shows_cancel_button(service: UserService, ui: Mapping[str, Any]) -> bool:
+    """The service's «⚙️ بیشتر» shows the cancel entry while the shop allows it or a request is open."""
+    if not service.pg_user_id or is_external_service(service):
+        return False
+    return bool(service.cancellation_pending or service.is_cancelled) or cancellation_policy(ui).allows_plan(service.plan_id)
+
+
+async def _panel_info(session: AsyncSession, service: UserService, shop_id: int | None) -> dict[str, Any] | None:
+    """The panel user of ``service``, or None when the panel did not answer for that exact user."""
+    try:
+        pg = await get_pg_for_reseller(session, shop_id) if shop_id else get_pg()
+        info = await pg.get_user_by_id(int(service.pg_user_id))
+    except (PasarGuardError, httpx.HTTPError, TimeoutError, ValueError):
+        logger.warning("cancellation quote panel read failed service=%s", service.id, exc_info=True)
+        return None
+    if not isinstance(info, dict) or int(info.get("id") or 0) != int(service.pg_user_id):
+        return None
+    return info
+
+
+async def _quote(
+    session: AsyncSession, service: UserService, policy: CancellationPolicy, *, shop_id: int | None, now: datetime,
+) -> tuple[str | None, RefundQuote | None]:
+    """(blocked reason, quote) of a new request under ``policy``; the panel is read only when needed."""
+    payment = await period_payment(session, service)
+    if outside_window(policy, payment, service, now):
+        return WINDOW_MESSAGE, None
+    info = await _panel_info(session, service, shop_id)
+    if info is None:
+        return None, None
+    return None, quote_refund(policy, payment, remaining_share(info, service, payment.started_at, now))
+
+
+async def _request_block(session: AsyncSession, service: UserService, policy: CancellationPolicy) -> str | None:
+    if not policy.allows_plan(service.plan_id):
+        return DISABLED_MESSAGE
+    try:
+        await assert_not_frozen(session, service.id)
+        await assert_not_transferred(session, service.id)
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
+async def cancellation_offer(
+    session: AsyncSession, user: BotUser, service_id: int, *, shop_id: int | None, ui: Mapping[str, Any],
+) -> CancellationOffer:
+    """The customer's current request, if any, and whether and for how much a new one can be made."""
+    service = await owned_cancellation_service(session, user, service_id, shop_id)
+    policy = cancellation_policy(ui)
+    status = await cancellation_status(session, user, service_id, shop_id=shop_id)
+    if status and status["status"] in OPEN_REQUEST_STATUSES:
+        return CancellationOffer(status, policy, "برای این سرویس درخواست لغو ثبت شده است", None)
+    blocked = await _request_block(session, service, policy)
+    if blocked:
+        return CancellationOffer(status, policy, blocked, None)
+    blocked, quote = await _quote(session, service, policy, shop_id=shop_id, now=datetime.now(timezone.utc))
+    return CancellationOffer(status, policy, blocked, quote)
+
+
+async def _insert_request(
+    session: AsyncSession, user: BotUser, service: UserService, *, shop_id: int | None, reason: str,
+    quote: RefundQuote | None,
+) -> None:
+    user_id = int(user.id)
+    session.add(ServiceCancellation(
+        service_id=service.id, user_id=user_id, reseller_id=shop_id, reason=reason, pg_user_id=service.pg_user_id,
+        paid_amount=quote.paid_amount if quote else None,
+        remaining_percent=quote.remaining_percent if quote else None,
+        suggested_refund=quote.amount if quote else None,
+    ))
+    try:
+        await session.commit()
+    except IntegrityError:
+        # A concurrent request for the same service won; the caller reads that one.
+        await session.rollback()
+
+
+async def _approve_automatically(session: AsyncSession, request_id: int, *, shop_id: int | None, amount: int) -> None:
+    """Approve with the quoted amount; a failure leaves the request for an operator as it stands."""
+    try:
+        await approve_cancellation(session, request_id, shop_id=shop_id, amount=amount, actor=AUTO_ACTOR)
+    except ValueError:
+        await session.rollback()
+        logger.warning("automatic cancellation approval left for review request=%s", request_id, exc_info=True)
+
+
+async def request_cancellation(
+    session: AsyncSession, user: BotUser, service_id: int, *, shop_id: int | None, reason: object,
+    ui: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Record the customer's request under the shop's settings and approve it at once when they say so."""
     user_id = int(user.id)
     reason = str(reason or "").strip()
     if not reason or len(reason) > 1000:
         raise ValueError("دلیل لغو را بین ۱ تا ۱۰۰۰ نویسه بنویسید")
     service = await owned_cancellation_service(session, user, service_id, shop_id)
-    await assert_not_frozen(session, service.id)
-    await assert_not_transferred(session, service.id)
     existing = await cancellation_status(session, user, service_id, shop_id=shop_id)
-    if existing and existing["status"] in {"pending", "processing", "review", "approved"}:
+    if existing and existing["status"] in OPEN_REQUEST_STATUSES:
         return existing
-    row = ServiceCancellation(service_id=service.id, user_id=user.id, reseller_id=shop_id,
-                              reason=reason, pg_user_id=service.pg_user_id)
-    session.add(row)
-    try:
-        await session.commit()
-    except IntegrityError:
-        await session.rollback()
-        user = await session.get(BotUser, user_id)
+    policy = cancellation_policy(ui)
+    blocked = await _request_block(session, service, policy)
+    if blocked:
+        raise ValueError(blocked)
+    blocked, quote = await _quote(session, service, policy, shop_id=shop_id, now=datetime.now(timezone.utc))
+    if blocked:
+        raise ValueError(blocked)
+    await _insert_request(session, user, service, shop_id=shop_id, reason=reason, quote=quote)
+    user = await session.get(BotUser, user_id)
     status = await cancellation_status(session, user, service_id, shop_id=shop_id)
     if status is None:
         raise ValueError("درخواست قبلی این سرویس نیاز به بررسی پشتیبانی دارد")
+    if status["status"] == "pending" and quote is not None and policy.auto_allows(quote.amount):
+        await _approve_automatically(session, int(status["id"]), shop_id=shop_id, amount=quote.amount)
+        user = await session.get(BotUser, user_id)
+        status = await cancellation_status(session, user, service_id, shop_id=shop_id)
     return status
 
 

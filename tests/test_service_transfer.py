@@ -211,7 +211,7 @@ class TransferTests(unittest.IsolatedAsyncioTestCase):
         await self.accept(await self.make())
         async with self.Session() as session:
             with self.assertRaisesRegex(ValueError, "منتقل"):
-                await request_cancellation(session, await session.get(BotUser, FRIEND), 10, shop_id=None, reason="x")
+                await request_cancellation(session, await session.get(BotUser, FRIEND), 10, shop_id=None, ui={}, reason="x")
 
     async def test_a_trial_service_never_moves_even_on_all_plans(self) -> None:
         token = await self.make()

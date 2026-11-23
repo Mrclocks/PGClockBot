@@ -83,6 +83,7 @@ from app.services.bot_setting_values import (
     wants_default_text,
 )
 from app.services.receipt_risk import BOT_FIELDS as RECEIPT_RISK_BOT_FIELDS
+from app.services.service_cancellation_settings import BOT_FIELDS as SERVICE_CANCEL_BOT_FIELDS, GROUP_TITLE as SERVICE_CANCEL_GROUP
 from app.services.service_freeze_settings import BOT_FIELDS as SERVICE_FREEZE_BOT_FIELDS, GROUP_TITLE as SERVICE_FREEZE_GROUP
 from app.services.service_transfer_settings import (
     BOT_FIELDS as SERVICE_TRANSFER_BOT_FIELDS,
@@ -386,6 +387,7 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("freeze", SERVICE_FREEZE_GROUP, SERVICE_FREEZE_BOT_FIELDS),
             ("transfer", SERVICE_TRANSFER_GROUP, SERVICE_TRANSFER_BOT_FIELDS),
+            ("svccancel", SERVICE_CANCEL_GROUP, SERVICE_CANCEL_BOT_FIELDS),
             # Same keys as the web «مینی‌اپ» tab; the brand colour stays on the web (it has a preview).
             ("miniapp", "مینی‌اپ", [
                 (MINIAPP_SHOPS_SWITCH, "مینی‌اپ فروشگاه نمایندگان", "toggle"),

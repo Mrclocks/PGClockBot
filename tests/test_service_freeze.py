@@ -268,7 +268,7 @@ class FreezeTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ValueError, "متوقف"):
                 await validate_renewal_selection(session, user_id=1, service=service, plan=await session.get(Plan, 1), shop_id=None)
             with self.assertRaisesRegex(ValueError, "متوقف"):
-                await request_cancellation(session, user, 10, shop_id=None, reason="x")
+                await request_cancellation(session, user, 10, shop_id=None, ui={}, reason="x")
 
     async def test_an_open_order_or_a_running_automation_blocks_the_freeze(self) -> None:
         async with self.Session() as session:

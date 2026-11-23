@@ -551,17 +551,38 @@
       </form>`).join("")}`;
   }
 
-  function cancellationHtml(row, serviceId) {
+  function cancellationQuoteHtml(offer) {
+    if (offer.refund === "none") return '<p class="sm">این فروشگاه برای لغو سرویس مبلغی برنمی‌گرداند.</p>';
+    const q = offer.quote;
+    if (!q) return '<p class="muted sm">پنل الان پاسخ نداد؛ مبلغ برگشتی را ادمین تعیین می‌کند.</p>';
+    const lines = [`<p class="sm">مبلغ برگشتی تقریبی: <strong>${esc(money(q.amount))}</strong></p>`];
+    if (offer.refund === "remaining") {
+      lines.push(`<p class="muted sm">بر اساس ${esc(num(q.remaining_percent))}٪ باقی‌مانده از ${esc(money(q.paid_amount))} پرداختی دورهٔ فعلی</p>`);
+    }
+    if (Number(offer.fee_percent) > 0) lines.push(`<p class="muted sm">کارمزد لغو (${esc(num(offer.fee_percent))}٪) کم شده است.</p>`);
+    if (!offer.auto) lines.push('<p class="muted sm">مبلغ نهایی را ادمین تعیین می‌کند.</p>');
+    return lines.join("");
+  }
+
+  const CANCEL_AUTO_NOTE = "با ثبت، سرویس همان لحظه غیرفعال و مبلغ به کیف پول برمی‌گردد. این کار برگشت‌پذیر نیست.";
+  const CANCEL_MANUAL_NOTE = "پس از ثبت، ادمین درخواست را بررسی می‌کند و تا آن موقع سرویس فعال می‌ماند.";
+
+  // ``offer`` comes from the server's cancellation settings; without it the old rule applies.
+  function cancellationHtml(row, serviceId, offer) {
     const sid = Number(serviceId) || 0;
-    const canRequest = !row || ["rejected", "withdrawn"].includes(row.status);
-    return `<p class="muted sm">مبلغ برگشتی را اپراتور تعیین می‌کند و پس از تأیید غیرفعال‌شدن سرویس به کیف پول برمی‌گردد. ثبت درخواست، سرویس را غیرفعال نمی‌کند.</p>
-      ${row ? `<div class="card inset"><strong>${esc(row.label)}</strong>
+    const canRequest = offer ? Boolean(offer.can_request) : !row || ["rejected", "withdrawn"].includes(row.status);
+    const auto = Boolean(offer && offer.auto);
+    const statusHtml = row ? `<div class="card inset"><strong>${esc(row.label)}</strong>
         ${row.refund_amount == null ? "" : `<p class="sm">اعتبار برگشتی: ${esc(money(row.refund_amount))}</p>`}
-        ${row.operator_note ? `<p class="sm pre-line">${esc(row.operator_note)}</p>` : ""}</div>` : ""}
-      ${canRequest ? `<form data-form="cancellation" data-id="${sid}">
+        ${row.operator_note ? `<p class="sm pre-line">${esc(row.operator_note)}</p>` : ""}</div>` : "";
+    const blocked = offer && !canRequest && !row ? `<p class="muted sm">${esc(offer.blocked_reason || "")}</p>` : "";
+    const form = canRequest ? `${offer ? `<div class="card inset">${cancellationQuoteHtml(offer)}</div>` : ""}
+      <p class="muted sm">${auto ? CANCEL_AUTO_NOTE : CANCEL_MANUAL_NOTE}</p>
+      <form data-form="cancellation" data-id="${sid}" data-auto="${auto ? "1" : "0"}">
         <label class="form-field"><span>دلیل لغو</span><textarea name="reason" rows="3" maxlength="1000" required></textarea></label>
-        <button type="submit" class="btn block is-danger">ثبت درخواست لغو</button>
-      </form>` : ""}`;
+        <button type="submit" class="btn block is-danger">${auto ? "لغو سرویس" : "ثبت درخواست لغو"}</button>
+      </form>` : "";
+    return `${statusHtml}${blocked}${form}`;
   }
 
   function qrHtml(pngBase64) {
