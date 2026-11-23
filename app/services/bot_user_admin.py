@@ -49,6 +49,7 @@ from app.services.pasarguard import (
     user_subscription_url,
 )
 from app.services.pg_access import staff_user_actions
+from app.services.plan_panel_groups import assert_panel_assigned_group, plan_uses_panel_groups
 from app.services.redact import user_safe_error
 from app.services.wallet import credit_wallet, debit_wallet, get_wallet_balance, list_transactions
 from app.services.service_scope import assert_service_in_shop, service_shop_id, shop_services_clause
@@ -545,7 +546,7 @@ async def admin_provision_service(
     group_ids = None
     if not plan.pg_template_id:
         group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
-        if not group_ids:
+        if not group_ids and not plan_uses_panel_groups(plan):
             raise ValueError(
                 "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
             )
@@ -585,6 +586,8 @@ async def admin_provision_service(
         raw_uid = pg_user.get("id") if isinstance(pg_user, dict) else None
         if raw_uid:
             pg_uid = int(raw_uid)
+        if plan_uses_panel_groups(plan):
+            assert_panel_assigned_group(pg_user if isinstance(pg_user, dict) else None)
 
         if shop_rid and getattr(pg, "_login_username", None) is None:
             owner_name = (pg_owner or "").strip()

@@ -5,8 +5,8 @@ When the platform grants a shop ``custom_service_name`` (or turns on
 required name step (a typed name or «🎲 اسم تصادفی») before the payment screen. The
 name is stored on the order and takes the place of the naming pattern's ``{random}``
 part at delivery, so the shop's prefix and suffix stay. A name already in use gets a
-short random ending without asking the buyer, here and again at delivery if the
-panel still holds it (see ``orders.create_with_name_fallback``).
+number at the end of the username (``clk_ali_x2``) without asking the buyer, here and
+again at delivery if the panel still holds it (see ``orders.create_with_name_fallback``).
 """
 
 from __future__ import annotations
@@ -135,13 +135,13 @@ async def _name_in_use(session: AsyncSession, order: Order, name: str, username:
 
 
 async def _free_name(session: AsyncSession, order: Order, wanted: str) -> tuple[str, str]:
-    """``wanted`` if free, else the first free variant with a random ending; returns (name, username)."""
+    """``wanted`` if free, else the first free numbered variant; returns (name, username)."""
     name = wanted
     for _ in range(MAX_VARIANT_TRIES):
         username = await preview_username(session, order, name)
         if not await _name_in_use(session, order, name, username):
             return name, username
-        name = chosen_name_variant(wanted)
+        name = chosen_name_variant(name)
     raise ValueError(NO_FREE_NAME)
 
 
@@ -166,7 +166,7 @@ async def _store_name(session: AsyncSession, order_id: int, *, buyer_id: int, na
 async def set_service_name(session: AsyncSession, order: Order, *, buyer_id: int, raw: str | None) -> str:
     """Store the name on the buyer's own unpaid order; returns the panel username.
 
-    A name already in use silently gets a short random ending. Two buyers sending
+    A name already in use silently gets a number at the end. Two buyers sending
     the same name at the same moment both pass the lookup; the unique index on open
     orders refuses the second write, and the retry finds the name taken.
     """

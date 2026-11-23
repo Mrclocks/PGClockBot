@@ -615,3 +615,5 @@ tests/test_trial_retrial.py
 tests/test_install_repair.py
 tests/test_lite_mode.py
 tests/test_service_cancellation_settings.py
+# Panel-assigned groups: who may skip choosing a group, and delivery refuses a groupless user.
+tests/test_plan_panel_groups.py

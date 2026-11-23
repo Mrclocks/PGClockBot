@@ -15,10 +15,15 @@ from app.bot import keyboards as kb
 from app.bot.list_pages import page_number
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
+from app.services.plan_panel_groups import (
+    PANEL_GROUPS_LABEL,
+    apply_plan_group_target,
+    panel_groups_offered,
+    resolve_plan_group_target,
+)
 from app.services.renewal_carry import CARRY_CODES, carry_button_text, carry_status_text, toggle_plan_carry
 from app.services.plans_catalog import (
     load_pg_plan_options,
-    plan_groups_denial,
     plan_template_denial,
     role_requires_template,
 )
@@ -144,7 +149,7 @@ def _plan_text(plan: Plan, *, category_name: str | None = None) -> str:
     src = (
         f"تمپلیت #{plan.pg_template_id}"
         if plan.pg_template_id
-        else (f"گروه {plan.pg_group_ids}" if plan.pg_group_ids else "—")
+        else (f"گروه {plan.pg_group_ids}" if plan.pg_group_ids else (PANEL_GROUPS_LABEL if plan.pg_panel_groups else "—"))
     )
     cat = category_name or "—"
     description = html.escape((plan.description or "").strip()) or "—"
@@ -687,6 +692,11 @@ async def _reseller_continue_pg_mode(
         rows.append(
             [InlineKeyboardButton(text="📦 انتخاب گروه پاسارگارد", callback_data="res:plan:mode:groups")]
         )
+    panel_groups = panel_groups_offered(staff, visible_groups=groups, pg_error=pg_error)
+    if panel_groups:
+        rows.append(
+            [InlineKeyboardButton(text=f"🗂 {PANEL_GROUPS_LABEL}", callback_data="res:plan:mode:panel")]
+        )
     if templates:
         rows.append(
             [InlineKeyboardButton(text="🧩 انتخاب تمپلیت", callback_data="res:plan:mode:tpl")]
@@ -699,7 +709,7 @@ async def _reseller_continue_pg_mode(
         if isinstance(message_or_cb, Message)
         else message_or_cb.message
     )
-    if not groups and not templates:
+    if not groups and not templates and not panel_groups:
         await state.clear()
         if target_msg:
             await target_msg.answer(
@@ -843,6 +853,36 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
+    data = await state.get_data()
+    selected = [int(x) for x in (data.get("selected_groups") or [])]
+    await _save_group_plan(
+        callback, state, session, db_user, selected,
+        is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id,
+    )
+
+
+@router.callback_query(F.data == "res:plan:mode:panel", ResellerPlanStates.mode)
+async def res_plan_save_panel_groups(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    await _save_group_plan(
+        callback, state, session, db_user, [],
+        is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id,
+    )
+
+
+async def _save_group_plan(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    selected: list[int],
+    *,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+) -> None:
+    """Save a group-mode plan; no selection means the panel assigns the groups, when the role allows it."""
     owner_id, profile = await _actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if not owner_id or not profile:
         await callback.answer(feedback.NOT_RESELLER, show_alert=True)
@@ -850,13 +890,13 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
     if not has_bot_perm(profile, "plans"):
         await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
-    data = await state.get_data()
-    selected = [int(x) for x in (data.get("selected_groups") or [])]
     staff = await _staff_ctx(profile, session)
-    groups_denial = plan_groups_denial(staff, selected) if selected else "حداقل یک گروه مجاز انتخاب کنید"
-    if groups_denial:
-        await callback.answer(groups_denial, show_alert=True)
+    try:
+        target = await resolve_plan_group_target(session, staff, selected)
+    except ValueError as e:
+        await callback.answer(str(e)[:190], show_alert=True)
         return
+    data = await state.get_data()
     cat_raw = data.get("category_id")
     category_id = int(cat_raw) if cat_raw not in (None, "", 0, "0") else None
     plan = Plan(
@@ -864,12 +904,11 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
         price=int(data.get("price") or 0),
         duration_days=int(data.get("days") or 30),
         data_limit_gb=data.get("gb"),
-        pg_group_ids=",".join(str(i) for i in selected),
-        pg_template_id=None,
         owner_reseller_id=owner_id,
         category_id=category_id,
         is_active=True,
     )
+    apply_plan_group_target(plan, target)
     session.add(plan)
     await session.commit()
     await state.clear()

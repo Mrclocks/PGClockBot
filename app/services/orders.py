@@ -46,12 +46,14 @@ from app.services.delivery_recovery_policy import DELIVERING_STALE_AFTER, DELIVE
 from app.services.pg_read_resilience import outside_web_read_budget
 from app.services.pasarguard import (
     PasarGuardError,
+    explain_missing_group,
     extract_sub_token,
     get_pg,
     parse_group_ids,
     user_subscription_url,
 )
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
+from app.services.plan_panel_groups import assert_panel_assigned_group, plan_uses_panel_groups
 from app.services.random_discounts import apply_random_discount
 from app.services.order_discounts import record_code_discount, release_order_discounts
 from app.services.discount_rules import apply_automatic_discounts, release_rule_discount, replace_rule_with_code
@@ -285,7 +287,11 @@ DEFAULT_USERNAME_PREFIX = "clk"
 USERNAME_TAKEN_STATUS = 409
 # Longest buyer-chosen name; a taken name keeps this length after its random ending.
 CHOSEN_NAME_MAX_LENGTH = 20
-CHOSEN_NAME_ENDING_LENGTH = 4
+# A buyer's name is stored as "ali" or, once taken, "ali-2": the "-" cannot occur in a
+# valid name, so the number can go after the shop's suffix instead of inside the name.
+CHOSEN_NAME_NUMBER_SEPARATOR = "-"
+FIRST_TAKEN_NAME_NUMBER = 2
+NAME_FALLBACK_TRIES = 5
 
 
 def _random_alnum(length: int = 8) -> str:
@@ -293,10 +299,20 @@ def _random_alnum(length: int = 8) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+def split_chosen_name(stored: str) -> tuple[str, str]:
+    """``("ali", "2")`` for ``"ali-2"``; ``("ali", "")`` for a name without a number."""
+    base, separator, number = stored.rpartition(CHOSEN_NAME_NUMBER_SEPARATOR)
+    if separator and base and number.isdigit():
+        return base, number
+    return stored, ""
+
+
 def chosen_name_variant(name: str) -> str:
-    """The buyer's name with a short random ending, for when the name is taken."""
-    keep = CHOSEN_NAME_MAX_LENGTH - CHOSEN_NAME_ENDING_LENGTH - 1
-    return f"{name[:keep]}_{_random_alnum(CHOSEN_NAME_ENDING_LENGTH)}"
+    """The buyer's name with the next number ("ali" -> "ali-2" -> "ali-3"), for when it is taken."""
+    base, number = split_chosen_name(name)
+    next_number = str(int(number) + 1 if number else FIRST_TAKEN_NAME_NUMBER)
+    keep = CHOSEN_NAME_MAX_LENGTH - len(CHOSEN_NAME_NUMBER_SEPARATOR) - len(next_number)
+    return f"{base[:keep]}{CHOSEN_NAME_NUMBER_SEPARATOR}{next_number}"
 
 
 PG_USERNAME_MIN_LENGTH = 3
@@ -495,15 +511,18 @@ async def generate_pg_username(
     volume = getattr(plan, "data_limit_gb", None)
     fallback_id = "" if user_id is None else str(user_id)
     tg_fallback = str(getattr(user, "telegram_id", None) or fallback_id)
-    return _random_username(
+    base_name, number = split_chosen_name(chosen_name) if chosen_name else (None, "")
+    built = _random_username(
         prefix=prefix,
         suffix=suffix,
         pattern=pattern,
         user_id=user_id,
         username=getattr(user, "username", None) or tg_fallback,
         plan_volume=f"{volume:g}" if volume is not None and volume > 0 else "unlimited",
-        chosen_name=chosen_name,
+        chosen_name=base_name,
     )
+    # The number of a taken name closes the username, after the shop's suffix.
+    return f"{built[: PG_USERNAME_MAX_LENGTH - len(number)]}{number}"
 
 
 async def list_active_plans(
@@ -2531,7 +2550,7 @@ async def deliver_order(
         group_ids = None
         if not plan.pg_template_id:
             group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
-            if not group_ids:
+            if not group_ids and not plan_uses_panel_groups(plan):
                 raise ValueError(
                     "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
                 )
@@ -2566,15 +2585,18 @@ async def deliver_order(
                 }
                 pg_user = await pg.create_user_from_template(payload)
             else:
-                pg_user = await pg.create_user(
-                    build_user_create_payload(
-                        username=username,
-                        group_ids=group_ids or [],
-                        data_limit=data_limit,
-                        expire_ts=expire,
-                        note=note,
+                try:
+                    pg_user = await pg.create_user(
+                        build_user_create_payload(
+                            username=username,
+                            group_ids=group_ids or [],
+                            data_limit=data_limit,
+                            expire_ts=expire,
+                            note=note,
+                        )
                     )
-                )
+                except PasarGuardError as exc:
+                    raise explain_missing_group(exc, group_ids or []) from exc
             return pg_user
 
         async def _create_one(index: int) -> UserService:
@@ -2586,14 +2608,24 @@ async def deliver_order(
                 index=index,
                 quantity=qty,
             )
+            attempt_name = chosen_name
+
+            async def _next_username() -> str:
+                nonlocal attempt_name
+                attempt_name = chosen_name_variant(attempt_name)
+                return await _username(attempt_name)
+
             pg_user, username = await create_with_name_fallback(
                 lambda name: _create_panel_user(name, note),
                 username,
-                regenerate=(lambda: _username(chosen_name_variant(chosen_name))) if chosen_name else None,
+                regenerate=_next_username if chosen_name else None,
             )
             pg_uid = pg_user.get("id")
             if pg_uid:
                 created_pg_ids.append(int(pg_uid))
+            if plan_uses_panel_groups(plan):
+                # After recording the id, so the rollback below deletes the groupless user.
+                assert_panel_assigned_group(pg_user)
             if plan.pg_template_id and _order_note(order) == CUSTOM_ORDER_NOTE and pg_uid:
                 # A template brings its own volume and expiry; the buyer paid for the chosen ones.
                 applied = await pg.modify_user_by_id(
@@ -2716,20 +2748,22 @@ async def create_with_name_fallback(
     *,
     regenerate: Callable[[], Awaitable[str]] | None,
 ) -> tuple[dict, str]:
-    """Create the panel user; a chosen name the panel already holds gets a random ending.
+    """Create the panel user; a chosen name the panel already holds gets the next number.
 
     Returns the panel reply and the username actually used. The panel answers 409 before
-    creating anything, so the second call cannot duplicate a user, and a paid order is
+    creating anything, so each retry cannot duplicate a user, and a paid order is
     never left undelivered because of the buyer's name.
     """
-    try:
-        return await create(username), username
-    except PasarGuardError as exc:
-        if regenerate is None or exc.status_code != USERNAME_TAKEN_STATUS:
-            raise
-        logger.info("chosen service name taken on the panel; adding a random ending")
-    generated = await regenerate()
-    return await create(generated), generated
+    candidate = username
+    for attempt in range(NAME_FALLBACK_TRIES + 1):
+        try:
+            return await create(candidate), candidate
+        except PasarGuardError as exc:
+            if regenerate is None or exc.status_code != USERNAME_TAKEN_STATUS or attempt == NAME_FALLBACK_TRIES:
+                raise
+            logger.info("chosen service name taken on the panel; adding a number")
+        candidate = await regenerate()
+    raise AssertionError("unreachable")  # pragma: no cover - the loop returns or raises
 
 
 MIN_TOPUP_AMOUNT = 1000

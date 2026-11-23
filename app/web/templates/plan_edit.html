@@ -64,10 +64,14 @@
           {% set gid = g.get('id')|string %}
           {{ switch_chip('group_' ~ g.get('id'), g.get('name') or g.get('id'), checked=(gid in selected_groups), value=g.get('id')) }}
           {% else %}
+          {% if pg_panel_groups %}
+          <span class="muted">نقش پاسارگارد شما گروهی نشان نمی‌دهد؛ گروه‌هایی که مدیر پنل به حساب شما داده خودکار روی کاربر می‌نشیند.</span>
+          {% else %}
           <span class="muted">گروهی نیست — از منوی پاسارگارد → گروه‌ها بسازید.</span>
+          {% endif %}
           {% endfor %}
         </div>
-        <small class="muted">حداقل یک گروه</small>
+        <small class="muted">{% if pg_panel_groups %}گروه‌های پیش‌فرض پنل{% else %}حداقل یک گروه{% endif %}</small>
       </div>
     </div>
     <div id="mode-template" class="form-stack" hidden>

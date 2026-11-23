@@ -240,6 +240,10 @@ BTN_SERVICE_MORE: list[Field] = [
     ("btn_svc_auto", "تنظیمات خودکار", "text"),
     ("btn_svc_cancel", "درخواست لغو سرویس", "text"),
     ("btn_svc_delete", "حذف سرویس", "text"),
+    ("btn_svc_freeze", "توقف موقت سرویس", "text"),
+    ("btn_svc_unfreeze", "ادامهٔ سرویس", "text"),
+    ("btn_svc_transfer", "انتقال به شخص دیگر", "text"),
+    ("btn_svc_transfer_cancel", "لغو لینک انتقال", "text"),
     ("btn_svc_add_existing", "اتصال اشتراک قبلی", "text"),
 ]
 
