@@ -11,7 +11,13 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.db import Base
 from app.db.models import BotUser, Order, OrderStatus, Plan, ResellerProfile, UserService
 from app.services import custom_service_name as naming
-from app.services.orders import chosen_name_variant, create_with_name_fallback, deliver_order, generate_pg_username
+from app.services.orders import (
+    NAME_FALLBACK_TRIES,
+    chosen_name_variant,
+    create_with_name_fallback,
+    deliver_order,
+    generate_pg_username,
+)
 from app.services.pasarguard import PasarGuardError
 
 ENABLED = {naming.SETTING_KEY: "1"}
@@ -60,6 +66,22 @@ class NameFallbackTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, ({"id": 1}, "clk_a1b2c3d4"))
         self.assertEqual([call.args[0] for call in create.await_args_list], ["clk_ali", "clk_a1b2c3d4"])
+
+    async def test_a_name_taken_repeatedly_walks_up_the_numbers(self) -> None:
+        taken = PasarGuardError("User already exists", status_code=409)
+        create = AsyncMock(side_effect=[taken, taken, {"id": 1}])
+        numbers = iter(["clk_ali2", "clk_ali3"])
+
+        result = await create_with_name_fallback(create, "clk_ali", regenerate=AsyncMock(side_effect=lambda: next(numbers)))
+
+        self.assertEqual(result, ({"id": 1}, "clk_ali3"))
+
+    async def test_the_number_retries_stop_after_the_limit(self) -> None:
+        taken = PasarGuardError("User already exists", status_code=409)
+        create = AsyncMock(side_effect=taken)
+        with self.assertRaises(PasarGuardError):
+            await create_with_name_fallback(create, "clk_ali", regenerate=AsyncMock(return_value="clk_ali2"))
+        self.assertEqual(create.await_count, NAME_FALLBACK_TRIES + 1)
 
     async def test_other_panel_errors_are_not_retried(self) -> None:
         create = AsyncMock(side_effect=PasarGuardError("bad group", status_code=400))
@@ -289,6 +311,21 @@ class StoredNameTests(NameFixture):
         self.assertEqual(delivered.status, OrderStatus.DELIVERED.value)
         service = await self.session.get(UserService, delivered.service_id)
         self.assertEqual(service.pg_username, "clk_ali2")
+
+    async def test_delivery_walks_the_numbers_when_the_panel_holds_several(self) -> None:
+        order = await self.order(self.buyer, status=OrderStatus.PAID.value, requested_username="ali")
+        taken = PasarGuardError("User already exists", status_code=409)
+        pg = SimpleNamespace(
+            create_user_from_template=AsyncMock(
+                side_effect=[taken, taken, {"id": 7, "subscription_url": "https://x/sub/v"}]
+            )
+        )
+        with patch("app.services.orders.get_pg", return_value=pg):
+            delivered = await deliver_order(self.session, order)
+
+        self.assertEqual(delivered.status, OrderStatus.DELIVERED.value)
+        service = await self.session.get(UserService, delivered.service_id)
+        self.assertEqual(service.pg_username, "clk_ali3")
 
 
 class NameStepHandlerTests(NameFixture):
