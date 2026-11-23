@@ -43,9 +43,8 @@ def upgrade() -> None:
     missing = [(name, kind) for name, kind in COLUMNS if name not in existing]
     if not missing:
         return
-    with op.batch_alter_table(TABLE) as batch:
-        for name, kind in missing:
-            batch.add_column(sa.Column(name, kind(), nullable=True))
+    for name, kind in missing:
+        op.add_column(TABLE, sa.Column(name, kind(), nullable=True))
 
 
 def downgrade() -> None:
@@ -55,6 +54,5 @@ def downgrade() -> None:
     present = [name for name, _kind in COLUMNS if name in existing]
     if not present:
         return
-    with op.batch_alter_table(TABLE) as batch:
-        for name in present:
-            batch.drop_column(name)
+    for name in present:
+        op.drop_column(TABLE, name)
