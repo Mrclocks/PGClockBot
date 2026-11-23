@@ -13,13 +13,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import ChoiceLoader, DictLoader, Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.random_discounts import register_random_discounts
 from app.db.models import Base, BotUser, RandomDiscount
 from app.services.formatting import format_money, format_number
 from app.services.marketing_nav import RANDOM_DISCOUNTS, marketing_sections
 from app.services.resellers import DEFAULT_FEATURE_PERMS, feature_perm_groups
+from tests.postgres_support import scoped_async_engine
 
 TEMPLATES = Path(__file__).resolve().parents[1] / "app/web/templates"
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
@@ -46,7 +47,7 @@ class Controls(HTMLParser):
 
 class RandomDiscountAdminTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

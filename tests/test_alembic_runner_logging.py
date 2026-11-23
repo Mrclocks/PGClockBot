@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import logging
-import tempfile
 import unittest
-from pathlib import Path
 
 from app.db.alembic_runner import stamp_head
+from tests.postgres_support import scoped_database_url
 
 
 class AlembicRunnerLoggingTests(unittest.TestCase):
@@ -17,8 +16,7 @@ class AlembicRunnerLoggingTests(unittest.TestCase):
         handler = logging.NullHandler()
         root.addHandler(handler)
         self.addCleanup(root.removeHandler, handler)
-        with tempfile.TemporaryDirectory() as tmp:
-            stamp_head(f"sqlite:///{Path(tmp) / 'm.db'}")  # runs alembic/env.py
+        stamp_head(scoped_database_url(tables=False))  # runs alembic/env.py
         self.assertFalse(existing.disabled)
         self.assertIn(handler, root.handlers)
         with self.assertLogs(existing.name, level="WARNING"):

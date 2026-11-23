@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, LoyaltyReward, ShopPoints, Ticket
 from app.services import miniapp_badges
@@ -15,6 +15,7 @@ from app.services.customer_support import count_answered_tickets
 from app.services.loyalty import SETTING_LOYALTY_ENABLED
 from app.services.miniapp_badges import HomeBadges, home_badges
 from app.services.users import clear_settings_cache, set_settings_bulk
+from tests.postgres_support import scoped_async_engine
 
 SHOP, OTHER_SHOP = 5, 6
 CUSTOMER, OTHER_CUSTOMER = 10, 11
@@ -23,7 +24,7 @@ CUSTOMER, OTHER_CUSTOMER = 10, 11
 class BadgeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

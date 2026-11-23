@@ -13,7 +13,7 @@ from aiogram.exceptions import TelegramForbiddenError
 from aiogram.methods import SendPhoto
 from fastapi import FastAPI
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_pages import register_miniapp_pages
 from app.api.miniapp_topup import register_miniapp_topup
@@ -21,6 +21,7 @@ from app.db.models import Base, BotUser, Payment, WalletTransaction
 from app.services import payment_settlement
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
 from app.services.wallet_topup import RECEIPT_MAX_BYTES, receipt_image_kind
+from tests.postgres_support import scoped_async_engine
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
@@ -62,13 +63,15 @@ class MiniAppTopupTestCase(unittest.IsolatedAsyncioTestCase):
     caller_id = 1
 
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
+        self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
+        self.session = self.sessions()
         self.session.add_all([
             BotUser(id=1, telegram_id=101, referral_code="buyer", role="user", wallet_balance=0),
             BotUser(id=2, telegram_id=102, referral_code="other", role="user", wallet_balance=0),
+            BotUser(id=3, telegram_id=103, referral_code="shop3", role="reseller"),
             BotUser(id=4, telegram_id=104, referral_code="admin", role="admin"),
         ])
         await self.session.commit()
@@ -78,8 +81,8 @@ class MiniAppTopupTestCase(unittest.IsolatedAsyncioTestCase):
         self.auto_approve = "0"
         payment_settlement._recent_psp_checks.clear()
 
-        async def load_user(*_args):
-            return await self.session.scalar(select(BotUser).where(BotUser.id == self.caller_id))
+        async def load_user(session, *_args):
+            return await session.scalar(select(BotUser).where(BotUser.id == self.caller_id))
 
         async def settings(*_args, **_kwargs):
             return dict(self.settings)
@@ -106,7 +109,9 @@ class MiniAppTopupTestCase(unittest.IsolatedAsyncioTestCase):
         app = FastAPI()
 
         async def get_db():
-            yield self.session
+            # One session per request, as in the app: concurrent requests must not share a connection.
+            async with self.sessions() as session:
+                yield session
 
         register_miniapp_pages(app, render=lambda *args: "", get_db=get_db)
         register_miniapp_topup(app, get_db=get_db)

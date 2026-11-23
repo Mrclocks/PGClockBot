@@ -62,6 +62,14 @@ ACTION_LABELS = {
     "service_cleanup_exempt": "معاف‌کردن سرویس از پاکسازی",
     "service_cleanup_unexempt": "برگرداندن سرویس به پاکسازی",
     "service_cleanup_hold": "تمدید مهلت حذف سرویس",
+    "payment_approve": "تأیید رسید پرداخت",
+    "payment_reject": "رد رسید پرداخت",
+    "free_checkout": "تحویل رایگان سفارش",
+    "setting_on": "روشن کردن تنظیم",
+    "setting_off": "خاموش کردن تنظیم",
+    "job_rerun": "اجرای دوبارهٔ کار پس‌زمینه",
+    "maintenance_run": "ابزار نگهداری",
+    "trial_reset": "اجازهٔ تست دوباره",
 }
 
 TARGET_LABELS = {
@@ -69,6 +77,10 @@ TARGET_LABELS = {
     "customer": "مشتری",
     "pg_user": "کاربر پاسارگارد",
     "service": "سرویس",
+    "payment": "پرداخت",
+    "order": "سفارش",
+    "setting": "تنظیم",
+    "job": "کار پس‌زمینه",
 }
 
 

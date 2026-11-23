@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import make_reseller_plan as flow
 from app.db import Base
 from app.db.models import BotUser, ResellerPlan, ResellerProfile
+from tests.postgres_support import scoped_async_engine
 
 ROLES = [
     {"id": 1, "name": "owner", "is_owner": True},
@@ -61,8 +58,7 @@ def _callback(data: str) -> SimpleNamespace:
 
 class MakeResellerPlanFlowTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'b.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -87,7 +83,6 @@ class MakeResellerPlanFlowTests(unittest.IsolatedAsyncioTestCase):
         for gate in self.gates:
             gate.stop()
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _ask(self) -> tuple[FakeState, SimpleNamespace]:
         state, message = FakeState(), SimpleNamespace(answer=AsyncMock())

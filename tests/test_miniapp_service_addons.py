@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from fastapi import FastAPI
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_feeds import register_miniapp_feeds
 from app.api.miniapp_pages import register_miniapp_pages
@@ -20,6 +20,7 @@ from app.services.notifications import (
     notify_pending_approval,
 )
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 GB = 1024**3
 DAY = 86400
@@ -40,7 +41,7 @@ class FakeAddonPanel:
 
 class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

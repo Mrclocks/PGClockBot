@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.edit_mode import CATALOG_ROW_SCREENS
 from app.bot.handlers.catalog_row_editor import parse_request
@@ -18,6 +18,7 @@ from app.services import catalog_row_edits as rows
 from app.services.screen_editor import EditorActor, edit_mode_store
 from app.services.shop_scope import ShopScopeError
 from tests.chat_sim import ChatSim
+from tests.postgres_support import scoped_async_engine
 
 OWNER_STAFF = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_parent_id": None, "org_status": "active"}
 SHOP_A, SHOP_B = 900, 901
@@ -29,7 +30,7 @@ def _shop_staff(shop_id: int) -> dict:
 
 class _Catalog(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.addAsyncCleanup(self.engine.dispose)

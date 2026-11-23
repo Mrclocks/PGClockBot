@@ -6,13 +6,14 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.requests import Request
 
 from app.db.models import Base, BotUser, ResellerProfile, Role
 from app.services import miniapp_auth
 from app.services.receipt_review import ReviewDenied, mini_reviewer
 from app.services.users import demote_stale_admin
+from tests.postgres_support import scoped_async_engine
 
 
 def _request() -> Request:
@@ -25,7 +26,7 @@ def _request() -> Request:
 
 class StaleAdminDemotionTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

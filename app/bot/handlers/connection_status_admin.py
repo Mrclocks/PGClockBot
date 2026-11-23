@@ -13,17 +13,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.connection_status_admin_ui import (
     MonitorCommand, monitor_error, parse_monitor_callback, show_monitor_home, show_monitor_target,
 )
-from app.bot.connection_status_ui import MONITOR_HOME_CALLBACK, MonitorAdminLabel, bot_monitor_access, button, config_picker_text, monitor_text
+from app.bot.connection_status_ui import (
+    INTERVAL_PICKER_TEXT, MONITOR_HOME_CALLBACK, MonitorAdminLabel, bot_monitor_access, button, config_picker_text,
+    interval_keyboard, monitor_text,
+)
 from app.bot.keyboards import back_button
 from app.bot.handlers.connection_status_admin_input import CANCEL_CODE, MonitorInput
 from app.bot.nav_input import ask_text
 from app.bot.tg_utils import safe_edit_text
+from app.bot.verbatim_input import NotVerbatimTextInput
 from app.db.models import BotUser
 from app.services.connection_monitor_access import MonitorAccess
 from app.services.connection_monitor_actions import edit_monitor_target, select_monitor_config
 from app.services.connection_monitor_admin import monitor_config_choices, set_monitor_enabled
 from app.services.connection_monitor_preferences import delete_monitor_target, pause_monitor_target
 from app.services.connection_monitor_queue import queue_manual_check
+from app.services.connection_monitor_timing import monitor_timing, set_monitor_interval
 from app.services.connection_monitor_views import monitor_target_view
 from app.services.users import get_all_settings
 
@@ -32,7 +37,7 @@ router = Router(name="connection_status_admin")
 
 
 @router.message(Command("connection_admin"))
-@router.message(MonitorAdminLabel())
+@router.message(MonitorAdminLabel(), NotVerbatimTextInput())
 async def monitor_admin_entry(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext,
                                 is_reseller_bot: bool = False) -> None:
     try:
@@ -72,6 +77,13 @@ async def _config_picker(message: Message, session: AsyncSession, access: Monito
     await safe_edit_text(message, config_picker_text(page), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
+async def _interval_picker(message: Message, session: AsyncSession) -> None:
+    current = (await monitor_timing(session)).interval_seconds
+    ui = await get_all_settings(session)
+    await session.commit()
+    await safe_edit_text(message, INTERVAL_PICKER_TEXT, reply_markup=interval_keyboard(current, ui))
+
+
 async def _mutate(session: AsyncSession, access: MonitorAccess, command: MonitorCommand) -> int | None:
     if command.action == "pick":
         return await select_monitor_config(session, access, config_key=command.config_key)
@@ -86,6 +98,10 @@ async def _mutate(session: AsyncSession, access: MonitorAccess, command: Monitor
         await queue_manual_check(session, access, target_id=command.identifier, now=datetime.now(timezone.utc))
     elif command.action in ("run", "halt"):
         await set_monitor_enabled(session, access, enabled=command.action == "run")
+        return None
+    elif command.action == "every":
+        # The service accepts only the offered choices and only from the monitor's owner.
+        await set_monitor_interval(session, access, seconds=command.identifier)
         return None
     return command.identifier
 
@@ -125,6 +141,8 @@ async def monitor_admin_callback(callback: CallbackQuery, session: AsyncSession,
             )
         elif command.action == "item":
             await show_monitor_target(callback.message, session, access, target_id=command.identifier)
+        elif command.action == "interval":
+            await _interval_picker(callback.message, session)
         else:
             target_id = await _mutate(session, access, command)
             if target_id is None:

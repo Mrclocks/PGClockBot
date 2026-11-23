@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy import update
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import text, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 from app.db.models import (
@@ -24,20 +20,21 @@ from app.db.models import (
     Role,
     SettlementStatus,
 )
+from app.services import payment_settlement
 from app.services.payment_settlement import (
     CHANNEL_PSP,
     PSP_SETTLING_STALE_AFTER,
     idem_key_psp,
     recover_stuck_psp_settlements,
 )
+from tests.postgres_support import scoped_async_engine
 
 AMOUNT = 50_000
 
 
 class StuckSettlingRecoveryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 't.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
@@ -50,7 +47,6 @@ class StuckSettlingRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _seed(self, *, payment_status: str, claimed_ago: timedelta) -> int:
         async with self.Session() as session:
@@ -127,6 +123,23 @@ class StuckSettlingRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self._status(sid), SettlementStatus.SETTLING.value)
         self.notify.assert_not_awaited()
 
+
+    async def test_a_settlement_that_keeps_failing_does_not_hold_back_the_others(self) -> None:
+        # A database error on one row used to expire the rest and crash the pass on the next row.
+        stale = PSP_SETTLING_STALE_AFTER + timedelta(minutes=1)
+        broken = await self._seed(payment_status=PaymentStatus.APPROVED.value, claimed_ago=stale)
+        healthy = await self._seed(payment_status=PaymentStatus.APPROVED.value, claimed_ago=stale)
+        recover = payment_settlement._recover_one_stuck_settlement
+
+        async def recover_one(session: AsyncSession, settlement: PaymentSettlement) -> bool:
+            if int(settlement.id) == broken:
+                await session.execute(text("SELECT * FROM no_such_table"))
+            return await recover(session, settlement)
+
+        with patch("app.services.payment_settlement._recover_one_stuck_settlement", recover_one):
+            self.assertEqual(await self._recover(), 1)
+        self.assertEqual(await self._status(broken), SettlementStatus.SETTLING.value)
+        self.assertEqual(await self._status(healthy), SettlementStatus.SETTLED.value)
 
 if __name__ == "__main__":
     unittest.main()

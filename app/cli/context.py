@@ -141,4 +141,7 @@ def web_port(root: Path) -> int:
 
 
 def database_url(root: Path) -> str:
-    return env_get(root, "DATABASE_URL", "") or f"sqlite+aiosqlite:///{root / 'data' / 'bot.db'}"
+    url = env_get(root, "DATABASE_URL", "")
+    if not url:
+        raise CliError("DATABASE_URL is not set in .env (PostgreSQL required).")
+    return url

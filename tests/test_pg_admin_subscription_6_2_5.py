@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class RenewInvoiceTests(unittest.TestCase):
@@ -117,18 +114,6 @@ class ModelAndMigrationSurfaceTests(unittest.TestCase):
         self.assertTrue(hasattr(ResellerPlan, "duration_days"))
         self.assertTrue(hasattr(PgAdminSubscription, "pg_username"))
         self.assertTrue(hasattr(PgAdminSubscription, "extra_gb_purchased"))
-
-    def test_alembic_revision_exists(self):
-        path = ROOT / "alembic/versions/0011_pg_admin_subscription.py"
-        self.assertTrue(path.is_file())
-        text = path.read_text(encoding="utf-8")
-        self.assertIn("pg_admin_subscriptions", text)
-        self.assertIn("plan_kind", text)
-
-    def test_scheduler_registers_tick(self):
-        src = (ROOT / "app/jobs/scheduler.py").read_text(encoding="utf-8")
-        self.assertIn("run_pg_admin_subscription_tick", src)
-        self.assertIn("pg_admin_subscription", src)
 
     def test_renew_uses_subscription_service(self):
         from app.services import pg_admin_subscription, reseller_package

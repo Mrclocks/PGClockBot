@@ -23,6 +23,7 @@ from app.db.models import (
 from app.services.chat_records import keep_sent
 from app.services.automation_review import count_review_queue
 from app.services.color_tags import tag_mark
+from app.bot.message_button_picker import ask_for_buttons, register_flow
 from app.services.customer_marks import marks_for, marks_of
 from app.bot.handlers.reseller_customer_tools import customer_tool_rows
 from app.services.customer_service_lines import service_lines
@@ -70,6 +71,7 @@ def _group_back(action: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, back_callback_for(action))]])
 
 router = Router(name="reseller")
+SHOP_DM_FLOW = "shop_dm"
 
 
 class ResellerStates(StatesGroup):
@@ -615,8 +617,34 @@ async def res_user_message_send(
     data = await state.get_data()
     uid = int(data.get("msg_user_id") or 0)
     user = await session.get(BotUser, uid) if uid else None
-    await state.clear()
     if not user or not await is_shop_customer(session, user, int(owner_id)):
+        await state.clear()
+        await message.answer(feedback.NO_ACCESS_REPLY)
+        return
+    await state.update_data(msg_text=message.text or "")
+    await ask_for_buttons(message, state, flow=SHOP_DM_FLOW, shop_id=int(owner_id), renew=True)
+
+
+async def _send_shop_dm(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    buttons: list,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+    **_: object,
+) -> None:
+    """After the buttons step: the shop and the customer are checked again, then the message is sent."""
+    message = callback.message
+    data = await state.get_data()
+    await state.clear()
+    owner_id, profile = await _actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    uid = int(data.get("msg_user_id") or 0)
+    user = await session.get(BotUser, uid) if uid else None
+    if not isinstance(message, Message):
+        return
+    if not owner_id or not has_bot_perm(profile, "dashboard") or not user or not await is_shop_customer(session, user, int(owner_id)):
         await message.answer(feedback.NO_ACCESS_REPLY)
         return
     from app.services.users_quick import send_staff_dm
@@ -625,7 +653,8 @@ async def res_user_message_send(
         await send_staff_dm(
             session,
             user,
-            message.text or "",
+            str(data.get("msg_text") or ""),
+            buttons=buttons,
             shop_id=int(owner_id),
             actor=bot_user_panel_label(db_user),
             sender_tg=int(db_user.telegram_id or 0),
@@ -636,6 +665,9 @@ async def res_user_message_send(
         await message.answer(user_safe_error(e), reply_markup=_user_card_back(uid))
     except Exception as e:
         await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=_user_card_back(uid))
+
+
+register_flow(SHOP_DM_FLOW, _send_shop_dm)
 
 
 @router.callback_query(F.data.startswith("res:userrenew:"))

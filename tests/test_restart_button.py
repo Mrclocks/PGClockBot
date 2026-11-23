@@ -9,6 +9,7 @@ from aiogram.types import MessageEntity
 from app.bot import keyboards as kb
 from app.services.rich_text import pack_rich_text
 from app.bot.reply_keyboards import main_reply_keyboard, reseller_hub_main_keyboard
+from tests.postgres_support import scoped_async_engine
 
 LABEL = "🔄 شروع مجدد"
 
@@ -103,14 +104,14 @@ if __name__ == "__main__":
 
 class RestartAfterPurchaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_the_keyboard_sent_with_a_delivery_keeps_restart(self) -> None:
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         from app.db.models import Base, BotUser, Order
         from app.services.delivery import _buyer_reply_markup
         from app.services.users import clear_settings_cache
 
         clear_settings_cache()
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         async with async_sessionmaker(engine, expire_on_commit=False)() as session:

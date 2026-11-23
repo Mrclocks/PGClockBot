@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import app.db.models  # noqa: F401
 from app.db import Base
@@ -15,6 +15,7 @@ from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
 from app.services.billing import GB, PaygRateError, is_billing_enabled, run_billing_tick
 from app.services.billing_mode import BillingModeChangeError, switch_billing_mode
 from app.services.resellers import make_reseller, provision_existing_pg_admin
+from tests.postgres_support import scoped_async_engine
 
 PG_ADMIN = "shopadm"
 RATE = 1000
@@ -45,7 +46,7 @@ class FakePanel:
 
 class BillingModeTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

@@ -4,20 +4,21 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, FunnelEvent, Order, OrderStatus, Payment, Plan
 from app.services.funnel_events import STEP_PAY_START, record_order_funnel
 from app.services.orders import attach_receipt, deliver_order
 from app.services.users import clear_settings_cache, set_setting
-from app.services.ux20 import funnel_summary
+from app.services.funnel_metrics import funnel_summary
 from tests.test_miniapp_shop_purchase import SHOP, SHOP_PLAN
 from tests.test_miniapp_shop_purchase import ShopPurchaseTests as _ShopPurchaseTests
+from tests.postgres_support import scoped_async_engine
 
 
 class FunnelCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

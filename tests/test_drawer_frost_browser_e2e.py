@@ -102,8 +102,9 @@ class DrawerFrostE2E(unittest.TestCase):
                 # Frosted glass over the light page stays near white (~253); over the dim it turned grey (~220).
                 self.assertGreater(inside_drawer, 240)
                 self.assertGreater(inside_topbar, 240)
-                # The page beside the drawer is still dimmed.
-                self.assertLess(dimmed_page, 200)
+                # The page beside the drawer is still dimmed: clearly darker than the frosted drawer. The
+                # light theme's dim is a light film, so how dark it ends up depends on the page colour under it.
+                self.assertLess(dimmed_page, inside_drawer - 30)
                 browser.close()
         finally:
             server.stop()

@@ -3,9 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import os
 import secrets
-import tempfile
 import unittest
 from dataclasses import replace
 from html.parser import HTMLParser
@@ -22,14 +20,13 @@ from alembic.operations import Operations
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import DictLoader, Environment, FileSystemLoader, ChoiceLoader, select_autoescape
-from sqlalchemy import create_engine, func, inspect, select, text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.schema import CreateSchema, DropSchema
+from sqlalchemy import func, inspect, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.catalog_discounts import register_catalog_discounts
 from app.api.miniapp_feeds import catalog_plans_payload
 from app.db.models import (
-    Base, BotUser, CampaignRecipient, CatalogDiscount, DiscountCode, MarketingPreference,
+    BotUser, CampaignRecipient, CatalogDiscount, DiscountCode, MarketingPreference,
     Order, Plan, PlanCategory, ServiceAddonPack, TargetedCampaign, UserService,
 )
 from app.services.campaigns import campaign_send_delay, process_campaign
@@ -43,6 +40,7 @@ from app.services.service_automation import automation_settings
 from app.services.checkout_summary import checkout_summary
 from app.services.shop_scope import ShopScopeError
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
@@ -63,21 +61,7 @@ class ScriptSources(HTMLParser):
 
 class CatalogDiscountTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        test_url = os.environ.get("PGCLOCKBOT_CATALOG_TEST_URL")
-        self.admin_engine = None
-        if test_url:
-            self.schema = "catalog_test_" + secrets.token_hex(8)
-            self.admin_engine = create_async_engine(test_url)
-            async with self.admin_engine.begin() as connection:
-                await connection.execute(CreateSchema(self.schema))
-            self.engine = create_async_engine(test_url, connect_args={"server_settings": {"search_path": self.schema}})
-        else:
-            self.engine = create_async_engine(f"sqlite+aiosqlite:///{self.tmp.name}/discounts.db")
-        async with self.engine.begin() as connection:
-            await connection.run_sync(Base.metadata.create_all)
-            if not test_url:
-                await connection.execute(text("PRAGMA foreign_keys=ON"))
+        self.engine = scoped_async_engine()
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
         self.session = self.Session()
         self.token = set_shop_reseller_id(None)
@@ -111,8 +95,6 @@ class CatalogDiscountTests(unittest.IsolatedAsyncioTestCase):
         await self.session.flush()
         self.service = UserService(id=1, bot_user_id=1, pg_user_id=10, pg_username="buyer", plan_id=1)
         self.session.add(self.service)
-        if test_url:
-            await self.session.execute(text("SELECT setval(pg_get_serial_sequence('plans', 'id'), (SELECT max(id) FROM plans))"))
         await self.session.commit()
         self.contact = patch("app.services.orders.require_purchase_contact", AsyncMock())
         self.contact.start()
@@ -121,13 +103,8 @@ class CatalogDiscountTests(unittest.IsolatedAsyncioTestCase):
         self.contact.stop()
         await self.session.close()
         await self.engine.dispose()
-        if self.admin_engine:
-            async with self.admin_engine.begin() as connection:
-                await connection.execute(DropSchema(self.schema, cascade=True))
-            await self.admin_engine.dispose()
         reset_shop_reseller_id(self.token)
         _SETTINGS_CACHE.clear()
-        self.tmp.cleanup()
 
     def data(self, **kwargs: object) -> DiscountInput:
         return replace(DiscountInput(
@@ -417,13 +394,8 @@ class CatalogDiscountMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("catalog_discount_migration", ROOT / "alembic/versions/0046_catalog_discounts.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        test_url = os.environ.get("PGCLOCKBOT_CATALOG_TEST_URL")
-        engine = create_engine(test_url.replace("+asyncpg", "+psycopg") if test_url else "sqlite://")
-        schema = "catalog_migration_" + secrets.token_hex(8)
+        engine = scoped_sync_engine()
         with engine.begin() as connection:
-            if test_url:
-                connection.execute(CreateSchema(schema))
-                connection.execute(text("SELECT set_config('search_path', :schema, true)"), {"schema": schema})
             for table in ("bot_users", "plans", "plan_categories", "targeted_campaigns"):
                 connection.execute(text(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY)"))
                 connection.execute(text(f"INSERT INTO {table} (id) VALUES (1)"))
@@ -436,6 +408,4 @@ class CatalogDiscountMigrationTests(unittest.TestCase):
                 self.assertEqual(connection.scalar(text("SELECT id FROM plans")), 1)
                 migration.upgrade()
                 self.assertIn("ix_catalog_discounts_shop_active", {item["name"] for item in inspect(connection).get_indexes("catalog_discounts")})
-            if test_url:
-                connection.execute(DropSchema(schema, cascade=True))
         engine.dispose()

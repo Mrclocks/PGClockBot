@@ -18,9 +18,16 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from app.bot.chat_cleanup import note_throwaway, sweep_above
 from app.bot.edit_mode import editable_screen
 from app.bot.hub_entries import (
+    ADMIN_COMMAND_CENTER,
+    ADMIN_QUICK_LINKS,
+    ADMIN_SEARCH,
     ADMIN_STAFF_AUDIT,
     ADMIN_TRIAL_USERS,
+    COMMAND_CENTER_SETTINGS_CALLBACK,
     SERVICE_SHOP_REVIEW,
+    SHOP_COMMAND_CENTER,
+    SHOP_QUICK_LINKS,
+    SHOP_SEARCH,
     SHOP_STAFF_AUDIT,
     SHOP_TRIAL_USERS,
     HubEntry,
@@ -33,11 +40,13 @@ from app.bot.payg_review_entries import PAYG_REVIEW
 from app.bot.service_cleanup_entries import ADMIN_SERVICE_CLEANUP, SHOP_SERVICE_CLEANUP
 from app.bot.shop_marketing_entries import ADMIN_DISCOUNTS, ADMIN_FUNNEL, DISCOUNTS_CALLBACK, FUNNEL_CALLBACK
 from app.services.resellers import has_bot_perm
+from app.bot.broadcast_segments import PLATFORM_LIST, TARGETED_LABEL
 from app.bot.reseller_hub_groups import (
     RESELLER_GROUPS,
     RESELLER_HOME_CALLBACK,
     back_callback_for,
     group_entries,
+    home_entries,
     reseller_group,
 )
 from app.services.wallet_topup import DEFAULT_TOPUP_PRESETS, parse_topup_presets  # noqa: F401  (re-exported)
@@ -608,6 +617,7 @@ def admin_groups_hub_keyboard(
     open_work = pending_payments + pending_tickets + pending_cancellations + pending_deliveries
 
     cb_map = {
+        "adm_broadcast": "nv:adm:broadcast",
         "adm_hub_ops": "nv:adm:ops",
         "adm_hub_people": "nv:adm:people",
         "adm_hub_product": "nv:adm:product",
@@ -636,8 +646,14 @@ def admin_groups_hub_keyboard(
     )
     if shortcuts:
         rows.append(shortcuts)
-    for i in range(0, len(buttons), 2):
-        rows.append(buttons[i : i + 2])
+    # Open work first; then the command center, which opens any other screen by name.
+    rows.append([_hub_entry_button(ui, ADMIN_COMMAND_CENTER), _hub_entry_button(ui, ADMIN_SEARCH)])
+    # Group messages and quick links share one row under the groups: the most used tools, one tap away.
+    broadcast = [b for b in buttons if b.callback_data == "nv:adm:broadcast"]
+    groups = [b for b in buttons if b.callback_data != "nv:adm:broadcast"]
+    for i in range(0, len(groups), 2):
+        rows.append(groups[i : i + 2])
+    rows.append([*broadcast, _hub_entry_button(ui, ADMIN_QUICK_LINKS)])
     rows.append(
         [
             _ikb(
@@ -766,22 +782,19 @@ def admin_product_hub_keyboard(
 
 @editable_screen("a.marketing")
 def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Club and broadcast leaves reuse ``nv:adm:*``; gift codes and campaigns are inline-only."""
+    """The club leaf reuses ``nv:adm:*``; gift codes and cashback are inline-only."""
     from app.bot.marketing_panels import (
-        CAMPAIGN_PANEL_CALLBACK,
         CASHBACK_PANEL_CALLBACK,
         GIFT_PANEL_CALLBACK,
     )
 
     from app.bot.reply_keyboards import (
-        REPLY_ACTION_ADMIN_BROADCAST,
         REPLY_ACTION_ADMIN_LOYALTY,
         _reply_admin_marketing_entries,
     )
 
     cb_map = {
         REPLY_ACTION_ADMIN_LOYALTY: "nv:adm:loy",
-        REPLY_ACTION_ADMIN_BROADCAST: "nv:adm:broadcast",
     }
     buttons = [
         _ikb(
@@ -802,13 +815,6 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
                 ui=ui,
                 label_key="btn_adm_gift_codes",
                 style_id="adm_gift_codes",
-            ),
-            _ikb(
-                _t(ui, "btn_adm_campaigns"),
-                callback_data=CAMPAIGN_PANEL_CALLBACK,
-                ui=ui,
-                label_key="btn_adm_campaigns",
-                style_id="adm_campaigns",
             ),
             _ikb(
                 _t(ui, "btn_adm_cashback"),
@@ -1040,8 +1046,11 @@ def reseller_manage_hub_keyboard(
     )
     if shortcuts:
         rows.append(shortcuts)
+    rows.append([_hub_entry_button(ui, SHOP_COMMAND_CENTER), _hub_entry_button(ui, SHOP_SEARCH)])
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i : i + 2])
+    # Like the admin panel: group messages beside quick links in one row.
+    rows.append([*_reseller_entry_buttons(home_entries(entries), ui, {}), _hub_entry_button(ui, SHOP_QUICK_LINKS)])
     rows.append(_hub_back_row(ui, callback_data="menu:home"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1245,7 +1254,7 @@ def admin_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     search_row = [
         _ikb(
             _t(ui, "btn_adm_st_find"),
-            callback_data="adm:st:find",
+            callback_data=COMMAND_CENTER_SETTINGS_CALLBACK,
             ui=ui,
             label_key="btn_adm_st_find",
             style_id="adm_st_find",
@@ -1281,6 +1290,7 @@ def admin_backup_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 @editable_screen("a.broadcast")
 def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    from app.bot.marketing_panels import CAMPAIGN_PANEL_CALLBACK
     from app.bot.reply_keyboards import _admin_broadcast_submenu_entries
 
     buttons = [
@@ -1294,8 +1304,19 @@ def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
         for key, text in _admin_broadcast_submenu_entries(ui)
         if key.startswith("bc_aud_")
     ]
+    buttons.append(_ikb(TARGETED_LABEL, callback_data=PLATFORM_LIST, ui=ui, style_id="bc_targeted", style_fallback="primary"))
+    # Campaigns were merged into group messages; their list opens from here.
+    buttons.append(
+        _ikb(
+            _t(ui, "btn_adm_campaigns"),
+            callback_data=CAMPAIGN_PANEL_CALLBACK,
+            ui=ui,
+            label_key="btn_adm_campaigns",
+            style_id="adm_campaigns",
+        )
+    )
     buttons.append(_hub_entry_button(ui, BROADCAST_HISTORY))
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:marketing")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
 @editable_screen("a.plans")
@@ -1458,9 +1479,10 @@ def service_card_keyboard(service_id: int, ui: dict | None = None) -> InlineKeyb
 
 @editable_screen("c.service_more")
 def service_more_keyboard(
-    service_id: int, ui: dict | None = None, *, external: bool = False, wireguard: bool = False
+    service_id: int, ui: dict | None = None, *, external: bool = False, wireguard: bool = False,
+    freeze: str | None = None, transfer: str | None = None,
 ) -> InlineKeyboardMarkup:
-    """«⚙️ بیشتر» of a service card: refresh, WireGuard, automation, cancellation and delete.
+    """«⚙️ بیشتر» of a service card: refresh, WireGuard, automation, freeze, transfer, cancellation, delete.
 
     The WireGuard button shows only for a service the panel gave a WireGuard address (``wireguard``).
     Cancel sits above delete so destructive delete stays visually separated. A service that was
@@ -1473,6 +1495,16 @@ def service_more_keyboard(
     if wireguard:
         rows.append([_service_button(ui, "btn_svc_wireguard", "🔐 فایل WireGuard", f"svc:wg:{sid}", "svc_wireguard")])
     rows.append([_service_button(ui, "btn_svc_auto", "⚙️ تنظیمات خودکار", f"svc:auto:{sid}", "svc_auto")])
+    # «pause» or «resume» from service_freeze.freeze_button; None when the shop has it off.
+    if freeze == "pause":
+        rows.append([_service_button(ui, "btn_svc_freeze", "⏸ توقف موقت سرویس", f"svc:frz:{sid}", "svc_auto")])
+    elif freeze == "resume":
+        rows.append([_service_button(ui, "btn_svc_unfreeze", "▶️ ادامهٔ سرویس", f"svc:frzres:{sid}", "svc_auto")])
+    # «start» or «cancel» from service_transfer.transfer_button; None when the shop has it off.
+    if transfer == "start":
+        rows.append([_service_button(ui, "btn_svc_transfer", "🔁 انتقال به شخص دیگر", f"svc:trn:{sid}", "svc_auto")])
+    elif transfer == "cancel":
+        rows.append([_service_button(ui, "btn_svc_transfer_cancel", "✖️ لغو لینک انتقال", f"svc:trnx:{sid}", "svc_auto")])
     if not external:
         rows.append([_service_button(ui, "btn_svc_cancel", "📝 درخواست لغو", f"svc:cancel:{sid}", "svc_cancel")])
     rows.append(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan
 from datetime import datetime, timedelta, timezone
@@ -14,13 +14,14 @@ from sqlalchemy import update
 
 from app.services.orders import cancel_order, reject_payment
 from app.services.plans_catalog import list_catalog_plans
+from tests.postgres_support import scoped_async_engine
 
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
 
 
 class CustomPlanCleanupTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

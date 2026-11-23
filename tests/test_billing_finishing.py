@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.db.models import Base, BotUser, CashbackGrant
+from app.db.models import Base, BotUser, CashbackGrant, ShopWallet
+from app.services import cashback
 from app.services.cashback import credited_text, mature_grants
 from app.services.checkout_summary import _cashback_line
 from app.services.credit_statements import ladder_days
 from app.services.users import set_setting
+from tests.postgres_support import scoped_async_engine
 
 NOW = datetime(2026, 11, 8, tzinfo=timezone.utc)
 
@@ -40,7 +41,7 @@ class PreviewTests(unittest.IsolatedAsyncioTestCase):
 
 class NoticeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -71,6 +72,32 @@ class NoticeTests(unittest.IsolatedAsyncioTestCase):
             async with self.Session() as session:
                 self.assertEqual(await mature_grants(session, now=NOW), 3)
 
+    async def test_a_grant_whose_credit_fails_does_not_hold_back_the_others(self) -> None:
+        # A rollback for one grant used to expire the rest and crash the pass on the next grant.
+        credit = cashback.credit_wallet
+        async with self.Session() as session:
+            first = await session.scalar(select(CashbackGrant.id).order_by(CashbackGrant.id).limit(1))
+
+        async def credit_wallet(session, user, amount, reason, **kwargs):
+            if kwargs.get("idempotency_key") == f"cashback:{first}":
+                raise RuntimeError("wallet write failed")
+            return await credit(session, user, amount, reason, **kwargs)
+
+        notices = AsyncMock()
+        with patch("app.services.cashback.credit_wallet", credit_wallet), \
+                patch("app.services.cashback._send_shop_batch", notices):
+            async with self.Session() as session:
+                self.assertEqual(await mature_grants(session, now=NOW), 2)
+        async with self.Session() as session:
+            grants = {int(g.order_id): g.status for g in await session.scalars(select(CashbackGrant))}
+            wallets = dict((await session.execute(
+                select(ShopWallet.reseller_id, ShopWallet.balance).where(ShopWallet.user_id == 9)
+            )).all())
+        self.assertEqual(grants, {1: "pending", 2: "available", 3: "available"})
+        self.assertEqual(wallets, {5: 20, 6: 30})  # each credit lands in its own shop's wallet
+        told = sorted(int(g.order_id) for call in notices.await_args_list for g in call.args[2])
+        self.assertEqual(told, [2, 3])
+
     def test_notice_text(self) -> None:
         text = credited_text(SimpleNamespace(amount=10_000, order_id=42))
         self.assertIn("کش‌بک", text)
@@ -79,7 +106,7 @@ class NoticeTests(unittest.IsolatedAsyncioTestCase):
 
 class LadderSettingTests(unittest.IsolatedAsyncioTestCase):
     async def test_owner_settings_drive_the_ladder_and_bad_values_fall_back(self) -> None:
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         self.addAsyncCleanup(engine.dispose)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

@@ -61,10 +61,6 @@ class PwaTests(unittest.TestCase):
 
 class UpdateWiringTests(unittest.TestCase):
     def test_update_api_enabled(self):
-        src = Path("app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("start_update", src)
-        self.assertNotIn("start_rollback", src)
-        self.assertNotIn("آپدیت از داخل پنل حذف شده است", src)
         from jinja2 import Environment, FileSystemLoader
 
         from app.api import app as app_module

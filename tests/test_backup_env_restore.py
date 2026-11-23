@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-import sqlite3
 import stat
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from cryptography.fernet import Fernet
+from sqlalchemy import text
 
 from app.services import backup as backup_mod
 from app.services import backup_env
 from app.services.secret_box import _hkdf_fernet_key, _legacy_fernet_key, decrypts_with_secret
 
 from tests import test_backup_postgres_restore as pg_case
+from tests.postgres_support import scoped_database_url, scoped_sync_engine
 
-PG_URL = pg_case.PG_URL
-requires_pg = pg_case.requires_pg
 # Shared PostgreSQL fixture: a fresh schema plus isolated data and backup directories.
 pg_install = pg_case.pg_install
 
@@ -75,12 +74,15 @@ class TestMergeRestoredEnv:
 
 class TestStoredSecretsReadable:
     def _db(self, tmp_path: Path, token: str | None) -> str:
-        path = tmp_path / "secrets.db"
-        with sqlite3.connect(path) as conn:
-            conn.execute("CREATE TABLE reseller_profiles (pg_admin_password_enc TEXT, pg_api_key_enc TEXT)")
-            if token is not None:
-                conn.execute("INSERT INTO reseller_profiles VALUES (?, NULL)", (token,))
-        return f"sqlite+aiosqlite:///{path}"
+        engine = scoped_sync_engine()
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("CREATE TABLE reseller_profiles (pg_admin_password_enc TEXT, pg_api_key_enc TEXT)"))
+                if token is not None:
+                    conn.execute(text("INSERT INTO reseller_profiles VALUES (:token, NULL)"), {"token": token})
+        finally:
+            engine.dispose()
+        return scoped_database_url(tables=False)
 
     def test_secret_of_this_server_reads_them(self, tmp_path):
         token = Fernet(_hkdf_fernet_key(b"kept")).encrypt(b"pg-pass").decode()
@@ -100,13 +102,12 @@ class TestStoredSecretsReadable:
         assert decrypts_with_secret("not-a-token", "kept") is False
 
 
-@requires_pg
 def test_restore_on_a_new_server_keeps_its_database_connection(pg_install, tmp_path):
     root = backup_mod.ROOT_DIR
     (root / ".env").write_text(OLD_SERVER_ENV, encoding="utf-8")
     created = backup_mod.create_backup(note="t", include_env=True, created_by="test")
     this_server = NEW_SERVER_ENV.replace(
-        "postgresql+asyncpg://pgclock:NEWPASS@127.0.0.1:5432/pgclock", PG_URL
+        "postgresql+asyncpg://pgclock:NEWPASS@127.0.0.1:5432/pgclock", pg_case.pg_url()
     )
     (root / ".env").write_text(this_server, encoding="utf-8")
 
@@ -116,14 +117,13 @@ def test_restore_on_a_new_server_keeps_its_database_connection(pg_install, tmp_p
 
     assert result["ok"] is True, result
     restored = (root / ".env").read_text(encoding="utf-8")
-    assert backup_env.env_value(restored, "DATABASE_URL") == PG_URL
+    assert backup_env.env_value(restored, "DATABASE_URL") == pg_case.pg_url()
     assert backup_env.env_value(restored, "WEB_SECRET") == "old-server-secret"
     assert stat.S_IMODE((root / ".env").stat().st_mode) == 0o600
     backups = list(root.glob(".env.bak.restore.*"))
     assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == this_server
 
 
-@requires_pg
 def test_unreadable_secrets_are_reported_after_the_restart(pg_install):
     created = backup_mod.create_backup(note="t", created_by="test")
     with patch.object(backup_mod, "stored_secrets_readable", return_value=False):

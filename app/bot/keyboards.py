@@ -21,6 +21,7 @@ from app.services.support_contacts import (
 )
 from app.services.users import DEFAULT_SETTINGS, on
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
+from app.services.trial_offer import TRIAL_MENU_KEY
 from app.services import bot_feedback_texts as feedback
 from app.services.staff_cards import SERVICE_BUTTON_LIMIT
 
@@ -29,6 +30,7 @@ from app.services.staff_cards import SERVICE_BUTTON_LIMIT
 # Connection «آموزش‌ها» lives on the service card (not the main ReplyKeyboard).
 DEFAULT_MENU_ORDER = [
     "shop",
+    TRIAL_MENU_KEY,
     "services",
     CONNECTION_STATUS_MENU_KEY,
     "wallet",
@@ -36,9 +38,12 @@ DEFAULT_MENU_ORDER = [
     "loyalty",
     "reseller_apply",
 ]
-# Items active on a fresh install. The connection status button stays in the catalog (the web menu
-# editor offers it from «مخزن») but is off until an admin adds it.
-DEFAULT_ACTIVE_MENU_ORDER = [key for key in DEFAULT_MENU_ORDER if key != CONNECTION_STATUS_MENU_KEY]
+# Items active on a fresh install. The connection status and trial buttons stay in the catalog (the
+# web menu editor offers them from «مخزن») but are off until added; choosing the keyboard in the
+# trial plan settings adds the trial button.
+DEFAULT_ACTIVE_MENU_ORDER = [
+    key for key in DEFAULT_MENU_ORDER if key not in {CONNECTION_STATUS_MENU_KEY, TRIAL_MENU_KEY}
+]
 
 # Legacy keys stripped from saved menu_order so old installs drop them from the keyboard.
 # miniapp: MenuButton «Open» only — never ReplyKeyboard / menu DnD / welcome inline.
@@ -831,25 +836,19 @@ def item_button_style_picker_keyboard(
 
 # Reply keyboards live in app.bot.reply_keyboards (re-exported for compatibility).
 from app.bot.reply_keyboards import (  # noqa: E402
-    _reply_markup,
     _reply_user_entries,
     _reply_admin_hub_entries,
     _reply_admin_ops_entries,
     _reply_admin_people_entries,
     _reply_admin_product_entries,
     _reply_admin_system_entries,
-    _reply_admin_entries,
     _pg_submenu_entries,
-    _admin_users_submenu_entries,
-    _admin_resellers_submenu_entries,
     _admin_settings_submenu_entries,
     _admin_backup_submenu_entries,
     _admin_broadcast_submenu_entries,
-    _admin_plans_submenu_entries,
     _admin_plans_audience_entries,
     _admin_plans_list_entries,
     _admin_plans_add_type_entries,
-    _admin_plans_kind_entries,
     REPLY_ACTION_ADM_PLANS_AUD_USERS,
     REPLY_ACTION_ADM_PLANS_AUD_RESELLERS,
     REPLY_ACTION_ADM_PLANS_ADD,
@@ -867,8 +866,6 @@ from app.bot.reply_keyboards import (  # noqa: E402
     REPLY_ACTION_RES_PLAN_ADDONS,
     _reseller_plans_submenu_entries,
     _reseller_settings_submenu_entries,
-    _wallet_submenu_entries,
-    _support_submenu_entries,
     _loyalty_submenu_entries,
     _admin_loyalty_submenu_entries,
     _reseller_capacity_entries,
@@ -876,8 +873,6 @@ from app.bot.reply_keyboards import (  # noqa: E402
     reseller_hub_main_keyboard,
     _pay_method_entries,
     _topup_method_entries,
-    _pack_reply_rows,
-    _submenu_footer,
     main_reply_keyboard,
     admin_reply_keyboard,
     admin_ops_reply_keyboard,

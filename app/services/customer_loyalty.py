@@ -201,7 +201,7 @@ async def redeem_club_reward(
         await rollback_quiet(session)
         raise ClubError(str(exc) or "بازخرید ناموفق بود") from exc
     except OperationalError as exc:
-        # SQLite refuses a second concurrent writer; the debit rolled back with it.
+        # A transient database error (lost connection, lock timeout); the debit rolled back with it.
         await rollback_quiet(session)
         raise ClubError("سرور مشغول است؛ چند ثانیه بعد دوباره تلاش کنید") from exc
     except Exception as exc:

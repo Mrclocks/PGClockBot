@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
 
@@ -16,7 +14,7 @@ from app.bot import service_import_ui as ui_mod
 from app.bot.handlers import service_import as flow
 from app.bot.handlers import services as services_handlers
 from app.bot.nav_inline import services_list_keyboard
-from app.db.models import BotUser, Plan, ServiceAddonPack, UserService
+from app.db.models import BotUser, Plan, PlanCategory, ServiceAddonPack, UserService
 from app.services.service_addons import create_addon_order
 from app.services.service_cancellations import owned_cancellation_service
 from app.services.service_import import (
@@ -66,6 +64,8 @@ class DownstreamBehaviourTests(ImportCase):
         token = set_shop_reseller_id(None)
         try:
             async with self.Session() as session:
+                session.add(PlanCategory(id=1, name="VIP", audience="users"))
+                await session.flush()
                 session.add_all([
                     ServiceAddonPack(id=1, name="G", kind="volume", amount=5, price=800, is_general=True),
                     ServiceAddonPack(id=2, name="VIP", kind="volume", amount=5, price=900, category_id=1, is_general=False),

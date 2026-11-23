@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import secrets
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -14,7 +13,7 @@ import httpx
 import sqlalchemy as sa
 from fastapi import FastAPI
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 import app.services.shop_wallet_adjust as adjust_module
 from app.services.shop_wallet_adjust import (
@@ -24,6 +23,7 @@ from app.services.shop_wallet_adjust import (
     shop_wallet_form_context,
     wallet_adjust_shop,
 )
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP_A = 81
@@ -88,10 +88,7 @@ class WalletDbHarness(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         from app.db.models import BotUser, BotUserShop, ResellerProfile
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'wallet.db'}", connect_args={"timeout": 15}
-        )
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -114,7 +111,6 @@ class WalletDbHarness(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _purse(self, user_id: int, shop_id: int) -> int:
         from app.services.wallet import get_wallet_balance
@@ -291,12 +287,12 @@ class ShopWalletMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("wallet_days", ROOT / "alembic/versions/0079_shop_wallet_adjust_days.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             migration.upgrade()
             migration.upgrade()
             conn.execute(sa.text("INSERT INTO shop_wallet_adjust_days (shop_id, day, used) VALUES (1, '2026-01-01', 5)"))
-            with self.assertRaises(sa.exc.IntegrityError):
+            with self.assertRaises(sa.exc.IntegrityError), conn.begin_nested():
                 conn.execute(sa.text("INSERT INTO shop_wallet_adjust_days (shop_id, day, used) VALUES (1, '2026-01-01', 1)"))
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             migration.downgrade()

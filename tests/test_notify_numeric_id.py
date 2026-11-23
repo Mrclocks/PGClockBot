@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, Order, Payment, PaymentStatus
 from app.services.notifications import (
@@ -18,13 +18,14 @@ from app.services.notifications import (
     notify_wallet_topup_ok,
     ticket_action_markup,
 )
+from tests.postgres_support import scoped_async_engine
 
 BUYER_TG = 123456789
 
 
 class NumericIdInReportsTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -33,13 +34,13 @@ class NumericIdInReportsTests(unittest.IsolatedAsyncioTestCase):
             BotUser(id=2, telegram_id=-5, referral_code="b2", role="user", username="synthetic"),
             BotUser(id=3, telegram_id=987654321, referral_code="b3", role="user", username="farid_g",
                     full_name="Farid <b>Ghaderi</b>"),
-            Order(id=1, user_id=1, amount=5_000),
+            Order(id=1, user_id=1, amount=5_000, status="delivered"),
             Payment(id=1, user_id=1, amount=1_700_000, method="card", status=PaymentStatus.APPROVED.value,
                     is_wallet_topup=True),
             Payment(id=2, user_id=1, amount=5_000, method="card", status=PaymentStatus.PENDING.value, order_id=1),
             Payment(id=3, user_id=2, amount=1_000, method="card", status=PaymentStatus.APPROVED.value,
                     is_wallet_topup=True),
-            Order(id=2, user_id=3, amount=210_000),
+            Order(id=2, user_id=3, amount=210_000, status="delivered"),
         ])
         await self.session.commit()
         self.dispatch = AsyncMock(return_value=1)

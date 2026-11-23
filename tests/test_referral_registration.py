@@ -12,20 +12,24 @@ from unittest.mock import AsyncMock, patch
 
 from aiogram.types import CallbackQuery, Chat, Message, MessageEntity, ReplyKeyboardRemove, Update, User
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, PointsRule, ReferralEvent, ResellerProfile, Role
 from app.services.referral_registration import ReferralRequired, referral_required_outbound
 from app.services.users import clear_settings_cache, get_or_create_user, set_setting
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 
 class ReferralRegistrationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
+        sessions = async_sessionmaker(self.engine, expire_on_commit=False)
+        # Shop 999 owns the "foreign" referrers below.
+        await add_shop_users(sessions, 999)
+        self.session = sessions()
         clear_settings_cache()
         self.settings = SimpleNamespace(admin_ids=[], bot_token="main-token")
         self.config_patch = patch("app.services.users.get_settings", return_value=self.settings)

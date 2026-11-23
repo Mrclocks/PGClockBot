@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
 
@@ -24,6 +22,7 @@ from app.services.service_import import (
 )
 from app.services.users import set_settings_bulk
 from tests.test_service_import import PLATFORM_ADMIN, SHOP_ADMIN, ImportCase
+from tests.postgres_support import scoped_sync_engine
 
 
 class ConfigCase(ImportCase):
@@ -224,14 +223,29 @@ class SettingNormalizationTests(unittest.TestCase):
         self.assertEqual(len(cfg.normalize_paths(",".join(f"/p{i}" for i in range(50)))), cfg.MAX_LIST_ITEMS)
 
     def test_the_cap_is_clamped_and_garbage_falls_back_to_the_default(self):
-        for raw, expected in (("3", 3), ("0", 1), ("-4", 1), ("999", cfg.MAX_PER_USER_LIMIT), ("x", 5), ("", 5), (None, 5), ("2.5", 5)):
+        huge = str(cfg.MAX_PER_USER_LIMIT + 1)
+        for raw, expected in (
+            ("3", 3), ("۷", 7), ("0", 1), ("-4", 1), ("21", 21), ("999", 999), (huge, cfg.MAX_PER_USER_LIMIT),
+            ("x", 5), ("", 5), (None, 5), ("2.5", 5), (True, 5),
+            ("unlimited", None), ("نامحدود", None),
+        ):
             with self.subTest(raw=raw):
                 self.assertEqual(cfg.normalize_max_per_user(raw), expected)
+
+    def test_only_the_unlimited_value_reads_as_unlimited(self):
+        self.assertTrue(cfg.read_settings({cfg.KEY_MAX_PER_USER: cfg.UNLIMITED_VALUE}).is_unlimited)
+        self.assertFalse(cfg.read_settings({cfg.KEY_MAX_PER_USER: "0"}).is_unlimited)
+        self.assertFalse(cfg.read_settings({cfg.KEY_MAX_PER_USER: "20"}).is_unlimited)
+        self.assertFalse(cfg.read_settings({}).is_unlimited)
 
     def test_stored_values_are_normalised_by_key(self):
         self.assertEqual(cfg.normalize_setting_value(cfg.KEY_PATHS, "sub,/hamid/"), "/sub\n/hamid")
         self.assertEqual(cfg.normalize_setting_value(cfg.KEY_ADMINS, "A, b"), "a\nb")
-        self.assertEqual(cfg.normalize_setting_value(cfg.KEY_MAX_PER_USER, "50"), "20")
+        self.assertEqual(cfg.normalize_setting_value(cfg.KEY_MAX_PER_USER, "50"), "50")
+        self.assertEqual(cfg.normalize_setting_value(cfg.KEY_MAX_PER_USER, "0"), "1")
+        # The web field's «نامحدود» button posts an empty value.
+        self.assertEqual(cfg.normalize_setting_value(cfg.KEY_MAX_PER_USER, ""), cfg.UNLIMITED_VALUE)
+        self.assertEqual(cfg.normalize_setting_value(cfg.KEY_MAX_PER_USER, "نامحدود"), cfg.UNLIMITED_VALUE)
         self.assertEqual(cfg.normalize_setting_value("service_import_enabled", "1"), "1")
 
     def test_defaults_when_nothing_is_stored(self):
@@ -252,11 +266,11 @@ class ReasonMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("reason_migration", root / "alembic/versions/0052_service_import_reason.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(sa.text(
                 "CREATE TABLE service_import_attempts (id INTEGER PRIMARY KEY, bot_user_id INTEGER NOT NULL, "
-                "token_hash VARCHAR(64) NOT NULL, outcome VARCHAR(24) NOT NULL, created_at DATETIME)"
+                "token_hash VARCHAR(64) NOT NULL, outcome VARCHAR(24) NOT NULL, created_at TIMESTAMPTZ)"
             ))
             conn.execute(sa.text("INSERT INTO service_import_attempts VALUES (1, 1, 'h', 'refused', NULL)"))
             with Operations.context(MigrationContext.configure(conn)):
@@ -274,7 +288,6 @@ class ReasonMigrationTests(unittest.TestCase):
         import importlib.util
         from pathlib import Path
 
-        import sqlalchemy as sa
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
@@ -282,7 +295,7 @@ class ReasonMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("reason_migration2", root / "alembic/versions/0052_service_import_reason.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             migration.upgrade()
             migration.downgrade()

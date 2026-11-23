@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import inspect
 from typing import Any
 from aiogram import F, Router
@@ -19,6 +20,7 @@ from app.bot.secret_fields import SECRET, is_secret, secret_prompt
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
+from app.services.trial_offer import TRIAL_MENU_KEY
 from app.services.notifications import NOTIFY_PREFS, PLATFORM_NOTIFY_PREFS
 from app.services.pasarguard import get_pg
 from app.services.support_contacts import (
@@ -27,24 +29,27 @@ from app.services.support_contacts import (
     support_chat_url,
     upsert_support_contact,
 )
-from app.services.settings_search import (
-    SEARCH_QUERY_MAX_LEN,
-    SettingsSearchEntry,
-    search_settings,
-)
 from app.bot.entry_gate import ENTRY_APPROVAL_BOT_FIELDS, ENTRY_APPROVAL_SUB, ENTRY_APPROVAL_SUB_TITLE
-from app.services.entry_approval_config import ENTRY_APPROVAL_NUMBER_BOUNDS
-from app.services.users import get_all_settings, get_setting, on, set_setting
-from app.services.approval_rule import MAX_MINUTES as APPROVAL_MAX_MINUTES
-from app.services.catalog_pricing import MAX_PRICE
-from app.services.miniapp_branding import NOTICE_SETTING as MINIAPP_NOTICE, normalize_notice
+from app.services.bot_appearance import PROFILE_TEXT_FIELDS, update_bot_profile_text
+from app.services.receipt_fingerprints import normalize_dup_policy
+from app.services.rich_text import pack_setting_from_message
+from app.services.setup_wizard import current_setup_values
+from app.services.users import (
+    get_all_settings,
+    get_setting,
+    normalize_force_join_channel_value,
+    on,
+    set_setting,
+)
+from app.services.miniapp_branding import NOTICE_SETTING as MINIAPP_NOTICE
 from app.services.miniapp_shop import PLATFORM_SWITCH as MINIAPP_SHOPS_SWITCH, set_platform_shop_miniapps
 from app.services.reseller_bots import schedule_shop_menu_sync
+from app.bot.backup_entry import BACKUP_PANEL_CALLBACK
+from app.services.bbc_settlement import ENABLED_KEY as BBC_ENABLED_KEY, bbc_enable_error
 from app.services.service_import_config import (
     KEY_ENABLED as IMPORT_KEY_ENABLED,
     KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
     KEY_MODE as IMPORT_KEY_MODE,
-    MAX_PER_USER_LIMIT as IMPORT_MAX_PER_USER_LIMIT,
 )
 from app.services.user_errors import domain_error_text
 from app.services.settings_button_labels import (
@@ -57,11 +62,58 @@ from app.services.settings_button_labels import (
     BTN_PAY_WALLET_DISCOUNT,
     button_label_subs,
 )
+from app.services.customer_notice_texts import CLEANUP_BOT_FIELDS, STAFF_ACTION_BOT_FIELDS
+from app.services.settings_message_texts import (
+    CONNECTION_STATUS_CUSTOMER_TEXTS,
+    MESSAGE_TEXT_SUBS,
+    PROFILE_BOT_FIELDS,
+)
+from app.services.bot_setting_values import (
+    NUMBER_BOUNDS,
+    NUMBER_UNLIMITED_VALUES,
+    SELECT_OPTIONS,
+    UNLIMITED_LABEL,
+    VALUE_NORMALIZERS,
+    next_select_value,
+    number_range_hint,
+    parse_bounded_int,
+    parse_number_setting,
+    select_label,
+    text_template_hint,
+    wants_default_text,
+)
+from app.services.receipt_risk import BOT_FIELDS as RECEIPT_RISK_BOT_FIELDS
+from app.services.service_freeze_settings import BOT_FIELDS as SERVICE_FREEZE_BOT_FIELDS, GROUP_TITLE as SERVICE_FREEZE_GROUP
+from app.services.service_transfer_settings import (
+    BOT_FIELDS as SERVICE_TRANSFER_BOT_FIELDS,
+    GROUP_TITLE as SERVICE_TRANSFER_GROUP,
+)
+from app.services.settings_operation_fields import (
+    AUTO_APPROVE_AFTER_FIELDS,
+    AUTO_RENEW_FIELDS,
+    CRYPTO_RATE_FIELDS,
+    OPERATIONS_FIELDS,
+    PG_LINK_HEALTH_FIELDS,
+    RECEIPT_MATCH_FIELDS,
+    SALES_STATE_FIELDS,
+    STARS_FIELDS,
+    TRIAL_MIN_AGE_FIELD,
+    USAGE_ALERT_FIELDS,
+    WALLET_TOPUP_FIELDS,
+)
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
 from app.bot.handlers.guide_editor import GUIDES_SECTION
+from app.bot.handlers.payment_destinations_editor import destination_list_rows
+from app.bot.plan_scope_picker import (
+    FIELD_KIND as PLAN_SCOPE_KIND,
+    picker_markup as plan_picker_markup,
+    picker_text as plan_picker_text,
+    scope_button as plan_scope_button,
+)
+from app.services.plan_scope import plan_choices, toggle_plan_scope
 from app.bot.handlers.settings_labels import (
     LABELS_SECTION,
     labels_audience_panel,
@@ -211,6 +263,15 @@ SECTIONS: dict[str, dict] = {
                 ("referral_text", "متن دعوت", "textarea"),
                 ("referral_bonus", "پاداش دعوت", "number"),
             ]),
+            ("profile", "پروفایل تلگرام ربات", PROFILE_BOT_FIELDS),
+            *MESSAGE_TEXT_SUBS,
+            ("status_texts", "متن‌های وضعیت اتصال", [
+                *CONNECTION_STATUS_CUSTOMER_TEXTS,
+                ("connection_status_admin_title", "عنوان مدیریت وضعیت اتصال", "text"),
+                ("connection_status_account_prompt", "تنظیم کاربر تست", "textarea"),
+                ("connection_status_name_prompt", "دریافت نام عمومی هاست", "text"),
+                ("connection_status_order_prompt", "دریافت ترتیب هاست", "text"),
+            ]),
         ],
     },
     "menu": {
@@ -218,6 +279,9 @@ SECTIONS: dict[str, dict] = {
         "subs": [
             ("layout", "چیدمان کیبورد", "menu_layout"),
             ("order", "ترتیب دکمه‌ها", "menu_order"),
+            ("editor", "حالت ویرایش منوها", [
+                ("screen_editor_enabled", "ویرایش منوها از داخل ربات", "toggle"),
+            ]),
         ],
     },
     LABELS_SECTION: {
@@ -282,18 +346,10 @@ SECTIONS: dict[str, dict] = {
                 ("crypto_pay_text", "راهنما", "textarea"),
                 *BTN_PAY_CRYPTO,
             ]),
-            ("stars", "استارز", [
-                ("stars_toman_per_star", "تومان هر استارز", "number"),
-                ("stars_title", "عنوان فاکتور", "text"),
-                ("stars_description", "توضیح فاکتور", "text"),
-                *BTN_PAY_STARS,
-            ]),
-            # Same keys as the web «رسیدها» section; they apply while «تأیید خودکار رسید» is on.
-            ("auto_after", "تأیید خودکار با مهلت", [
-                ("auto_approve_after_minutes", "مهلت تأیید خودکار (دقیقه، ۰ = فوری)", "number"),
-                ("auto_approve_after_max_amount", "سقف مبلغ (تومان، ۰ = بدون سقف)", "number"),
-                ("auto_approve_after_returning_only", "فقط مشتریان با خرید قبلی", "toggle"),
-            ]),
+            ("stars", "استارز", [*STARS_FIELDS, *BTN_PAY_STARS]),
+            ("auto_after", "تأیید خودکار با مهلت", AUTO_APPROVE_AFTER_FIELDS),
+            ("crypto_rate", "نرخ تبدیل رمزارز", CRYPTO_RATE_FIELDS),
+            ("wallet_topup", "شارژ کیف پول", WALLET_TOPUP_FIELDS),
             # Same keys as web finance modal tab «مدیریت PAYG» (SETTING_GROUPS).
             ("payg", "مدیریت PAYG", [
                 ("billing_enabled", "فعال‌سازی PAYG", "toggle"),
@@ -328,6 +384,8 @@ SECTIONS: dict[str, dict] = {
                 (IMPORT_KEY_MODE, "روش پذیرش", "select"),
                 (IMPORT_KEY_MAX_PER_USER, "سقف سرویس هر مشتری", "number"),
             ]),
+            ("freeze", SERVICE_FREEZE_GROUP, SERVICE_FREEZE_BOT_FIELDS),
+            ("transfer", SERVICE_TRANSFER_GROUP, SERVICE_TRANSFER_BOT_FIELDS),
             # Same keys as the web «مینی‌اپ» tab; the brand colour stays on the web (it has a preview).
             ("miniapp", "مینی‌اپ", [
                 (MINIAPP_SHOPS_SWITCH, "مینی‌اپ فروشگاه نمایندگان", "toggle"),
@@ -364,13 +422,17 @@ SECTIONS: dict[str, dict] = {
             ("trial_gate", "اکانت تست", [
                 ("trial_require_contact", "تأیید شماره تماس", "toggle"),
                 ("trial_require_iran_phone", "فقط شماره ایران", "toggle"),
+                TRIAL_MIN_AGE_FIELD,
             ]),
+            ("sales", "وضعیت فروش", SALES_STATE_FIELDS),
             ("purchase_contact", "شماره تماس خرید", [
                 ("purchase_require_contact", "شماره تماس اجباری", "toggle"),
             ]),
             ("receipt_dup", "ضدتقلب رسید", [
                 ("receipt_dup_policy", "رسید تکراری (warn/block)", "text"),
+                *RECEIPT_RISK_BOT_FIELDS,
             ]),
+            ("receipt_match", "تطبیق رسید", RECEIPT_MATCH_FIELDS),
             ("terms_buy", "قوانین خرید", [
                 ("terms_buy_user_enabled", "فعال خرید کاربر", "toggle"),
                 ("terms_buy_user_text", "متن قوانین خرید کاربر", "textarea"),
@@ -406,6 +468,22 @@ SECTIONS: dict[str, dict] = {
             ("custom", "پلن دلخواه", "custom"),
         ],
     },
+    # Opened from the backup panel, not the settings hub. Recipients, the backup bot token and the
+    # .env switches stay on the web: from a chat they would let one stolen account send every secret away.
+    "backup": {
+        "title": "تنظیمات بکاپ",
+        "back": BACKUP_PANEL_CALLBACK,
+        "subs": [
+            ("schedule", "بکاپ زمان‌بندی", [
+                ("backup_schedule_enabled", "بکاپ خودکار شبانه", "toggle"),
+                ("backup_schedule_hour", "ساعت بکاپ (۰ تا ۲۳، UTC)", "number"),
+                ("backup_keep_count", "تعداد بکاپ نگه‌داشته‌شده", "select"),
+            ]),
+            ("telegram", "ارسال بکاپ به تلگرام", [
+                ("backup_telegram_enabled", "ارسال بکاپ به گیرنده‌های وب‌پنل", "toggle"),
+            ]),
+        ],
+    },
     "notify": {
         "title": "اعلان‌ها",
         "kind": "notify",
@@ -414,8 +492,14 @@ SECTIONS: dict[str, dict] = {
             ("daily", "گزارش روزانه", [
                 ("admin_daily_report_enabled", "ارسال گزارش روزانه", "toggle"),
                 ("subordinate_report_enabled", "گزارش نمایندگان زیرمجموعه", "toggle"),
-                ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، UTC)", "number"),
+                ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، به وقت تهران)", "number"),
             ]),
+            ("usage_alerts", "هشدار سرویس کاربر", USAGE_ALERT_FIELDS),
+            ("auto_renew", "تمدید خودکار سرویس", AUTO_RENEW_FIELDS),
+            ("operations", "گزارش و عملیات", OPERATIONS_FIELDS),
+            ("pg_link", "سلامت ارتباط پاسارگارد", PG_LINK_HEALTH_FIELDS),
+            ("staff_notices", "متن اعلان کار روی سرویس", STAFF_ACTION_BOT_FIELDS),
+            ("cleanup_notices", "متن اعلان پاکسازی سرویس", CLEANUP_BOT_FIELDS),
         ],
     },
 }
@@ -435,6 +519,7 @@ CUSTOM_PRICE: list[Field] = [
 
 MENU_ORDER_LABELS = {
     "shop": "خرید",
+    TRIAL_MENU_KEY: "دریافت تست",
     "services": "سرویس‌ها",
     CONNECTION_STATUS_MENU_KEY: "وضعیت اتصال",
     "wallet": "کیف پول",
@@ -452,7 +537,6 @@ class SettingsStates(StatesGroup):
     trial_name = State()
     trial_days = State()
     trial_gb = State()
-    search_query = State()
 
 
 def _field_lookup() -> dict[str, Field]:
@@ -469,30 +553,12 @@ def _field_lookup() -> dict[str, Field]:
 
 FIELDS = _field_lookup()
 
-# Select fields cycle through these (value, Persian label); keep in sync with SETTING_GROUPS.
-SELECT_CYCLE_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
-    "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
-    IMPORT_KEY_MODE: (("instant", "فوری"), ("approval", "با تأیید ادمین")),
-}
+# Number bounds and choice values are shared with the shop bot (app/services/bot_setting_values.py).
+SELECT_CYCLE_OPTIONS = SELECT_OPTIONS
+NUMBER_INT_RANGES = NUMBER_BOUNDS
 
-# Integer ranges for PAYG settings (consumers clamp the same bounds).
-NUMBER_INT_RANGES: dict[str, tuple[int, int]] = {
-    "billing_low_balance": (0, 10_000_000_000),
-    "billing_tick_minutes": (1, 1440),
-    "credit_due_days": (0, 365),
-    "credit_block_create_days": (0, 365),
-    "credit_block_changes_days": (0, 365),
-    "credit_block_days": (0, 365),
-    # Same bounds the consumers apply (approval_rule, daily_report, service_import_config).
-    "auto_approve_after_minutes": (0, APPROVAL_MAX_MINUTES),
-    "auto_approve_after_max_amount": (0, MAX_PRICE),
-    "admin_daily_report_hour": (0, 23),
-    IMPORT_KEY_MAX_PER_USER: (1, IMPORT_MAX_PER_USER_LIMIT),
-    **ENTRY_APPROVAL_NUMBER_BOUNDS,
-}
-
-# Plain one-line texts saved through their service normalizer instead of rich-text packing.
-TEXT_NORMALIZERS = {MINIAPP_NOTICE: normalize_notice}
+# Texts saved through their service rule instead of rich-text packing (shared with the shop bot).
+TEXT_NORMALIZERS = VALUE_NORMALIZERS
 
 NOTIFY_KEYS: frozenset[str] = frozenset(key for key, *_ in NOTIFY_PREFS)
 
@@ -515,17 +581,9 @@ def _is_toggleable_setting_key(key: str) -> bool:
     return bool(meta and meta[2] == "toggle")
 
 
-def _parse_bounded_int(raw: str, lo: int, hi: int) -> int:
-    """Whole number in ``[lo, hi]``; rejects floats, NaN, and signs outside the range."""
-    from app.services.numbers import normalize_number_text
-
-    text = normalize_number_text(raw)
-    if not text or text in {".", "-", "+"} or any(ch in text for ch in ".eE"):
-        raise ValueError("not an integer")
-    value = int(text)
-    if value < lo or value > hi:
-        raise ValueError("out of range")
-    return value
+_number_range_hint = number_range_hint
+_parse_number_setting = parse_number_setting
+_parse_bounded_int = parse_bounded_int
 
 
 def _preview(value: str | None, *, limit: int = 120) -> str:
@@ -644,7 +702,7 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
         rows.append([colors_entry_button(for_reseller=False)])
     if sec_id == GUIDES_SECTION:
         rows.append([guides_entry_button(for_reseller=False)])
-    rows.append(_back_row("adm:st:hub"))
+    rows.append(_back_row(sec.get("back") or "adm:st:hub"))
     if callback.message:
         await callback.message.edit_text(
             f"⚙️ <b>{sec['title']}</b>\nزیر‌بخش را انتخاب کنید:",
@@ -652,17 +710,12 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
         )
 
 
-def _select_label(key: str, raw: str | None) -> str:
-    options = SELECT_CYCLE_OPTIONS.get(key) or ()
-    by_value = {value: text for value, text in options}
-    if raw in by_value:
-        return by_value[raw]
-    if options:
-        return options[0][1]
-    return str(raw or "—")
+_select_label = select_label
 
 
 def _field_button(ui: dict, key: str, label: str, kind: str) -> InlineKeyboardButton:
+    if kind == PLAN_SCOPE_KIND:
+        return plan_scope_button("adm:st", key, label, ui.get(key))
     if kind == "toggle":
         mark = "✅" if on(ui.get(key)) else "⬜️"
         return InlineKeyboardButton(text=f"{mark} {label}", callback_data=f"adm:st:tog:{key}")
@@ -760,6 +813,7 @@ async def _render_sub(callback: CallbackQuery, session: AsyncSession, sec_id: st
             title=title,
             fields=payload,
             back_cb=back,
+            extra_rows=destination_list_rows(sec_id, sub_id, for_reseller=False),
             intro=intro,
         )
         return
@@ -837,7 +891,10 @@ async def _render_notify(callback: CallbackQuery, session: AsyncSession) -> None
             for key, title, _, default in PLATFORM_NOTIFY_PREFS
         ]
     )
-    rows.append([InlineKeyboardButton(text="📊 گزارش روزانه", callback_data="adm:st:sub:notify:daily")])
+    rows.extend(
+        [InlineKeyboardButton(text=title, callback_data=f"adm:st:sub:notify:{sub_id}")]
+        for sub_id, title, _fields in SECTIONS["notify"]["subs"]
+    )
     rows.append(_back_row("adm:st:hub"))
     if callback.message:
         await callback.message.edit_text(
@@ -917,7 +974,7 @@ async def _rerender_after_key(callback: CallbackQuery, session: AsyncSession, ke
         await _render_hub(callback, session)
         return
     sec_id, sub_id = loc
-    if sec_id == "notify":
+    if sec_id == "notify" and not sub_id:
         await _render_notify(callback, session)
     elif not sub_id:
         await _render_section(callback, session, sec_id)
@@ -1024,7 +1081,12 @@ async def _settings_location_panel(
     if isinstance(payload, list):
         intro = _bbc_fields_intro(title) if sub_id == "bbc" else None
         return await _fields_panel(
-            session, title=title, fields=payload, back_cb=back, intro=intro
+            session,
+            title=title,
+            fields=payload,
+            back_cb=back,
+            extra_rows=destination_list_rows(sec_id, sub_id, for_reseller=False),
+            intro=intro,
         )
     # menu_layout / menu_order — one Back into that sub (callback still works with nav kept)
     return (
@@ -1157,25 +1219,78 @@ async def settings_toggle(
     if not _is_toggleable_setting_key(key):
         await callback.answer("کلید نامعتبر", show_alert=True)
         return
-    await _flip_setting(session, key)
+    refusal = await _flip_setting(session, key)
+    if refusal:
+        await callback.answer(refusal, show_alert=True)
+        return
     await callback.answer(feedback.SAVED)
     await _rerender_after_key(callback, session, key)
 
 
-async def _flip_setting(session: AsyncSession, key: str) -> None:
-    """Flip one switch, with the side effects the web save of the same switch has."""
+async def _flip_setting(session: AsyncSession, key: str) -> str | None:
+    """Flip one switch, with the checks and side effects the web save of the same switch has.
+
+    Returns the reason when the switch may not be turned on (nothing is saved then).
+    """
     new_on = not on(await get_setting(session, key))
+    if new_on and key == BBC_ENABLED_KEY:
+        refusal = await bbc_enable_error(session, {key: "1"}, reseller_id=None)
+        if refusal:
+            return refusal
     if key == MINIAPP_SHOPS_SWITCH:
         if await set_platform_shop_miniapps(session, enabled=new_on):
             # Shop bots' «Open» buttons appear or go away with the switch, as after the web save.
             schedule_shop_menu_sync()
-        return
+        return None
     await set_setting(session, key, "1" if new_on else "0")
     if key == "trial_enabled":
         trial = (await session.execute(select(Plan).where(Plan.is_trial.is_(True)))).scalar_one_or_none()
         if trial:
             trial.is_active = new_on
             await session.commit()
+    return None
+
+
+def _plan_scope_meta(key: str) -> tuple | None:
+    meta = FIELDS.get(key)
+    return meta if meta is not None and meta[2] == PLAN_SCOPE_KIND else None
+
+
+async def _show_plan_picker(callback: CallbackQuery, session: AsyncSession, key: str) -> None:
+    loc = _owner_screen_for_key(key)
+    back = f"adm:st:sub:{loc[0]}:{loc[1]}" if loc else "adm:st:hub"
+    markup = plan_picker_markup("adm:st", key, await get_setting(session, key), await plan_choices(session, None), back)
+    if callback.message:
+        await safe_edit_text(callback.message, plan_picker_text(FIELDS[key][1]), reply_markup=markup)
+
+
+@settings_actor_required
+@router.callback_query(F.data.startswith("adm:st:plo:"))
+async def settings_plan_scope_open(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    key = callback.data.split(":", 3)[-1]
+    if not _is_admin(db_user) or _plan_scope_meta(key) is None:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    await callback.answer()
+    await _show_plan_picker(callback, session, key)
+
+
+@settings_actor_required
+@router.callback_query(F.data.regexp(r"^adm:st:pls:[a-z_]{1,48}:(all|\d{1,10})$"))
+async def settings_plan_scope_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    _, _, _, key, choice = callback.data.split(":")
+    if not _is_admin(db_user) or _plan_scope_meta(key) is None:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    own = [c.plan_id for c in await plan_choices(session, None)]
+    try:
+        value = toggle_plan_scope(await get_setting(session, key), choice, own)
+    except ValueError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await set_setting(session, key, value)
+    await callback.answer(feedback.SAVED)
+    await _show_plan_picker(callback, session, key)
 
 
 @settings_actor_required
@@ -1195,112 +1310,10 @@ async def settings_select_cycle(
     if not options or meta is None or meta[2] != "select":
         await callback.answer("کلید نامعتبر", show_alert=True)
         return
-    values = [value for value, _label in options]
-    cur = await get_setting(session, key)
-    if cur not in values:
-        cur = values[0]
-    nxt = values[(values.index(cur) + 1) % len(values)]
+    nxt = next_select_value(key, await get_setting(session, key))
     await set_setting(session, key, nxt)
     await callback.answer(feedback.SAVED)
     await _rerender_after_key(callback, session, key)
-
-
-def _search_entries() -> list[SettingsSearchEntry]:
-    entries: list[SettingsSearchEntry] = []
-    for sec_id, sec in SECTIONS.items():
-        for sub_id, sub_title, payload, *_ in sec.get("subs") or []:
-            entries.append(
-                SettingsSearchEntry(
-                    label=sub_title, section_id=sec_id, section_title=sec["title"],
-                    sub_id=sub_id, sub_title=sub_title,
-                )
-            )
-            if isinstance(payload, list):
-                entries.extend(
-                    SettingsSearchEntry(
-                        label=label, section_id=sec_id, section_title=sec["title"],
-                        sub_id=sub_id, sub_title=sub_title, key=key,
-                    )
-                    for key, label, _kind in payload
-                )
-    return entries
-
-
-_SEARCH_ENTRIES = _search_entries()
-_SEARCH_PROMPT = (
-    "🔍 <b>جستجو در تنظیمات</b>\n"
-    "بخشی از نام گزینه را بفرستید؛ مثلاً «کارت»، «قوانین» یا «دکمه خرید».\n"
-    "برای انصراف: انصراف"
-)
-
-
-def _search_results_panel(query: str) -> Panel:
-    hits = search_settings(_SEARCH_ENTRIES, query)
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=f"{hit.label} — {hit.section_title}"[:60],
-                callback_data=f"adm:st:sub:{hit.section_id}:{hit.sub_id}",
-            )
-        ]
-        for hit in hits
-    ]
-    rows.append(
-        [InlineKeyboardButton(text="🔍 جستجوی دیگر", callback_data="adm:st:find")]
-    )
-    rows.append(_back_row("adm:st:hub"))
-    head = (
-        f"🔍 <b>نتیجه‌ها</b> ({len(hits)})\nروی گزینه بزنید تا همان بخش باز شود."
-        if hits
-        else "🔍 چیزی پیدا نشد. با کلمه‌ی کوتاه‌تر یا نام دیگری امتحان کنید."
-    )
-    return head, _kb(rows)
-
-
-@settings_actor_required
-@router.callback_query(F.data == "adm:st:find")
-async def settings_search_ask(
-    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
-):
-    if not _is_admin(db_user):
-        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
-        return
-    await callback.answer()
-    from app.bot.nav_input import ask_text
-
-    await ask_text(
-        callback,
-        state,
-        prompt=_SEARCH_PROMPT,
-        cancel_code="adm_set",
-        fsm_state=SettingsStates.search_query,
-        edit=True,
-    )
-
-
-@settings_actor_required
-@router.message(SettingsStates.search_query)
-async def settings_search_run(
-    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
-):
-    if not _is_admin(db_user):
-        await state.clear()
-        return
-    text = (message.text or "").strip()
-    if not text or kb.is_cancel_text(text):
-        if text:
-            from app.bot.nav_input import try_legacy_cancel
-
-            if await try_legacy_cancel(message, state, session, db_user):
-                return
-        await _silent_settings_cancel(message, state, session, db_user)
-        return
-    body, markup = _search_results_panel(text[:SEARCH_QUERY_MAX_LEN])
-    await finish_text_step(message, state, text=body, inline=markup)
-    await state.clear()
-    await _keep_settings_nav(state)
-    await delete_user_message(message)
-
 
 
 @settings_actor_required
@@ -1326,12 +1339,12 @@ async def settings_edit_ask(
         from app.services.users import format_force_join_for_edit
 
         cur = format_force_join_for_edit(cur)
+    cur = UNLIMITED_LABEL if cur and cur == NUMBER_UNLIMITED_VALUES.get(key) else cur
     loc = _owner_screen_for_key(key)
     await callback.answer()
     await state.update_data(edit_key=key, edit_loc=loc)
     if kind == "number" and key in NUMBER_INT_RANGES:
-        lo, hi = NUMBER_INT_RANGES[key]
-        hint = f"یک عدد صحیح بین {lo} و {hi} بفرستید."
+        hint = _number_range_hint(key)
     elif kind == "number":
         hint = "عدد بفرستید."
     else:
@@ -1348,12 +1361,15 @@ async def settings_edit_ask(
             )
         elif is_message_rich_key(key):
             hint += "\n<i>ایموجی پریمیوم در متن پیام حفظ می‌شود.</i>"
+    template_hint = text_template_hint(key)
+    if template_hint:
+        hint += "\n" + template_hint
     from app.bot.nav_input import ask_text
 
     prompt = (
         secret_prompt(label, cur)
         if is_secret(kind)
-        else f"<b>{label}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}"
+        else f"<b>{label}</b>\nفعلی:\n<code>{html.escape(_preview(cur))}</code>\n\n{hint}"
     )
     await ask_text(
         callback,
@@ -1363,6 +1379,35 @@ async def settings_edit_ask(
         fsm_state=SettingsStates.edit_value,
         edit=True,
     )
+
+
+def _owner_setting_value(key: str, kind: str, text: str, message: Message) -> str:
+    """The stored form of a typed owner setting; ``ValueError`` carries the message to show."""
+    if is_secret(kind):
+        return text
+    if kind == "number":
+        return _parse_number_setting(key, text)
+    if key in TEXT_NORMALIZERS:
+        try:
+            return TEXT_NORMALIZERS[key](text)
+        except ValueError as exc:
+            raise ValueError(domain_error_text(exc)) from exc
+    if key == "force_join_channel":
+        return normalize_force_join_channel_value(text)
+    if key == "receipt_dup_policy":
+        return normalize_dup_policy(text)
+    if wants_default_text(key, text):
+        return ""
+    return pack_setting_from_message(key, message)
+
+
+async def _store_owner_setting(session: AsyncSession, key: str, value: str) -> None:
+    """Save one owner setting; the bot's Telegram profile texts are pushed to Telegram first."""
+    if key in PROFILE_TEXT_FIELDS:
+        token = current_setup_values().get("BOT_TOKEN")
+        await update_bot_profile_text(session, token=token, key=key, value=value, reseller_id=None)
+        return
+    await set_setting(session, key, value)
 
 
 @settings_actor_required
@@ -1390,45 +1435,11 @@ async def settings_edit_save(
     kind = meta[2] if meta else "text"
     if is_secret(kind):
         await delete_user_message(message)
-        await set_setting(session, key, text)
-    elif kind == "number":
-        raw = text.replace(",", "").replace("٬", "")
-        bounds = NUMBER_INT_RANGES.get(key)
-        if bounds is not None:
-            try:
-                text = str(_parse_bounded_int(raw, bounds[0], bounds[1]))
-            except ValueError:
-                lo, hi = bounds
-                await message.answer(f"یک عدد صحیح بین {lo} و {hi} بفرستید.")
-                return
-        else:
-            try:
-                float(raw)
-            except ValueError:
-                await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
-                return
-            text = raw
-        await set_setting(session, key, text)
-    elif key in TEXT_NORMALIZERS:
-        try:
-            text = TEXT_NORMALIZERS[key](text)
-        except ValueError as exc:
-            await message.answer(domain_error_text(exc))
-            return
-        await set_setting(session, key, text)
-    elif key == "force_join_channel":
-        from app.services.users import normalize_force_join_channel_value
-
-        await set_setting(session, key, normalize_force_join_channel_value(text))
-    elif key == "receipt_dup_policy":
-        from app.services.receipt_fingerprints import normalize_dup_policy
-
-        await set_setting(session, key, normalize_dup_policy(text))
-    else:
-        from app.services.rich_text import pack_setting_from_message
-
-        text = pack_setting_from_message(key, message)
-        await set_setting(session, key, text)
+    try:
+        await _store_owner_setting(session, key, _owner_setting_value(key, kind, text, message))
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
     await _finish_settings_text_edit(message, state, session, db_user, loc=loc)
 
 

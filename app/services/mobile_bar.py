@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.db_safe import rollback_quiet
-from app.services.panel_nav import DOCK_SLOTS, DockChoice, dock_choices
+from app.services.panel_nav import DOCK_SLOTS, LEGACY_DOCK_KEYS, DockChoice, dock_choices
 from app.services.users import get_setting, set_setting
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def parse_bar_order(raw: str | None) -> tuple[str, ...]:
     known = _choice_keys()
     order: list[str] = []
     for part in str(raw or "").split(","):
-        key = part.strip()
+        key = LEGACY_DOCK_KEYS.get(part.strip(), part.strip())
         if key in known and key not in order:
             order.append(key)
     return tuple(order[:DOCK_SLOTS])

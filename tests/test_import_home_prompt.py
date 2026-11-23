@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import SendRichMessage
@@ -65,7 +63,10 @@ class OfferRuleTests(unittest.TestCase):
 
     def test_an_available_trial_is_enough_to_offer_even_with_adding_old_services_off(self):
         self.assertTrue(prompt.should_offer_import(OFF, has_services=False, dismissed=False, trial_available=True))
-        self.assertFalse(prompt.should_offer_import(OFF, has_services=True, dismissed=False, trial_available=True))
+        # Whether a service owner may get the trial is decided before (``may_offer_trial``); an owner
+        # with no trial available and adding old services on gets nothing.
+        self.assertFalse(prompt.should_offer_import(ON, has_services=True, dismissed=False, trial_available=False))
+        self.assertFalse(prompt.should_offer_import(OFF, has_services=False, dismissed=True, trial_available=True))
 
 
 class SendTests(unittest.IsolatedAsyncioTestCase):

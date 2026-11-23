@@ -25,7 +25,7 @@
   {% endfor %}
 </nav>
 
-{% set selectable = can_message or can_block %}
+{% set selectable = can_message or can_block or can_retrial %}
 <div class="card card-flush">
   <form method="get" action="/trial-users" class="search-bar">
     {% if active_filter != 'all' %}<input type="hidden" name="filter" value="{{ active_filter }}" />{% endif %}
@@ -34,17 +34,14 @@
     </label>
     {{ search_submit() }}
   </form>
+  {% set bulk_ops = [] %}
+  {% if can_message %}{% set _ = bulk_ops.append({'key': 'message', 'label': 'پیام', 'confirm': 'پیام برای {n} کاربر ارسال شود؟ کاربرانی که پیام بازاریابی را قطع کرده‌اند حذف می‌شوند.', 'confirm_title': 'پیام به کاربران تست', 'confirm_label': 'ارسال', 'reason': true, 'reason_label': 'متن پیام'}) %}{% endif %}
+  {% if can_retrial %}{% set _ = bulk_ops.append({'key': 'retrial', 'label': 'تست دوباره', 'confirm': '{n} کاربر بتوانند دوباره از این فروشگاه تست بگیرند؟ سفارش و سرویس تست قبلی‌شان می‌ماند.', 'confirm_title': 'اجازهٔ تست دوباره', 'confirm_label': 'اجازه بده'}) %}{% endif %}
   {% if can_block %}
-  {{ table_bulk_bar('/trial-users/bulk-action', [
-    {'key': 'message', 'label': 'پیام', 'confirm': 'پیام برای {n} کاربر ارسال شود؟ کاربرانی که پیام بازاریابی را قطع کرده‌اند حذف می‌شوند.', 'confirm_title': 'پیام به کاربران تست', 'confirm_label': 'ارسال', 'reason': true, 'reason_label': 'متن پیام'},
-    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر در کل سیستم مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true},
-    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
-  ]) }}
-  {% elif can_message %}
-  {{ table_bulk_bar('/trial-users/bulk-action', [
-    {'key': 'message', 'label': 'پیام', 'confirm': 'پیام برای {n} کاربر ارسال شود؟ کاربرانی که پیام بازاریابی را قطع کرده‌اند حذف می‌شوند.', 'confirm_title': 'پیام به کاربران تست', 'confirm_label': 'ارسال', 'reason': true, 'reason_label': 'متن پیام'},
-  ]) }}
+  {% set _ = bulk_ops.append({'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر در کل سیستم مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true}) %}
+  {% set _ = bulk_ops.append({'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'}) %}
   {% endif %}
+  {% if bulk_ops %}{{ table_bulk_bar('/trial-users/bulk-action', bulk_ops) }}{% endif %}
   {{ user_card_hint() }}
   <div class="table-wrap">
   <table class="table-compact table-list-sm" data-sortable{% if selectable %} data-bulk-select{% endif %}>
@@ -71,6 +68,7 @@
     {% for row in rows %}
       {% set ops = [] %}
       {% if can_message and not row.is_blocked and not row.is_opted_out %}{% set _ = ops.append('message') %}{% endif %}
+      {% if can_retrial and not row.is_buyer and not row.is_blocked and row.trial_state == 'ended' %}{% set _ = ops.append('retrial') %}{% endif %}
       {% if can_block and row.can_manage %}{% set _ = ops.append('unblock' if row.is_blocked else 'block') %}{% endif %}
       <tr data-uid="{{ row.user_id }}"{% if selectable %} data-bulk-ops="{{ ops | join(',') }}"{% endif %}>
         {% if selectable %}{{ table_select_cell(row.user_id) }}{% endif %}
@@ -118,6 +116,18 @@
               <input type="hidden" name="return_to" value="{{ return_to }}" />
               <input type="hidden" name="reason" value="" />
               <button class="btn btn-ghost btn-sm" type="submit">پیام</button>
+            </form>
+            {% endif %}
+            {% if 'retrial' in ops %}
+            <form method="post" action="/trial-users/bulk-action"
+                  data-confirm="این کاربر بتواند دوباره از این فروشگاه تست بگیرد؟ سفارش و سرویس تست قبلی‌اش می‌ماند."
+                  data-confirm-title="اجازهٔ تست دوباره"
+                  data-confirm-label="اجازه بده">
+              {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
+              <input type="hidden" name="action" value="retrial" />
+              <input type="hidden" name="ids" value="{{ row.user_id }}" />
+              <input type="hidden" name="return_to" value="{{ return_to }}" />
+              <button class="btn btn-ghost btn-sm" type="submit">تست دوباره</button>
             </form>
             {% endif %}
             {% if 'block' in ops or 'unblock' in ops %}

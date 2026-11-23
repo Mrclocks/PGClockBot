@@ -7,11 +7,9 @@ panel.css and sales-chart.js. Skipped when Playwright is not installed.
 from __future__ import annotations
 
 import json
-import os
 import re
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.api.app import templates
 from app.services.dashboard_trend import empty_trend
@@ -37,6 +35,8 @@ def _chart_page() -> str:
         '<!doctype html><html lang="fa" dir="rtl" data-theme="dark"><head><meta charset="utf-8">'
         '<link rel="stylesheet" href="/static/panel.css"></head>'
         f'<body><div style="width:760px;padding:24px">{card}</div>'
+        # base.html loads fa-number.js in the head of every page; the chart formats its figures with it.
+        '<script src="/static/fa-number.js"></script>'
         '<script src="/static/sales-chart.js"></script></body></html>'
     )
 

@@ -1,13 +1,11 @@
 """Queue of automatic purchases parked for review: scope, safe release, web route, bot and template."""
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.automation_review_pages import register_automation_review_pages
 from app.bot.handlers import automation_review as bot
@@ -22,6 +20,7 @@ from app.services.automation_review import (
     list_review_queue,
     shops_without_bot_token,
 )
+from tests.postgres_support import scoped_async_engine
 
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
 SHOP_STAFF = {"role": "reseller", "bot_user_id": 2, "permissions": ["orders"]}
@@ -29,8 +28,7 @@ SHOP_STAFF = {"role": "reseller", "bot_user_id": 2, "permissions": ["orders"]}
 
 class ReviewCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'auto.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -76,7 +74,6 @@ class ReviewCase(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def row(self, service_id):
         row = await self.session.get(ServiceAutomation, service_id)

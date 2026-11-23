@@ -5,7 +5,6 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -178,7 +177,6 @@ class BackupManifestPathTests(unittest.TestCase):
     def test_manifest_uses_relative_db_path(self):
         src = (ROOT / "app/services/backup.py").read_text(encoding="utf-8")
         # Relative archive members only (never absolute live paths).
-        self.assertIn('SQLITE_DB_MEMBER = "data/bot.db"', src)
         self.assertIn('POSTGRES_DUMP_MEMBER = "data/postgres.dump"', src)
         self.assertIn('"db_path": db_member', src)
         self.assertNotIn('"db_path": str(db_src)', src)
@@ -231,15 +229,6 @@ class OwnerBypassGuardsStillHold(unittest.TestCase):
             "        return get_pg(), True",
             src,
         )
-
-
-class Version383Tests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 
 if __name__ == "__main__":

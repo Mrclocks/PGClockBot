@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from datetime import timedelta
 from urllib.parse import unquote
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
+import sqlalchemy as sa
 from sqlalchemy import select
 
 from app.db.models import ShopStaffAction, UserService
@@ -22,6 +21,7 @@ from tests.test_service_cleanup import (
     CleanupCase,
     SHOP_SESSION,
 )
+from tests.postgres_support import scoped_sync_engine
 
 POLICY = CleanupPolicy(time_on=True, time_days=7, time_enabled_at=NOW - timedelta(days=60))
 ROUTE = "/service-cleanup"
@@ -138,12 +138,15 @@ class ManageAtomicityTests(CleanupCase):
             result = real(service, policy, kind)
             if kind == "time" and not getattr(self, "raced", False):
                 self.raced = True
-                import sqlite3  # the other click lands between this read and the write below
-
-                con = sqlite3.connect(self.db_path)
-                con.execute("UPDATE user_services SET cleanup_hold_until = ? WHERE id = 1", ((NOW + timedelta(days=90)).strftime("%Y-%m-%d %H:%M:%S.%f"),))
-                con.commit()
-                con.close()
+                # The other click lands, on its own connection, between this read and the write below.
+                other_click = scoped_sync_engine(tables=True)
+                with other_click.begin() as conn:
+                    conn.execute(sa.text("SET LOCAL lock_timeout = '5s'"))
+                    conn.execute(
+                        sa.text("UPDATE user_services SET cleanup_hold_until = :until WHERE id = 1"),
+                        {"until": NOW + timedelta(days=90)},
+                    )
+                other_click.dispose()
             return result
 
         from unittest.mock import patch

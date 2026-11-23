@@ -16,16 +16,16 @@ from app.config import get_settings
 from app.db.models import Plan
 from app.db.session import SessionLocal, init_db
 from app.services.bot_updates import get_update_scheduler
-from app.jobs.scheduler import start_background_scheduler, start_scheduler, stop_scheduler
+from app.jobs.scheduler import run_lite_mode_apply, start_background_scheduler, start_scheduler, stop_scheduler
 from app.services.home_overview import close_bot_probe_client
 from app.services.pasarguard import get_pg
+from app.services.shop_bot_webhook import shop_webhook_config
+from app.services.terminal_text import install_english_logging
 from app.services.users import ensure_default_settings
 from app.services.web_auth import load_web_admin
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+# The journal is read over SSH: every line is English (see services.terminal_text).
+install_english_logging(level=logging.INFO, fmt="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("pgclock")
 
 # httpx logs full request URLs at INFO — bot tokens in api.telegram.org/bot{token}/…
@@ -92,6 +92,8 @@ def main() -> None:
             logger.exception("Bot init failed — starting web panel only")
             bot = None
             dp = None
+    # Opt-in (SHOP_BOT_WEBHOOK): shop bots use the main bot's public HTTPS origin; None keeps them polling.
+    shop_webhook = shop_webhook_config() if dp is not None else None
 
     @asynccontextmanager
     async def lifespan(app):
@@ -104,12 +106,12 @@ def main() -> None:
                 "Database init timed out after 120s — check PostgreSQL is up, "
                 "DATABASE_URL password/HBA, and listen_addresses"
             )
-            raise SystemExit("Database init timed out (PostgreSQL unreachable?)")
+            raise SystemExit("Database init timed out (PostgreSQL unreachable?)") from None
         except Exception:
             logger.exception(
                 "Database init failed — panel will not listen until DATABASE_URL works"
             )
-            raise SystemExit("Database init failed — see journalctl -u pgclockbot")
+            raise SystemExit("Database init failed — see journalctl -u pgclockbot") from None
 
         from app.services.setup_wizard import ensure_web_secret
 
@@ -117,7 +119,7 @@ def main() -> None:
             ensure_web_secret()
         except Exception:
             logger.exception("ensure_web_secret failed")
-            raise SystemExit("WEB_SECRET could not be persisted — check .env permissions")
+            raise SystemExit("WEB_SECRET could not be persisted — check .env permissions") from None
 
         try:
             from app.services.service_control import ensure_restart_helper
@@ -135,6 +137,8 @@ def main() -> None:
             start_background_scheduler()
         except Exception:
             logger.exception("Background scheduler failed to start")
+        else:
+            await run_lite_mode_apply()
 
         poll_task = None
         pg_warmup_task = None
@@ -179,6 +183,9 @@ def main() -> None:
                     start_scheduler(bot)
                 except Exception:
                     logger.exception("Scheduler failed to start")
+                else:
+                    # The bot's jobs were just added on their own timers.
+                    await run_lite_mode_apply()
 
                 async def _pg_warmup() -> None:
                     try:
@@ -284,7 +291,7 @@ def main() -> None:
                 try:
                     from app.services.reseller_bots import init_reseller_bot_manager
 
-                    reseller_mgr = init_reseller_bot_manager(dp)
+                    reseller_mgr = init_reseller_bot_manager(dp, webhook=shop_webhook)
                     await asyncio.wait_for(reseller_mgr.start_all(), timeout=90)
                 except TimeoutError:
                     logger.error(
@@ -383,6 +390,11 @@ def main() -> None:
             await get_update_scheduler().submit(dp, bot, update)
             return {"ok": True}
 
+    if shop_webhook is not None:
+        from app.api.shop_bot_webhook_pages import register_shop_bot_webhook
+
+        register_shop_bot_webhook(api, config=shop_webhook)
+
     from app.services.setup_wizard import is_setup_complete, persist_setup_entry_url
     from app.services.web_auth import repair_web_admin_from_env
 
@@ -449,6 +461,8 @@ def main() -> None:
         host=settings.web_host,
         port=settings.web_port,
         log_level="info",
+        # uvicorn's own logging config would bypass the English formatter; its loggers propagate to root.
+        log_config=None,
         **ssl_kwargs,
     )
 

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
-
 import pytest
+
+from tests.postgres_support import scoped_database_url
 
 
 @pytest.fixture()
@@ -25,7 +23,7 @@ def install_tree(tmp_path, monkeypatch):
     (root / "data").mkdir()
     (root / ".env").write_text(
         'WEB_PORT="9019"\nWEB_SECRET="cli-test-secret-xxxxxxxxxxxxxxxx"\n'
-        f'DATABASE_URL="sqlite+aiosqlite:///{root / "data" / "bot.db"}"\n',
+        f'DATABASE_URL="{scoped_database_url(tables=False)}"\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("PGCLOCK_HOME", str(root))
@@ -85,7 +83,6 @@ def test_migrate_default_calls_upgrade(install_tree, monkeypatch):
     monkeypatch.setattr("app.db.alembic_runner.upgrade_head", fake_upgrade)
     monkeypatch.setattr("app.db.alembic_runner.current_revision", fake_current)
 
-    from app.cli.main import main
 
     # Patch where migrate_cmds imports from
     import app.cli.migrate_cmds as mig
@@ -131,23 +128,3 @@ def test_restore_requires_confirmation(install_tree, monkeypatch):
     with pytest.raises(CliError) as ei:
         cmd_restore(ctx, backup_id="x", yes=False)
     assert ei.value.code == 2
-
-
-def test_scripts_pgclock_wrapper_exists():
-    root = Path(__file__).resolve().parents[1]
-    wrapper = root / "scripts" / "pgclock"
-    installer = root / "scripts" / "install_global_cli.sh"
-    assert wrapper.is_file()
-    assert installer.is_file()
-    text = wrapper.read_text(encoding="utf-8")
-    assert "app.cli" in text
-    assert "PGCLOCK_HOME" in text
-
-
-def test_ctl_allows_start_stop():
-    src = (Path(__file__).resolve().parents[1] / "scripts" / "pgclockbot-ctl").read_text(
-        encoding="utf-8"
-    )
-    assert "start)" in src
-    assert "stop)" in src
-    assert "restart)" in src

@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import re
 import unittest
 from types import SimpleNamespace
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.services.resellers import FEATURE_PERMS, feature_perm_groups
 from tests.test_message_variables_entry import OWNER, _page

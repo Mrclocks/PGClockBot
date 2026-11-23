@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,9 +14,9 @@ import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.db.models import Base, BotUser, CashbackGrant, CashbackRule, Order, OrderStatus, ShopWallet
+from app.db.models import Base, BotUser, CashbackGrant, CashbackRule, Order, OrderStatus, Plan, ShopWallet
 from app.services.cashback import (
     Purchase,
     combine,
@@ -28,6 +27,7 @@ from app.services.cashback import (
     rule_amount,
 )
 from app.services.users import set_setting
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 11, 8, 12, tzinfo=timezone.utc)
@@ -83,8 +83,7 @@ class RuleTests(unittest.TestCase):
 
 class CashbackCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'k.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -95,7 +94,9 @@ class CashbackCase(unittest.IsolatedAsyncioTestCase):
                 BotUser(id=BUYER, telegram_id=9, referral_code="c"),
                 CashbackRule(id=1, shop_id=SHOP_A, name="10%", percent_bps=1000),
                 CashbackRule(id=2, shop_id=SHOP_B, name="50%", percent_bps=5000),
+                Plan(id=3, name="plan", price=100_000, owner_reseller_id=SHOP_A),
             ])
+            await session.flush()
             for n in range(1, 6):
                 session.add(Order(id=n, user_id=BUYER, plan_id=3, amount=100_000, reseller_id=SHOP_A,
                                   status=OrderStatus.DELIVERED.value, payment_method="card"))
@@ -108,7 +109,6 @@ class CashbackCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def grant(self, order_id: int, at: datetime = NOW):
         async with self.Session() as session:
@@ -202,7 +202,7 @@ class MigrationTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(module)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         self.addCleanup(engine.dispose)
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))

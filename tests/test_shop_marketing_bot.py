@@ -3,25 +3,22 @@
 from __future__ import annotations
 
 import inspect
-import os
 import secrets
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import shop_marketing_bot as view
 from app.bot.nav_inline import admin_marketing_hub_keyboard, reseller_group_hub_keyboard
-from app.bot.reseller_hub_groups import reseller_group
+from app.bot.reseller_hub_groups import NESTED_ACTIONS, reseller_group
 from app.db import Base
 from app.db.models import BotUser, CatalogDiscount, ChargeCode, FunnelEvent, TargetedCampaign
 from app.services import bot_feedback_texts as feedback
 from app.services.users import DEFAULT_SETTINGS
+from tests.postgres_support import scoped_async_engine
 
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
 SHOP = 5
@@ -45,8 +42,7 @@ def _discount(shop_id: int | None, title: str, **fields) -> CatalogDiscount:
 
 class MarketingBotCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'm.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -71,7 +67,6 @@ class MarketingBotCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def press(self, handler, data: str, staff_by_perm: dict[str, dict | None]):
         callback = AsyncMock()
@@ -211,6 +206,12 @@ class HubEntryTests(unittest.TestCase):
         entries = [(action, action) for action in view.SHOP_LEAF_OPENERS]
         with patch("app.bot.reply_keyboards._reseller_submenu_entries", return_value=entries):
             found = callbacks(reseller_group_hub_keyboard("shop", MagicMock(), dict(DEFAULT_SETTINGS)))
-        for expected in ("res:gc", "res:cmp", "dsc:l", "fnl:v"):
+        for expected in ("res:gc", "dsc:l", "fnl:v"):
             self.assertIn(expected, found)
+        # Staff without group messages open campaigns here; with group messages they open from that hub instead.
+        self.assertIn("res:cmp", found)
         self.assertTrue(set(view.SHOP_LEAF_OPENERS) <= set(reseller_group("shop").actions))
+        with patch("app.bot.reply_keyboards._reseller_submenu_entries", return_value=[*entries, ("res_broadcast", "b")]):
+            found = callbacks(reseller_group_hub_keyboard("shop", MagicMock(), dict(DEFAULT_SETTINGS)))
+        self.assertNotIn("res:cmp", found)
+        self.assertIn("res_campaigns", NESTED_ACTIONS)

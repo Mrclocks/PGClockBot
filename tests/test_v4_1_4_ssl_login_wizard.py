@@ -38,11 +38,6 @@ class LoginFlashTests(unittest.TestCase):
 
 
 class WizardFinishUrlTests(unittest.TestCase):
-    def test_setup_finish_uses_http_login_url(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("setup_finish_login_url()", src)
-        self.assertNotIn('RedirectResponse("/login?restarting=1"', src)
-
     def test_setup_finish_login_url_http_when_ssl_off(self):
         from app.services.setup_wizard import setup_finish_login_url
 

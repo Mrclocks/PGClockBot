@@ -81,8 +81,9 @@ class Phase3Phase4SourceGuards(unittest.TestCase):
         self.assertIn("user_safe_error(send_exc)", actions)
 
     def test_scheduler_logs_shop_bot_close_failures(self):
-        src = (ROOT / "app/jobs/scheduler.py").read_text(encoding="utf-8")
-        idx = src.find("shop_bot.session.close")
+        # The nightly reports, the only place that opens a shop bot, moved out of the scheduler.
+        src = (ROOT / "app/services/daily_report_delivery.py").read_text(encoding="utf-8")
+        idx = src.find("bot.session.close")
         self.assertGreater(idx, 0)
         block = src[idx - 220 : idx + 260]
         self.assertIn("logger.debug", block)

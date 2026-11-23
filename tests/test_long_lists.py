@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot import keyboards as kb
 from app.bot.handlers import admin_plans, service_search
@@ -20,6 +16,7 @@ from app.bot.nav_inline import services_list_keyboard
 from app.db import Base
 from app.db.models import BotUser, UserService
 from app.services.service_scope import search_customer_services
+from tests.postgres_support import scoped_async_engine
 
 
 def _callbacks(markup) -> list[str]:
@@ -69,7 +66,7 @@ class PlanListTests(unittest.IsolatedAsyncioTestCase):
         session = MagicMock(execute=AsyncMock(return_value=MagicMock(scalars=lambda: MagicMock(all=lambda: plans))))
         with (
             patch.object(admin_plans, "get_all_settings", AsyncMock(return_value={})),
-            patch("app.bot.handlers.admin._plan_line", side_effect=lambda p: f"card {p.id}"),
+            patch("app.bot.handlers.admin_plan_editor._plan_line", side_effect=lambda p: f"card {p.id}"),
         ):
             text, markup = await admin_plans.users_fixed_list_view(session, 2)
         data = _callbacks(markup)
@@ -98,8 +95,7 @@ class PlanListTests(unittest.IsolatedAsyncioTestCase):
 
 class ServiceSearchTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 's.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -119,7 +115,6 @@ class ServiceSearchTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _found(self, text: str, shop: int | None = None) -> list[int]:
         async with self.Session() as session:

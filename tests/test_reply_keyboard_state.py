@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey

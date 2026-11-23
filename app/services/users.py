@@ -19,6 +19,16 @@ from app.services.screen_titles import SCREEN_TEXT_TAB, screen_text_defaults, sc
 from app.services.settings_button_labels import appearance_button_subs, shop_button_subs
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
+from app.services.service_import_config import (
+    DEFAULT_MAX_PER_USER as IMPORT_DEFAULT_MAX_PER_USER,
+    UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
+)
+from app.services.customer_notice_texts import (
+    CLEANUP_GROUP as NOTICE_CLEANUP_GROUP,
+    STAFF_ACTION_GROUP as NOTICE_STAFF_ACTION_GROUP,
+    notice_text_defaults,
+    web_setting_groups as notice_web_setting_groups,
+)
 from app.services.entry_approval_config import (
     ENTRY_APPROVAL_DEFAULTS,
     GROUP_TITLE as ENTRY_APPROVAL_GROUP,
@@ -26,6 +36,22 @@ from app.services.entry_approval_config import (
     entry_approval_visibility,
     prepare_saved_values as prepare_entry_approval_values,
     touches_entry_approval,
+)
+from app.services.receipt_risk import RISK_DEFAULTS as RECEIPT_RISK_DEFAULTS, WEB_FIELDS as RECEIPT_RISK_FIELDS
+from app.services.auto_renew_timing import (
+    GROUP_TITLE as AUTO_RENEW_GROUP,
+    TIMING_DEFAULTS as AUTO_RENEW_DEFAULTS,
+    WEB_FIELDS as AUTO_RENEW_FIELDS,
+)
+from app.services.service_transfer_settings import (
+    GROUP_TITLE as SERVICE_TRANSFER_GROUP,
+    TRANSFER_DEFAULTS,
+    WEB_FIELDS as SERVICE_TRANSFER_FIELDS,
+)
+from app.services.service_freeze_settings import (
+    FREEZE_DEFAULTS,
+    GROUP_TITLE as SERVICE_FREEZE_GROUP,
+    WEB_FIELDS as SERVICE_FREEZE_FIELDS,
 )
 from app.services.psp_gateways import KEY_PSP_GATEWAYS, merge_submitted_psp_gateways
 from app.services.retired_text_defaults import refresh_retired_defaults
@@ -560,6 +586,10 @@ async def get_or_create_user(
             await on_user_referred(session, referred=user, source="telegram")
         except Exception:
             logger.debug("get_or_create_user: ignored failure", exc_info=True)
+        # Local import: coupon_programs reaches users through loyalty and the shop bots.
+        from app.services.coupon_programs import issue_referral_welcome
+
+        await issue_referral_welcome(session, user)
     return user
 
 
@@ -786,6 +816,10 @@ DEFAULT_SETTINGS = {
     "terms_buy_reseller_btn": "موافقم",
     "terms_buy_reseller_reaccept": "1",
     "trial_enabled": "0",
+    # Where «دریافت تست» shows: offer (home message), keyboard (main menu) or both.
+    "trial_button_placement": "offer",
+    "trial_for_service_owners": "0",
+    "trial_show_claimed": "1",
     "trial_require_contact": "0",
     "purchase_require_contact": "0",
     "trial_require_iran_phone": "0",
@@ -886,7 +920,19 @@ DEFAULT_SETTINGS = {
     "user_alert_low_enabled": "0",
     "user_alert_low_traffic_pct": "20",
     "user_alert_low_time_pct": "20",
+    # Superseded by the time unit below; still read for shops that set it and have not saved the new form.
+    "user_alert_low_days": "0",
+    "user_alert_low_traffic_unit": "pct",
+    # Empty until the alert form is saved: then a legacy days value (above) decides (apply_legacy_alert_days).
+    "user_alert_low_time_unit": "",
+    # Empty = the built-in alert texts (usage_alert_messages).
+    "user_alert_time_text": "",
+    "user_alert_traffic_text": "",
     "first_use_nudge_enabled": "0",
+    # One message after the second manual renewal of a service, pointing to automatic renewal.
+    "auto_renew_offer_enabled": "1",
+    # Renewal price (and the wallet's shortfall) under the low-time and low-volume alerts.
+    "user_alert_price_preview_enabled": "1",
     # Expired / volume-finished service cleanup (service_cleanup.py keeps the same defaults).
     "expired_cleanup_enabled": "0",
     "expired_cleanup_days": "7",
@@ -906,6 +952,7 @@ DEFAULT_SETTINGS = {
     "bot_tg_photo": "",
 
     "btn_shop": "🟢🛒 خرید سرویس",
+    "btn_trial": "🎁 دریافت تست",
     "btn_services": "🔵📦 سرویس‌های من",
     "btn_wallet": "🟡👛 کیف پول",
     "btn_wallet_topup": "🟢➕ شارژ کیف پول",
@@ -972,8 +1019,9 @@ DEFAULT_SETTINGS = {
     "btn_backup_create_env": "🆕 بکاپ + .env",
     "btn_backup_upload": "📤 آپلود فایل بکاپ",
     "btn_backup_refresh": "🔄 تازه‌سازی لیست",
+    "btn_backup_settings": "⚙️ تنظیمات بکاپ",
     "btn_bc_aud_all": "📢 همه",
-    "btn_bc_aud_users": "👥 کاربران عادی",
+    "btn_bc_aud_users": "👥 مشتریان (بدون ادمین)",
     "btn_bc_aud_resellers": "🤝 فقط نمایندگان",
     "btn_bc_aud_admins": "🛠 ادمین‌ها",
     "btn_adm_plans_aud_users": "📦 پلن‌های کاربران",
@@ -1017,12 +1065,18 @@ DEFAULT_SETTINGS = {
     "btn_adm_trial_users": "🧪 کاربران تست",
     "btn_adm_broadcast_history": "📜 تاریخچهٔ ارسال‌ها",
     "btn_adm_staff_audit": "🧾 گزارش کارکنان",
+    "btn_adm_quick_links": "🔗 لینک‌های سریع",
+    "btn_adm_command_center": "⚡ مرکز فرمان",
+    "btn_adm_search": "🔎 جستجو",
     "btn_adm_service_shop_review": "🏷 تعیین فروشگاه سرویس",
     "btn_pg_hosts": "🌐 هاست‌ها",
     "btn_pg_inbounds": "📡 اینباندها",
     "btn_pg_admins": "🛡 ادمین‌های پنل",
     "btn_res_trial_users": "🧪 کاربران تست",
     "btn_res_staff_audit": "🧾 گزارش کارکنان",
+    "btn_res_quick_links": "🔗 لینک‌های سریع",
+    "btn_res_command_center": "⚡ مرکز فرمان",
+    "btn_res_search": "🔎 جستجو",
     "btn_adm_discounts": "🏷 تخفیف‌ها",
     "btn_adm_funnel": "📊 رفتار کاربر",
     "btn_res_gift_codes": "🎁 کد هدیه",
@@ -1198,7 +1252,7 @@ DEFAULT_SETTINGS = {
     "admin_daily_report_enabled": "1",
     "pg_link_watchdog_enabled": "1",
     "pg_link_alerts_enabled": "1",
-    "admin_daily_report_hour": "0",
+    "admin_daily_report_hour": "4",
     "admin_daily_report_last": "",
     "admin_daily_report_template": "",
     "admin_daily_report_metrics": "",
@@ -1212,6 +1266,7 @@ DEFAULT_SETTINGS = {
     "backup_last_verify_ok": "",
     "backup_keep_count": "10",
     "backup_telegram_enabled": "0",
+    "backup_telegram_allow_env": "0",
     "backup_telegram_custom_bot": "0",
     "backup_telegram_bot_token": "",
     "backup_telegram_chat_ids": "",
@@ -1233,7 +1288,7 @@ DEFAULT_SETTINGS = {
     "miniapp_accent_color": "",
     "miniapp_notice": "",
     "service_import_mode": "instant",
-    "service_import_max_per_user": "5",
+    "service_import_max_per_user": str(IMPORT_DEFAULT_MAX_PER_USER),
     "service_import_paths": "",
     "service_import_admins": "",
 }
@@ -1241,6 +1296,11 @@ DEFAULT_SETTINGS.update(button_style_defaults())
 DEFAULT_SETTINGS.update(screen_text_defaults())
 DEFAULT_SETTINGS.update(MONITOR_TEXT_DEFAULTS)
 DEFAULT_SETTINGS.update(ENTRY_APPROVAL_DEFAULTS)
+DEFAULT_SETTINGS.update(FREEZE_DEFAULTS)
+DEFAULT_SETTINGS.update(TRANSFER_DEFAULTS)
+DEFAULT_SETTINGS.update(RECEIPT_RISK_DEFAULTS)
+DEFAULT_SETTINGS.update(AUTO_RENEW_DEFAULTS)
+DEFAULT_SETTINGS.update(notice_text_defaults())
 
 # field kinds: text | textarea | toggle | select | number | image
 # (key, label, kind, help?, options?)
@@ -1259,6 +1319,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("naming", "قالب نام‌گذاری"),
     ("limits", "قوانین و محدودیت‌ها"),
     ("service_import", "افزودن سرویس قبلی"),
+    ("service_actions", "کارهای مشتری روی سرویس"),
     ("guides", "آموزش اتصال"),
     ("notifications", "هشدارها"),
     ("daily_report", "گزارش روزانه"),
@@ -1296,7 +1357,7 @@ ALL_SETTINGS_TABS: list[tuple[str, str]] = [*SETTINGS_TABS, *PANEL_SETTINGS_TABS
 
 BUTTON_LABELS_GROUP = "متن دکمه‌های منو"
 
-# Settings fields shown only while another select field has one of the listed values:
+# Settings fields shown only while another select or switch field has one of the listed values:
 # key -> (controlling key, values that show it). The form hides the rest and keeps their saved values.
 SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
     "auto_approve_after_minutes": ("auto_approve_payments", ("1",)),
@@ -1309,12 +1370,30 @@ SETTING_VISIBILITY: dict[str, tuple[str, tuple[str, ...]]] = {
     "crypto_rate_api_url": ("crypto_rate_mode", ("api",)),
     "crypto_rate_api_path": ("crypto_rate_mode", ("api",)),
     "crypto_rate_api_divisor": ("crypto_rate_mode", ("api",)),
+    "backup_telegram_allow_env": ("backup_telegram_enabled", ("1",)),
     **entry_approval_visibility(),
+}
+
+# Switches whose "on" accepts a security risk: the warning is shown under the switch in danger tone.
+SETTING_RISK_NOTES: dict[str, str] = {
+    "backup_telegram_allow_env": (
+        "با روشن کردن این گزینه، بکاپ‌هایی که .env دارند همراه توکن ربات، WEB_SECRET، رمز دیتابیس "
+        "و دسترسی پاسارگارد در تلگرام نگه داشته می‌شوند. هر کس به این گفتگو یا حساب تلگرام گیرنده "
+        "دسترسی پیدا کند، کنترل کامل پنل و ربات را به دست می‌گیرد. فقط برای گفتگوی خصوصی و امن روشن کنید."
+    ),
 }
 
 # Main-bot switch only: a shop gets the name step from its package permission instead.
 CUSTOM_SERVICE_NAME_GROUP = "نام دلخواه سرویس"
-PLATFORM_ONLY_SETTING_GROUPS: frozenset[str] = frozenset({CUSTOM_SERVICE_NAME_GROUP})
+# Only the main bot's Owner configures connection monitoring, so these prompts never reach a shop.
+MONITOR_ADMIN_TEXTS_GROUP = "متن‌های مدیریت وضعیت اتصال"
+# The one panel link is watched and reported platform-wide; a shop value would change nothing.
+PG_LINK_HEALTH_GROUP = "سلامت ارتباط پاسارگارد"
+# Action center, one-tap renew, capacity warning and funnel tracking are the Owner's operations settings.
+OPERATIONS_GROUP = "گزارش و عملیات"
+PLATFORM_ONLY_SETTING_GROUPS: frozenset[str] = frozenset(
+    {CUSTOM_SERVICE_NAME_GROUP, MONITOR_ADMIN_TEXTS_GROUP, PG_LINK_HEALTH_GROUP, OPERATIONS_GROUP}
+)
 
 SETTING_GROUPS = {
     "خوش‌آمد و هویت": [
@@ -1340,6 +1419,8 @@ SETTING_GROUPS = {
         ("connection_status_title", "عنوان وضعیت اتصال مشتری", "text", "بدون متغیر"),
         ("connection_status_empty", "فهرست وضعیت خالی", "textarea", "بدون متغیر"),
         ("connection_status_error", "خطای دریافت وضعیت", "textarea", "بدون متغیر"),
+    ],
+    MONITOR_ADMIN_TEXTS_GROUP: [
         ("connection_status_admin_title", "عنوان مدیریت وضعیت اتصال", "text", "بدون متغیر"),
         ("connection_status_account_prompt", "تنظیم کاربر تست", "textarea", "بدون متغیر"),
         ("connection_status_name_prompt", "دریافت نام عمومی هاست", "text", "بدون متغیر"),
@@ -1398,6 +1479,7 @@ SETTING_GROUPS = {
             "اگر همان تصویر رسید برای پرداخت دیگری دیده شود",
             [("warn", "هشدار به بررسی‌کننده"), ("block", "رد کردن آپلود")],
         ),
+        *RECEIPT_RISK_FIELDS,
     ],
     "آموزش اتصال": [
         (
@@ -1466,6 +1548,7 @@ SETTING_GROUPS = {
         ("btn_admin", "دکمه ادمین", "text", ""),
         ("btn_connection_status_admin", "دکمه وضعیت اتصال", "text", "صفحهٔ اول پنل ادمین"),
         ("btn_connection_status", "دکمه وضعیت اتصال مشتری", "text", "منوی اصلی"),
+        ("btn_trial", "دکمه دریافت تست", "text", "منوی اصلی؛ محل نمایش از تنظیم پلن تست"),
         ("btn_menu_home", "دکمه منوی اصلی (کیبورد)", "text", "خروج از پیش‌نمایش / خانه"),
         ("btn_adm_hub_ops", "گروه عملیات روزانه (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_people", "گروه افراد (ادمین)", "text", "هاب پنل ادمین"),
@@ -1563,25 +1646,51 @@ SETTING_GROUPS = {
             "user_alert_low_enabled",
             "ارسال خودکار هشدار کمبود به کاربر",
             "toggle",
-            "وقتی حجم یا زمان باقی‌ماندهٔ سرویس از درصد تعیین‌شده کمتر شود، به کاربر در تلگرام پیام می‌رود.",
+            "وقتی حجم یا زمان باقی‌ماندهٔ سرویس از حد تعیین‌شده کمتر شود، به کاربر در تلگرام پیام می‌رود.",
         ),
         (
             "user_alert_low_traffic_pct",
-            "کمتر از چند درصد حجم؟",
-            "number",
-            "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ حجم مانده پیام برود",
+            "حجم کمتر از",
+            "threshold",
+            "وقتی حجم باقی‌مانده از این مقدار کمتر شود پیام می‌رود. درصد از کل حجم سرویس است؛ گیگ مقدار ثابت باقی‌مانده.",
+            ("user_alert_low_traffic_unit", [("pct", "درصد"), ("gb", "گیگ")]),
         ),
         (
             "user_alert_low_time_pct",
-            "کمتر از چند درصد زمان؟",
-            "number",
-            "۱ تا ۹۹ — مثلاً ۲۰ یعنی وقتی کمتر از ۲۰٪ از مدت سرویس مانده پیام برود",
+            "زمان کمتر از",
+            "threshold",
+            "وقتی زمان باقی‌مانده از این مقدار کمتر شود پیام می‌رود. درصد از مدت سرویس است؛ روز تعداد روز باقی‌مانده.",
+            ("user_alert_low_time_unit", [("pct", "درصد"), ("day", "روز")]),
+        ),
+        (
+            "user_alert_time_text",
+            "متن هشدار کمبود زمان",
+            "textarea",
+            "خالی = متن پیش‌فرض. متغیرها: {service_name} {days_left} {expire_date} {shop_title}",
+        ),
+        (
+            "user_alert_traffic_text",
+            "متن هشدار کمبود حجم",
+            "textarea",
+            "خالی = متن پیش‌فرض. متغیرها: {service_name} {traffic_used} {shop_title}",
+        ),
+        (
+            "user_alert_price_preview_enabled",
+            "نمایش قیمت تمدید در هشدار",
+            "toggle",
+            "زیر هشدار کمبود زمان و حجم، قیمت تمدید همین پلن و موجودی کیف پول نوشته می‌شود؛ اگر کیف پول کم باشد، دکمهٔ شارژ همان مبلغ کسری هم می‌آید.",
         ),
         (
             "first_use_nudge_enabled",
             "پیام کمکی برای سرویس بدون مصرف",
             "toggle",
             "اگر ۲۴ ساعت پس از تحویل سرویس هنوز هیچ ترافیکی مصرف نشده باشد، یک بار پیام کمکی با دکمهٔ آموزش اتصال و پشتیبانی برای کاربر می‌رود.",
+        ),
+        (
+            "auto_renew_offer_enabled",
+            "پیشنهاد تمدید خودکار",
+            "toggle",
+            "بعد از دومین تمدید دستی یک سرویس، یک بار پیامی با دکمهٔ «روشن کردن تمدید خودکار» برای مشتری می‌رود. برای هر سرویس فقط یک بار؛ اگر پرداخت با کیف پول خاموش باشد فرستاده نمی‌شود.",
         ),
     ],
     "گزارش روزانه": [
@@ -1599,9 +1708,9 @@ SETTING_GROUPS = {
         ),
         (
             "admin_daily_report_hour",
-            "ساعت ارسال (۰–۲۳، UTC)",
+            "ساعت ارسال (۰–۲۳، به وقت تهران)",
             "number",
-            "گزارش روز کامل قبل تهران را می‌فرستد · تهران = UTC + ۳:۳۰ · پیش‌فرض ۰ = ۰۳:۳۰ تهران · اگر ربات خاموش باشد همان روز بعداً فرستاده می‌شود",
+            "گزارش روز کامل قبل را می‌فرستد · پیش‌فرض ۴ = ساعت ۰۴:۰۰ بامداد · اگر ربات در این ساعت خاموش باشد، همان روز بعداً فرستاده می‌شود",
         ),
         (
             "admin_daily_report_template",
@@ -1610,7 +1719,7 @@ SETTING_GROUPS = {
             "متغیرها: {admin_name} {users_new} {revenue_today} … — فهرست کامل در همین تب و /message-variables",
         ),
     ],
-    "سلامت ارتباط پاسارگارد": [
+    PG_LINK_HEALTH_GROUP: [
         (
             "pg_link_watchdog_enabled",
             "پایش خودکار ارتباط با پاسارگارد",
@@ -1621,10 +1730,10 @@ SETTING_GROUPS = {
             "pg_link_alerts_enabled",
             "اعلان قطع و برقراری ارتباط پاسارگارد",
             "toggle",
-            "به مالک تلگرام اطلاع می‌دهد وقتی لینک قطع یا دوباره برقرار می‌شود. حداکثر یک پیام از هر نوع در ۱۵ دقیقه. پیش‌فرض روشن است.",
+            "به مالک تلگرام اطلاع می‌دهد وقتی لینک حدود یک دقیقه قطع بماند و بعد از بازیابی پایدار دوباره برقرار شود. قطع لحظه‌ای پیام نمی‌دهد؛ حداکثر یک پیام قطع در ۳۰ دقیقه. پیش‌فرض روشن است.",
         ),
     ],
-    "گزارش و عملیات": [
+    OPERATIONS_GROUP: [
         (
             "action_center_expire_days",
             "پنجره سرویس‌های نزدیک انقضا (روز)",
@@ -1633,9 +1742,9 @@ SETTING_GROUPS = {
         ),
         (
             "one_tap_renew_enabled",
-            "دکمه تمدید یک‌ضرب در هشدار انقضا",
+            "دکمهٔ تمدید سرویس در هشدارها",
             "toggle",
-            "در پیام هشدار انقضا دکمه تمدید سریع نمایش داده شود",
+            "در پیام هشدار کمبود زمان و حجم، دکمهٔ «تمدید سرویس» نمایش داده شود",
         ),
         (
             "capacity_warn_pct",
@@ -1683,7 +1792,13 @@ SETTING_GROUPS = {
             "backup_telegram_enabled",
             "ارسال بکاپ به تلگرام",
             "toggle",
-            "بعد از هر بکاپ بدون .env، فایل برای گیرنده‌ها فرستاده می‌شود (تا ۵۰ مگابایت).",
+            "بعد از هر بکاپ، فایل برای گیرنده‌ها فرستاده می‌شود (تا ۵۰ مگابایت). بکاپ شامل .env فقط با «تأیید ریسک» فرستاده می‌شود.",
+        ),
+        (
+            "backup_telegram_allow_env",
+            "تأیید ریسک: ارسال بکاپ همراه .env",
+            "toggle",
+            "خاموش: بکاپی که .env دارد ساخته می‌شود ولی به تلگرام نمی‌رود.",
         ),
         (
             "backup_telegram_custom_bot",
@@ -1963,8 +2078,10 @@ SETTING_GROUPS = {
         (
             "service_import_max_per_user",
             "سقف سرویس افزوده‌شده برای هر مشتری",
-            "number",
-            "بین ۱ تا ۲۰ — پیش‌فرض ۵",
+            "number_unlimited",
+            "با دکمهٔ «نامحدود» سقفی نمی‌ماند — پیش‌فرض ۵",
+            # (value stored by the «نامحدود» button, number shown when nothing valid is stored)
+            (IMPORT_UNLIMITED_VALUE, str(IMPORT_DEFAULT_MAX_PER_USER)),
         ),
     ],
     "مسیرها و ادمین‌های مجاز": [
@@ -2050,6 +2167,10 @@ SETTING_GROUPS = {
 }
 SETTING_GROUPS.update(screen_text_setting_groups())
 SETTING_GROUPS[ENTRY_APPROVAL_GROUP] = entry_approval_setting_fields()
+SETTING_GROUPS[SERVICE_FREEZE_GROUP] = list(SERVICE_FREEZE_FIELDS)
+SETTING_GROUPS[SERVICE_TRANSFER_GROUP] = list(SERVICE_TRANSFER_FIELDS)
+SETTING_GROUPS[AUTO_RENEW_GROUP] = list(AUTO_RENEW_FIELDS)
+SETTING_GROUPS.update(notice_web_setting_groups())
 
 
 def _remaining_button_label_groups(groups: dict[str, list]) -> dict[str, list[tuple[str, str, str, str]]]:
@@ -2073,7 +2194,7 @@ SETTING_GROUPS.update(BUTTON_LABEL_GROUPS_MORE)
 TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "menu": [],
     "welcome": ["خوش‌آمد و هویت"],
-    "messages": ["متن پیام‌ها"],
+    "messages": ["متن پیام‌ها", MONITOR_ADMIN_TEXTS_GROUP],
     "buttons": [BUTTON_LABELS_GROUP, *BUTTON_LABEL_GROUPS_MORE],
     SCREEN_TEXT_TAB: list(screen_text_setting_groups()),
     "colors": ["رنگ دکمه‌ها"],
@@ -2108,11 +2229,19 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     ],
     "guides": ["آموزش اتصال"],
     "service_import": ["افزودن سرویس قبلی", "مسیرها و ادمین‌های مجاز"],
+    "service_actions": [SERVICE_FREEZE_GROUP, SERVICE_TRANSFER_GROUP],
     # Legacy aliases — redirected to limits
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],
     "billing": ["مدیریت PAYG"],
-    "notifications": ["هشدار سرویس کاربر", "گزارش و عملیات", "سلامت ارتباط پاسارگارد"],
+    "notifications": [
+        "هشدار سرویس کاربر",
+        AUTO_RENEW_GROUP,
+        NOTICE_STAFF_ACTION_GROUP,
+        NOTICE_CLEANUP_GROUP,
+        OPERATIONS_GROUP,
+        PG_LINK_HEALTH_GROUP,
+    ],
     "daily_report": ["گزارش روزانه"],
     "backup": ["بکاپ زمان‌بندی", "ارسال بکاپ به تلگرام"],
     "pwa": [],
@@ -2121,6 +2250,11 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "bot": [],
     "appearance": [],
 }
+
+# Fields that hold a plan scope (plan_scope.py): saved from a list of checkboxes, not one value.
+PLAN_SCOPE_KEYS = frozenset(
+    item[0] for fields in SETTING_GROUPS.values() for item in fields if len(item) >= 3 and item[2] == "plans"
+)
 
 TOGGLE_KEYS = {
     item[0]
@@ -2167,6 +2301,8 @@ def keys_for_tab(tab: str) -> set[str]:
     for name in names:
         for item in SETTING_GROUPS.get(name, []):
             keys.add(item[0])
+            if len(item) > 4 and item[2] == "threshold":
+                keys.add(item[4][0])
     return keys
 
 
@@ -2250,21 +2386,29 @@ async def get_all_settings(
     from app.services.payment_destinations import enrich_payment_settings
 
     data = enrich_payment_settings(refresh_retired_defaults(readable_monitor_texts(data), DEFAULT_SETTINGS))
+    apply_legacy_alert_days(data)
     _SETTINGS_CACHE[cache_key] = (now, dict(data))
     return data
 
 
+def apply_legacy_alert_days(data: dict[str, str]) -> None:
+    """Carry a days threshold saved before the unit choice existed into the time threshold, in place.
+
+    Only while the time unit is still empty: saving the alert form stores an explicit unit.
+    """
+    if (data.get("user_alert_low_time_unit") or "").strip():
+        return
+    try:
+        legacy_days = int(float(str(data.get("user_alert_low_days") or "0").strip()))
+    except (TypeError, ValueError, OverflowError):
+        legacy_days = 0
+    if legacy_days > 0:
+        data["user_alert_low_time_unit"] = "day"
+        data["user_alert_low_time_pct"] = str(legacy_days)
+
+
 def on(value: str | None) -> bool:
     return (value or "").strip() in {"1", "true", "yes", "on", "True"}
-
-
-def clamp_alert_percent(raw: str | None, default: int = 20) -> str:
-    """Keep user-alert thresholds in 1..99."""
-    try:
-        n = int(float(str(raw).strip()))
-    except Exception:
-        n = default
-    return str(max(1, min(99, n)))
 
 
 def is_protected_admin(user: BotUser) -> bool:

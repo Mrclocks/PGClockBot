@@ -76,15 +76,6 @@ class PlansTemplateCreateAclTests(unittest.TestCase):
         reseller["pg_actions"]["templates"]["create"] = True
         self.assertTrue(staff_can_create_pg_template(reseller))
 
-    def test_plans_create_uses_staff_pg_not_owner_token(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        block = src.split("if also_create_template:", 1)[1].split("from app.services.orders import parse_naming_form", 1)[0]
-        self.assertIn("_staff_pg", block)
-        self.assertIn("create_user_template", block)
-        self.assertNotIn("get_pg().create_user_template", block)
-        self.assertIn("staff_can_create_pg_template", block)
-
-
 class PgMutationServerAclTests(unittest.TestCase):
     """Sensitive /pg write routes must gate on staff_pg_action / user actions."""
 

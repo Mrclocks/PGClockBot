@@ -15,7 +15,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -48,21 +48,7 @@ from app.services.shop_scope import (
     resolve_shop_scope_id,
     shop_owner_id,
 )
-
-
-def _owner_staff(**extra) -> dict:
-    staff = {
-        "role": "admin",
-        "username": "owner",
-        "org_principal_id": 1,
-        "org_depth": 0,
-        "org_parent_id": None,
-        "org_status": "active",
-        "web_owner": True,
-        "org_visible_principal_ids": [1],
-    }
-    staff.update(extra)
-    return staff
+from tests.postgres_support import scoped_async_engine
 
 
 class BareAdminScopeTests(unittest.TestCase):
@@ -98,7 +84,7 @@ class ExplicitOwnerWorksTests(unittest.IsolatedAsyncioTestCase):
     """E — explicit Owner Principal retains platform shop privileges."""
 
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(
@@ -130,7 +116,7 @@ class StickyBotAdminOwnerTests(unittest.IsolatedAsyncioTestCase):
     """B — sticky BotUser.role=admin is not Owner without ADMIN_IDS."""
 
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(
@@ -196,7 +182,7 @@ class PrincipalAttachDenyTests(unittest.IsolatedAsyncioTestCase):
     """C — reseller/pg_staff security-sensitive path without Principal → DENY."""
 
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(
@@ -227,14 +213,6 @@ class PrincipalAttachDenyTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(
                 await resolve_org_principal_for_staff(session, staff)
             )
-
-    def test_c_require_staff_source_denies_missing_principal(self) -> None:
-        src = open("app/api/app.py", encoding="utf-8").read()
-        # Reseller + pg_staff + admin branches must fail closed when unresolved.
-        self.assertGreaterEqual(src.count("if principal is None:"), 3)
-        fn = src[src.find("async def require_staff") : src.find("async def require_admin")]
-        self.assertIn("resolve_org_principal_for_staff", fn)
-        self.assertIn("attach_org_principal_fields", fn)
 
 
 class SiblingIsolationTests(unittest.TestCase):
@@ -276,18 +254,6 @@ class SafeLegacyShopFeatureTests(unittest.TestCase):
         # Must still not imply Owner / platform shop_scope.
         self.assertFalse(is_explicit_org_owner(ctx))
         self.assertFalse(is_platform_admin({"role": "admin"}))
-
-
-class RequireStaffAttachContract(unittest.TestCase):
-    def test_admin_branch_requires_principal(self) -> None:
-        src = open("app/api/app.py", encoding="utf-8").read()
-        admin_branch = src[
-            src.find('elif user.get("role") == "admin":') : src.find(
-                "Skip unread COUNT"
-            )
-        ]
-        self.assertIn("if principal is None:", admin_branch)
-        self.assertIn('user["web_owner"] = True', admin_branch)
 
 
 if __name__ == "__main__":

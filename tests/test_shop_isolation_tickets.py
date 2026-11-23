@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Ticket, TicketStatus
@@ -18,6 +14,7 @@ from app.services.table_bulk import bulk_close_bot_tickets
 from app.services.ticket_scope import staff_ticket_in_scope
 from app.services.tickets import list_open_tickets
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION
+from tests.postgres_support import scoped_async_engine
 
 SHOP_ID = 5
 PLATFORM_TICKET, SHOP_TICKET, UNATTRIBUTED_SHOP_TICKET = 1, 2, 3
@@ -25,8 +22,7 @@ PLATFORM_TICKET, SHOP_TICKET, UNATTRIBUTED_SHOP_TICKET = 1, 2, 3
 
 class TicketScopeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 't.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -47,7 +43,6 @@ class TicketScopeTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def ids(self, **scope) -> set[int]:
         async with self.Session() as session:

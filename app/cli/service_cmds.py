@@ -55,12 +55,11 @@ def cmd_status(ctx: CliContext) -> int:
         warn(f"web health :{port} unreachable ({health.get('error')})")
 
     db = env_get(ctx.root, "DATABASE_URL", "")
-    if "postgresql" in db:
+    # Only the kind: the URL itself carries the database password.
+    if db.startswith(("postgresql://", "postgresql+asyncpg://", "postgres://")):
         kv("database", "postgresql")
-    elif "sqlite" in db:
-        kv("database", "sqlite")
     else:
-        kv("database", db or "(default sqlite)")
+        warn("DATABASE_URL is missing or not PostgreSQL" if db else "DATABASE_URL is missing")
     return 0
 
 

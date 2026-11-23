@@ -73,21 +73,35 @@ BOT_PROBE_CACHE_SIZE = 256
 BOT_PROBE_TIMEOUT_SEC = 6.0
 _bot_probe_cache: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
 _telegram_client: httpx.AsyncClient | None = None
+# The client _telegram_http opened, with the event loop its connections belong to.
+_opened_client: tuple[httpx.AsyncClient, asyncio.AbstractEventLoop] | None = None
 _log = logging.getLogger(__name__)
 
 
 def _telegram_http() -> httpx.AsyncClient:
-    """One client for every probe, so repeated dashboard loads reuse its connection to Telegram."""
-    global _telegram_client
-    if _telegram_client is None or _telegram_client.is_closed:
+    """One client for every probe, so repeated dashboard loads reuse its connection to Telegram.
+
+    Its open connections belong to the event loop that made them; reusing them from another loop (a
+    loop started for a worker thread, or the next test) fails with "Event loop is closed". A probe
+    from another loop therefore gets a client of its own. A client put in place from outside is used
+    as it is.
+    """
+    global _telegram_client, _opened_client
+    loop = asyncio.get_running_loop()
+    opened_elsewhere = (
+        _opened_client is not None and _opened_client[0] is _telegram_client and _opened_client[1] is not loop
+    )
+    if _telegram_client is None or _telegram_client.is_closed or opened_elsewhere:
         _telegram_client = httpx.AsyncClient(timeout=BOT_PROBE_TIMEOUT_SEC)
+        _opened_client = (_telegram_client, loop)
     return _telegram_client
 
 
 async def close_bot_probe_client() -> None:
     """Close the shared getMe client on shutdown; the next probe opens a new one."""
-    global _telegram_client
+    global _telegram_client, _opened_client
     client, _telegram_client = _telegram_client, None
+    _opened_client = None
     if client is not None and not client.is_closed:
         await client.aclose()
 

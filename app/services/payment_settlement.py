@@ -26,7 +26,9 @@ from sqlalchemy import case, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pasarguard import failure_text
 from app.config import get_settings
+from app.services.pg_read_resilience import outside_web_read_budget
 from app.services.db_safe import rollback_quiet
 from app.db.models import (
     BotUser,
@@ -36,7 +38,8 @@ from app.db.models import (
     PaymentStatus,
     SettlementStatus,
 )
-from app.services.orders import approve_payment
+from app.services.delivery_recovery_policy import is_delivered
+from app.services.orders import DeliveryAttempt, approve_payment
 from app.services.shop_scope import payment_shop_id
 from app.services.payment_providers import get_psp_adapter
 from app.services.psp_gateways import PspGateway, choose_psp_gateway, find_psp_gateway
@@ -306,19 +309,6 @@ def _embed_mock_token(checkout_url: str, token: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), parts.fragment))
 
 
-async def _break_read_snapshot(session: AsyncSession) -> None:
-    """End the current txn so peer commits become visible (needed on SQLite).
-
-    SQLite DEFERRED transactions keep a read snapshot for the whole txn; without
-    ending it, a loser waiting on a concurrent winner never sees AWAITING+url.
-    ``commit()`` persists any prior caller dirty state (SAVEPOINT already
-    protected the failed insert) rather than wiping it with rollback.
-    """
-    bind = session.get_bind()
-    if bind is not None and getattr(bind.dialect, "name", "") == "sqlite":
-        await session.commit()
-
-
 async def _await_open_settlement(
     session: AsyncSession,
     *,
@@ -331,7 +321,6 @@ async def _await_open_settlement(
 ) -> PaymentSettlement | None:
     """Poll for the winner row after a lost insert race (same DB, other session)."""
     for _ in range(max(1, attempts)):
-        await _break_read_snapshot(session)
         raced = await _get_by_idem(session, idem) or await _get_open_for_payment_channel(
             session, payment_id=payment_id, channel=channel
         )
@@ -350,7 +339,6 @@ async def _await_open_settlement(
         elif raced.status in _OPEN_STATUSES or raced.status == SettlementStatus.AWAITING.value:
             return raced
         await asyncio.sleep(delay_s)
-    await _break_read_snapshot(session)
     raced = await _get_by_idem(session, idem) or await _get_open_for_payment_channel(
         session, payment_id=payment_id, channel=channel
     )
@@ -385,7 +373,6 @@ async def _insert_settlement_race_safe(
         idem = settlement.idempotency_key
         payment_id = int(settlement.payment_id)
         channel = str(settlement.channel)
-        await _break_read_snapshot(session)
         raced = await _get_by_idem(session, idem)
         if raced is None:
             raced = await _get_open_for_payment_channel(
@@ -401,7 +388,8 @@ async def _insert_settlement_race_safe(
                 require_checkout_url=False,
             )
         if raced is None:
-            raise ValueError("ساخت تسویه همزمان ناموفق بود — دوباره تلاش کنید")
+            # The unique-key conflict is the expected race; the customer gets the retry message only.
+            raise ValueError("ساخت تسویه همزمان ناموفق بود — دوباره تلاش کنید") from None
         return raced
 
 
@@ -756,7 +744,6 @@ async def _wait_for_peer_settle(
     sid = int(settlement.id)
     pid = int(payment.id)
     for _ in range(80):
-        await _break_read_snapshot(session)
         # expire_on_commit=False keeps stale identity — force DB reload.
         settlement = (
             await session.execute(
@@ -779,7 +766,6 @@ async def _wait_for_peer_settle(
             await session.commit()
             return payment
         await asyncio.sleep(0.05)
-    await _break_read_snapshot(session)
     settlement = (
         await session.execute(
             select(PaymentSettlement)
@@ -858,19 +844,27 @@ async def _approved_but_undelivered(session: AsyncSession, payment: Payment) -> 
     return payment.status == PaymentStatus.APPROVED.value
 
 
-async def _report_undelivered(session: AsyncSession, payment: Payment, error: str) -> None:
-    """Queue the order under failed deliveries and alert its shop's staff, who resume it.
+async def _report_undelivered(
+    session: AsyncSession, payment: Payment, error: str, *, outcome_unknown: bool
+) -> None:
+    """Queue the order under failed deliveries and alert its shop's staff.
 
-    Delivery is not retried automatically: a panel that failed mid-create may already
-    hold the user, and only a person can tell before a second user is created.
+    The retry job finishes renewals and purchases whose attempt created nothing. When the
+    panel may already hold the change (``outcome_unknown``), the payment is stamped so a new
+    purchase is never created twice; staff decide those.
     """
     # Local imports: notifications and the bot pull in handler modules that import this one.
     from app.bot import create_bot
     from app.services.notifications import notify_approved_delivery_stuck
-    from app.services.ux20 import note_delivery_send_failure
+    from app.services.orders import hold_unknown_delivery_for_review
+    from app.services.delivery_failures import note_delivery_send_failure
 
     order = await session.get(Order, int(payment.order_id)) if payment.order_id else None
-    await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    if outcome_unknown and order is not None:
+        await hold_unknown_delivery_for_review(session, order, error=error)
+        await session.refresh(payment)
+    else:
+        await note_delivery_send_failure(session, order=order, payment=payment, error=error)
     payer = await session.get(BotUser, int(payment.user_id)) if payment.user_id else None
     bot = create_bot()
     try:
@@ -884,6 +878,7 @@ async def _report_undelivered(session: AsyncSession, payment: Payment, error: st
         await bot.session.close()
 
 
+@outside_web_read_budget
 async def settle_and_approve(
     session: AsyncSession,
     settlement: PaymentSettlement,
@@ -948,8 +943,9 @@ async def settle_and_approve(
         ref = external_ref or settlement.external_ref or str(settlement.id)
         payment.receipt_file_id = f"{settlement.channel}:{settlement.provider}:{ref}"[:255]
 
+    attempt = DeliveryAttempt()
     try:
-        await approve_payment(session, payment, reviewer_tg=reviewer_tg)
+        await approve_payment(session, payment, reviewer_tg=reviewer_tg, attempt=attempt)
     except Exception as exc:
         if isinstance(exc, ValueError) and "قبلاً تأیید شده" in str(exc):
             await _finalize_settled(session, settlement)
@@ -963,7 +959,9 @@ async def settle_and_approve(
             # hand the unfinished delivery to staff instead of reporting a payment failure.
             await _finalize_settled(session, settlement)
             await session.commit()
-            await _report_undelivered(session, payment, str(exc))
+            await _report_undelivered(
+                session, payment, failure_text(exc), outcome_unknown=attempt.panel_may_hold_account
+            )
             return payment
         await _revert_claim_to_awaiting(session, settlement, error=str(exc))
         await session.commit()
@@ -1348,12 +1346,14 @@ async def recover_stuck_psp_settlements(
         )
     ).scalars().all()
     settled = 0
-    for settlement in rows:
+    for settlement_id in [int(row.id) for row in rows]:
         try:
-            if await _recover_one_stuck_settlement(session, settlement):
+            # Read from the identity map; only a rollback for an earlier row makes this a query.
+            settlement = await session.get(PaymentSettlement, settlement_id)
+            if settlement is not None and await _recover_one_stuck_settlement(session, settlement):
                 settled += 1
         except Exception:
-            logger.exception("psp stuck settlement recovery failed settlement=%s", settlement.id)
+            logger.exception("psp stuck settlement recovery failed settlement=%s", settlement_id)
             await rollback_quiet(session)
     return settled
 
@@ -1397,7 +1397,7 @@ def psp_poll_delay(age: timedelta) -> timedelta:
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
-    # SQLite returns naive datetimes for timezone-aware columns; they are stored as UTC.
+    # Stored timestamps are UTC; a naive value (from Python code or a test) is read as UTC.
     if value is None or value.tzinfo is not None:
         return value
     return value.replace(tzinfo=timezone.utc)
@@ -1510,7 +1510,7 @@ async def notify_after_settlement(
         except Exception as send_exc:
             if order is not None:
                 try:
-                    from app.services.ux20 import note_delivery_send_failure
+                    from app.services.delivery_failures import note_delivery_send_failure
 
                     await note_delivery_send_failure(
                         session, order=order, payment=payment, error=str(send_exc)
@@ -1523,7 +1523,9 @@ async def notify_after_settlement(
             return
         if payment.is_wallet_topup:
             await notify_wallet_topup_ok(bot, session, payment, user.telegram_id)
-        elif order:
+        elif order and is_delivered(order):
+            # An undelivered order got the «در حال آماده‌سازی» card above; its staff got the
+            # stuck-delivery notice, never a «تحویل‌شده» one.
             plan = await session.get(Plan, order.plan_id) if order.plan_id else None
             await notify_new_subscription(
                 bot,

@@ -16,23 +16,24 @@ from alembic.operations import Operations
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.user_pages import register_user_pages
 from app.db.models import (
     Base, BotUser, DeliveryFailure, FunnelEvent, LoyaltyReward, Order, Payment, Plan,
     PointsTransaction, ReferralEvent, RewardRedemption, ShopWallet, Ticket, UserService, WalletTransaction,
 )
-from app.services.daily_report import _scoped_totals, _today_activity
+from app.services.daily_report import _scoped_totals, previous_day_activity
 from app.services.demo_users import set_demo_user
 from app.services.finance_reports import build_finance_report
 from app.services.formatting import format_money, format_number
 from app.services.home_overview import admin_customer_counts, bot_dashboard_summary, bot_panel_summary, reseller_shop_summary
 from app.services.loyalty import overview_metrics
 from app.services.subordinate_report import SubordinateShop, collect_subordinate_stats
-from app.services.ux20 import funnel_summary
+from app.services.funnel_metrics import funnel_summary
 from app.services.shop_scope import ShopScopeError
 from app.services.numbers import to_fa_digits
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
@@ -47,7 +48,7 @@ def shop_staff(shop_id: int, *, has_permission: bool = True) -> dict[str, Any]:
 
 class DemoUserTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -140,6 +141,7 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
             assert order is not None and service is not None
             order.created_at = mid
             order.updated_at = mid
+            order.delivered_at = mid
             service.created_at = mid
         await self.session.commit()
 
@@ -147,7 +149,7 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
             summary = await _scoped_totals(self.session, reseller_id=shop_id)
             self.assertEqual(summary["orders_total"], 2)
             self.assertEqual(summary["revenue_total"], 100)
-            activity = await _today_activity(self.session, reseller_id=shop_id)
+            activity = await previous_day_activity(self.session, reseller_id=shop_id)
             self.assertEqual(activity["revenue_today"], 100)
             self.assertEqual(activity["services_new"], 1)
             if shop_id is not None:
@@ -174,7 +176,8 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_subordinate_report_excludes_demo_customers_orders_and_services(self) -> None:
         shops = [SubordinateShop(principal_id=10, reseller_profile_id=10, reseller_user_id=10, display_name="Shop", is_active=True)]
-        row = (await collect_subordinate_stats(self.session, shops))[0]
+        # The digest covers the previous Tehran day, so look from the day after the activity.
+        row = (await collect_subordinate_stats(self.session, shops, now=self.now + timedelta(days=1)))[0]
         self.assertEqual(row.users_total, 1)
         self.assertEqual(row.services_total, 1)
         self.assertEqual(row.orders_new, 2)
@@ -331,7 +334,7 @@ class DemoUserMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("demo_user_migration", ROOT / "alembic/versions/0041_demo_users.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as connection:
             connection.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY, full_name TEXT)"))
             connection.execute(sa.text("INSERT INTO bot_users VALUES (1, 'existing')"))

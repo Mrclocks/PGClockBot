@@ -11,11 +11,9 @@ import asyncio
 import hashlib
 import hmac
 import json
-import tempfile
 import time
 import unittest
 from datetime import datetime, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import urlencode
@@ -23,7 +21,7 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import Depends, FastAPI, Request
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.miniapp_onboarding import register_miniapp_onboarding
 from app.db.models import Base, BotUser, BotUserShop, ResellerProfile, TermsAcceptance
@@ -41,6 +39,7 @@ from app.services.miniapp_registration import referral_code_from_start_param, te
 from app.services.miniapp_shop import PLATFORM_SWITCH, SHOP_SWITCH, mini_scope, new_shop_key
 from app.services.secret_box import seal_bot_token
 from app.services.users import clear_settings_cache, set_setting
+from tests.postgres_support import scoped_async_engine
 
 MAIN_TOKEN = "111111:main-bot-token"
 SHOP_TOKEN = "222222:shop-bot-token"
@@ -92,8 +91,7 @@ class OnboardingFixture(unittest.IsolatedAsyncioTestCase):
         miniapp_onboarding._JOIN_CHECKS._hits.clear()
         miniapp_onboarding._REFERRAL_TRIES._hits.clear()
         # A file database: concurrent requests each get their own connection, as in production.
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'mini.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -156,7 +154,6 @@ class OnboardingFixture(unittest.IsolatedAsyncioTestCase):
             p.stop()
         clear_settings_cache()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     def headers(self, init_data: str, key: str | None = None) -> dict[str, str]:
         headers = {"X-Telegram-Init-Data": init_data}

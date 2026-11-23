@@ -58,6 +58,8 @@
           <td class="col-actions">
             {% call row_actions() %}
             <button class="btn btn-ghost btn-sm" type="button" data-gift-edit="gift-edit-{{ c.id }}" aria-expanded="false" aria-controls="gift-edit-{{ c.id }}">ویرایش</button>
+            {% set code_link = (gift_code_links or {}).get(c.id) %}
+            {% if code_link %}<button class="btn btn-ghost btn-sm" type="button" data-copy="{{ code_link }}" aria-label="کپی لینک ثبت کد {{ c.code }} در ربات">کپی لینک کد</button>{% endif %}
             <form method="post" action="/plans/gift-codes/{{ c.id }}/toggle">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>

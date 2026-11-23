@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Order, OrderStatus, Plan, ResellerProfile, UserService
@@ -19,6 +19,7 @@ from app.services.orders import (
     generate_pg_username,
 )
 from app.services.pasarguard import PasarGuardError
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ENABLED = {naming.SETTING_KEY: "1"}
 
@@ -98,7 +99,7 @@ class NameFallbackTests(unittest.IsolatedAsyncioTestCase):
 
 class NameFixture(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -442,7 +443,7 @@ class RequestedUsernameMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("requested_username_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(
                 sa.text(
@@ -455,7 +456,7 @@ class RequestedUsernameMigrationTests(unittest.TestCase):
                 migration.upgrade()
                 migration.upgrade()
                 self.assertEqual(conn.execute(sa.text("SELECT requested_username FROM orders")).scalar(), None)
-                indexes = {row[1] for row in conn.execute(sa.text("PRAGMA index_list('orders')"))}
+                indexes = {index["name"] for index in sa.inspect(conn).get_indexes("orders")}
                 self.assertTrue({"ix_orders_requested_username", "uq_orders_open_requested_username"} <= indexes)
                 migration.downgrade()
                 columns = {column["name"] for column in sa.inspect(conn).get_columns("orders")}

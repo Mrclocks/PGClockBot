@@ -1,0 +1,93 @@
+name: Full test suite
+
+# Every test in tests/, the standalone browser-logic tests and the lint ratchet, on every pull request
+# and on dev and main. dev passes them all, so any failure here is new. The curated security suite
+# keeps its own fast workflow (security-tests.yml).
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+
+concurrency:
+  group: full-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # Database tests run against a real PostgreSQL server (tests/postgres_support.py).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: pgclock_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/pgclock_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # The browser tests (tests/*_browser_e2e.py) skip themselves without Playwright; CI runs them.
+      # CI-only: the app never imports Playwright, so it stays out of requirements-dev.txt.
+      - name: Install Playwright and Chromium
+        run: |
+          pip install "playwright>=1.47,<2"
+          python -m playwright install --with-deps chromium
+
+      - name: Run every test
+        run: python -m pytest tests -q -p no:cacheprovider -n auto
+
+  node-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Node tests that a Python test drives already run in the pytest job.
+      - name: Run the standalone browser-logic tests
+        run: bash scripts/run_node_tests.sh
+
+  lint-ratchet:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install "ruff>=0.6,<1"
+
+      # A changed file must not have more findings than on the base branch (AGENTS.md §11).
+      - name: Lint ratchet
+        run: bash scripts/lint_changed.sh "origin/${{ github.base_ref }}"

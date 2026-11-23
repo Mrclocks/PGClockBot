@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import button_colors as ui_module
 from app.db.models import ResellerSetting, Setting
@@ -28,6 +26,7 @@ from app.services.users import (
     reset_shop_reseller_id,
     set_shop_reseller_id,
 )
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 SHOP_A = 501
 SHOP_B = 502
@@ -40,18 +39,16 @@ class _DatabaseCase(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401  (registers every table on Base)
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "button-colors.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, SHOP_A, SHOP_B)
         clear_settings_cache()
 
     async def asyncTearDown(self) -> None:
         clear_settings_cache()
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _platform_value(self, key: str) -> str | None:
         async with self.Session() as session:

@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.cashback_pages import rule_from_form, settings_from_form
 from app.db.models import Base, BotUser, CashbackRule
@@ -23,6 +21,7 @@ from app.services.cashback_rules import (
     set_rule_enabled,
 )
 from app.services.marketing_nav import marketing_groups, marketing_sections
+from tests.postgres_support import scoped_async_engine
 
 VALID = {"name": "۱۰٪", "mode": "percent", "percent": "10", "event_new": "1", "allow_with_discount": "1"}
 
@@ -72,7 +71,7 @@ class ScopeTests(unittest.TestCase):
 
 class IsolationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

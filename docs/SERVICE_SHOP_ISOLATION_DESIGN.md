@@ -42,7 +42,7 @@ Where the shop is known at creation (all three creation sites):
 
 ## 4. Backfill, review state and the report
 
-Migration `NNNN_service_shop_id` (idempotent, SQLite and PostgreSQL, keyset batches, `downgrade` drops what it added):
+Migration `NNNN_service_shop_id` (idempotent, keyset batches, `downgrade` drops what it added):
 
 1. `remark = 'order:N'` and the order belongs to the same user: `shop_id = order.reseller_id`. This is the only place the remark text is parsed; from this release on `shop_id` is written when the service is created (delivery, manual provisioning, import) and nothing parses the remark again.
 2. Every other service (`imported`, `linked`, `manual:*`, malformed remark) has no order. Its shop can only be guessed from the customer's current `reseller_id`, which is wrong for a customer who was attributed to a shop after the service existed. These rows are **not** assigned silently:
@@ -53,7 +53,7 @@ Migration `NNNN_service_shop_id` (idempotent, SQLite and PostgreSQL, keyset batc
 
 ## 4a. Shop membership
 
-The user list of a panel and the bot's customer queries cannot rely on `bot_users.reseller_id`, because one person can be a customer of several shops. Add a light table `bot_user_shops(bot_user_id, shop_id)` (`shop_id` `NULL` = platform; two partial unique indexes with `sqlite_where` and `postgresql_where` keep one row per pair) written idempotently on first contact with a bot, on order creation, on service creation and on import, and backfilled from `reseller_id`, orders and services. `reseller_id` stays for compatibility and for "which shop first attributed this person". User-level actions (block, role, delete, wallet adjustment, message) still belong only to the attributed shop; a delete is refused with a clear message while the person has services of another shop.
+The user list of a panel and the bot's customer queries cannot rely on `bot_users.reseller_id`, because one person can be a customer of several shops. Add a light table `bot_user_shops(bot_user_id, shop_id)` (`shop_id` `NULL` = platform; two partial unique indexes (`postgresql_where`) keep one row per pair) written idempotently on first contact with a bot, on order creation, on service creation and on import, and backfilled from `reseller_id`, orders and services. `reseller_id` stays for compatibility and for "which shop first attributed this person". User-level actions (block, role, delete, wallet adjustment, message) still belong only to the attributed shop; a delete is refused with a clear message while the person has services of another shop.
 
 Rejected: an `EXISTS` over orders and services as the membership rule. It cannot represent a customer who opened a bot but has not bought, and costs two index probes per row in every list.
 

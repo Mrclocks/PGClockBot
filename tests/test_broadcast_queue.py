@@ -1,7 +1,6 @@
 """Durable owner broadcasts: audience scope, no double sends, unknown outcomes, cancel and migration."""
 import asyncio
 import importlib.util
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -11,7 +10,7 @@ import httpx
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
 from fastapi import FastAPI
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.broadcast_queue_pages import register_broadcast_queue_pages
 from app.db.models import Base, BotUser, BroadcastLog
@@ -26,6 +25,7 @@ from app.services.broadcast_queue import (
     queue_broadcast,
     run_broadcast_worker,
 )
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 PLATFORM_USERS = (1, 2, 3, 4, 5)  # telegram ids 1001..1005; the shop owner (9020) is a reseller-role platform customer too
@@ -50,8 +50,7 @@ class FakeBot:
 
 class QueueCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'broadcast.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -70,7 +69,6 @@ class QueueCase(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def log(self, log_id):
         row = await self.session.get(BroadcastLog, log_id)
@@ -237,6 +235,7 @@ class HistoryTemplateTests(unittest.TestCase):
         request = NS(url=NS(path="/broadcast"), query_params={}, state=NS(), cookies={}, headers={})
         return templates.env.get_template("broadcast.html").render(
             request=request, staff={"role": "admin"}, history=rows, audience_labels=AUDIENCE_LABELS,
+            page_path="/broadcast", is_platform=True,
             status_labels=STATUS_LABELS, flash_ok=None, flash_err=None, csp_nonce="n", csrf_token="TOK",
         )
 
@@ -295,7 +294,7 @@ class BroadcastMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("broadcast_migration", ROOT / "alembic/versions/0073_broadcast_queue.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text("CREATE TABLE broadcast_logs (id INTEGER PRIMARY KEY, audience TEXT, text TEXT, total INTEGER, ok_count INTEGER, fail_count INTEGER)"))
             conn.execute(text("INSERT INTO broadcast_logs VALUES (1, 'all', 'old message', 10, 9, 1)"))

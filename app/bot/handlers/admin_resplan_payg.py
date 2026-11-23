@@ -14,6 +14,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import keyboards as kb
+from app.services.users import get_all_settings
 from app.bot.auth import is_platform_admin, require_bot_owner_handler
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, ResellerPlan
@@ -61,7 +63,7 @@ def screen_text(plan: ResellerPlan) -> str:
     return "\n".join(lines)
 
 
-def screen_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
+def screen_keyboard(plan: ResellerPlan, ui: dict[str, str]) -> InlineKeyboardMarkup:
     pid = int(plan.id)
     access = plan.allow_pg_panel_access is not False
     rows = [[InlineKeyboardButton(text=_mark(access) + "دسترسی به پاسارگارد", callback_data=f"{PREFIX}:f:acc:{pid}")]]
@@ -79,13 +81,14 @@ def screen_keyboard(plan: ResellerPlan) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="✏️ قیمت هر کاربر", callback_data=f"{PREFIX}:p:user:{pid}")],
             [InlineKeyboardButton(text="✏️ قیمت کاربر نامحدود", callback_data=f"{PREFIX}:p:unl:{pid}")],
         ]
-    rows.append([InlineKeyboardButton(text="بازگشت", callback_data=f"adm:resplan:view:{pid}")])
+    rows.append([kb.back_button(ui, f"adm:resplan:view:{pid}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-async def _show(callback: CallbackQuery, plan: ResellerPlan) -> None:
+async def _show(callback: CallbackQuery, session: AsyncSession, plan: ResellerPlan) -> None:
     if callback.message:
-        await safe_edit_text(callback.message, screen_text(plan), reply_markup=screen_keyboard(plan))
+        markup = screen_keyboard(plan, await get_all_settings(session))
+        await safe_edit_text(callback.message, screen_text(plan), reply_markup=markup)
 
 
 async def _guard(callback: CallbackQuery, db_user: BotUser) -> bool:
@@ -105,7 +108,7 @@ async def payg_screen(callback: CallbackQuery, session: AsyncSession, db_user: B
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
-    await _show(callback, plan)
+    await _show(callback, session, plan)
 
 
 @router.callback_query(F.data.regexp(rf"^{PREFIX}:f:(acc|up|p30):\d+$"))
@@ -120,7 +123,7 @@ async def payg_flag(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         await callback.answer(str(exc), show_alert=True)
         return
     await callback.answer(feedback.UPDATED)
-    await _show(callback, plan)
+    await _show(callback, session, plan)
 
 
 @router.callback_query(F.data.regexp(rf"^{PREFIX}:b:(traffic|user|user_traffic):\d+$"))
@@ -135,7 +138,7 @@ async def payg_basis(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         await callback.answer(str(exc), show_alert=True)
         return
     await callback.answer(feedback.UPDATED)
-    await _show(callback, plan)
+    await _show(callback, session, plan)
 
 
 @router.callback_query(F.data.regexp(rf"^{PREFIX}:p:(user|unl):\d+$"))
@@ -166,4 +169,4 @@ async def payg_price_save(message: Message, state: FSMContext, session: AsyncSes
         await message.answer(html.escape(str(exc)))
         return
     await state.clear()
-    await message.answer(screen_text(plan), reply_markup=screen_keyboard(plan))
+    await message.answer(screen_text(plan), reply_markup=screen_keyboard(plan, await get_all_settings(session)))

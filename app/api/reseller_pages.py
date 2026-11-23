@@ -25,6 +25,7 @@ from app.services.miniapp_shop import (
     shop_miniapp_state,
 )
 from app.api.payg_plan_form import apply_payg_settings, payg_rate_and_settings
+from app.services.pg_admin_subscription import set_plan_keeps_extras_from_form
 from app.services.shop_credit import credit_overview
 from app.api.pg_panel_access_pages import (
     access_target_from_form,
@@ -34,6 +35,7 @@ from app.api.pg_panel_access_pages import (
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
 from app.services.db_safe import rollback_quiet
+from app.services.bot_admins import WEB_ASSIGNABLE_ROLES, BotAdminRoleLocked, assert_role_change_allowed
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.reseller_capacity_view import allocation_view_for_shop
 from app.services.volume_allocation import apply_create_form_oversell, apply_oversell_switch, list_oversold_shop_ids
@@ -81,7 +83,7 @@ def _require_rep_mgmt(staff: dict) -> None:
     try:
         assert_staff_can_manage_representatives(staff)
     except RepresentativeUnifyError:
-        raise HTTPException(status_code=403, detail="forbidden")
+        raise HTTPException(status_code=403, detail="forbidden") from None
 
 
 async def _validate_reseller_capacity_inputs(
@@ -244,7 +246,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         try:
             await assert_live_parent_for_child(session, staff)
         except RepresentativeUnifyError:
-            raise HTTPException(status_code=403, detail="forbidden")
+            raise HTTPException(status_code=403, detail="forbidden") from None
 
         owner_view = is_explicit_owner_staff(staff)
         l2_pg_roles: list[dict] = []
@@ -569,7 +571,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         try:
             await assert_live_parent_for_child(session, staff)
         except RepresentativeUnifyError:
-            raise HTTPException(status_code=403, detail="forbidden")
+            raise HTTPException(status_code=403, detail="forbidden") from None
         form = await request.form()
         _ = form.get("parent_id")
         _ = form.get("depth")
@@ -591,9 +593,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                     depth=form.get("depth"),
                 ),
             )
+            # The panel admin already exists; without this the new principal was rolled back.
+            await session.commit()
         except ChildProvisionError as exc:
+            await rollback_quiet(session)
             return RedirectResponse(f"/resellers?err={_q(exc.message)}", status_code=303)
         except Exception:
+            logger.exception("reseller create-child failed")
+            await rollback_quiet(session)
             return RedirectResponse(
                 f"/resellers?err={_q('ساخت نماینده ناموفق بود')}",
                 status_code=303,
@@ -787,7 +794,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         try:
             await assert_live_parent_for_child(session, staff)
         except RepresentativeUnifyError:
-            raise HTTPException(status_code=403, detail="forbidden")
+            raise HTTPException(status_code=403, detail="forbidden") from None
 
         user, _profile, status = await _load_scoped_reseller(session, staff, user_id)
         if status == "forbidden":
@@ -825,7 +832,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         try:
             await assert_live_parent_for_child(session, staff)
         except RepresentativeUnifyError:
-            raise HTTPException(status_code=403, detail="forbidden")
+            raise HTTPException(status_code=403, detail="forbidden") from None
 
         form = await request.form()
         user, _profile, status = await _load_scoped_reseller(session, staff, user_id)
@@ -1155,7 +1162,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         ).scalar_one_or_none()
         if not user or not profile:
             return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
-        if role not in {Role.USER.value, Role.RESELLER.value, Role.ADMIN.value}:
+        try:
+            assert_role_change_allowed(user, role)
+        except BotAdminRoleLocked as exc:
+            return RedirectResponse(f"/resellers?err={_q(str(exc))}", status_code=303)
+        if role not in WEB_ASSIGNABLE_ROLES:
             return RedirectResponse(f"/resellers?err={_q('نقش نامعتبر')}", status_code=303)
 
         reason = str(form.get("reason") or "").strip()
@@ -1189,30 +1200,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 await notify_reseller_revoked(int(info["telegram_id"]), reason)
             return RedirectResponse(
                 f"/resellers?ok={_q('نقش به کاربر عادی تغییر کرد و اطلاع داده شد')}",
-                status_code=303,
-            )
-
-        if role == Role.ADMIN.value:
-            from app.services.notifications import actor_label_from_staff, notify_account_edit
-
-            old_role = user.role
-            profile.is_active = False
-            user.role = Role.ADMIN.value
-            await session.commit()
-            from app.services.reseller_bots import sync_reseller_bot_runtime
-
-            await sync_reseller_bot_runtime(profile)
-            await notify_account_edit(
-                session,
-                user=user,
-                event="role",
-                reason=reason,
-                old_role=old_role,
-                new_role=Role.ADMIN.value,
-                actor=actor_label_from_staff(staff),
-            )
-            return RedirectResponse(
-                f"/resellers?ok={_q('نقش به مدیر تغییر کرد (پروفایل نماینده غیرفعال شد)')}",
                 status_code=303,
             )
 
@@ -1476,7 +1463,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             ),
             renew_price=_parse_nonneg_int(form, "renew_price"),
             carry_remaining_period=bool(form.get("carry_remaining_period")),
-            keep_extras_on_renew=bool(form.get("keep_extras_on_renew")),
             can_approve_receipts="payments" in parse_perms(perms),
             web_permissions=perms,
             bot_permissions=perms,
@@ -1490,6 +1476,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             is_active=bool(form.get("is_active", "1")),
             sort_order=sort_order,
         )
+        set_plan_keeps_extras_from_form(plan, form)
         apply_payg_settings(plan, payg_settings)
         session.add(plan)
         await session.flush()
@@ -1634,7 +1621,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 form, allow_buy_extra=bool(plan.allow_buy_extra)
             )
             plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
-            plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))
+            set_plan_keeps_extras_from_form(plan, form)
             plan.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
             plan.allow_pg_panel_access = bool(form.get("allow_pg_panel_access"))
             perms = _feature_perms_from_form(form)
@@ -1798,7 +1785,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         plan.allow_pg_panel_access = bool(form.get("allow_pg_panel_access"))
         plan.renew_price = _parse_nonneg_int(form, "renew_price")
         plan.carry_remaining_period = bool(form.get("carry_remaining_period"))
-        plan.keep_extras_on_renew = bool(form.get("keep_extras_on_renew"))
+        set_plan_keeps_extras_from_form(plan, form)
         plan.plan_kind = "subscription"
         plan.duration_days = _parse_nonneg_int(form, "duration_days")
         plan.included_gb = _parse_nonneg_int(form, "included_gb")

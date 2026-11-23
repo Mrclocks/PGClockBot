@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from fastapi import FastAPI
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_reseller import register_miniapp_reseller
 from app.db.models import (
@@ -29,6 +29,7 @@ from app.services.pg_admin_subscription import list_addon_plans
 from app.services.reseller_capacity import EXTRA_FAILED_REFUNDED, EXTRA_OUTCOME_UNKNOWN, STALE_PURCHASE
 from app.services.reseller_package import AdminUsage
 from app.services.reseller_packs import NO_PACK, PACK_EXPIRED, buy_addon_pack
+from tests.postgres_support import scoped_async_engine
 
 HOSTILE = "<img src=x onerror=alert(1)>"
 
@@ -42,7 +43,7 @@ def _pack(pack_id: int, *, kind: str, amount: int, price: int, category_id: int 
 
 class PackTestBase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

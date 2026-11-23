@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser
 from app.services.stale_order_cleanup import (
@@ -14,11 +14,12 @@ from app.services.stale_order_cleanup import (
     soft_cancel_retired_notice_on,
 )
 from app.services.users import _SETTINGS_CACHE, get_all_settings, set_settings_bulk
+from tests.postgres_support import scoped_async_engine
 
 
 class SoftCancelRetirementTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.exceptions import TelegramRetryAfter
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services import pg_link_alerts as alerts
 from app.services import pg_link_health as health
 from app.services import pg_read_resilience as resilience
 from app.services.users import get_setting, set_setting
+from tests.postgres_support import scoped_async_engine
 
 
 class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
@@ -23,8 +22,7 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'alerts.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -33,7 +31,7 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
         self.now = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
         self.sent: list[str] = []
 
-        async def fake_send(text: str) -> int:
+        async def fake_send(text: str, **_kwargs) -> int:
             self.sent.append(text)
             return 1
 
@@ -43,7 +41,6 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         self._send_patch.stop()
         await self.engine.dispose()
-        self._tmpdir.cleanup()
         resilience.reset_read_circuits()
         health.reset()
 
@@ -53,30 +50,88 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
                 session, is_down=is_down, failure_kind=kind, now=now or self.now,
             )
 
-    async def test_healthy_to_down_sends_one_message(self) -> None:
-        result = await self._notify(is_down=True, kind="connect")
+    async def _confirm_down(self, *, kind: str | None = "connect", start: datetime | None = None) -> str | None:
+        moment = start or self.now
+        await self._notify(is_down=True, kind=kind, now=moment)
+        return await self._notify(
+            is_down=True,
+            kind=kind,
+            now=moment + timedelta(seconds=alerts.DOWN_CONFIRM_SEC),
+        )
+
+    async def test_brief_blip_does_not_alert(self) -> None:
+        await self._notify(is_down=True)
+        await self._notify(is_down=False, now=self.now + timedelta(seconds=30))
+        self.assertEqual(self.sent, [])
+
+    async def test_healthy_to_down_waits_for_confirmation(self) -> None:
+        first = await self._notify(is_down=True, kind="connect")
+        self.assertIsNone(first)
+        self.assertEqual(self.sent, [])
+        result = await self._notify(
+            is_down=True,
+            kind="connect",
+            now=self.now + timedelta(seconds=alerts.DOWN_CONFIRM_SEC),
+        )
         self.assertEqual(result, alerts.ALERT_DOWN)
         self.assertEqual(len(self.sent), 1)
         self.assertIn(health.KIND_LABELS["connect"], self.sent[0])
-        # 12:00 UTC → 15:30 Asia/Tehran
-        self.assertIn("15:30:00", self.sent[0])
+        # Confirm moment is 12:01 UTC → 15:31 Asia/Tehran
+        self.assertIn("15:31:00", self.sent[0])
 
-    async def test_flapping_within_throttle_does_not_spam(self) -> None:
-        await self._notify(is_down=True)
-        await self._notify(is_down=False, now=self.now + timedelta(seconds=30))
-        await self._notify(is_down=True, now=self.now + timedelta(minutes=1))
-        await self._notify(is_down=False, now=self.now + timedelta(minutes=2))
+    async def test_flapping_within_confirm_and_throttle_does_not_spam(self) -> None:
+        await self._confirm_down()
+        up_start = self.now + timedelta(seconds=alerts.DOWN_CONFIRM_SEC + 5)
+        await self._notify(is_down=False, now=up_start)
+        await self._notify(
+            is_down=False,
+            now=up_start + timedelta(seconds=alerts.UP_CONFIRM_SEC),
+        )
+        # Another blip well inside the down throttle must not page again.
+        flap_at = up_start + timedelta(seconds=alerts.UP_CONFIRM_SEC + 30)
+        await self._notify(is_down=True, now=flap_at)
+        await self._notify(
+            is_down=True,
+            now=flap_at + timedelta(seconds=alerts.DOWN_CONFIRM_SEC),
+        )
+        await self._notify(
+            is_down=False,
+            now=flap_at + timedelta(seconds=alerts.DOWN_CONFIRM_SEC + 5),
+        )
         self.assertEqual(len(self.sent), 2)
         self.assertIn("قطع", self.sent[0])
         self.assertIn("برقرار شد", self.sent[1])
 
-    async def test_recovery_once_per_outage(self) -> None:
-        await self._notify(is_down=True)
-        first = await self._notify(is_down=False, now=self.now + timedelta(seconds=10))
-        second = await self._notify(is_down=False, now=self.now + timedelta(seconds=20))
-        self.assertEqual(first, alerts.ALERT_UP)
+    async def test_recovery_once_per_outage_after_confirmation(self) -> None:
+        await self._confirm_down()
+        up_start = self.now + timedelta(seconds=alerts.DOWN_CONFIRM_SEC + 10)
+        first = await self._notify(is_down=False, now=up_start)
+        self.assertIsNone(first)
+        confirmed = await self._notify(
+            is_down=False,
+            now=up_start + timedelta(seconds=alerts.UP_CONFIRM_SEC),
+        )
+        second = await self._notify(
+            is_down=False,
+            now=up_start + timedelta(seconds=alerts.UP_CONFIRM_SEC + 20),
+        )
+        self.assertEqual(confirmed, alerts.ALERT_UP)
         self.assertIsNone(second)
         self.assertEqual(sum(1 for t in self.sent if "برقرار شد" in t), 1)
+
+    async def test_recovery_blip_during_up_confirm_resets_clock(self) -> None:
+        await self._confirm_down()
+        up_start = self.now + timedelta(seconds=alerts.DOWN_CONFIRM_SEC + 10)
+        await self._notify(is_down=False, now=up_start)
+        # Drop again before UP_CONFIRM elapses — must not send «برقرار شد».
+        await self._notify(is_down=True, now=up_start + timedelta(seconds=30))
+        await self._notify(is_down=False, now=up_start + timedelta(seconds=40))
+        await self._notify(
+            is_down=False,
+            now=up_start + timedelta(seconds=40 + alerts.UP_CONFIRM_SEC - 1),
+        )
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("قطع", self.sent[0])
 
     async def test_dynamic_parts_are_html_escaped(self) -> None:
         # Inject a hostile label via a temporary kind map entry is impossible;
@@ -90,19 +145,25 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
     async def test_notify_failure_does_not_raise(self) -> None:
         self._send_patch.stop()
 
-        async def boom(_text: str) -> int:
+        async def boom(_text: str, **_kwargs) -> int:
             raise RuntimeError("telegram down")
 
         with patch.object(alerts, "_send_to_owners", side_effect=boom):
             async with self.Session() as session:
-                result = await alerts.notify_link_health_change(
+                await alerts.notify_link_health_change(
                     session, is_down=True, failure_kind="dns", now=self.now,
+                )
+                result = await alerts.notify_link_health_change(
+                    session,
+                    is_down=True,
+                    failure_kind="dns",
+                    now=self.now + timedelta(seconds=alerts.DOWN_CONFIRM_SEC),
                 )
         self.assertIsNone(result)
         self._send_patch.start()
 
     async def test_restart_keeps_throttle_from_persisted_settings(self) -> None:
-        await self._notify(is_down=True)
+        await self._confirm_down()
         self.assertEqual(len(self.sent), 1)
         # Simulate process restart: in-memory gone, settings remain.
         async with self.Session() as session:
@@ -110,8 +171,13 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
             last = await get_setting(session, alerts.LAST_DOWN_SENT_KEY, "")
             self.assertEqual(outage, "1")
             self.assertTrue(last)
-        # Fresh call within 15m must not send another down.
-        again = await self._notify(is_down=True, now=self.now + timedelta(minutes=5))
+        # Fresh confirmed down within the throttle must not send another down.
+        again_at = self.now + timedelta(seconds=alerts.DOWN_CONFIRM_SEC + 60)
+        await self._notify(is_down=True, now=again_at)
+        again = await self._notify(
+            is_down=True,
+            now=again_at + timedelta(seconds=alerts.DOWN_CONFIRM_SEC),
+        )
         self.assertIsNone(again)
         self.assertEqual(len(self.sent), 1)
 
@@ -124,13 +190,15 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_concurrent_down_claims_send_only_one_alert(self) -> None:
         """Pause-alert task and watchdog must not both emit «قطع»."""
+        await self._notify(is_down=True, now=self.now)
+        confirmed_at = self.now + timedelta(seconds=alerts.DOWN_CONFIRM_SEC)
         gate = asyncio.Event()
 
         async def staggered_notify(session_factory=self.Session):
             await gate.wait()
             async with session_factory() as session:
                 return await alerts.notify_link_health_change(
-                    session, is_down=True, failure_kind="connect", now=self.now,
+                    session, is_down=True, failure_kind="connect", now=confirmed_at,
                 )
 
         tasks = [asyncio.create_task(staggered_notify()) for _ in range(8)]
@@ -148,6 +216,10 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
                 task = next(iter(alerts._pause_alert_tasks))
                 await task
         self.assertEqual(len(alerts._pause_alert_tasks), 0)
+
+    async def test_single_watchdog_failure_is_not_down(self) -> None:
+        self.assertFalse(alerts.link_is_down(watchdog_failed=True, watchdog_streak=1))
+        self.assertTrue(alerts.link_is_down(watchdog_failed=True, watchdog_streak=2))
 
     async def test_retry_after_is_honoured(self) -> None:
         self._send_patch.stop()
@@ -176,7 +248,7 @@ class LinkAlertTests(unittest.IsolatedAsyncioTestCase):
         with patch("asyncio.sleep", new=AsyncMock()), \
              patch.object(alerts, "get_settings", return_value=MagicMock(admin_ids=[111])), \
              patch.dict(sys.modules, {"app.bot": bot_mod}):
-            delivered = await alerts._send_to_owners("hello")
+            delivered = await alerts._send_to_owners("hello", is_down=True)
         self.assertIs(alerts.get_settings(), real_settings)
         self.assertEqual(delivered, 1)
         self.assertEqual(calls["n"], 2)

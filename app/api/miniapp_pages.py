@@ -26,6 +26,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.catalog_pricing import displayed_quote, quote_product, sale_price
+from app.services.service_period import period_view
 from app.config import get_settings
 from app.db.models import BotUser, Order, ResellerProfile, UserService
 from app.api.miniapp_buy_extras import (
@@ -251,7 +252,7 @@ def _iso_time(value: object) -> str | None:
 
 
 def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
-    info = validate_service_info(info)
+    info = period_view(validate_service_info(info), svc)
     # Only our sentinel may appear as ``error`` — never raw upstream strings.
     upstream_err = not info or info.get("error") == "upstream_unavailable"
     used = info.get("used_traffic")
@@ -705,7 +706,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             buf = make_subscription_qr(url, background=bg, box_size=8, border=2)
         except Exception:
             log.exception("miniapp qr failed service=%s", service_id)
-            raise HTTPException(500, "qr failed")
+            raise HTTPException(500, "qr failed") from None
         data = buf.getvalue()
         if request.query_params.get("format") == "png":
             return Response(
@@ -798,7 +799,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             pack_id = int(body.get("pack_id"))
             kind = body.get("kind")
         except (AttributeError, TypeError, ValueError):
-            raise HTTPException(400, "سرویس و بسته را انتخاب کنید")
+            raise HTTPException(400, "سرویس و بسته را انتخاب کنید") from None
         if kind is not None and kind not in ("volume", "duration"):
             raise HTTPException(400, "نوع بسته نامعتبر است")
         shop_id = mini_scope(request).shop_id
@@ -845,7 +846,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         except Exception:
             await rollback_quiet(session)
             log.exception("mini addon failed user=%s svc=%s", user_id, service_id)
-            raise HTTPException(500, "افزایش حجم یا زمان ناموفق")
+            raise HTTPException(500, "افزایش حجم یا زمان ناموفق") from None
         order_id = int(order.id)
         response = _no_store(
             {
@@ -867,11 +868,11 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(400, "bad json")
+            raise HTTPException(400, "bad json") from None
         try:
             plan_id = int(body.get("plan_id"))
         except (TypeError, ValueError):
-            raise HTTPException(400, "plan_id required")
+            raise HTTPException(400, "plan_id required") from None
         staff_free = is_staff_free_request(body)
         service_name = service_name_field(body)
         await check_buy_extras(
@@ -908,7 +909,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         except Exception:
             await rollback_quiet(session)
             log.exception("mini buy failed user=%s plan=%s", user.id, plan_id)
-            raise HTTPException(500, "خرید ناموفق")
+            raise HTTPException(500, "خرید ناموفق") from None
         response = _no_store(
             {
                 "ok": True,
@@ -984,12 +985,12 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             if not isinstance(body, dict):
                 raise ValueError("bad json")
         except Exception:
-            raise HTTPException(400, "bad json")
+            raise HTTPException(400, "bad json") from None
         try:
             service_id = int(body.get("service_id"))
             plan_id = int(body.get("plan_id"))
         except (TypeError, ValueError):
-            raise HTTPException(400, "service_id and plan_id required")
+            raise HTTPException(400, "service_id and plan_id required") from None
         ui = await _scope_ui(session, request)
         if not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
@@ -1032,7 +1033,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         except Exception:
             await rollback_quiet(session)
             log.exception("mini renew failed user=%s svc=%s", user.id, service_id)
-            raise HTTPException(500, "تمدید ناموفق")
+            raise HTTPException(500, "تمدید ناموفق") from None
         response = _no_store(
             {
                 "ok": True,

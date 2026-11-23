@@ -8,16 +8,18 @@ import json
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy import delete, event, select
+from sqlalchemy import delete, event, select, update
 
 from connection_monitor_support import MonitorDatabaseCase, subscription_fixture_key
 
-from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, UserService
+from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, Setting, UserService
+from app.services.connection_monitor_snapshots import stored_utc
+from app.services.connection_monitor_timing import INTERVAL_SETTING_KEY
 from app.services.connection_monitor_config import MonitorBinding
 from app.services.connection_monitor_subscription import plan_monitor_configs, subscription_entries
 from app.services.connection_monitor_panel import MonitorAccount, MonitorCatalog
@@ -25,9 +27,12 @@ from app.services.connection_monitor_accounts import MonitorAccountError
 from app.services.connection_monitor_claims import claim_monitor_cycle
 from app.services.connection_monitor_sync import reconcile_monitor_plans
 from app.services.connection_monitor_types import MonitorConfigError, MonitorEndpoint, MonitorConfigPlan, MonitorIssue
-from app.services.connection_monitor_worker import run_monitor_cycle
+from app.services.connection_monitor_worker import PROXY_CONCURRENCY, run_monitor_cycle
 from app.services.connection_status_types import ObservationKind, ProbeObservation
 from app.services.xray_probe_resources import XrayBinary, XrayProbeError
+
+
+OVERLAP_WAIT_SECONDS = 5
 
 
 class MonitorWorkerTests(MonitorDatabaseCase):
@@ -42,6 +47,10 @@ class MonitorWorkerTests(MonitorDatabaseCase):
         self.closed = 0
         self.active = 0
         self.peak = 0
+        # When set, each probe waits here until this many probes overlap, so the
+        # concurrency assertion does not depend on how fast the machine is.
+        self.overlap_target: int | None = None
+        self.overlap_reached = asyncio.Event()
 
         async def catalog(account: MonitorAccount) -> MonitorCatalog:
             self.assertFalse(self.open_connections, "Panel I/O must not hold DB connections")
@@ -65,6 +74,10 @@ class MonitorWorkerTests(MonitorDatabaseCase):
             self.active += 1
             self.peak = max(self.peak, self.active)
             try:
+                if self.overlap_target is not None:
+                    if self.active >= self.overlap_target:
+                        self.overlap_reached.set()
+                    await asyncio.wait_for(self.overlap_reached.wait(), timeout=OVERLAP_WAIT_SECONDS)
                 await asyncio.sleep(0.005)
                 return ProbeObservation(ObservationKind.SUCCESS, datetime.now(timezone.utc), "gstatic", 100)
             finally:
@@ -83,6 +96,45 @@ class MonitorWorkerTests(MonitorDatabaseCase):
             session.add(ConnectionMonitorState(enabled=True, pg_user_id=900, pg_username="monitor-only", account_revision="one", subscription_token_enc="synthetic"))
             session.add_all([ConnectionMonitorTarget(subscription_key=subscription_fixture_key(index), test_enabled=True, next_check_at=self.now) for index in range(2)])
             await session.commit()
+
+    async def _next_round(self) -> None:
+        """The targets are due again, as they are one interval after a completed round."""
+        async with self.Session() as session:
+            await session.execute(update(ConnectionMonitorTarget).values(next_check_at=datetime.now(timezone.utc) - timedelta(seconds=1)))
+            await session.commit()
+
+    async def test_a_round_with_nothing_due_reads_neither_the_panel_nor_the_core(self) -> None:
+        await run_monitor_cycle(self.Session, self.binary)
+        with patch("app.services.connection_monitor_worker.read_monitor_catalog",
+                   AsyncMock(side_effect=AssertionError("catalog read in an idle round"))):
+            result = await run_monitor_cycle(self.Session, self.binary)
+        self.assertEqual((result.claimed, result.completed), (True, 0))
+        self.assertEqual(self.started, 1)
+        async with self.Session() as session:
+            self.assertIsNone((await session.scalar(select(ConnectionMonitorState))).cycle_token)
+
+    async def test_a_catalog_one_interval_old_is_read_again_even_with_nothing_due(self) -> None:
+        await run_monitor_cycle(self.Session, self.binary)
+        async with self.Session() as session:
+            await session.execute(update(ConnectionMonitorState).values(
+                catalog_synced_at=datetime.now(timezone.utc) - timedelta(seconds=61)))
+            await session.commit()
+        reads = AsyncMock(side_effect=lambda account: MonitorCatalog(
+            copy.deepcopy(self.catalog["native_configs"]), checked_at=datetime.now(timezone.utc)))
+        with patch("app.services.connection_monitor_worker.read_monitor_catalog", reads):
+            await run_monitor_cycle(self.Session, self.binary)
+        self.assertEqual(reads.await_count, 1)
+        self.assertEqual(self.started, 1)
+
+    async def test_the_configured_interval_schedules_the_next_check(self) -> None:
+        async with self.Session() as session:
+            session.add(Setting(key=INTERVAL_SETTING_KEY, value="300"))
+            await session.commit()
+        before = datetime.now(timezone.utc)
+        await run_monitor_cycle(self.Session, self.binary)
+        async with self.Session() as session:
+            due = [stored_utc(row) for row in (await session.scalars(select(ConnectionMonitorTarget.next_check_at))).all()]
+        self.assertTrue(all(before + timedelta(seconds=300) <= at <= datetime.now(timezone.utc) + timedelta(seconds=300) for at in due))
 
     async def test_one_core_batch_persists_complete_coverage_and_releases_all_leases(self) -> None:
         result = await run_monitor_cycle(self.Session, self.binary)
@@ -129,9 +181,10 @@ class MonitorWorkerTests(MonitorDatabaseCase):
             session.add_all(ConnectionMonitorTarget(subscription_key=entry.config_key, test_enabled=True, next_check_at=self.now)
                             for entry in subscription_entries(self.catalog["native_configs"]))
             await session.commit()
+        self.overlap_target = PROXY_CONCURRENCY
         result = await run_monitor_cycle(self.Session, self.binary)
         self.assertEqual(result.completed, 12)
-        self.assertEqual(self.peak, 4)
+        self.assertEqual(self.peak, PROXY_CONCURRENCY)
         self.assertEqual(self.active, 0)
 
     async def test_removed_host_is_paused_and_unpublished_without_starting_a_route_for_it(self) -> None:
@@ -215,6 +268,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
 
     async def test_panel_timeout_invalidates_evidence_without_incrementing_route_failure(self) -> None:
         await run_monitor_cycle(self.Session, self.binary)
+        await self._next_round()
         with patch("app.services.connection_monitor_worker.read_monitor_catalog", AsyncMock(side_effect=TimeoutError)):
             result = await run_monitor_cycle(self.Session, self.binary)
         self.assertEqual(result.reason, "catalog_unavailable")
@@ -224,6 +278,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
 
     async def test_inactive_account_error_is_not_ready_not_catalog_outage(self) -> None:
         await run_monitor_cycle(self.Session, self.binary)
+        await self._next_round()
         with patch("app.services.connection_monitor_worker.read_monitor_catalog",
                    AsyncMock(side_effect=MonitorAccountError("inactive"))):
             result = await run_monitor_cycle(self.Session, self.binary)
@@ -234,6 +289,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
 
     async def test_panel_timeout_account_error_stays_catalog_unavailable(self) -> None:
         await run_monitor_cycle(self.Session, self.binary)
+        await self._next_round()
         with patch("app.services.connection_monitor_worker.read_monitor_catalog",
                    AsyncMock(side_effect=MonitorAccountError("panel_timeout"))):
             result = await run_monitor_cycle(self.Session, self.binary)
@@ -244,6 +300,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
 
     async def test_monitor_config_error_stores_issue_code_as_reason(self) -> None:
         await run_monitor_cycle(self.Session, self.binary)
+        await self._next_round()
         with patch("app.services.connection_monitor_worker.plan_monitor_configs",
                    side_effect=MonitorConfigError(MonitorIssue.UNSUPPORTED)):
             result = await run_monitor_cycle(self.Session, self.binary)

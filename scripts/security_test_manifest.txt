@@ -20,6 +20,7 @@ tests/test_connection_status_menu_migration.py
 tests/test_connection_monitor_install.py
 tests/test_connection_status.py
 tests/test_connection_status_authz.py
+tests/test_connection_monitor_timing.py
 tests/test_connection_status_concurrency.py
 tests/test_connection_status_migration.py
 # Subscription contact ownership, shop isolation and cancellation notification claims.
@@ -30,6 +31,7 @@ tests/test_web_money_formatting.py
 tests/test_update_migration_metadata.py
 # --- ACL / RBAC / authz audits ---
 # --- Core authorization / role & tenant isolation phases ---
+tests/test_bot_admin_role.py
 # Every file listed here is executed by scripts/run_security_tests.sh (and by
 # full test suite, which also contains a long tail of unrelated pre-existing
 # it is never silently skipped by future patches. One path per line; lines
@@ -155,6 +157,8 @@ tests/test_service_live_info.py
 tests/test_setup_bot_placeholder_rejection.py
 tests/test_setup_gate_install_url.py
 tests/test_setup_url_log_redaction.py
+tests/test_payment_log_token_redaction.py
+tests/test_shop_bot_webhook.py
 tests/test_setup_wizard_secret_masking.py
 tests/test_shop_isolation_3_5_4.py
 tests/test_nav_admin_counters_0_2_47.py
@@ -180,7 +184,6 @@ tests/test_service_automation.py
 tests/test_psp_stuck_settling_recovery.py
 tests/test_customer_features.py
 tests/test_scheduler_background_jobs.py
-tests/test_sqlite_db_file_permissions.py
 tests/test_template_variable_validation.py
 tests/test_nav_tenancy_context_0_2_47.py
 tests/test_service_card_parity_0_2_47.py
@@ -265,6 +268,8 @@ tests/test_replaceable_notices.py
 tests/test_risk_mark.py
 tests/test_overview_redesign.py
 tests/test_backup_retention_telegram.py
+tests/test_backup_archive_safety.py
+tests/test_backup_schedule.py
 tests/test_reseller_wallet_debit.py
 tests/test_py_compat.py
 tests/test_bbc_https_requirement.py
@@ -297,6 +302,7 @@ tests/test_miniapp_shop_topup.py
 tests/test_legacy_discount_shop_scope.py
 tests/test_miniapp_shop_extras.py
 tests/test_shop_notify_isolation.py
+tests/test_new_order_report.py
 tests/test_user_search.py
 tests/test_psp_gateways.py
 tests/test_user_card.py
@@ -324,6 +330,14 @@ tests/test_payment_void_bot.py
 # Durable broadcast queue: platform audience only, no double send, cancel, admin-only.
 tests/test_broadcast_queue.py
 tests/test_shop_broadcast.py
+# Buttons under staff messages: link permission per shop, presets per shop, renewal of own services only.
+tests/test_message_buttons.py
+tests/test_message_button_colors.py
+# Group-message audiences, pages and buttons: tenant scope, opt-out, plan buttons, forged segments.
+tests/test_broadcast_audience.py
+tests/test_broadcast_pages.py
+tests/test_message_button_targets.py
+tests/test_broadcast_segments_bot.py
 # First-use nudge: once per service, per-shop switch, shop bot only.
 tests/test_first_use_nudge.py
 # The app must compile and import (guards a broken merge).
@@ -393,6 +407,7 @@ tests/test_pg_read_breaker_threshold.py
 tests/test_pg_http_rebuild.py
 # Shop staff action log: written with the change, read only by the shop it belongs to.
 tests/test_staff_audit.py
+tests/test_staff_audit_payment_decisions.py
 # Manual shop wallet changes by shop staff: own shop purse only, capped, once per request.
 tests/test_shop_wallet_adjust.py
 # Manual loyalty-point changes by shop staff: own shop only, capped, once per request.
@@ -429,6 +444,7 @@ tests/test_mini_addon_packs.py
 # PasarGuard link watchdog job: heal, one rebuild, lock and disable.
 tests/test_pg_link_watchdog.py
 tests/test_pg_link_alerts.py
+tests/test_pg_link_timing.py
 tests/test_pg_link_health_persist.py
 tests/test_pg_stop_missing_user_poll.py
 tests/test_pg_cache_capability_probe.py
@@ -503,6 +519,7 @@ tests/test_random_discount_migration.py
 tests/test_random_discount_purge.py
 tests/test_random_discount_code_namespace.py
 tests/test_renewal_categories.py
+tests/test_renewal_category_rule.py
 tests/test_miniapp_renewal_options.py
 tests/test_magic_links_bot_token.py
 tests/test_mobile_bar.py
@@ -513,6 +530,7 @@ tests/test_empty_state.py
 tests/test_dashboard_layout.py
 tests/test_pg_capability_probe_credentials.py
 tests/test_pg_capability_outage_hold.py
+tests/test_terms_acceptance_race.py
 tests/test_platform_pg_access_end_to_end.py
 tests/test_plan_template_only_role.py
 tests/test_plan_category_board.py
@@ -521,3 +539,78 @@ tests/test_platform_pg_admins_page.py
 tests/test_pg_role_parity.py
 tests/test_reseller_revoke_panel_admin.py
 tests/test_pg_quota_parity.py
+tests/test_trial_keyboard_button.py
+tests/test_inbox_customer_alerts_off.py
+tests/test_inbox_modal.py
+# Paid orders the panel did not apply: retry, one wallet refund per order, shop purse isolation.
+tests/test_paid_order_recovery.py
+tests/test_panel_rejection_recovery.py
+tests/test_shop_settings_platform_only_groups.py
+tests/test_bot_settings_edit_path.py
+tests/test_bot_message_text_settings.py
+tests/test_owner_bot_operation_settings.py
+tests/test_bot_setting_values.py
+tests/test_shop_bot_settings_parity.py
+tests/test_bot_bbc_enable_check.py
+tests/test_editable_service_notices.py
+tests/test_bot_backup_settings.py
+tests/test_bot_profile_texts.py
+tests/test_bot_crypto_rate_settings.py
+tests/test_bot_topup_presets.py
+tests/test_bot_payment_destinations.py
+# PostgreSQL test isolation (one schema or database per test) and the PostgreSQL-only check.
+tests/test_postgres_support.py
+tests/test_postgres_only_check.py
+# Operator CLI: PostgreSQL only, never prints DATABASE_URL.
+tests/test_cli_postgres_only.py
+# PostgreSQL backups: all-or-nothing restore, refused archives, .env and secrets kept safe.
+tests/test_backup_postgres_restore.py
+tests/test_backup_tool_version.py
+tests/test_backup_restore_newer_client.py
+tests/test_backup_env_restore.py
+# Startup: PostgreSQL DATABASE_URL only; a refused URL is never echoed.
+tests/test_database_url_startup.py
+tests/test_command_center.py
+tests/test_quick_switches.py
+tests/test_command_data_search.py
+tests/test_switch_schedule.py
+tests/test_command_center_recent.py
+# Gateway, payment webhook and Telegram webhook requests never get the web page panel read budget.
+tests/test_panel_read_budget_paths.py
+# Payment and delivery never run under a web page panel read deadline; no second attempt on a running delivery.
+tests/test_payment_read_budget.py
+# Updates are refused (web panel and pgclock.sh) when the database is not PostgreSQL.
+tests/test_update_database_guard.py
+tests/test_command_center_navigation.py
+tests/test_cli_english_output.py
+tests/test_receipt_risk.py
+tests/test_auto_renew_offer.py
+tests/test_cashback_topup.py
+tests/test_service_freeze.py
+tests/test_service_transfer.py
+tests/test_plan_scope.py
+tests/test_error_handling_rules.py
+tests/test_plan_pages_routes.py
+tests/test_delivery_rewards_after_db_error.py
+tests/test_delivery_completes_after_reward_failure.py
+tests/test_support_settings_routes.py
+tests/test_update_routes_behavior.py
+tests/test_finance_receipt_suggestions.py
+tests/test_order_discount_ledger.py
+tests/test_discount_rules.py
+tests/test_discount_rule_pages.py
+tests/test_coupon_programs.py
+tests/test_discount_budget_winback.py
+tests/test_setup_wizard_routes.py
+tests/test_connection_status_interval_bot.py
+#
+# No renewal or pack is sold for a service the panel removed; retrying its paid order says why.
+tests/test_panel_removed_service_purchases.py
+tests/test_tools_area.py
+tests/test_system_health.py
+tests/test_stuck_work.py
+tests/test_maintenance_tools.py
+tests/test_restart_and_resync.py
+tests/test_trial_retrial.py
+tests/test_install_repair.py
+tests/test_lite_mode.py

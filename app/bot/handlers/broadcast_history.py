@@ -14,7 +14,7 @@ from app.bot.nav_inline import with_inline_back
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, BroadcastLog
 from app.services import bot_feedback_texts as feedback
-from app.services.broadcast import AUDIENCE_LABELS
+from app.services.broadcast_audience import stored_label
 from app.services.broadcast_queue import ACTIVE_STATUSES, STATUS_LABELS, cancel_broadcast
 from app.services.formatting import format_message, format_number, info_block, kv_line
 from app.services.users import get_all_settings
@@ -55,7 +55,7 @@ async def _render_card(callback: CallbackQuery, session: AsyncSession, log: Broa
     lines = [
         kv_line("🔢", "شناسه", f"#{log.id}"),
         kv_line("📌", "وضعیت", STATUS_LABELS.get(log.status, log.status)),
-        kv_line("🎯", "مخاطبان", html.escape(AUDIENCE_LABELS.get(log.audience, log.audience))),
+        kv_line("🎯", "مخاطبان", html.escape(stored_label(log.audience_spec, log.audience, shop_id=log.shop_id))),
         kv_line("✅", "موفق", format_number(log.ok_count)),
         kv_line("❌", "ناموفق", format_number(log.fail_count)),
         kv_line("❓", "نتیجهٔ نامعلوم", format_number(log.review_count)),

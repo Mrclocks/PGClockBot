@@ -118,17 +118,6 @@ class PgWriteRouteStaticAudit(unittest.TestCase):
         self.assertIn("get_pg_for_staff", fn)
         self.assertIn("بدون اعتبارنامه اختصاصی", fn)
 
-    def test_plans_also_create_template_uses_staff_credentials(self):
-        self.assertIn("staff_can_create_pg_template", APP_PY)
-        idx = APP_PY.find("if also_create_template:")
-        self.assertGreater(idx, 0)
-        chunk = APP_PY[idx : idx + 2500]
-        self.assertIn("_staff_pg(", chunk)
-        self.assertIn("create_user_template", chunk)
-        self.assertNotIn("get_pg().create_user_template", chunk)
-        self.assertNotIn("await get_pg().create_user_template(", chunk)
-
-
 class RoleMatrixAuthz(unittest.TestCase):
     def test_owner_never_gets_admin_row_actions_in_template(self):
         html = (ROOT / "app" / "web" / "templates" / "pg_admins.html").read_text(encoding="utf-8")

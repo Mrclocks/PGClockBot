@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import secrets
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -14,7 +13,7 @@ import httpx
 import sqlalchemy as sa
 from fastapi import FastAPI
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 import app.services.shop_points_adjust as points_module
 from app.services.shop_manual_adjust import ManualAdjustError
@@ -24,6 +23,7 @@ from app.services.shop_points_adjust import (
     points_adjust_shop,
     shop_points_form_context,
 )
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP_A = 81
@@ -74,10 +74,7 @@ class PointsDbHarness(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         from app.db.models import BotUser, BotUserShop, ResellerProfile
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'points.db'}", connect_args={"timeout": 15}
-        )
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -99,7 +96,6 @@ class PointsDbHarness(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _points(self, user_id: int, shop_id: int | None) -> int:
         from app.db.models import BotUser
@@ -223,7 +219,7 @@ class PointsMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("points_days", ROOT / "alembic/versions/0080_shop_points_adjust_days.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             migration.upgrade()
             migration.upgrade()

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -11,15 +10,16 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, PgAdminSubscription, ResellerPlan
 from app.services.pg_admin_subscription import (
     compute_renew_invoice,
     plan_carries_remaining_period,
-    plan_keeps_extras_on_renew,
+    plan_keeps_extra,
     renew_subscription,
 )
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 1, 10, 12, 0, tzinfo=timezone.utc)
@@ -29,7 +29,8 @@ class ResellerCarryHelpersTests(unittest.TestCase):
     def test_defaults_keep_previous_behavior(self):
         plan = SimpleNamespace()
         self.assertTrue(plan_carries_remaining_period(plan))
-        self.assertTrue(plan_keeps_extras_on_renew(plan))
+        self.assertTrue(plan_keeps_extra(plan, "gb"))
+        self.assertTrue(plan_keeps_extra(plan, "users"))
 
     def test_invoice_skips_extras_when_plan_clears_them(self):
         plan = SimpleNamespace(
@@ -59,7 +60,7 @@ class ResellerCarryHelpersTests(unittest.TestCase):
 
 
 class ResellerCarryMigrationTests(unittest.TestCase):
-    def test_sqlite_upgrade_repeat_and_downgrade_keep_plans(self):
+    def test_upgrade_repeat_and_downgrade_keep_plans(self):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
@@ -70,7 +71,7 @@ class ResellerCarryMigrationTests(unittest.TestCase):
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             conn.execute(
                 sa.text(
@@ -101,8 +102,7 @@ class ResellerCarryMigrationTests(unittest.TestCase):
 
 class ResellerCarryRenewalTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'r.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -143,7 +143,6 @@ class ResellerCarryRenewalTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def test_renew_starts_period_from_now_and_clears_extras(self):
         panel = AsyncMock(

@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from unittest import mock
 
 import httpx
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services.shop_permission_grant import GrantResult, grant_shop_permission, grant_summary
+from tests.postgres_support import scoped_async_engine
 
 OWNER = {
     "role": "admin",
@@ -30,15 +29,13 @@ class BulkGrantHarness(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'grant.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _reseller(self, user_id: int, perms: str | None) -> int:
         from app.db.models import BotUser, ResellerProfile

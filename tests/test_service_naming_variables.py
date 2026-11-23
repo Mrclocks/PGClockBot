@@ -5,11 +5,12 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Order, OrderStatus, Plan, UserService
 from app.services.orders import generate_pg_username
+from tests.postgres_support import scoped_async_engine
 
 
 class NamingContextTests(unittest.IsolatedAsyncioTestCase):
@@ -119,7 +120,7 @@ class NamingContextTests(unittest.IsolatedAsyncioTestCase):
 
 class DeliveryNamingTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)

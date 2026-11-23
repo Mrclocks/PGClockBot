@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.user_errors import domain_error_text
+from app.services.service_period import period_view
 from app.services.catalog_pricing import displayed_quote, price_html, quote_product, sale_price
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
@@ -27,6 +28,8 @@ from app.db.models import BotUser, UserService
 from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_catalog_plan
 from app.services.pasarguard import absolutize_subscription_url, get_pg
+from app.services.service_freeze import freeze_button
+from app.services.service_transfer import transfer_button
 from app.services.service_import import is_external_service
 from app.services.service_panel_presence import (
     ABSENT,
@@ -186,7 +189,7 @@ async def _show_automation(callback, session, db_user, service_id):
     )
     service = await owned_automation_service(session, db_user, service_id)
     row = await get_automation(session, service)
-    choices = await automation_choices(session)
+    choices = await automation_choices(session, service)
     await session.commit()
     lines = [
         f"سرویس: <b>{html.escape(service.pg_username)}</b>",
@@ -244,8 +247,8 @@ async def svc_auto_pick(callback: CallbackQuery, session: AsyncSession, db_user:
         category_raw = parts[4] if len(parts) > 4 else None
         if action not in ACTIONS:
             raise ValueError("تنظیم نامعتبر است")
-        await owned_automation_service(session, db_user, service_id)
-        choices = (await automation_choices(session))[action]
+        service = await owned_automation_service(session, db_user, service_id)
+        choices = (await automation_choices(session, service))[action]
         if not choices:
             raise ValueError("پلن یا بسته فعالی موجود نیست")
         category_id = None
@@ -506,7 +509,7 @@ async def svc_view(
             await record_presence(session, svc_id, PRESENT)
         await session.commit()
     # Display only, after the cache sync: saved values must never be written back as live.
-    info = with_stored_quota(info, svc)
+    info = period_view(with_stored_quota(info, svc), svc)
     info.setdefault("username", svc.pg_username)
     text = format_message("📦 سرویس شما", service_card(info))
     if callback.message:
@@ -583,7 +586,7 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     elif not url:
         parts.append("لینک موجود نیست.")
     sub_info.setdefault("username", svc.pg_username)
-    parts.append(service_card(sub_info))
+    parts.append(service_card(period_view(sub_info, svc)))
     text = format_message("📱 اشتراک", "\n\n".join(parts))
     if callback.message:
         markup = InlineKeyboardMarkup(
@@ -722,7 +725,9 @@ async def svc_renew_preview(
     await state.update_data(renewal_preview={
         "service_id": svc.id, "plan_id": plan.id, "price": preview["price"], "terms": preview["terms"], "request_key": preview["request_key"],
     })
-    lines = [f"پلن: {plan.name}", *preview["lines"], *preview["warnings"], "", preview["notice"]]
+    # Warnings first: a plan that drops the remaining quota must be read before the numbers.
+    warnings = [*preview["warnings"], ""] if preview["warnings"] else []
+    lines = [f"پلن: {plan.name}", *warnings, *preview["lines"], "", preview["notice"]]
     if callback.message:
         await safe_edit_text(
             callback.message, format_message("🔄 پیش‌نمایش تمدید", html.escape("\n".join(lines)) + "\nمبلغ: " + price_html(displayed_quote(plan), get_settings().currency)),
@@ -1068,7 +1073,9 @@ async def svc_more(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             callback.message,
             format_message("⚙️ گزینه‌های بیشتر", f"سرویس <b>{label}</b>"),
             reply_markup=service_more_keyboard(
-                svc_id, ui, external=is_external_service(svc), wireguard=has_wireguard(info)
+                svc_id, ui, external=is_external_service(svc), wireguard=has_wireguard(info),
+                freeze=await freeze_button(session, svc, ui),
+                transfer=await transfer_button(session, svc, ui),
             ),
         )
 

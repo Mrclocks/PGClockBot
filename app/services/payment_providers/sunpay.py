@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 import httpx
 
 from app.services.payment_providers.base import CheckoutRequest, CheckoutResult, VerifyResult
-from app.services.redact import redact
+from app.services.redact import redact, secret_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +295,7 @@ def _parse_verified_payment(
         )
     result = data.get("data") if isinstance(data.get("data"), dict) else {}
     if _missing_paid_evidence(result):
-        logger.warning("sunpay verify success without paid reference token=%s", token[:16])
+        logger.warning("sunpay verify success without paid reference token_fp=%s", secret_fingerprint(token))
         return VerifyResult(
             ok=False,
             external_ref=token,
@@ -313,8 +313,8 @@ def _parse_verified_payment(
         )
     if paid_amount != expected_amount:
         logger.warning(
-            "sunpay verify amount mismatch token=%s expected=%s paid=%s",
-            token[:16],
+            "sunpay verify amount mismatch token_fp=%s expected=%s paid=%s",
+            secret_fingerprint(token),
             expected_amount,
             paid_amount,
         )
@@ -353,8 +353,8 @@ def _invoice_matches_settlement(
     try:
         if _safe_int(raw_invoice, field="invoice_id") != int(expected_invoice_id):
             logger.warning(
-                "sunpay verify invoice mismatch token=%s expected=%s got=%s",
-                token[:16],
+                "sunpay verify invoice mismatch token_fp=%s expected=%s got=%s",
+                secret_fingerprint(token),
                 expected_invoice_id,
                 raw_invoice,
             )

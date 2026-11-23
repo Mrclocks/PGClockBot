@@ -99,7 +99,7 @@ def _rejection(message: str, audience: Audience, **numbers: int) -> VolumeAlloca
 
 
 async def lock_reseller_profile(session: AsyncSession, shop_id: int) -> ResellerProfile | None:
-    """Row-lock the shop profile (FOR UPDATE on PostgreSQL; no-op on SQLite)."""
+    """Row-lock the shop profile (SELECT ... FOR UPDATE)."""
     return await session.scalar(
         select(ResellerProfile).where(ResellerProfile.user_id == int(shop_id)).with_for_update()
     )
@@ -377,8 +377,8 @@ async def hold_volume(
 ) -> HeldVolume | None:
     """Reserve ``delta_bytes`` for an upcoming panel call and commit; None when nothing is held.
 
-    The hold row is inserted before the total is read, so on SQLite its write lock and on
-    PostgreSQL the profile row lock make concurrent holds of one shop take turns. Re-using
+    The shop profile is row-locked before the total is read, so concurrent holds of one
+    shop take turns. Re-using
     ``key`` replaces the earlier hold (a retried delivery does not count twice).
     """
     if shop_id is None:

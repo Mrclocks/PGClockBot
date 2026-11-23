@@ -18,7 +18,7 @@ import httpx
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse
 from itsdangerous import URLSafeTimedSerializer
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
 from app.config import Settings
@@ -27,7 +27,8 @@ from app.services import pg_read_resilience as resilience
 from app.services.pasarguard import PasarGuardClient, PasarGuardError
 from app.services.pg_access import resolve_acl_from_client
 from app.services.pg_staff_access import enforce_pg_admin_web_gate
-from app.services.ux20 import check_pg_connection
+from app.services.action_center import check_pg_connection
+from tests.postgres_support import scoped_async_engine
 
 
 class PanelReadTests(unittest.IsolatedAsyncioTestCase):
@@ -87,6 +88,8 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("app.services.pasarguard.get_pg", return_value=client),
             patch("app.services.pg_staff_access._PG_GATE_CACHE", {}),
+            # A confirmation left by another test would keep access during the outage.
+            patch("app.services.pg_staff_access._PG_GATE_LAST_OK", {}),
             patch("app.services.pg_staff_access.revoke_web_access", new=AsyncMock()) as revoke,
             resilience.web_read_budget(),
         ):
@@ -326,22 +329,27 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         calls = []
         dns_threads = []
 
+        # The lookup outlasts the budget by a wide margin, so a busy CI worker
+        # (parallel tests, a GC pause) cannot blur "gave up on time" into
+        # "waited for DNS".
+        dns_seconds = 0.5
+
         def slow_dns(*args: Any, **kwargs: Any) -> list[tuple[int, int, int, str, tuple[str, int]]]:
             dns_threads.append(threading.current_thread())
-            time.sleep(0.06)
+            time.sleep(dns_seconds)
             return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443))]
 
         with patch("socket.getaddrinfo", side_effect=slow_dns):
             client = await self.make_client(lambda request: calls.append(request) or httpx.Response(200, json={}))
             started = time.monotonic()
-            with resilience.web_read_budget(seconds=0.02):
+            with resilience.web_read_budget(seconds=0.05):
                 read = asyncio.create_task(client.get_current_admin())
                 await asyncio.sleep(0.005)
                 self.assertFalse(read.done())
                 with self.assertRaises(resilience.PgReadUnavailable):
                     await read
-            self.assertLess(time.monotonic() - started, 0.05)
-            await asyncio.sleep(0.07)
+            self.assertLess(time.monotonic() - started, dns_seconds * 0.6)
+            await asyncio.sleep(dns_seconds + 0.1)
         self.assertEqual(calls, [])
         self.assertEqual(len(dns_threads), 1)
         self.assertIsNot(dns_threads[0], threading.main_thread())
@@ -369,6 +377,7 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(pg_staff_access, "time", SimpleNamespace(monotonic=lambda: now[0])),
             patch.object(pg_staff_access, "_PG_GATE_CACHE", {}),
+            patch.object(pg_staff_access, "_PG_GATE_LAST_OK", {}),
             patch.object(pg_staff_access, "fetch_pg_admin_gate", gate),
         ):
             self.assertFalse((await enforce_pg_admin_web_gate(AsyncMock(), "shop_a"))[0])
@@ -388,7 +397,7 @@ class PanelReadTests(unittest.IsolatedAsyncioTestCase):
             raise httpx.ConnectError("offline", request=request)
 
         pg = await self.make_client(offline)
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         sessions = async_sessionmaker(engine, expire_on_commit=False)
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)

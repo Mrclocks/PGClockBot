@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.services.formatting import node_status_fa, pg_user_status_fa
 from app.services.node_traffic import build_nodes_overview

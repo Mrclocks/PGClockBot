@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -14,6 +15,7 @@ from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.connection_monitor_timing import monitor_timing
 from connection_monitor_support import MonitorDatabaseCase, OWNER_STAFF, subscription_fixture_key
 
 from app.api.app import create_api_app, render
@@ -273,6 +275,7 @@ class MonitorWebTests(MonitorDatabaseCase):
             self.staff.update(staff)
             for path, data in (("/connection-status/account", {"username": "monitor-only"}),
                                ("/connection-status/runtime", {"enabled": "1"}), (f"/connection-status/configs/{subscription_fixture_key()}", {}),
+                               ("/connection-status/interval", {"seconds": "900"}),
                                ("/connection-status/targets/1/check", {}), ("/connection-status/targets/1/pause", {}),
                                ("/connection-status/targets/1/delete", {}),
                                ("/connection-status/targets/1", {"public_name": "x", "display_order": "0", "is_public": "0"})):
@@ -281,6 +284,17 @@ class MonitorWebTests(MonitorDatabaseCase):
             self.assertEqual((await self.client.get("/connection-status?hosts=1")).status_code, 403)
         self.panel.get_hosts.assert_not_called()
         self.panel.get_user_by_username.assert_not_called()
+
+    async def test_owner_changes_the_check_interval_and_odd_values_are_refused(self) -> None:
+        response = await self.client.post("/connection-status/interval", data={"seconds": "300"})
+        self.assertEqual(response.headers["location"], "/connection-status?saved=1")
+        page = await self.client.get("/connection-status")
+        self.assertIn('<option value="300" selected>هر ۵ دقیقه</option>', page.text)
+        self.assertIn("بررسی هر ۵ دقیقه انجام می‌شود", page.text)
+        response = await self.client.post("/connection-status/interval", data={"seconds": "45"})
+        self.assertIn("error=", response.headers["location"])
+        async with self.Session() as session:
+            self.assertEqual((await monitor_timing(session)).interval_seconds, 300)
 
     async def test_other_shop_target_cannot_be_edited_or_checked_by_id(self) -> None:
         await self.attach()
@@ -324,6 +338,16 @@ class MonitorWebTests(MonitorDatabaseCase):
         self.assertIn("تأخیر واقعی", text)
         title_block = text.split('class="page-title"', 1)[1].split("</div>", 2)[1]
         self.assertNotIn("<p", title_block)
+
+    async def test_the_test_card_keeps_one_action_and_the_interval_has_its_own_card(self) -> None:
+        text = (await self.client.get("/connection-status")).text
+        test_card = text.split('aria-labelledby="test-runtime-title"', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(test_card.count("<form"), 1)
+        self.assertIn('action="/connection-status/runtime"', test_card)
+        interval_card = text.split('aria-labelledby="monitor-interval-title"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('action="/connection-status/interval"', interval_card)
+        self.assertIn('name="seconds"', interval_card)
+        self.assertLess(text.index("test-runtime-title"), text.index("monitor-interval-title"))
 
     async def test_missing_core_warning_is_one_readable_block_with_a_copyable_command(self) -> None:
         await self.attach()
@@ -422,7 +446,8 @@ class MonitorWebTests(MonitorDatabaseCase):
         self.panel.get_current_admin.assert_not_awaited()
 
     async def test_real_panel_middleware_rejects_missing_csrf_and_accepts_the_valid_form(self) -> None:
-        with patch("app.api.app.DATA_DIR", Path(self.temporary.name)):
+        with tempfile.TemporaryDirectory(prefix="pgclock-monitor-web-") as data_dir, \
+                patch("app.api.app.DATA_DIR", Path(data_dir)):
             app = create_api_app()
         route = next(route for route in app.routes if getattr(route, "path", None) == "/connection-status")
         dependencies = list(route.dependant.dependencies)

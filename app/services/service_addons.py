@@ -14,11 +14,13 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pg_read_resilience import outside_web_read_budget
 from app.services.catalog_pricing import annotate_prices, assert_expected_price, quote_product
 from app.db.models import (
     BotUser,
     Order,
     OrderStatus,
+    delivered_stamp,
     Plan,
     ServiceAddonPack,
     UserService,
@@ -32,6 +34,7 @@ from app.services.formatting import (
     parse_expire,
 )
 from app.services.numbers import to_fa_digits
+from app.services.service_freeze_guard import assert_not_frozen
 from app.services.plans_catalog import require_catalog_owner_id
 from app.services.cashback import grant_after_delivery
 from app.services.payg_charges import new_request_key
@@ -45,7 +48,7 @@ from app.services.payg_gate import (
 )
 from app.services.payg_pricing import ChargeEvent, ServiceChange
 from app.services.provision_gate import ProvisionError, hold_limit_change, new_hold_key
-from app.services.random_discounts import apply_random_discount
+from app.services.discount_rules import apply_automatic_discounts
 from app.services.service_live_info import validate_service_info
 from app.services.volume_allocation import (
     HeldVolume,
@@ -1044,7 +1047,9 @@ async def validate_addon_selection(
     if not user:
         raise ValueError("کاربر یافت نشد")
     from app.services.service_automation import service_shop_id
-    from app.services.service_renewals import assert_service_quota_available
+    from app.services.service_renewals import assert_service_on_panel, assert_service_quota_available
+
+    assert_service_on_panel(service)
 
     if await service_shop_id(session, service) != shop_id:
         raise ValueError("سرویس این فروشگاه نیست")
@@ -1170,6 +1175,7 @@ async def create_addon_order(
     await validate_addon_selection(
         session, user_id=user_id, service=service, pack=pack, shop_id=shop_rid,
     )
+    await assert_not_frozen(session, service.id)
     await _assert_pack_affordable(session, shop_rid, service, pack)
 
     quote = await quote_product(session, pack, shop_id=shop_rid)
@@ -1192,11 +1198,6 @@ async def create_addon_order(
     if key is None:
         session.add(order)
     else:
-        connection = await session.connection()
-        if connection.dialect.name == "sqlite":
-            raw = await connection.get_raw_connection()
-            if not raw.driver_connection.in_transaction:
-                await connection.exec_driver_sql("BEGIN")
         try:
             async with session.begin_nested():
                 session.add(order)
@@ -1215,7 +1216,7 @@ async def create_addon_order(
             ) != (user_id, service.id, int(pack.id), shop_rid):
                 raise ValueError("درخواست افزایش نامعتبر است") from None
             return existing
-    await apply_random_discount(session, order)
+    await apply_automatic_discounts(session, order)
     if commit:
         await session.commit()
         await session.refresh(order)
@@ -1224,6 +1225,7 @@ async def create_addon_order(
     return order
 
 
+@outside_web_read_budget
 async def apply_service_addon(
     session: AsyncSession, order: Order
 ) -> Order:
@@ -1315,7 +1317,7 @@ async def apply_service_addon(
                     Order.id == order_id,
                     Order.status == OrderStatus.DELIVERING.value,
                 )
-                .values(status=OrderStatus.DELIVERED.value, service_mutation_pending=False)
+                .values(status=OrderStatus.DELIVERED.value, service_mutation_pending=False, **delivered_stamp(OrderStatus.DELIVERED.value))
                 .execution_options(synchronize_session=False)
             )
         if done.rowcount != 1:
@@ -1347,7 +1349,7 @@ async def apply_service_addon(
                         Order.id == order_id,
                         Order.status == OrderStatus.DELIVERING.value,
                     )
-                    .values(status=OrderStatus.DELIVERED.value, service_mutation_pending=False)
+                    .values(status=OrderStatus.DELIVERED.value, service_mutation_pending=False, **delivered_stamp(OrderStatus.DELIVERED.value))
                     .execution_options(synchronize_session=False)
                 )
                 from app.services.loyalty import consume_loyalty_discount_for_order

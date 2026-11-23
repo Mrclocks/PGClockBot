@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+from tests.postgres_support import scoped_async_engine
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("WEB_SECRET", "test-web-secret-for-money-phase-32chars")
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,16 +25,17 @@ class LoyaltyIdempotencyKeyTests(unittest.TestCase):
 
 class RedemptionSlotKeyTests(unittest.IsolatedAsyncioTestCase):
     async def test_double_tap_shares_the_key_and_a_new_redemption_moves_it(self):
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import async_sessionmaker
 
-        from app.db.models import Base, BotUser, RewardRedemption
+        from app.db.models import Base, BotUser, LoyaltyReward, RewardRedemption
         from app.services.loyalty import next_redemption_key
 
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         async with async_sessionmaker(engine, expire_on_commit=False)() as session:
             session.add(BotUser(id=1, telegram_id=1, referral_code="a"))
+            session.add(LoyaltyReward(id=7, name="credit", reward_type="wallet_credit", reward_value=1, points_cost=1))
             await session.commit()
             first = await next_redemption_key(session, 1, 7, None)
             self.assertEqual(first, await next_redemption_key(session, 1, 7, None))
@@ -48,12 +49,12 @@ class RedemptionSlotKeyTests(unittest.IsolatedAsyncioTestCase):
 
 class ServiceDeleteFailClosedTests(unittest.IsolatedAsyncioTestCase):
     async def test_local_row_kept_when_pg_delete_and_disable_fail(self):
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         from app.db.models import Base, BotUser, Role, UserService
         from app.services.bot_user_admin import admin_delete_service
 
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False)
@@ -100,15 +101,20 @@ class ServiceDeleteFailClosedTests(unittest.IsolatedAsyncioTestCase):
 
 class WalletTopupApproveTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_user_rolls_back_approved_claim(self):
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         from app.db.models import Base, BotUser, Payment, PaymentMethod, PaymentStatus, Role
         from app.services.orders import approve_payment
 
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False)
+        # The foreign key normally makes an orphaned payment impossible; drop it in this
+        # throwaway database so the defensive "user not found" branch can be reached.
+        async with engine.begin() as conn:
+            await conn.execute(text("ALTER TABLE payments DROP CONSTRAINT payments_user_id_fkey"))
 
         async with Session() as session:
             # Create then delete the user so payment.user_id points nowhere
@@ -157,12 +163,12 @@ class StarsRefundHelperTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_mismatch_path_refunds_and_rejects(self):
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         from app.bot.handlers import payments as paymod
         from app.db.models import Base, BotUser, Payment, PaymentMethod, PaymentStatus, Role
 
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False)

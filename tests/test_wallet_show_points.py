@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers.wallet import build_wallet_home_text, load_wallet_home
 from app.bot.nav_inline import wallet_hub_keyboard
@@ -22,6 +20,7 @@ from app.services.users import (
     set_setting,
     set_shop_reseller_id,
 )
+from tests.postgres_support import scoped_async_engine
 
 
 def _ui(**overrides: str) -> dict:
@@ -85,8 +84,7 @@ class WalletHomeShopSettingsParityTests(unittest.IsolatedAsyncioTestCase):
     """Text line and club button must share one shop-scoped settings source."""
 
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'w.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -103,7 +101,6 @@ class WalletHomeShopSettingsParityTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         reset_shop_reseller_id(self.token)
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _home(self) -> tuple[str, list[str]]:
         async with self.Session() as session:
@@ -149,8 +146,7 @@ class WalletHomeShopSettingsParityTests(unittest.IsolatedAsyncioTestCase):
 
 class MiniappCustomerSummaryPointsTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'w.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -167,7 +163,6 @@ class MiniappCustomerSummaryPointsTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         reset_shop_reseller_id(self.token)
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _summary(self, *, shop_id: int | None):
         from app.api.miniapp_pages import _customer_summary

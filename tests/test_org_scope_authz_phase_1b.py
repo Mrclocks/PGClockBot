@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -19,11 +19,12 @@ from app.services.authz import (
     is_explicit_org_owner,
     is_platform_admin,
 )
+from tests.postgres_support import scoped_async_engine
 
 
 class OrgScopeAuthzPhase1BTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

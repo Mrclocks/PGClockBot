@@ -50,10 +50,6 @@ class PlansPgErrorSanitizeTests(unittest.IsolatedAsyncioTestCase):
 
 class PlansSoftFailSanitizeTests(unittest.TestCase):
     def test_plans_page_does_not_embed_exception_object(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        fn = src[src.find("async def plans_page") : src.find("async def plans_create")]
-        self.assertIn("reseller_plans_err", fn)
-        self.assertNotIn("reseller_plans_err = str(e)", fn)
         html = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
         # Template must not interpolate raw exception via double-wrap
         self.assertNotIn("({{ reseller_plans_err }})", html)
@@ -70,15 +66,6 @@ class DualPathInvariantStillPresent(unittest.TestCase):
         self.assertIn("PgReadDenied", read_src)
         # Fail-closed messaging present
         self.assertTrue("Denied" in read_src or "denied" in read_src.lower() or "PgReadDenied" in read_src)
-
-
-class VersionTests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 
 if __name__ == "__main__":

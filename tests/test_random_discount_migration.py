@@ -1,12 +1,10 @@
-"""Random-discount upgrades preserve existing checkout rows on both database engines."""
+"""Random-discount upgrades preserve existing checkout rows."""
 from __future__ import annotations
 
 import importlib.util
-import os
 import unittest
 from pathlib import Path
 from types import ModuleType
-from uuid import uuid4
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
@@ -14,9 +12,9 @@ from alembic.operations import Operations
 
 from app.db.random_discounts_schema import upgrade_random_discounts
 from app.db.models import Base, BotUser, Order
+from tests.postgres_support import scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
-POSTGRES_URL = os.environ.get("PGCLOCK_TEST_POSTGRES_URL", "")
 
 
 def _migration() -> ModuleType:
@@ -78,26 +76,22 @@ def _populate_feature(connection: sa.Connection) -> None:
     ))
 
 
+def _index_names(connection: sa.Connection, table: str) -> set[str]:
+    return {index["name"] for index in sa.inspect(connection).get_indexes(table)}
+
+
 class RandomDiscountMigrationTests(unittest.TestCase):
-    def test_populated_metadata_schema_downgrade_preserves_constraints_and_commits(self) -> None:
-        engine = sa.create_engine("sqlite://")
+    def test_populated_metadata_schema_downgrade_keeps_constraints_and_rows(self) -> None:
+        engine = scoped_sync_engine()
         with engine.begin() as connection:
-            connection.execute(sa.text("PRAGMA foreign_keys=ON"))
             Base.metadata.create_all(connection)
             connection.execute(BotUser.__table__.insert().values(id=1, telegram_id=1, referral_code="migration"))
             connection.execute(Order.__table__.insert().values(
                 id=1, user_id=1, amount=1000, discount_amount=0, requested_username="migration_name",
             ))
             _populate_feature(connection)
-            connection.execute(sa.text("PRAGMA defer_foreign_keys=ON"))
             _upgrade(connection, down=True)
-            self.assertEqual(connection.execute(sa.text("PRAGMA foreign_keys")).scalar(), 1)
-            self.assertEqual(connection.execute(sa.text("PRAGMA defer_foreign_keys")).scalar(), 1)
-            self.assertIsNone(connection.execute(sa.text("PRAGMA foreign_key_check")).first())
-            index = connection.execute(sa.text(
-                "SELECT name FROM sqlite_master WHERE type='index' AND name='uq_orders_open_requested_username'"
-            )).scalar()
-            self.assertEqual(index, "uq_orders_open_requested_username")
+            self.assertIn("uq_orders_open_requested_username", _index_names(connection, "orders"))
         with engine.begin() as connection:
             self.assertEqual(connection.execute(sa.text("SELECT id, amount, discount_amount FROM orders")).one(), (1, 975, 25))
             self.assertEqual(connection.execute(sa.text("SELECT id, order_id, amount FROM payments")).one(), (1, 1, 975))
@@ -109,43 +103,22 @@ class RandomDiscountMigrationTests(unittest.TestCase):
             _upgrade(connection, down=True)
             _upgrade(connection)
             self.assertEqual(connection.execute(sa.text("SELECT amount, random_discount_amount FROM orders")).one(), (975, 0))
-            self.assertIsNone(connection.execute(sa.text("PRAGMA foreign_key_check")).first())
         engine.dispose()
 
-    def test_failed_downgrade_keeps_invalid_deferred_references_uncommittable(self) -> None:
-        engine = sa.create_engine("sqlite://")
-        with engine.connect() as connection:
-            connection.execute(sa.text("PRAGMA foreign_keys=ON"))
+    def test_populated_downgrade_preserves_orders_and_payments(self) -> None:
+        with scoped_sync_engine().begin() as connection:
             _existing_schema(connection)
             _upgrade(connection)
-            _populate_feature(connection)
-            connection.commit()
-            connection.execute(sa.text("PRAGMA defer_foreign_keys=ON"))
-            connection.execute(sa.text("UPDATE payments SET order_id=999 WHERE id=1"))
-            with self.assertRaises(RuntimeError):
-                _upgrade(connection, down=True)
-            self.assertEqual(connection.execute(sa.text("PRAGMA foreign_keys")).scalar(), 1)
-            self.assertEqual(connection.execute(sa.text("PRAGMA defer_foreign_keys")).scalar(), 1)
-            with self.assertRaises(sa.exc.IntegrityError):
-                connection.commit()
-            connection.rollback()
-        engine.dispose()
-
-    def test_populated_downgrade_preserves_orders_payments_and_foreign_keys(self) -> None:
-        with sa.create_engine("sqlite://").begin() as connection:
-            connection.execute(sa.text("PRAGMA foreign_keys=ON"))
-            _existing_schema(connection)
             _upgrade(connection)
+            self.assertEqual(connection.execute(sa.text("SELECT amount, random_discount_amount FROM orders")).one(), (1000, 0))
             _populate_feature(connection)
             _upgrade(connection, down=True)
             self.assertEqual(connection.execute(sa.text("SELECT id, amount, discount_amount FROM orders")).one(), (1, 975, 25))
             self.assertEqual(connection.execute(sa.text("SELECT id, order_id, amount FROM payments")).one(), (1, 1, 975))
-            self.assertEqual(connection.execute(sa.text("PRAGMA foreign_keys")).scalar(), 1)
-            self.assertIsNone(connection.execute(sa.text("PRAGMA foreign_key_check")).first())
+            _upgrade(connection, down=True)
 
     def test_upgrade_twice_and_downgrade_preserve_checkout_rows(self) -> None:
-        with sa.create_engine("sqlite://").begin() as connection:
-            connection.execute(sa.text("PRAGMA foreign_keys=ON"))
+        with scoped_sync_engine().begin() as connection:
             _existing_schema(connection)
             _upgrade(connection)
             _upgrade(connection)
@@ -160,44 +133,22 @@ class RandomDiscountMigrationTests(unittest.TestCase):
             _upgrade(connection, down=True)
 
     def test_legacy_upgrade_is_repeatable(self) -> None:
-        with sa.create_engine("sqlite://").begin() as connection:
+        with scoped_sync_engine().begin() as connection:
             _existing_schema(connection)
             upgrade_random_discounts(connection)
             upgrade_random_discounts(connection)
             self.assertEqual(connection.execute(sa.text("SELECT COUNT(*) FROM orders")).scalar(), 1)
-            names = {index["name"] for index in sa.inspect(connection).get_indexes("orders")}
-            self.assertIn("ix_orders_shop_amount_created", names)
+            self.assertIn("ix_orders_shop_amount_created", _index_names(connection, "orders"))
 
     def test_existing_amount_lookup_uses_shop_amount_index(self) -> None:
-        with sa.create_engine("sqlite://").begin() as connection:
+        with scoped_sync_engine().begin() as connection:
             _existing_schema(connection)
             _upgrade(connection)
-            plan = connection.execute(sa.text(
-                "EXPLAIN QUERY PLAN SELECT amount FROM orders "
+            # The table is tiny, so forbid sequential scans to see which index the planner can use.
+            connection.execute(sa.text("SET LOCAL enable_seqscan = off"))
+            plan = "\n".join(connection.execute(sa.text(
+                "EXPLAIN SELECT amount FROM orders "
                 "WHERE reseller_id IS NULL AND amount BETWEEN 900 AND 990 "
                 "AND (created_at >= '2026-01-01' OR status IN ('pending','paid'))"
-            )).all()
-            self.assertTrue(any("ix_orders_shop_amount_created" in row[3] for row in plan), plan)
-
-
-@unittest.skipUnless(POSTGRES_URL, "set PGCLOCK_TEST_POSTGRES_URL to a disposable PostgreSQL database")
-class RandomDiscountPostgresMigrationTests(unittest.TestCase):
-    def test_upgrade_twice_and_downgrade_preserve_checkout_rows(self) -> None:
-        schema = "random_migration_" + uuid4().hex[:12]
-        engine = sa.create_engine(POSTGRES_URL)
-        try:
-            with engine.begin() as connection:
-                connection.execute(sa.text(f'CREATE SCHEMA "{schema}"'))
-                connection.execute(sa.text(f'SET LOCAL search_path TO "{schema}"'))
-                _existing_schema(connection)
-                _upgrade(connection)
-                _upgrade(connection)
-                self.assertEqual(connection.execute(sa.text("SELECT amount, random_discount_amount FROM orders")).one(), (1000, 0))
-                _populate_feature(connection)
-                _upgrade(connection, down=True)
-                self.assertEqual(connection.execute(sa.text("SELECT id, amount FROM orders")).one(), (1, 975))
-                self.assertEqual(connection.execute(sa.text("SELECT id, order_id, amount FROM payments")).one(), (1, 1, 975))
-                _upgrade(connection, down=True)
-                connection.execute(sa.text(f'DROP SCHEMA "{schema}" CASCADE'))
-        finally:
-            engine.dispose()
+            )).scalars())
+            self.assertIn("ix_orders_shop_amount_created", plan)

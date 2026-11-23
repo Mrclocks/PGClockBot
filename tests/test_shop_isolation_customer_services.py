@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot import keyboards  # noqa: F401  (import order: breaks a handler import cycle)
 from app.bot.handlers.services import svc_link, svc_list, svc_view
@@ -19,6 +15,7 @@ from app.db.models import BotUser, Order, OrderStatus, UserService
 from app.services import bot_feedback_texts as feedback
 from app.services.service_scope import customer_may_use_service, list_customer_services
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 SHOP_ID = 5
 CUSTOMER_ID = 7
@@ -27,8 +24,7 @@ PLATFORM_SVC, SHOP_SVC, IMPORTED_SVC, BROKEN_SVC = 11, 12, 13, 14
 
 class CustomerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'c.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -57,7 +53,6 @@ class CustomerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def listed(self, shop: int | None) -> set[int]:
         async with self.Session() as session:

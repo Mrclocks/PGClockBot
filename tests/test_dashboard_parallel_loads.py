@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 import unittest
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 
@@ -156,7 +154,7 @@ class PgHealthStatsReuseTests(unittest.IsolatedAsyncioTestCase):
     async def test_dashboard_probe_reuses_only_a_few_seconds_old_system_stats(self) -> None:
         probe = AsyncMock(return_value={"ok": True})
         with patch.object(home_pages, "circuit_status", return_value={"paused": False}), \
-                patch("app.services.ux20.check_pg_connection", probe):
+                patch("app.services.action_center.check_pg_connection", probe):
             await home_pages._safe_pg_health()
         max_age = probe.await_args.kwargs["stats_max_age"]
         self.assertEqual(max_age, home_pages.PG_REACHABILITY_MAX_AGE_SEC)
@@ -165,12 +163,12 @@ class PgHealthStatsReuseTests(unittest.IsolatedAsyncioTestCase):
     async def test_dashboard_probe_asks_the_panel_while_its_circuit_is_paused(self) -> None:
         probe = AsyncMock(return_value={"ok": None, "unchecked": True})
         with patch.object(home_pages, "circuit_status", return_value={"paused": True}), \
-                patch("app.services.ux20.check_pg_connection", probe):
+                patch("app.services.action_center.check_pg_connection", probe):
             await home_pages._safe_pg_health()
         self.assertIsNone(probe.await_args.kwargs["stats_max_age"])
 
     async def test_live_endpoint_probe_keeps_reading_fresh_stats(self) -> None:
-        from app.services import ux20
+        from app.services import action_center
 
         class FakePg:
             base_url = "https://panel"
@@ -187,8 +185,8 @@ class PgHealthStatsReuseTests(unittest.IsolatedAsyncioTestCase):
 
         pg = FakePg()
         with patch("app.services.pasarguard.get_pg", return_value=pg):
-            live = await ux20.check_pg_connection()
-            dashboard = await ux20.check_pg_connection(stats_max_age=SYSTEM_SUMMARY_MAX_AGE_SEC)
+            live = await action_center.check_pg_connection()
+            dashboard = await action_center.check_pg_connection(stats_max_age=SYSTEM_SUMMARY_MAX_AGE_SEC)
         self.assertEqual(pg.max_ages, [None, SYSTEM_SUMMARY_MAX_AGE_SEC])
         self.assertTrue(live["ok"] and dashboard["ok"])
 

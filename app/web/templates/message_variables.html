@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% from "_settings_hub.html" import settings_area_header %}
+{% from "_settings_hub.html" import settings_area_header, settings_menu %}
 {% block title %}متغیرهای پیام{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
 {% set area_base = settings_base|default('/settings') %}
 {{ settings_area_header(tab_nav, 'variables', area_base, 'تنظیمات ربات' if area_base == '/settings' else 'تنظیمات فروشگاه', 'bot-settings', help='message-variables') }}
+{% if tab_nav %}{{ settings_menu(settings_nav(tab_nav, area_base, 'variables', area_icon='bot')) }}{% endif %}
 
 <nav class="msg-vars-jump" aria-label="گروه‌های متغیر">
   {% for g in groups %}

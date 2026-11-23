@@ -163,12 +163,12 @@ async def ensure_owner_principal(session: AsyncSession) -> OrgPrincipal:
             session.add(owner)
             await session.flush()
         return owner
-    except IntegrityError:
+    except IntegrityError as exc:
         session.expunge(owner)
         existing = await get_active_owner(session)
         if existing is not None:
             return existing
-        raise OrgPrincipalError("Owner principal conflict; resolve manually")
+        raise OrgPrincipalError("Owner principal conflict; resolve manually") from exc
 
 
 async def create_principal(

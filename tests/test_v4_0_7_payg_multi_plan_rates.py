@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from tests.template_source import template_with_includes
+from tests.postgres_support import scoped_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -24,12 +25,6 @@ class PaygPlanModelTests(unittest.TestCase):
         self.assertIn("price_per_gb", src)
         self.assertIn("pg_group_ids", src)
         self.assertIn("0003_reseller_plan_billing_mode", src)
-
-    def test_session_additive_columns(self):
-        src = (ROOT / "app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn("reseller_plans ADD COLUMN price_per_gb", src)
-        self.assertIn("reseller_plans ADD COLUMN pg_group_ids", src)
-
 
 class PaygPlanUiTests(unittest.TestCase):
     def test_create_modal_has_payg_rate_and_groups(self):
@@ -55,14 +50,14 @@ class PaygPlanUiTests(unittest.TestCase):
 class PaygPlanDeleteTests(unittest.IsolatedAsyncioTestCase):
     async def test_deleting_plan_removes_only_its_billing_rate(self):
         from sqlalchemy import select
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         import app.db.models  # noqa: F401
         from app.db import Base
         from app.db.models import ResellerBillingRate, ResellerPlan
         from app.services.plans_catalog import delete_reseller_plan
 
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
@@ -130,15 +125,6 @@ class PaygRateResolveTests(unittest.IsolatedAsyncioTestCase):
         src = (ROOT / "app/services/billing.py").read_text(encoding="utf-8")
         fn = src[src.find("async def tick_reseller_usage") : src.find("async def maybe_warn_low_balance")]
         self.assertIn("rate_context_for_profile", fn)
-
-
-class VersionTests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 
 if __name__ == "__main__":

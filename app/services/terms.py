@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -139,47 +139,54 @@ async def record_acceptance(
     gate: GateId,
     ui: dict,
 ) -> None:
+    """Record that this person accepted the current text of this gate; one row per person, shop and gate.
+
+    Safe to run twice or concurrently: the row is refreshed with an atomic UPDATE, and a
+    first acceptance is inserted inside a savepoint. Losing a concurrent insert rolls back
+    only that savepoint, so the caller's loaded objects (the BotUser) are not expired.
+    """
     if gate not in GATE_META:
         raise ValueError("گیت نامعتبر")
     want = current_hash(ui, gate)
-    row = await session.scalar(
-        select(TermsAcceptance).where(
-            TermsAcceptance.bot_user_id == int(bot_user_id),
-            TermsAcceptance.shop_owner_id == int(shop_owner_id),
+    now = datetime.now(timezone.utc)
+    key = (int(bot_user_id), int(shop_owner_id), gate)
+    if not await _refresh_acceptance(session, key, content_hash=want, accepted_at=now):
+        try:
+            async with session.begin_nested():
+                session.add(
+                    TermsAcceptance(
+                        bot_user_id=key[0],
+                        shop_owner_id=key[1],
+                        gate=gate,
+                        content_hash=want,
+                        accepted_at=now,
+                    )
+                )
+        except IntegrityError:
+            # A concurrent tap inserted the row first: refresh it instead.
+            await _refresh_acceptance(session, key, content_hash=want, accepted_at=now)
+    await session.commit()
+
+
+async def _refresh_acceptance(
+    session: AsyncSession,
+    key: tuple[int, int, GateId],
+    *,
+    content_hash: str,
+    accepted_at: datetime,
+) -> bool:
+    """Update this person's acceptance row in place; whether a row existed."""
+    bot_user_id, shop_owner_id, gate = key
+    result = await session.execute(
+        update(TermsAcceptance)
+        .where(
+            TermsAcceptance.bot_user_id == bot_user_id,
+            TermsAcceptance.shop_owner_id == shop_owner_id,
             TermsAcceptance.gate == gate,
         )
+        .values(content_hash=content_hash, accepted_at=accepted_at)
     )
-    now = datetime.now(timezone.utc)
-    if row is None:
-        session.add(
-            TermsAcceptance(
-                bot_user_id=int(bot_user_id),
-                shop_owner_id=int(shop_owner_id),
-                gate=gate,
-                content_hash=want,
-                accepted_at=now,
-            )
-        )
-    else:
-        row.content_hash = want
-        row.accepted_at = now
-    try:
-        await session.commit()
-    except IntegrityError:
-        # Concurrent double-accept on unique (user, shop, gate) — treat as success.
-        await session.rollback()
-        row = await session.scalar(
-            select(TermsAcceptance).where(
-                TermsAcceptance.bot_user_id == int(bot_user_id),
-                TermsAcceptance.shop_owner_id == int(shop_owner_id),
-                TermsAcceptance.gate == gate,
-            )
-        )
-        if row is None:
-            raise
-        row.content_hash = want
-        row.accepted_at = now
-        await session.commit()
+    return bool(result.rowcount)
 
 
 async def needs_entry_gate(

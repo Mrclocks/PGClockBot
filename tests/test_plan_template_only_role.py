@@ -18,6 +18,7 @@ from app.services.plans_catalog import (
     plan_groups_denial,
     plan_template_denial,
 )
+from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
 
 OWNER_PRINCIPAL = {
     "role": "admin",
@@ -111,7 +112,7 @@ class PlansPageTemplateOnlyTests(unittest.TestCase):
             "staff": OWNER_PRINCIPAL, "plans": [], "plan_categories": [], "plan_category_map": {},
             "service_addon_packs": [], "category_linked_plans": {}, "values": {}, "reseller_plans": [],
             "templates": [{"id": 10, "name": "Monthly"}], "groups": [{"id": 1, "name": "<b>Main</b>"}],
-            "gift_codes": [], "is_platform_admin": True,
+            "gift_codes": [], "is_platform_admin": True, "trial_placement_labels": TRIAL_PLACEMENT_LABELS,
             "pg_template_only": template_only, "role_blocked_plans": blocked,
         }
         return render(request, "plans.html", ctx).body.decode("utf-8")
@@ -135,7 +136,7 @@ class PlansPageTemplateOnlyTests(unittest.TestCase):
 
 class PlanImportTemplateTests(unittest.IsolatedAsyncioTestCase):
     async def test_import_refuses_a_template_outside_the_allow_list(self):
-        from app.services.ux20 import _validate_import_plan
+        from app.services.shop_bundle import _validate_import_plan
 
         staff = _limited_owner(allowed_template_ids=[10])
         with self.assertRaises(ValueError) as ctx:
@@ -168,40 +169,40 @@ class AdminBotPlanFlowTests(unittest.IsolatedAsyncioTestCase):
     def _staff(self, staff: dict):
         from unittest.mock import AsyncMock
 
-        return self.patch("app.bot.handlers.admin._platform_catalog_staff", AsyncMock(return_value=staff))
+        return self.patch("app.bot.handlers.admin_plan_editor._platform_catalog_staff", AsyncMock(return_value=staff))
 
     async def test_group_plan_is_refused_for_a_template_only_role(self):
-        from app.bot.handlers import admin
+        from app.bot.handlers import admin_plan_editor
 
         self.callback.data = "adm:plan:grpdone:0"
         with self._staff(_limited_owner(require_template=True)):
-            await admin.adm_plan_grp_done(self.callback, session=self.session, state=self.state, db_user=self.db_user)
+            await admin_plan_editor.adm_plan_grp_done(self.callback, session=self.session, state=self.state, db_user=self.db_user)
         self.callback.answer.assert_awaited_once_with(ROLE_REQUIRES_TEMPLATE_MESSAGE, show_alert=True)
         self.state.set_state.assert_not_awaited()
 
     async def test_template_outside_the_allow_list_is_refused(self):
-        from app.bot.handlers import admin
+        from app.bot.handlers import admin_plan_editor
 
         self.callback.data = "adm:plan:settpl:0:20"
         with self._staff(_limited_owner(allowed_template_ids=[10])):
-            await admin.adm_plan_set_tpl(self.callback, session=self.session, state=self.state, db_user=self.db_user)
+            await admin_plan_editor.adm_plan_set_tpl(self.callback, session=self.session, state=self.state, db_user=self.db_user)
         self.callback.answer.assert_awaited_once_with(PLAN_TEMPLATE_DENIED_MESSAGE, show_alert=True)
         self.state.update_data.assert_not_awaited()
 
     async def test_allowed_groups_continue_the_flow(self):
         from unittest.mock import AsyncMock
 
-        from app.bot.handlers import admin
+        from app.bot.handlers import admin_plan_editor
 
         self.callback.data = "adm:plan:grpdone:0"
         with self._staff(_limited_owner()), \
-             self.patch("app.bot.handlers.admin._show_user_plan_color_picker", AsyncMock()):
-            await admin.adm_plan_grp_done(self.callback, session=self.session, state=self.state, db_user=self.db_user)
+             self.patch("app.bot.handlers.admin_plan_editor._show_user_plan_color_picker", AsyncMock()):
+            await admin_plan_editor.adm_plan_grp_done(self.callback, session=self.session, state=self.state, db_user=self.db_user)
         self.state.update_data.assert_awaited()
         self.state.set_state.assert_awaited()
 
     def test_mode_menu_drops_the_group_button_only_for_a_template_only_role(self):
-        from app.bot.handlers.admin import _plan_link_markup
+        from app.bot.handlers.admin_plan_editor import _plan_link_markup
 
         def callbacks(staff):
             return [row[0].callback_data for row in _plan_link_markup(staff).inline_keyboard]

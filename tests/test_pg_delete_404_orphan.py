@@ -6,10 +6,10 @@ import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("WEB_SECRET", "test-web-secret-for-pg-delete-404-32chars!!")
 
 from app.services.pasarguard import PasarGuardError, is_pg_not_found
+from tests.postgres_support import scoped_async_engine
 
 
 class IsPgNotFoundTests(unittest.TestCase):
@@ -125,12 +125,12 @@ class EnsurePgUserRemovedTests(unittest.IsolatedAsyncioTestCase):
 
 class AdminDeleteServiceOrphanTests(unittest.IsolatedAsyncioTestCase):
     async def test_local_row_removed_when_pg_already_404(self):
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         from app.db.models import Base, BotUser, Role, UserService
         from app.services.bot_user_admin import admin_delete_service
 
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False)
@@ -181,12 +181,12 @@ class AdminDeleteServiceOrphanTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_local_row_kept_on_transport_failure(self):
         """Regression: non-404 failures must still fail closed."""
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         from app.db.models import Base, BotUser, Role, UserService
         from app.services.bot_user_admin import admin_delete_service
 
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False)

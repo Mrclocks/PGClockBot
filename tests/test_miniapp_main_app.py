@@ -18,7 +18,7 @@ from aiogram.exceptions import TelegramNetworkError
 from aiogram.methods import GetMe
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_pages import register_miniapp_pages
 from app.api.shop_settings import _miniapp_switch_context
@@ -33,6 +33,7 @@ from app.services.miniapp_main_app import (
 from app.services.miniapp_shop import PLATFORM_SWITCH, SHOP_SWITCH, new_shop_key
 from app.services.secret_box import seal_bot_token
 from app.services.users import clear_settings_cache, set_setting
+from tests.postgres_support import scoped_async_engine
 
 TOKEN = "123456:AAH-secret-token-value"
 SHOP_TOKEN = "222222:shop-secret-token"
@@ -145,7 +146,7 @@ class ShopAndPageTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
         self.key, self.other_key = new_shop_key(), new_shop_key()
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

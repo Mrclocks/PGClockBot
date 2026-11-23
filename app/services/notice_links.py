@@ -20,7 +20,8 @@ CALLBACK_DATA_LIMIT = 64
 
 M = TypeVar("M")
 
-# Read-only screens a notice may open. Each handler still checks the actor and the shop.
+# Screens a notice may open: read-only screens, and the customer's renewal and pack pickers, which only
+# offer choices until the customer confirms. Each handler still checks the actor and the shop.
 NOTICE_SCREEN_PREFIXES: tuple[str, ...] = (
     "adm:users:view:",
     "adm:users:svc:",
@@ -30,6 +31,8 @@ NOTICE_SCREEN_PREFIXES: tuple[str, ...] = (
     "cnrv:v:",
     "payvoid:v:",
     "svc:auto:",
+    "svc:renew:",
+    "svc:addon:",
 )
 
 
@@ -40,10 +43,22 @@ NOTICE_SCREENS: frozenset[str] = frozenset({
     "nv:adm:pg",
     "nv:adm:resellers",
     "nv:res:home",
+    # The scenario list, and the confirmation of the «panel is down» scenario (it acts only on «اجرا»).
+    "cmd:sc",
+    "cmd:sc:down",
     "nv:s:home",
     "nv:w:home",
     "nv:loy:home",
     "svc:list",
+    "shop:list",
+    # Customer screens a group message button may open (message_buttons.SCREENS).
+    "shop:kind:trial",
+    "shop:kind:custom",
+    "nv:w:topup",
+    "nv:loy:ref",
+    "nv:loy:wheel",
+    "help:guide",
+    "help:faq",
 })
 
 

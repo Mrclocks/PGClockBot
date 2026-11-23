@@ -3,21 +3,20 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
 
-# Force SQLite for these tests before app settings cache
-os.environ.setdefault(
-    "DATABASE_URL",
-    f"sqlite+aiosqlite:///{Path('/tmp/pgclock-phase0-test.db')}",
-)
+from tests.postgres_support import scoped_database_url, scoped_sync_engine
 
 
 @pytest.fixture()
-def seeded_sqlite(tmp_path, monkeypatch):
-    db_path = tmp_path / "bot.db"
+def seeded_install(tmp_path, monkeypatch):
+    from app.db.alembic_runner import upgrade_head
+
+    url = scoped_database_url(tables=False)
+    # Before ROOT_DIR is patched below: Alembic reads alembic.ini from the project root.
+    upgrade_head(url)
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     backups = data_dir / "backups"
@@ -29,11 +28,11 @@ def seeded_sqlite(tmp_path, monkeypatch):
     )
     env_path = tmp_path / ".env"
     env_path.write_text(
-        f'DATABASE_URL="sqlite+aiosqlite:///{db_path}"\nWEB_SECRET="test-secret-phase0-xxxxxx"\n',
+        f'DATABASE_URL="{url}"\nWEB_SECRET="test-secret-phase0-xxxxxx"\n',
         encoding="utf-8",
     )
 
-    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    monkeypatch.setenv("DATABASE_URL", url)
     monkeypatch.setenv("WEB_SECRET", "test-secret-phase0-xxxxxx")
 
     import app.config as config
@@ -52,19 +51,15 @@ def seeded_sqlite(tmp_path, monkeypatch):
     monkeypatch.setattr(baseline, "DATA_DIR", data_dir)
     monkeypatch.setattr(baseline, "BASELINE_DIR", data_dir / "baselines")
 
-    # Build schema + seed row via Alembic/create_all on this URL
-    from sqlalchemy import create_engine, text
+    # Schema at head plus one seed row, on this test's own database.
+    from sqlalchemy import text
 
-    from app.db import Base
-    import app.db.models  # noqa: F401
-
-    eng = create_engine(f"sqlite:///{db_path}")
-    Base.metadata.create_all(eng)
+    eng = scoped_sync_engine()
     with eng.begin() as conn:
         conn.execute(
             text(
                 "INSERT INTO bot_users (telegram_id, role, wallet_balance, points_balance, referral_code, is_blocked) "
-                "VALUES (1001, 'admin', 500, 0, 'ref1001', 0)"
+                "VALUES (1001, 'admin', 500, 0, 'ref1001', false)"
             )
         )
         conn.execute(
@@ -72,18 +67,17 @@ def seeded_sqlite(tmp_path, monkeypatch):
         )
     eng.dispose()
 
-    yield {"db": db_path, "data": data_dir, "root": tmp_path}
+    yield {"url": url, "data": data_dir, "root": tmp_path}
     config.get_settings.cache_clear()
 
 
-def test_phase0_baseline_creates_artifacts_and_verifies_restore(seeded_sqlite):
+def test_phase0_baseline_creates_artifacts_and_verifies_restore(seeded_install):
     from app.services.baseline import create_phase0_baseline, latest_baseline
 
     result = create_phase0_baseline(note="unit-test-phase0", verify_restore=True)
     assert result["ok"] is True
     root = Path(result["path"])
     assert (root / "BASELINE.json").is_file()
-    assert (root / "bot.db").is_file()
     assert list(root.glob("pgclock-backup-*.zip"))
     assert (root / "config" / "env").is_file()
     assert (root / "config" / "web_admin.json").is_file()
@@ -92,8 +86,9 @@ def test_phase0_baseline_creates_artifacts_and_verifies_restore(seeded_sqlite):
     assert record["magic"] == "pgclock-phase0-baseline-v1"
     assert record["git"]["commit"]
     assert record["restore_verification"]["ok"] is True
-    assert record["restore_verification"]["sqlite_ok"] is True
-    assert record["restore_verification"]["tables_sample"].get("bot_users") == 1
+    assert record["database_url_dialect"] == "postgresql"
+    assert record["restore_verification"]["engine"] == "postgresql"
+    assert record["restore_verification"]["postgres_dump_size"] > 0
     assert record["restore_verification"]["has_web_admin"] is True
     assert record["restore_verification"]["has_env"] is True
 

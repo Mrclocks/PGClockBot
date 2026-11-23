@@ -19,9 +19,8 @@ from app.bot.handlers.shop import shop_buy
 from app.bot.import_prompt import HOME_TRIAL_CALLBACK
 from app.db.models import BotUser
 from app.services.formatting import format_message
-from app.services.service_scope import list_customer_services
-from app.services.trial_offer import offerable_trial_plans
-from app.services.users import current_shop_reseller_id, get_all_settings
+from app.services.trial_offer import customer_trial_plans
+from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +49,7 @@ async def home_get_trial(
     reseller_owner_id: int | None = None,
 ) -> None:
     ui = await get_all_settings(session)
-    has_service = await list_customer_services(session, db_user.id, current_shop_reseller_id(), limit=1)
-    plans = [] if has_service else await offerable_trial_plans(session, ui, int(db_user.id))
+    plans = await customer_trial_plans(session, ui, int(db_user.id))
     if not plans:
         await callback.answer(TRIAL_UNAVAILABLE, show_alert=True)
         await _remove_offer(callback)

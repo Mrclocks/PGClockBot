@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot import marketing_panels as panels
 from app.bot.handlers import marketing_tools
@@ -20,6 +16,7 @@ from app.db.models import BotUser, CampaignRecipient, ChargeCode, TargetedCampai
 from app.services.formatting import format_number
 from app.services.campaigns import campaign_progress_map, list_recent_campaigns
 from app.services.gift_codes import set_gift_code_active
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 
 def _callbacks(markup) -> list[str]:
@@ -88,15 +85,14 @@ class MarketingDbCase(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'm.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, 5)
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
 
 class GiftCodeServiceTests(MarketingDbCase):
@@ -147,6 +143,8 @@ class CampaignServiceTests(MarketingDbCase):
             both = await list_recent_campaigns(session, shop_id=None)
             self.assertEqual({c.text for c in both}, {"a", "b"})
             self.assertEqual(await campaign_progress_map(session, []), {})
+            session.add_all(BotUser(id=uid, telegram_id=uid, referral_code=f"recipient{uid}") for uid in (1, 2, 3))
+            await session.flush()
             session.add_all([
                 CampaignRecipient(campaign_id=ids[1], user_id=1, status="sent"),
                 CampaignRecipient(campaign_id=ids[1], user_id=2, status="sent"),
@@ -209,14 +207,15 @@ class OwnerGateHandlerTests(MarketingDbCase):
     async def test_every_panel_has_a_back_button_to_the_hub(self):
         async with self.Session() as session:
             with await self._owner(True), patch.object(marketing_tools, "panel_page_url", return_value=None):
-                for handler, data in (
-                    (marketing_tools.open_gift_panel, marketing_tools.GIFT_PANEL_CALLBACK),
-                    (marketing_tools.open_campaign_panel, marketing_tools.CAMPAIGN_PANEL_CALLBACK),
+                # Campaigns were merged into group messages, so their panel returns to that hub.
+                for handler, data, back in (
+                    (marketing_tools.open_gift_panel, marketing_tools.GIFT_PANEL_CALLBACK, panels.MARKETING_HUB_CALLBACK),
+                    (marketing_tools.open_campaign_panel, marketing_tools.CAMPAIGN_PANEL_CALLBACK, "nv:adm:broadcast"),
                 ):
                     callback = _callback(data)
                     await handler(callback, session=session, db_user=BotUser(telegram_id=1), state=_state())
                     markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
-                    self.assertEqual(_callbacks(markup)[-1], panels.MARKETING_HUB_CALLBACK)
+                    self.assertEqual(_callbacks(markup)[-1], back)
 
     async def test_non_owner_changes_nothing(self):
         async with self.Session() as session:
@@ -278,9 +277,7 @@ class HubEntryTests(unittest.TestCase):
             data,
             [
                 "nv:adm:loy",
-                "nv:adm:broadcast",
                 "nv:adm:gc",
-                "nv:adm:cmp",
                 "nv:adm:cb",
                 "dsc:l",
                 "fnl:v",

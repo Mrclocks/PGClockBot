@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest import mock
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Order
@@ -21,7 +19,10 @@ from app.services import bot_overview
 from app.services.bot_overview import (
     PeriodFigures, PeriodKpis, Viewer, change_pct, parse_period, period_kpis, viewer_of,
 )
+from app.services.job_metrics import JobMetrics
+from app.services.resource_cost import JobUsageRow, job_usage_rows
 from app.services.pg_overview_view import overview_view, owned_user_counts, owner_user_counts, segments
+from tests.postgres_support import scoped_async_engine
 
 NOW = datetime(2026, 10, 17, 9, 0, tzinfo=timezone.utc)
 SHOP = 5
@@ -38,7 +39,7 @@ def order(user_id: int, amount: int, days_ago: int, *, shop: int | None = None, 
 
 class PeriodKpiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -255,6 +256,73 @@ class DashboardRenderTests(unittest.TestCase):
         self.assertIn("در انتظار", html)
         self.assertNotIn("در انتظار پرداخت", html)
         self.assertIn('href="/shop-settings"', html)
+
+
+class BackgroundJobCardTests(DashboardRenderTests):
+    ROWS = [
+        JobUsageRow("connection_status", "تست اتصال سرویس", 3, 1234, 2500, 1, 2, True),
+        JobUsageRow("billing_tick", "صورت‌حساب", 9, 4, 9, 0, 0, False),
+    ]
+
+    def test_owner_sees_the_busiest_jobs_with_the_heavy_tag(self):
+        viewer = Viewer(shop_id=None, has_shop=True, can_payments=True, can_orders=True, can_tickets=True,
+                        can_settings=True)
+        ctx = self.context(viewer)
+        ctx.update(host_gauges=HOST, job_usage=self.ROWS, heavy_label="پر مصرف")
+        html = _render("dashboard.html", **ctx)
+        self.assertIn("کارهای پس‌زمینه", html)
+        self.assertLess(html.index("تست اتصال سرویس"), html.index("صورت‌حساب"))
+        self.assertIn("۱٬۲۳۴", html)
+        # One heavy row: the tag once, in the job's own cell (a plain dashboard table has no separate phone list).
+        self.assertEqual(html.count("پر مصرف"), 1)
+
+    def test_the_jobs_table_is_built_like_the_other_dashboard_tables_and_comes_last(self):
+        viewer = Viewer(shop_id=None, has_shop=True, can_payments=True, can_orders=True, can_tickets=True,
+                        can_settings=True)
+        ctx = self.context(viewer)
+        ctx.update(host_gauges=HOST, job_usage=self.ROWS, heavy_label="پر مصرف")
+        html = _render("dashboard.html", **ctx)
+        payments = html.split('aria-label="آخرین پرداخت‌ها"', 1)[0].rsplit("<section", 1)[1]
+        jobs_open = html.split('aria-label="کارهای پس‌زمینه"', 1)[0].rsplit("<section", 1)[1]
+        self.assertEqual(jobs_open, payments, "same card class as «آخرین پرداخت‌ها»")
+        card = html.split('aria-label="کارهای پس‌زمینه"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('<header class="card-flush-head">', card)
+        self.assertIn('<table class="table-compact">', card)
+        self.assertNotIn("table-list-sm", card)
+        self.assertLess(card.index('class="muted card-flush-note"'), card.index('class="table-wrap"'))
+        self.assertNotIn("ov-empty", card, "the empty-state style is only for a card without rows")
+        self.assertGreater(html.index("کارهای پس‌زمینه"), html.index("آخرین سفارش‌ها"), "the jobs table is last")
+
+    def test_shop_staff_never_see_the_server_jobs(self):
+        viewer = Viewer(shop_id=SHOP, has_shop=True, can_payments=True, can_orders=True, can_tickets=True,
+                        can_settings=True)
+        ctx = self.context(viewer)
+        ctx.update(job_usage=self.ROWS, heavy_label="پر مصرف")
+        html = _render("dashboard.html", **ctx)
+        self.assertNotIn("کارهای پس‌زمینه", html)
+        self.assertNotIn("تست اتصال سرویس", html)
+
+    def test_owner_without_runs_yet_sees_the_empty_state(self):
+        viewer = Viewer(shop_id=None, has_shop=True, can_payments=True, can_orders=True, can_tickets=True,
+                        can_settings=True)
+        ctx = self.context(viewer)
+        ctx.update(host_gauges=HOST, job_usage=[])
+        self.assertIn("هنوز کاری از آخرین راه‌اندازی اجرا نشده", _render("dashboard.html", **ctx))
+
+
+class JobUsageRowTests(unittest.TestCase):
+    def test_rows_are_named_in_persian_capped_and_tag_heavy_jobs(self):
+        metrics = JobMetrics()
+        for job_id, seconds in (("expiry", 4.0), ("billing_tick", 0.0025), ("unknown_job", 0.5)):
+            metrics.mark_started(job_id, now=0.0)
+            metrics.mark_finished(job_id, succeeded=True, now=seconds)
+        rows = job_usage_rows(metrics.snapshot(), limit=2)
+        self.assertEqual([r.job_id for r in rows], ["expiry", "unknown_job"])
+        self.assertEqual(rows[0].label, "هشدار کمبود حجم و زمان")
+        self.assertTrue(rows[0].is_heavy)
+        self.assertEqual(rows[0].average_ms, 4000)
+        self.assertEqual(rows[1].label, "unknown_job")
+        self.assertFalse(rows[1].is_heavy)
 
 
 class MetricsRouteTests(unittest.TestCase):

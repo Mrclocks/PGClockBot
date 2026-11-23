@@ -50,20 +50,6 @@ class PresentInlineOnlyEditTests(unittest.IsolatedAsyncioTestCase):
         message.edit_text.assert_not_awaited()
 
 
-class NoFillerChromeTests(unittest.TestCase):
-    def test_filler_string_removed_from_handlers(self):
-        from pathlib import Path
-
-        banned = "از منوی پایین یا دکمه‌های بالا ادامه دهید."
-        roots = [
-            Path("app/bot/handlers/loyalty.py"),
-            Path("app/bot/handlers/admin_plans.py"),
-        ]
-        for path in roots:
-            src = path.read_text(encoding="utf-8")
-            self.assertNotIn(banned, src, msg=str(path))
-
-
 class StaffLoyaltyAnswerTests(unittest.IsolatedAsyncioTestCase):
     async def test_callback_edits_without_filler_answer(self):
         from app.bot.handlers.loyalty import _staff_loyalty_answer

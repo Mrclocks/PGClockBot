@@ -431,12 +431,10 @@ def main() -> int:
         encoding="utf-8",
     )
 
+    # Every page loads guide.js from the guide root and fetches the one index next to it
+    # (guideRoot in guide.js), so pages need no copy of their own.
     for page in built:
-        local = [{**it, "href": f"../{it['href']}"} for it in search_items]
-        (OUT / page["slug"] / "search-index.json").write_text(
-            json.dumps(local, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        (OUT / page["slug"] / "search-index.json").unlink(missing_ok=True)
 
     print(f"built {len(built)} pages → {OUT}")
     return 0

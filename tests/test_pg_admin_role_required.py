@@ -6,25 +6,25 @@ reseller from the users page passes neither a plan nor a role.
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, ResellerPlan, ResellerProfile
+from app.services.pasarguard import PasarGuardError
 from app.services.pg_admin_roles import (
+    ROLE_LIST_UNREADABLE,
     AdminRoleError,
     apply_admin_role,
+    is_missing_role_rejection,
     resolve_new_admin_role_id,
 )
 from app.services.resellers import grantable_reseller_plan, provision_reseller, reseller_plan_from_form
+from tests.postgres_support import scoped_async_engine
 
 OWNER_ROLE = {"id": 1, "name": "owner", "is_owner": True}
 SHOP_ROLE = {"id": 4, "name": "shop", "is_owner": False}
@@ -44,6 +44,26 @@ class FakeRoleClient:
     async def _create(self, payload: dict) -> dict:
         if self._roles and not isinstance(self._roles, Exception) and "role_id" not in payload:
             raise ValueError("role_id: field required")
+        return {"username": payload["username"]}
+
+
+MISSING_ROLE = PasarGuardError(
+    "validation",
+    422,
+    {"detail": [{"loc": ["body", "role_id"], "msg": "Field required", "type": "missing"}]},
+)
+
+
+class RoleListUnreadableClient(FakeRoleClient):
+    """A panel that requires roles while the bot's credential cannot list them."""
+
+    def __init__(self) -> None:
+        super().__init__([])
+        self.create_admin.side_effect = self._create_requiring_role
+
+    async def _create_requiring_role(self, payload: dict) -> dict:
+        if "role_id" not in payload:
+            raise MISSING_ROLE
         return {"username": payload["username"]}
 
 
@@ -86,8 +106,7 @@ class ResolveRoleTests(unittest.IsolatedAsyncioTestCase):
 
 class ProvisionWithoutPlanTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'r.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -97,7 +116,6 @@ class ProvisionWithoutPlanTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def _provision(self, pg: FakeRoleClient) -> dict:
         async with self.Session() as session:
@@ -169,6 +187,43 @@ class ProvisionWithoutPlanTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await self._provision(pg)
         self.assertEqual(pg.create_admin.await_count, 1)
+
+
+    async def test_unreadable_role_list_explains_how_to_pick_a_role(self) -> None:
+        pg = RoleListUnreadableClient()
+        with self.assertRaises(ValueError) as ctx:
+            await self._provision(pg)
+        self.assertEqual(str(ctx.exception), ROLE_LIST_UNREADABLE)
+        self.assertEqual(pg.create_admin.await_count, 1)
+        async with self.Session() as session:
+            profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == 5))
+        self.assertIsNone(profile)
+
+    async def test_package_role_is_sent_even_when_the_role_list_is_unreadable(self) -> None:
+        pg = RoleListUnreadableClient()
+        async with self.Session() as session:
+            session.add(ResellerPlan(id=3, name="pro", price=0, plan_kind="subscription",
+                                     pg_role_id=7, is_active=True))
+            await session.commit()
+            plan = await grantable_reseller_plan(session, 3)
+            user = await session.get(BotUser, 5)
+            with patch("app.services.pasarguard.get_pg", return_value=pg):
+                await provision_reseller(session, user=user, plan=plan, create_pg_admin=True)
+        self.assertEqual(pg.create_admin.await_args.args[0]["role_id"], 7)
+
+
+class MissingRoleRejectionTests(unittest.TestCase):
+    def test_only_a_role_id_validation_error_matches(self) -> None:
+        self.assertTrue(is_missing_role_rejection(MISSING_ROLE))
+        other_field = PasarGuardError("v", 422, {"detail": [{"loc": ["body", "username"]}]})
+        for exc in (
+            other_field,
+            PasarGuardError("v", 409, MISSING_ROLE.body),
+            PasarGuardError("v", 422, {"detail": "role_id"}),
+            PasarGuardError("v", 422, None),
+            TimeoutError("slow"),
+        ):
+            self.assertFalse(is_missing_role_rejection(exc), exc)
 
 
 if __name__ == "__main__":

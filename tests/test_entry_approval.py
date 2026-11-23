@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import sqlalchemy as sa
 from aiogram.types import CallbackQuery, Chat, Message, User
@@ -20,7 +17,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from fastapi import HTTPException
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot import entry_gate
 from app.db import Base
@@ -32,6 +29,7 @@ from app.services.miniapp_auth import ENTRY_PENDING, ERROR_HEADER, assert_mini_e
 from app.services.miniapp_shop import MiniScope
 from app.services.users import clear_settings_cache, get_all_settings, set_settings_bulk
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarness
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 PERMS_WITH_APPROVAL = "dashboard,shop_settings,customers_approve"
 LONG_AGO = datetime(2020, 1, 1, tzinfo=timezone.utc)
@@ -49,8 +47,7 @@ async def pin_switch_moment(session) -> None:
 class GateCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         clear_settings_cache()
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'e.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -75,7 +72,6 @@ class GateCase(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         clear_settings_cache()
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def settings(self, values: dict[str, str], shop: int | None = None) -> None:
         async with self.Session() as session:
@@ -136,7 +132,7 @@ class GateTests(GateCase):
         self.assertEqual((row.status, row.decided_by), ("approved", ea.EXEMPT_MEMBER))
 
     async def test_someone_who_joins_in_the_second_of_the_switch_still_waits(self):
-        # SQLite stores whole seconds; the switch moment carries microseconds.
+        # The join time is whole seconds; the switch moment carries microseconds.
         async with self.Session() as session:
             session.add(BotUser(id=9, telegram_id=109, referral_code="u9", role="user", created_at=SWITCHED_ON))
             await session.execute(
@@ -497,22 +493,21 @@ class MigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("entry_approvals_migration", path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        with tempfile.TemporaryDirectory() as tmp:
-            engine = sa.create_engine(f"sqlite:///{Path(tmp) / 'm.db'}")
-            with engine.begin() as conn:
-                conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))
-                conn.execute(sa.text("INSERT INTO bot_users (id) VALUES (1)"))
-                with Operations.context(MigrationContext.configure(conn)):
-                    module.upgrade()
-                    module.upgrade()
-                    conn.execute(sa.text("INSERT INTO entry_approvals (bot_user_id) VALUES (1)"))
-                    self.assertEqual(conn.execute(sa.text("SELECT shop_key, status FROM entry_approvals")).one(), (0, "pending"))
-                    with self.assertRaises(sa.exc.IntegrityError):
-                        conn.execute(sa.text("INSERT INTO entry_approvals (bot_user_id, shop_key) VALUES (1, 0)"))
-                    module.downgrade()
-                    self.assertFalse(sa.inspect(conn).has_table("entry_approvals"))
-                    self.assertEqual(conn.execute(sa.text("SELECT id FROM bot_users")).scalar(), 1)
-            engine.dispose()
+        engine = scoped_sync_engine()
+        with engine.begin() as conn:
+            conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))
+            conn.execute(sa.text("INSERT INTO bot_users (id) VALUES (1)"))
+            with Operations.context(MigrationContext.configure(conn)):
+                module.upgrade()
+                module.upgrade()
+                conn.execute(sa.text("INSERT INTO entry_approvals (bot_user_id) VALUES (1)"))
+                self.assertEqual(conn.execute(sa.text("SELECT shop_key, status FROM entry_approvals")).one(), (0, "pending"))
+                with self.assertRaises(sa.exc.IntegrityError), conn.begin_nested():
+                    conn.execute(sa.text("INSERT INTO entry_approvals (bot_user_id, shop_key) VALUES (1, 0)"))
+                module.downgrade()
+                self.assertFalse(sa.inspect(conn).has_table("entry_approvals"))
+                self.assertEqual(conn.execute(sa.text("SELECT id FROM bot_users")).scalar(), 1)
+        engine.dispose()
 
 
 if __name__ == "__main__":

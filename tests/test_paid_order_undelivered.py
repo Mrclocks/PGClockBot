@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import (
     Base,
@@ -23,10 +23,12 @@ from app.db.models import (
     SettlementStatus,
     UserService,
 )
-from app.services.delivery import UNDELIVERED_ORDER_NOTE, build_delivery_content
+from app.services.delivery import build_delivery_content
+from app.services.delivery_recovery_policy import PENDING_PURCHASE_NOTE, PENDING_STAFF_NOTE
 from app.services.orders import CUSTOM_PLAN_UNCONFIGURED, approve_payment, create_custom_order
 from app.services.payment_settlement import settle_and_approve
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 SHOP = 3
 CUSTOM = {"custom_plan_enabled": "1", "custom_plan_price_per_gb": "1000", "custom_plan_price_per_day": "100"}
@@ -40,7 +42,7 @@ class UndeliveredPaidOrderTestCase(unittest.IsolatedAsyncioTestCase):
     shop_id: int | None = None
 
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -139,7 +141,8 @@ class UndeliveredCases:
         paid = await self.paid_custom_order()
         await self.settle(paid)
         text = await self.delivery_text(paid)
-        self.assertIn(UNDELIVERED_ORDER_NOTE, text)
+        # The create got no answer, so it may exist: staff decide, no automatic promise.
+        self.assertIn(PENDING_STAFF_NOTE, text)
         self.assertIn("در حال آماده‌سازی", text)
 
     async def test_staff_resume_delivers_once_without_a_second_charge(self) -> None:
@@ -152,7 +155,9 @@ class UndeliveredCases:
         self.assertEqual(len(services), 1)
         self.assertEqual(services[0].shop_id, self.shop_id)
         self.assertEqual(self.pg.create_user.await_args.args[0]["group_ids"], [4] if self.shop_id else [2])
-        self.assertNotIn(UNDELIVERED_ORDER_NOTE, await self.delivery_text(paid))
+        text = await self.delivery_text(paid)
+        self.assertNotIn(PENDING_STAFF_NOTE, text)
+        self.assertNotIn(PENDING_PURCHASE_NOTE, text)
 
     async def test_payment_failure_still_reopens_the_settlement(self) -> None:
         paid = await self.paid_custom_order()

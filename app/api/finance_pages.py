@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 def _sql_substr(col, pat: str):
-    """Case-insensitive substring match (SQLite + Postgres)."""
+    """Case-insensitive substring match."""
     return func.lower(cast(col, String)).like(pat, escape="\\")
 
 
@@ -463,7 +463,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             ctx["payment_voids"] = await list_voids(session, [int(p.id) for p in payments])
             # Soft receipt match suggestions for pending payments
             from app.services.users import on as _on
-            from app.services.ux20 import suggest_receipt_matches
+            from app.services.receipt_matching import suggest_receipt_matches
 
             values = ctx.get("values") or {}
             if _on(values.get("receipt_auto_match_enabled", "1")):
@@ -477,32 +477,29 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                     if p.status != "pending" or not p.receipt_file_id:
                         continue
                     try:
-                        matches[int(p.id)] = await suggest_receipt_matches(
-                            session,
-                            payment=p,
-                            window_minutes=window,
-                            reseller_id=rid_scope,
-                        )
-                    except Exception:
-                        from app.services.db_safe import rollback_quiet
-
-                        await rollback_quiet(session)
+                        # A savepoint: a failed suggestion must not expire the rows the page still renders.
+                        async with session.begin_nested():
+                            matches[int(p.id)] = await suggest_receipt_matches(
+                                session,
+                                payment=p,
+                                window_minutes=window,
+                                reseller_id=rid_scope,
+                            )
+                    except Exception:  # noqa: BLE001 - suggestions are optional; the page shows the payment without them
+                        logger.warning("receipt match suggestion failed payment=%s", p.id, exc_info=True)
                         continue
                 ctx["receipt_matches"] = matches
 
         elif tab == "delivery" and can_orders:
             from app.services.db_safe import rollback_quiet
-            from app.services.ux20 import (
-                list_open_delivery_failures,
-                list_stuck_paid_orders,
-            )
+            from app.services.delivery_failures import list_open_delivery_failures, list_stuck_paid_orders
 
             rid = None if is_platform_admin(staff) else shop_owner_id(staff)
             if not is_platform_admin(staff) and not rid:
                 ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
                 return render(request, "finance.html", ctx)
             try:
-                from app.services.payment_review_diag import diagnose_order_delivery
+                from app.services.payment_review_diag import diagnose_order_deliveries
 
                 failures = await list_open_delivery_failures(session, reseller_id=rid)
                 stuck = await list_stuck_paid_orders(session, reseller_id=rid, limit=100)
@@ -534,18 +531,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                         if oid and oid not in payments_by_order:
                             payments_by_order[oid] = p
 
-                diag_by_order: dict[int, object] = {}
-                for oid, o in orders_by_id.items():
-                    try:
-                        diag_by_order[int(oid)] = await diagnose_order_delivery(
-                            session,
-                            o,
-                            payment=payments_by_order.get(int(oid)),
-                        )
-                    except Exception:
-                        logger.debug(
-                            "delivery diagnosis failed order=%s", oid, exc_info=True
-                        )
+                diag_by_order = await diagnose_order_deliveries(
+                    session, orders_by_id.values(), payments_by_order
+                )
 
                 ctx["delivery_failures"] = failures
                 ctx["stuck_paid_orders"] = stuck

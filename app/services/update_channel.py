@@ -11,6 +11,7 @@ import httpx
 
 from app.services.migration_metadata import clear_revision_metadata_cache, fetch_revision_ids
 from app.services.migration_metadata import parse_revision_assignment as parse_revision_assignment
+from app.services.update_database_guard import database_update_block
 from app.version import GITHUB_REPO
 
 logger = logging.getLogger(__name__)
@@ -262,6 +263,10 @@ async def migration_preflight(
     force: bool = False,
 ) -> dict[str, Any]:
     ch = channel_branch(channel)
+    unsupported = database_update_block()
+    if unsupported is not None:
+        unsupported["channel"] = ch
+        return unsupported
     db_rev: str | None = None
     try:
         from app.config import get_settings

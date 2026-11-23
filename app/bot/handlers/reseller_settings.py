@@ -15,6 +15,7 @@ from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.user_errors import domain_error_text
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
+from app.services.trial_offer import TRIAL_MENU_KEY
 from app.bot.entry_gate import ENTRY_APPROVAL_BOT_FIELDS, ENTRY_APPROVAL_SUB, ENTRY_APPROVAL_SUB_TITLE
 from app.services.entry_approval_config import PERMISSION as ENTRY_APPROVAL_PERMISSION
 from app.services.resellers import get_reseller_profile, has_bot_perm
@@ -23,9 +24,15 @@ from app.services.support_contacts import (
     get_support_contacts,
     upsert_support_contact,
 )
+from app.services.bbc_settlement import ENABLED_KEY as BBC_ENABLED_KEY, bbc_enable_error
+from app.services.bot_appearance import PROFILE_TEXT_FIELDS, update_bot_profile_text
+from app.services.secret_box import reveal_bot_token
+from app.services.receipt_fingerprints import normalize_dup_policy
+from app.services.rich_text import pack_setting_from_message
 from app.services.users import (
     get_all_settings,
     get_setting,
+    normalize_force_join_channel_value,
     on,
     reset_shop_reseller_id,
     set_setting,
@@ -41,11 +48,59 @@ from app.services.settings_button_labels import (
     BTN_PAY_WALLET_DISCOUNT,
     button_label_subs,
 )
+from app.services.bot_setting_values import (
+    NUMBER_UNLIMITED_VALUES,
+    SELECT_OPTIONS,
+    UNLIMITED_LABEL,
+    VALUE_NORMALIZERS,
+    next_select_value,
+    number_range_hint,
+    parse_number_setting,
+    select_label,
+    text_template_hint,
+    wants_default_text,
+)
+from app.services.service_import_config import (
+    KEY_ENABLED as IMPORT_KEY_ENABLED,
+    KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
+    KEY_MODE as IMPORT_KEY_MODE,
+)
+from app.services.customer_notice_texts import CLEANUP_BOT_FIELDS, STAFF_ACTION_BOT_FIELDS
+from app.services.settings_message_texts import (
+    CONNECTION_STATUS_CUSTOMER_TEXTS,
+    MESSAGE_TEXT_SUBS,
+    PROFILE_BOT_FIELDS,
+)
+from app.services.receipt_risk import BOT_FIELDS as RECEIPT_RISK_BOT_FIELDS
+from app.services.service_freeze_settings import BOT_FIELDS as SERVICE_FREEZE_BOT_FIELDS, GROUP_TITLE as SERVICE_FREEZE_GROUP
+from app.services.service_transfer_settings import (
+    BOT_FIELDS as SERVICE_TRANSFER_BOT_FIELDS,
+    GROUP_TITLE as SERVICE_TRANSFER_GROUP,
+)
+from app.services.settings_operation_fields import (
+    AUTO_APPROVE_AFTER_FIELDS,
+    AUTO_RENEW_FIELDS,
+    CRYPTO_RATE_FIELDS,
+    RECEIPT_MATCH_FIELDS,
+    SALES_STATE_FIELDS,
+    STARS_FIELDS,
+    TRIAL_MIN_AGE_FIELD,
+    USAGE_ALERT_FIELDS,
+    WALLET_TOPUP_FIELDS,
+)
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
 from app.bot.handlers.guide_editor import GUIDES_SECTION
+from app.bot.handlers.payment_destinations_editor import destination_list_rows
+from app.bot.plan_scope_picker import (
+    FIELD_KIND as PLAN_SCOPE_KIND,
+    picker_markup as plan_picker_markup,
+    picker_text as plan_picker_text,
+    scope_button as plan_scope_button,
+)
+from app.services.plan_scope import plan_choices, toggle_plan_scope
 from app.bot.handlers.settings_labels import (
     LABELS_SECTION,
     labels_audience_panel,
@@ -56,6 +111,7 @@ from app.bot.handlers.settings_labels import (
 from app.bot.handlers.guide_editor import entry_button as guides_entry_button
 from app.bot.handlers.screen_editor import entry_button as editor_entry_button
 from app.services.screen_editor import is_editor_enabled
+import html
 import logging
 
 logger = logging.getLogger(__name__)
@@ -80,10 +136,16 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("texts", "متن‌های ضروری", [
                 ("support_text", "متن پشتیبانی", "textarea"),
-                ("referral_text", "متن دعوت", "textarea"),
                 ("purchase_success_text", "موفقیت خرید", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
             ]),
+            ("invite", "دعوت دوستان", [
+                ("referral_text", "متن دعوت", "textarea"),
+                ("referral_bonus", "پاداش دعوت", "number"),
+            ]),
+            ("profile", "پروفایل تلگرام ربات", PROFILE_BOT_FIELDS),
+            *MESSAGE_TEXT_SUBS,
+            ("status_texts", "متن‌های وضعیت اتصال", CONNECTION_STATUS_CUSTOMER_TEXTS),
         ],
     },
     "menu": {
@@ -157,6 +219,10 @@ SECTIONS: dict[str, dict] = {
                 ("crypto_pay_text", "راهنما", "textarea"),
                 *BTN_PAY_CRYPTO,
             ]),
+            ("stars", "استارز", STARS_FIELDS),
+            ("auto_after", "تأیید خودکار با مهلت", AUTO_APPROVE_AFTER_FIELDS),
+            ("crypto_rate", "نرخ تبدیل رمزارز", CRYPTO_RATE_FIELDS),
+            ("wallet_topup", "شارژ کیف پول", WALLET_TOPUP_FIELDS),
         ],
     },
     "support": {
@@ -170,6 +236,19 @@ SECTIONS: dict[str, dict] = {
                 ("qr_enabled", "ارسال خودکار QR", "toggle"),
                 ("show_sub_link_in_text", "لینک در کپشن", "toggle"),
                 ("qr_caption", "کپشن QR", "textarea"),
+            ]),
+            # Same keys as the web «افزودن سرویس قبلی» tab; paths and panel admins stay with the Owner.
+            ("import", "افزودن سرویس قبلی", [
+                (IMPORT_KEY_ENABLED, "افزودن سرویس قبلی توسط مشتری", "toggle"),
+                (IMPORT_KEY_MODE, "روش پذیرش", "select"),
+                (IMPORT_KEY_MAX_PER_USER, "سقف سرویس هر مشتری", "number"),
+            ]),
+            ("freeze", SERVICE_FREEZE_GROUP, SERVICE_FREEZE_BOT_FIELDS),
+            ("transfer", SERVICE_TRANSFER_GROUP, SERVICE_TRANSFER_BOT_FIELDS),
+            ("naming", "نام در پاسارگارد", [
+                ("pg_username_prefix", "پیشوند", "text"),
+                ("pg_username_suffix", "پسوند", "text"),
+                ("pg_username_pattern", "الگو", "text"),
             ]),
         ],
     },
@@ -202,13 +281,17 @@ SECTIONS: dict[str, dict] = {
             ("trial_gate", "سرویس تست", [
                 ("trial_require_contact", "تأیید شماره تماس", "toggle"),
                 ("trial_require_iran_phone", "فقط شماره ایران", "toggle"),
+                TRIAL_MIN_AGE_FIELD,
             ]),
+            ("sales", "وضعیت فروش", SALES_STATE_FIELDS),
             ("purchase_contact", "شماره تماس خرید", [
                 ("purchase_require_contact", "شماره تماس اجباری", "toggle"),
             ]),
             ("receipt_dup", "ضدتقلب رسید", [
                 ("receipt_dup_policy", "رسید تکراری (warn/block)", "text"),
+                *RECEIPT_RISK_BOT_FIELDS,
             ]),
+            ("receipt_match", "تطبیق رسید", RECEIPT_MATCH_FIELDS),
             ("terms_buy", "قوانین خرید", [
                 ("terms_buy_user_enabled", "فعال خرید کاربر", "toggle"),
                 ("terms_buy_user_text", "متن قوانین خرید کاربر", "textarea"),
@@ -233,6 +316,18 @@ SECTIONS: dict[str, dict] = {
     "notify": {
         "title": "اعلان‌ها",
         "kind": "notify",
+        # Opened from the notify screen; the report text and metrics stay on the web (placeholder picker).
+        "subs": [
+            ("daily", "گزارش روزانه", [
+                ("admin_daily_report_enabled", "ارسال گزارش روزانه", "toggle"),
+                ("subordinate_report_enabled", "گزارش نمایندگان زیرمجموعه", "toggle"),
+                ("admin_daily_report_hour", "ساعت ارسال (۰ تا ۲۳، به وقت تهران)", "number"),
+            ]),
+            ("usage_alerts", "هشدار سرویس کاربر", USAGE_ALERT_FIELDS),
+            ("auto_renew", "تمدید خودکار سرویس", AUTO_RENEW_FIELDS),
+            ("staff_notices", "متن اعلان کار روی سرویس", STAFF_ACTION_BOT_FIELDS),
+            ("cleanup_notices", "متن اعلان پاکسازی سرویس", CLEANUP_BOT_FIELDS),
+        ],
     },
     # Own shop bot token only — never platform BOT_TOKEN.
     "bot": {
@@ -282,6 +377,7 @@ def _preview(value: str | None, *, limit: int = 120) -> str:
 
 MENU_ORDER_LABELS = {
     "shop": "خرید",
+    TRIAL_MENU_KEY: "دریافت تست",
     "services": "سرویس‌ها",
     CONNECTION_STATUS_MENU_KEY: "وضعیت اتصال",
     "wallet": "کیف پول",
@@ -552,6 +648,10 @@ async def _render_notify(callback: CallbackQuery, session: AsyncSession, reselle
         rows.append(
             [InlineKeyboardButton(text="— اعلانی برای دسترسی شما نیست —", callback_data="res:st:hub")]
         )
+    rows.extend(
+        [InlineKeyboardButton(text=title, callback_data=f"res:st:sub:notify:{sub_id}")]
+        for sub_id, title, _fields in SECTIONS["notify"]["subs"]
+    )
     rows.append([kb.back_button(None, "res:st:hub")])
     if callback.message:
         await safe_edit_text(
@@ -614,14 +714,21 @@ async def _sub_panel(session: AsyncSession, sec_id: str, sub_id: str, reseller_i
         rows = []
         for key, label, kind in fields:
             cur = await get_setting(session, key, reseller_id=reseller_id)
-            if kind == "toggle":
+            if kind == PLAN_SCOPE_KIND:
+                rows.append([plan_scope_button("res:st", key, label, cur)])
+            elif kind == "toggle":
                 mark = "✅" if on(cur) else "❌"
                 rows.append([InlineKeyboardButton(text=f"{mark} {label}", callback_data=f"res:st:tog:{key}")])
+            elif kind == "select":
+                rows.append(
+                    [InlineKeyboardButton(text=f"{label}: {select_label(key, cur)}", callback_data=f"res:st:sel:{key}")]
+                )
             else:
                 shown = secret_state(cur) if is_secret(kind) else _preview(cur, limit=28)
                 rows.append(
                     [InlineKeyboardButton(text=f"✏️ {label}: {shown}", callback_data=f"res:st:edit:{key}")]
                 )
+    rows.extend(destination_list_rows(sec_id, sub_id, for_reseller=True))
     rows.append([kb.back_button(None, sub_back("res", sec_id, sub_id))])
     if sub_id == "bbc":
         from app.services.payment_providers.bezanbecard import SETUP_HELP_HTML
@@ -782,7 +889,88 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
     with _Scoped(profile.user_id):
         cur = await get_setting(session, key, reseller_id=profile.user_id)
         new_val = "0" if on(cur) else "1"
+        # Same check as the web payment save: the gateway calls back over https only.
+        refusal = (
+            await bbc_enable_error(session, {key: new_val}, reseller_id=profile.user_id)
+            if key == BBC_ENABLED_KEY
+            else None
+        )
+        if refusal:
+            await callback.answer(refusal, show_alert=True)
+            return
         await set_setting(session, key, new_val, reseller_id=profile.user_id)
+    await callback.answer(feedback.SAVED)
+    loc = _owner_screen_for_key(key)
+    if loc:
+        await _render_sub(callback, session, loc[0], loc[1], profile.user_id)
+
+
+async def _show_plan_picker(callback: CallbackQuery, session: AsyncSession, key: str, shop_id: int) -> None:
+    loc = _owner_screen_for_key(key)
+    back = f"res:st:sub:{loc[0]}:{loc[1]}" if loc else "res:st:hub"
+    with _Scoped(shop_id):
+        raw = await get_setting(session, key, reseller_id=shop_id)
+    markup = plan_picker_markup("res:st", key, raw, await plan_choices(session, shop_id), back)
+    if callback.message:
+        await safe_edit_text(callback.message, plan_picker_text(FIELDS[key][1]), reply_markup=markup)
+
+
+def _is_plan_scope_key(key: str) -> bool:
+    meta = FIELDS.get(key)
+    return bool(meta and meta[2] == PLAN_SCOPE_KIND)
+
+
+@router.callback_query(F.data.startswith("res:st:plo:"))
+async def settings_plan_scope_open(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    key = (callback.data or "").split(":", 3)[-1]
+    if err or not _is_plan_scope_key(key):
+        await callback.answer(err or feedback.INVALID, show_alert=True)
+        return
+    await callback.answer()
+    await _show_plan_picker(callback, session, key, profile.user_id)
+
+
+@router.callback_query(F.data.regexp(r"^res:st:pls:[a-z_]{1,48}:(all|\d{1,10})$"))
+async def settings_plan_scope_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    _, _, _, key, choice = (callback.data or "").split(":")
+    if err or not _is_plan_scope_key(key):
+        await callback.answer(err or feedback.INVALID, show_alert=True)
+        return
+    # Only this shop's own plans can be chosen; the scope is saved on this shop only.
+    own = [c.plan_id for c in await plan_choices(session, profile.user_id)]
+    with _Scoped(profile.user_id):
+        try:
+            value = toggle_plan_scope(await get_setting(session, key, reseller_id=profile.user_id), choice, own)
+        except ValueError as exc:
+            await callback.answer(str(exc), show_alert=True)
+            return
+        await set_setting(session, key, value, reseller_id=profile.user_id)
+    await callback.answer(feedback.SAVED)
+    await _show_plan_picker(callback, session, key, profile.user_id)
+
+
+@router.callback_query(F.data.startswith("res:st:sel:"))
+async def settings_select_cycle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    key = callback.data.split(":", 3)[-1]
+    meta = FIELDS.get(key)
+    if meta is None or meta[2] != "select" or key not in SELECT_OPTIONS:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    with _Scoped(profile.user_id):
+        cur = await get_setting(session, key, reseller_id=profile.user_id)
+        await set_setting(session, key, next_select_value(key, cur), reseller_id=profile.user_id)
     await callback.answer(feedback.SAVED)
     loc = _owner_screen_for_key(key)
     if loc:
@@ -937,16 +1125,23 @@ async def settings_edit_ask(
     if not meta:
         await callback.answer(feedback.INVALID, show_alert=True)
         return
+    if meta[2] == "select":
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
     with _Scoped(profile.user_id):
         cur = await get_setting(session, key, reseller_id=profile.user_id)
     if key == "force_join_channel":
         from app.services.users import format_force_join_for_edit
 
         cur = format_force_join_for_edit(cur)
+    if cur and cur == NUMBER_UNLIMITED_VALUES.get(key):
+        cur = UNLIMITED_LABEL
     await callback.answer()
     await state.update_data(edit_key=key, reseller_id=profile.user_id, rs_loc=_owner_screen_for_key(key))
     hint = feedback.ENTER_NEW_TEXT
-    if key == "force_join_channel":
+    if meta[2] == "number":
+        hint = number_range_hint(key)
+    elif key == "force_join_channel":
         hint = "هر خط یک کانال (@channel یا آیدی).\nعضویت همه الزامی ذخیره می‌شود.\nبرای انصراف: انصراف"
     else:
         from app.services.rich_text import is_button_label_key, is_message_rich_key
@@ -958,6 +1153,9 @@ async def settings_edit_ask(
             )
         elif is_message_rich_key(key):
             hint += "\n<i>ایموجی پریمیوم در متن پیام حفظ می‌شود.</i>"
+    template_hint = text_template_hint(key, actor="shop")
+    if template_hint:
+        hint += "\n" + template_hint
     from app.bot.nav_input import ask_text
 
     await ask_text(
@@ -966,12 +1164,44 @@ async def settings_edit_ask(
         prompt=(
             secret_prompt(meta[1], cur)
             if is_secret(meta[2])
-            else f"<b>{meta[1]}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}"
+            else f"<b>{meta[1]}</b>\nفعلی:\n<code>{html.escape(_preview(cur))}</code>\n\n{hint}"
         ),
         cancel_code="rs_set",
         fsm_state=ResellerSettingsStates.edit_value,
         edit=True,
     )
+
+
+async def _store_shop_setting(session: AsyncSession, profile, key: str, value: str) -> None:
+    """Save one setting of the shop; its own bot's Telegram profile texts are pushed to Telegram first."""
+    if key in PROFILE_TEXT_FIELDS:
+        await update_bot_profile_text(
+            session, token=reveal_bot_token(profile.bot_token), key=key, value=value, reseller_id=profile.user_id
+        )
+        return
+    await set_setting(session, key, value, reseller_id=profile.user_id)
+
+
+def _shop_typed_value(key: str, kind: str, text: str, message: Message) -> str:
+    """The stored form of a typed shop setting; ``ValueError`` carries the message to show."""
+    if is_secret(kind):
+        return text
+    if kind == "number":
+        return parse_number_setting(key, text)
+    if key in VALUE_NORMALIZERS:
+        return VALUE_NORMALIZERS[key](text)
+    return _shop_setting_value(key, message)
+
+
+def _shop_setting_value(key: str, message: Message) -> str:
+    """The stored form of a typed shop text: the same normalisation the owner bot and the web apply."""
+    if key == "force_join_channel":
+        return normalize_force_join_channel_value(message.text or "")
+    if key == "receipt_dup_policy":
+        return normalize_dup_policy(message.text or "")
+    if wants_default_text(key, message.text):
+        return ""
+    return pack_setting_from_message(key, message)
 
 
 @router.message(ResellerSettingsStates.edit_value)
@@ -991,17 +1221,17 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
                             is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
         return
     meta = FIELDS.get(key)
-    if meta and is_secret(meta[2]):
+    if meta is None:
+        await state.clear()
+        await message.answer(feedback.INVALID)
+        return
+    if is_secret(meta[2]):
         await delete_user_message(message)
-    elif key == "force_join_channel":
-        from app.services.users import normalize_force_join_channel_value
-
-        text = normalize_force_join_channel_value(text)
-    if not (meta and is_secret(meta[2])):
-        from app.services.rich_text import pack_setting_from_message
-
-        text = pack_setting_from_message(key, message)
-    await set_setting(session, key, text, reseller_id=profile.user_id)
+    try:
+        await _store_shop_setting(session, profile, key, _shop_typed_value(key, meta[2], text, message))
+    except ValueError as exc:
+        await message.answer(domain_error_text(exc))
+        return
     await _close_input_to_location(message, state, session, profile, note=feedback.SAVED_WITH_ICON)
 
 
