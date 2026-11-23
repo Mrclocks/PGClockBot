@@ -56,7 +56,8 @@ class FlowEndTests(unittest.IsolatedAsyncioTestCase):
         message = MagicMock(text="دلیل")
         state = AsyncMock(get_data=AsyncMock(return_value={"cancellation_service_id": 7}))
         with (
-            patch("app.services.service_cancellations.request_cancellation", AsyncMock(return_value={"id": 3})),
+            patch.object(services, "request_cancellation", AsyncMock(return_value={"id": 3, "status": "pending", "label": "در انتظار بررسی"})),
+            patch.object(services, "get_all_settings", AsyncMock(return_value={})),
             patch("app.bot.nav_input.finish_text_step", AsyncMock()) as shown,
         ):
             await services.svc_cancel_reason(message, MagicMock(), SimpleNamespace(id=1), state)
