@@ -26,6 +26,7 @@ from app.services import bot_feedback_texts as feedback
 from app.services.formatting import format_toman
 from app.services.pasarguard import get_pg
 from app.services.plans_catalog import plan_groups_denial, plan_template_denial, role_requires_template
+from app.services.plan_panel_groups import PANEL_GROUPS_LABEL, plan_has_pg_link, plan_uses_panel_groups
 from app.services.redact import user_safe_error
 from app.services.renewal_carry import carry_button_text, CARRY_CODES, carry_status_text, toggle_plan_carry
 from app.services.users import get_all_settings, get_setting, on, set_setting
@@ -39,6 +40,8 @@ def _plan_line(p: Plan) -> str:
         link = f"تمپلیت #{p.pg_template_id}"
     elif p.pg_group_ids:
         link = f"گروه {p.pg_group_ids}"
+    elif plan_uses_panel_groups(p):
+        link = PANEL_GROUPS_LABEL
     else:
         link = "⚠️ بدون اتصال پاسارگارد"
     return (
@@ -48,7 +51,7 @@ def _plan_line(p: Plan) -> str:
 
 
 def _plan_needs_link(p: Plan) -> bool:
-    return not p.pg_template_id and not (p.pg_group_ids or "").strip()
+    return not plan_has_pg_link(p)
 
 
 async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> None:
@@ -107,6 +110,8 @@ async def _plan_detail_text(p: Plan, *, category_name: str | None = None) -> str
         link = f"تمپلیت #{p.pg_template_id}"
     elif p.pg_group_ids:
         link = f"گروه‌ها: {p.pg_group_ids}"
+    elif plan_uses_panel_groups(p):
+        link = PANEL_GROUPS_LABEL
     else:
         link = "⚠️ هنوز به تمپلیت/گروه وصل نشده — خرید تحویل نمی‌شود"
     cat = html.escape(category_name) if category_name else "—"

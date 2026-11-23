@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.gift_code_pages import legacy_gift_modal_redirect
 from app.db.models import Plan
+from app.services.plan_panel_groups import panel_groups_offered, resolve_plan_group_target
 from app.services.renewal_carry import set_plan_carry_from_form
 from app.services.trial_offer import PLACEMENT_LABELS as TRIAL_PLACEMENT_LABELS
 from app.services.trial_offer import (
@@ -206,6 +207,7 @@ def register_plan_pages(  # noqa: C901 - counts the nested routes; each is liste
                 "groups": groups,
                 "pg_error": pg_error,
                 "pg_template_only": role_requires_template(staff),
+                "pg_panel_groups": panel_groups_offered(staff, visible_groups=groups, pg_error=pg_error),
                 "role_blocked_plans": group_plans_blocked_by_role(
                     staff,
                     plans,
@@ -270,7 +272,6 @@ def register_plan_pages(  # noqa: C901 - counts the nested routes; each is liste
         from app.services.plans_catalog import (
             parse_group_ids_from_form,
             parse_user_plan_duration_days,
-            plan_groups_denial,
             plan_template_denial,
             require_catalog_owner_id,
             staff_can_create_pg_template,
@@ -295,6 +296,7 @@ def register_plan_pages(  # noqa: C901 - counts the nested routes; each is liste
             return RedirectResponse(f"/plans?err={quote(e.message)}", status_code=303)
         tpl = None
         group_csv = None
+        panel_groups = False
         try:
             owner_id = require_catalog_owner_id(staff)
         except ShopScopeError as e:
@@ -315,19 +317,14 @@ def register_plan_pages(  # noqa: C901 - counts the nested routes; each is liste
                 )
         else:
             ids = parse_group_ids_from_form(form)
-            if not ids:
-                return RedirectResponse(
-                    f"/plans?err={quote('حداقل یک گروه پاسارگارد انتخاب کنید')}",
-                    status_code=303,
-                )
-            groups_denial = plan_groups_denial(staff, ids)
-            if groups_denial:
-                return RedirectResponse(
-                    f"/plans?err={quote(groups_denial)}",
-                    status_code=303,
-                )
-            group_csv = ",".join(str(i) for i in ids)
-            if also_create_template:
+            try:
+                group_target = await resolve_plan_group_target(session, staff, ids)
+            except ValueError as e:
+                return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
+            group_csv = group_target.group_csv
+            panel_groups = group_target.panel_groups
+            # A PasarGuard template needs explicit groups, so panel-assigned groups never make one.
+            if also_create_template and ids:
                 if not staff_can_create_pg_template(staff):
                     return RedirectResponse(
                         f"/plans?err={quote('اجازه ساخت تمپلیت در پاسارگارد را ندارید')}",
@@ -378,6 +375,7 @@ def register_plan_pages(  # noqa: C901 - counts the nested routes; each is liste
             data_limit_gb=gb,
             pg_template_id=tpl,
             pg_group_ids=group_csv,
+            pg_panel_groups=panel_groups,
             pg_username_prefix=uname_prefix,
             pg_username_suffix=uname_suffix,
             pg_username_pattern=uname_pattern,
@@ -719,6 +717,7 @@ def register_plan_pages(  # noqa: C901 - counts the nested routes; each is liste
             "groups": groups,
             "pg_error": pg_error,
             "pg_template_only": role_requires_template(staff),
+            "pg_panel_groups": panel_groups_offered(staff, visible_groups=groups, pg_error=pg_error),
             "pg_limit_snapshot": snap,
             "pg_limit_cards": limit_snapshot_cards(snap),
             "flash_err": request.query_params.get("err"),
@@ -818,7 +817,6 @@ def register_plan_pages(  # noqa: C901 - counts the nested routes; each is liste
             get_owned_plan,
             parse_group_ids_from_form,
             parse_user_plan_duration_days,
-            plan_groups_denial,
             plan_template_denial,
         )
 
@@ -850,6 +848,7 @@ def register_plan_pages(  # noqa: C901 - counts the nested routes; each is liste
             )
         tpl = None
         group_csv = None
+        panel_groups = False
 
         if mode == "template":
             tpl = int(pg_template_id) if str(pg_template_id).strip() else None
@@ -865,19 +864,12 @@ def register_plan_pages(  # noqa: C901 - counts the nested routes; each is liste
                     status_code=303,
                 )
         else:
-            ids = parse_group_ids_from_form(form)
-            if not ids:
-                return RedirectResponse(
-                    f"/plans/{plan_id}/edit?err={quote('حداقل یک گروه پاسارگارد انتخاب کنید')}",
-                    status_code=303,
-                )
-            groups_denial = plan_groups_denial(staff, ids)
-            if groups_denial:
-                return RedirectResponse(
-                    f"/plans/{plan_id}/edit?err={quote(groups_denial)}",
-                    status_code=303,
-                )
-            group_csv = ",".join(str(i) for i in ids)
+            try:
+                group_target = await resolve_plan_group_target(session, staff, parse_group_ids_from_form(form))
+            except ValueError as e:
+                return RedirectResponse(f"/plans/{plan_id}/edit?err={quote(str(e))}", status_code=303)
+            group_csv = group_target.group_csv
+            panel_groups = group_target.panel_groups
 
         plan.name = name.strip()
         plan.price = price
@@ -887,6 +879,7 @@ def register_plan_pages(  # noqa: C901 - counts the nested routes; each is liste
         plan.sort_order = sort_order
         plan.pg_template_id = tpl
         plan.pg_group_ids = group_csv
+        plan.pg_panel_groups = panel_groups
         set_plan_carry_from_form(plan, form)
         from app.services.orders import parse_naming_form
         from app.services.button_styles import parse_plan_button_style_form

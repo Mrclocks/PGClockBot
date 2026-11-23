@@ -32,6 +32,7 @@ async def clone_plan(session: AsyncSession, plan_id: int, *, owner_reseller_id: 
         data_limit_gb=src.data_limit_gb,
         pg_template_id=src.pg_template_id,
         pg_group_ids=src.pg_group_ids,
+        pg_panel_groups=bool(src.pg_panel_groups),
         pg_username_prefix=src.pg_username_prefix,
         pg_username_suffix=src.pg_username_suffix,
         pg_username_pattern=src.pg_username_pattern,

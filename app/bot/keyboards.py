@@ -12,6 +12,7 @@ from app.bot.edit_mode import editable_screen
 from app.bot.list_pages import page_of, pager_row
 from app.bot.panel_back import BACK_LABEL_KEY, back_callback
 from app.services.catalog_pricing import sale_price
+from app.services.plan_panel_groups import plan_has_pg_link
 from app.config import get_settings
 from app.db.models import Plan, Role
 from app.services.support_contacts import (
@@ -1630,7 +1631,7 @@ def admin_users_plans_overview_keyboard(
     fixed = [p for p in plans if not getattr(p, "is_trial", False)]
     for p in fixed[:LIST_BUTTON_CAP]:
         warn = ""
-        if not getattr(p, "pg_template_id", None) and not (getattr(p, "pg_group_ids", None) or "").strip():
+        if not plan_has_pg_link(p):
             warn = " ⚠️"
         flag = "✅" if getattr(p, "is_active", True) else "⏸"
         name = (getattr(p, "name", "") or "")[:22]
@@ -1866,7 +1867,7 @@ def admin_plans_list_keyboard(
     rows: list[list[InlineKeyboardButton]] = []
     for p in [p for p in plans if not getattr(p, "is_trial", False)][:LIST_BUTTON_CAP]:
         warn = ""
-        if not getattr(p, "pg_template_id", None) and not (getattr(p, "pg_group_ids", None) or "").strip():
+        if not plan_has_pg_link(p):
             warn = " ⚠️"
         rows.append(
             [
