@@ -17,6 +17,7 @@
 
 <form method="post" action="{{ page_path }}" class="bc-compose ds-page-form" id="bc-form" data-bc-form
       data-audience-url="{{ page_path }}/audience"
+      data-test-url="{{ page_path }}/test"
       data-confirm="پیام برای گروه انتخاب‌شده در صف ارسال قرار بگیرد؟ پیامِ فرستاده‌شده پس گرفته نمی‌شود."
       data-confirm-title="ارسال پیام گروهی"
       data-confirm-label="ارسال">
@@ -108,6 +109,8 @@
     {% endcall %}
     <div class="bc-send">
       <button class="btn bc-send-btn" type="submit" data-bc-send>ارسال پیام</button>
+      <button class="btn btn-ghost" type="button" data-bc-test>ارسال آزمایشی به {{ 'ادمین‌های ربات' if is_platform else 'حساب صاحب فروشگاه' }}</button>
+      <p class="bc-test-status" data-bc-test-status role="status" aria-live="polite"></p>
     </div>
   </aside>
 </form>

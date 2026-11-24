@@ -99,6 +99,16 @@ def _spec(audience: AudienceSpec | str) -> AudienceSpec:
     return audience if isinstance(audience, AudienceSpec) else make_spec(str(audience or ""), shop_id=None)
 
 
+def clean_platform_text(text: str) -> str:
+    """A platform message body as Telegram HTML it accepts; ``ValueError`` when empty or too long."""
+    body = normalize_telegram_html((text or "").strip())
+    if not body:
+        raise ValueError("متن پیام خالی است")
+    if len(body) > MAX_TEXT_LENGTH:
+        raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
+    return body
+
+
 async def count_platform_targets(session: AsyncSession, audience: AudienceSpec | str) -> int:
     """How many people a platform broadcast to ``audience`` reaches now."""
     return await count_audience(session, _spec(audience), shop_id=None)
@@ -119,11 +129,7 @@ async def queue_broadcast(
     request's buttons are rows already validated by ``message_buttons`` (``dump_buttons``).
     """
     request = request or BroadcastRequest()
-    body = normalize_telegram_html((text or "").strip())
-    if not body:
-        raise ValueError("متن پیام خالی است")
-    if len(body) > MAX_TEXT_LENGTH:
-        raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
+    body = clean_platform_text(text)
     spec = _spec(audience)
     key = platform_request_key(request.token)
     if key is not None:

@@ -332,6 +332,7 @@ tests/test_broadcast_queue.py
 tests/test_shop_broadcast.py
 # Broadcast failure reasons and unreachable marks: per-tenant bot, detail page scoped to its shop.
 tests/test_broadcast_failures.py
+tests/test_broadcast_test_send.py
 # Buttons under staff messages: link permission per shop, presets per shop, renewal of own services only.
 tests/test_message_buttons.py
 tests/test_message_button_colors.py
