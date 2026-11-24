@@ -10,6 +10,7 @@ from app.services.message_variables import catalog_groups
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.resellers import RESELLER_SETTINGS_TABS
 from app.services.settings_tab_groups import (
+    BOT_AREA,
     MESSAGE_VARIABLES_TAB_KEY,
     group_settings_tabs,
     tabs_with_message_variables,
@@ -48,7 +49,7 @@ def register_message_variables_pages(
         )
         settings_tabs = SETTINGS_TABS if settings_base == "/settings" else RESELLER_SETTINGS_TABS
         tab_nav = group_settings_tabs(
-            tabs_with_message_variables(settings_tabs, staff), MESSAGE_VARIABLES_TAB_KEY
+            tabs_with_message_variables(settings_tabs, staff), MESSAGE_VARIABLES_TAB_KEY, area=BOT_AREA
         )
         return render(
             request,

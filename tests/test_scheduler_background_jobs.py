@@ -20,6 +20,8 @@ OPERATIONS = {
     "credit_cycle",
     # Credits cashback whose hold has passed; needs no running bot.
     "cashback_mature",
+    # Issues win-back coupons and opens each shop's bot for the notices itself; needs no running bot.
+    "coupon_win_back",
     "pg_admin_subscription",
     # Deletes the order and payment rows each shop chose for automatic deletion; needs no running bot.
     "order_purge",
@@ -29,10 +31,14 @@ OPERATIONS = {
     "pg_link_watchdog",
     "bbc_settlement_poll",
     "psp_settlement_poll",
+    # Retries paid orders the panel did not apply; needs no running bot.
+    "paid_order_recovery",
     "volume_external_sync",
     "chat_message_purge",
     # Queues the warnings before an expired service is deleted; needs no running bot.
     "service_cleanup",
+    # Puts timed quick switches back when their time comes; needs no running bot.
+    "switch_reverts",
     # Approves card receipts nobody reviewed in time; opens the bot it needs only when a receipt is due.
     "scheduled_receipt_approval",
     # Reads each converting shop's API rate into memory; needs no running bot.
@@ -41,6 +47,10 @@ OPERATIONS = {
     "bot_profile_photo",
     # Removes cached customer profile photos for the user card; needs no running bot.
     "user_photo_prune",
+    # Resumes frozen services at their deadline; queues the notice, so it needs no running bot.
+    "service_freezes",
+    # Retries the subscription link rotation of transferred services; needs no running bot.
+    "service_transfers",
 }
 NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "broadcast", "first_use_nudge", "cancellation_notifications", "panel_alert_notifications", "customer_notices"}
 

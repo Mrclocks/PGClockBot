@@ -11,6 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pasarguard import failure_text
+from app.services.trial_offer import has_claimed_trial, may_offer_trial, trial_shown_to_claimed
 from app.services.catalog_descriptions import with_descriptions
 from app.services.chat_records import keep_sent
 from app.services.service_scope import list_customer_services
@@ -104,7 +106,7 @@ async def _deliver_free_order(
         delivered = await deliver_order(session, order, attempt=attempt)
     except Exception as exc:
         logger.warning("free delivery failed order=%s", order.id, exc_info=True)
-        error = str(exc)
+        error = failure_text(exc)
         failure = format_message("❌ خطا در تحویل", user_safe_error(exc))
     else:
         await notify_trial_claimed(bot, session, order=delivered, user=db_user)
@@ -192,7 +194,7 @@ async def _record_shop_funnel(
     if not on(ui.get("funnel_tracking_enabled", "1")):
         return
     try:
-        from app.services.ux20 import record_funnel_event
+        from app.services.funnel_metrics import record_funnel_event
 
         await record_funnel_event(
             session,
@@ -288,7 +290,8 @@ async def _shop_kind_flags(
     if not trial_setting:
         plans = [p for p in plans if not p.is_trial]
     has_svc = await list_customer_services(session, db_user.id, current_shop_reseller_id(), limit=1)
-    if has_svc:
+    hide_for_claimed = not trial_shown_to_claimed(ui) and await has_claimed_trial(session, db_user.id)
+    if hide_for_claimed or not may_offer_trial(ui, has_services=bool(has_svc)):
         plans = [p for p in plans if not p.is_trial]
     fixed_plans = [p for p in plans if not p.is_trial]
     trial_plans = [p for p in plans if p.is_trial]
@@ -831,21 +834,6 @@ async def custom_confirm(callback: CallbackQuery, session: AsyncSession, db_user
     """«ادامه خرید» after the days step opens the payment screen; the details are shown there."""
     await custom_buy(callback, session, db_user, state, reseller_owner_id=reseller_owner_id)
 
-async def _notify_new_order(bot, session, order, db_user, plan_name: str | None):
-    try:
-        from app.services.notifications import notify_new_order
-
-        await notify_new_order(
-            bot,
-            session,
-            order=order,
-            user_tg_id=db_user.telegram_id,
-            user_name=db_user.full_name or db_user.username,
-            plan_name=plan_name,
-        )
-    except Exception:
-        logger.exception("notify_new_order failed order=%s", getattr(order, "id", None))
-
 @router.callback_query(F.data == "shop:custom:buy")
 async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
     reseller_owner_id: int | None = None,
@@ -917,7 +905,6 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     text = await checkout_summary(session, order, currency=get_settings().currency)
     if callback.message:
         await _show_order_pay(callback.message, session, db_user, order.id, state, text)
-    await _notify_new_order(callback.bot, session, order, db_user, "پلن دلخواه")
 
 @router.callback_query(F.data == "shop:wholesale:noop")
 async def wholesale_noop(callback: CallbackQuery):
@@ -1216,9 +1203,6 @@ async def wholesale_buy(
     text = await checkout_summary(session, order, currency=get_settings().currency)
     if callback.message:
         await _show_order_pay(callback.message, session, db_user, order.id, state, text)
-    await _notify_new_order(
-        callback.bot, session, order, db_user, f"فروش عمده ×{order.quantity}"
-    )
 
 @router.callback_query(F.data.startswith("shop:plan:"))
 async def shop_plan(
@@ -1316,8 +1300,6 @@ async def _complete_shop_buy(
     msg = callback.message if callback is not None else message
     if msg is not None:
         await _show_order_pay(msg, session, db_user, order.id, state, text)
-    bot = callback.bot if callback is not None else message.bot
-    await _notify_new_order(bot, session, order, db_user, plan.name if plan else None)
 
 @router.callback_query(F.data.startswith("shop:buy:"))
 async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,

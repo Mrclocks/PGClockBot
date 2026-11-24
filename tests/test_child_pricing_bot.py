@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot.handlers import child_pricing_bot as cp
 from app.bot.nav_inline import _reseller_entry_buttons

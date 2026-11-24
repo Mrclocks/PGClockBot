@@ -1406,7 +1406,7 @@
 {# One fixed plan in the users list; the list renders it inside its category group. #}
 {% macro fixed_plan_row(p) %}
       {% set tpl_missing = p.pg_template_id and (p.pg_template_id|int) not in (pg_live_template_ids or []) %}
-      {% set pg_empty = (not p.pg_template_id) and not p.pg_group_ids %}
+      {% set pg_empty = (not p.pg_template_id) and not p.pg_group_ids and not p.pg_panel_groups %}
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
         <td class="li-title">
@@ -1429,6 +1429,7 @@
             تمپلیت #{{ p.pg_template_id }}
             {% if tpl_missing %}<span class="badge warn" title="این تمپلیت در پاسارگارد پیدا نشد">خالی</span>{% endif %}
           {% elif p.pg_group_ids %}گروه {{ p.pg_group_ids }}
+          {% elif p.pg_panel_groups %}گروه‌های پیش‌فرض پنل
           {% else %}—{% endif %}
         </td>
         <td class="li-badge">

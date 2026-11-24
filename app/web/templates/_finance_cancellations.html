@@ -9,7 +9,7 @@
 <div class="flash warn">{{ cancel_flash_err }}</div>
 {% endif %}
 <p class="muted update-card-caption">
-  مبلغ را اپراتور به تومان تعیین می‌کند. اعتبار پس از تأیید غیرفعال‌شدن سرویس، به کیف پول مشتری در همین فروشگاه واریز می‌شود. نتیجهٔ نامشخص تا تلاش مجدد محفوظ می‌ماند.
+  مبلغ را اپراتور به تومان تعیین می‌کند؛ مبلغ پیشنهادی از تنظیمات «لغو سرویس» در زمان ثبت درخواست حساب شده است. اعتبار پس از تأیید غیرفعال‌شدن سرویس، به کیف پول مشتری در همین فروشگاه واریز می‌شود. نتیجهٔ نامشخص تا تلاش مجدد محفوظ می‌ماند.
 </p>
 {% if cancel_requests %}
 {% for row, username in cancel_requests %}
@@ -25,7 +25,10 @@
   <p class="text-pre-wrap">توضیح اپراتور: {{ row.operator_note }}</p>
   {% endif %}
   {% if row.status == 'approved' %}
-  <p>اعتبار برگشتی: <span dir="ltr">{{ row.refund_amount | money }}</span> تومان</p>
+  <p>اعتبار برگشتی: <span dir="ltr">{{ row.refund_amount | money }}</span> تومان{% if row.processed_by == 'auto' %} — تأیید خودکار طبق تنظیمات لغو{% endif %}</p>
+  {% elif row.suggested_refund is not none and row.refund_amount is none %}
+  <p>مبلغ پیشنهادی: <span dir="ltr">{{ row.suggested_refund | money }}</span> تومان{% if row.remaining_percent is not none and row.paid_amount is not none %}
+    <span class="muted">({{ row.remaining_percent | fa }}٪ باقی‌مانده از <span dir="ltr">{{ row.paid_amount | money }}</span> تومان پرداختی)</span>{% endif %}</p>
   {% endif %}
   {% if can_approve_cancel and row.status in ['pending', 'review', 'processing'] %}
   <form method="post" action="/service-cancellations/{{ row.id }}/approve" class="form-stack"
@@ -33,7 +36,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label class="form-field">اعتبار برگشتی (تومان)
       <input name="amount" type="number" data-money min="0" max="2147483647" required
-             value="{{ row.refund_amount if row.refund_amount is not none else '' }}"
+             value="{{ row.refund_amount if row.refund_amount is not none else (row.suggested_refund if row.suggested_refund is not none else '') }}"
              {% if row.refund_amount is not none %}readonly{% endif %}>
     </label>
     <label class="form-field">توضیح برای مشتری

@@ -46,7 +46,7 @@ async def _bot_return_href(
     shop_owner_id: int | None,
 ) -> str:
     """``tg://resolve?domain=…`` (or https t.me fallback) for the return CTA."""
-    from app.services.ux20 import bot_deep_link, bot_tg_resolve_link, shop_bot_chat_url
+    from app.services.bot_links import bot_deep_link, bot_tg_resolve_link, shop_bot_chat_url
 
     if session is not None:
         return (await shop_bot_chat_url(session, shop_owner_id=shop_owner_id)) or ""

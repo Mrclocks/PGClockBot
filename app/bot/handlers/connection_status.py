@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.connection_status_public_ui import MonitorPublicLabel, public_cursor, public_status_keyboard, public_status_text
 from app.bot.connection_status_ui import monitor_text
 from app.bot.tg_utils import safe_edit_text
+from app.bot.verbatim_input import NotVerbatimTextInput
 from app.services.connection_status import PublicConnectionPage, public_connection_page
 from app.services.db_safe import rollback_quiet
 from app.services.users import DEFAULT_SETTINGS, get_all_settings
@@ -41,7 +42,7 @@ async def _show(message: Message, session: AsyncSession, *, after_id: int, edit:
 
 
 @router.message(Command("status"))
-@router.message(MonitorPublicLabel())
+@router.message(MonitorPublicLabel(), NotVerbatimTextInput())
 async def connection_status(message: Message, session: AsyncSession, state: FSMContext) -> None:
     await state.set_state(None)
     await _show(message, session, after_id=0, edit=False)

@@ -39,6 +39,7 @@ from app.services.formatting import (
     time_remaining_label,
 )
 from app.services.numbers import normalize_number_text
+from app.services.service_period import clear_period_start
 from app.services.pasarguard import (
     PasarGuardError,
     absolutize_subscription_url,
@@ -48,6 +49,7 @@ from app.services.pasarguard import (
     user_subscription_url,
 )
 from app.services.pg_access import staff_user_actions
+from app.services.plan_panel_groups import assert_panel_assigned_group, plan_uses_panel_groups
 from app.services.redact import user_safe_error
 from app.services.wallet import credit_wallet, debit_wallet, get_wallet_balance, list_transactions
 from app.services.service_scope import assert_service_in_shop, service_shop_id, shop_services_clause
@@ -544,7 +546,7 @@ async def admin_provision_service(
     group_ids = None
     if not plan.pg_template_id:
         group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
-        if not group_ids:
+        if not group_ids and not plan_uses_panel_groups(plan):
             raise ValueError(
                 "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
             )
@@ -584,6 +586,8 @@ async def admin_provision_service(
         raw_uid = pg_user.get("id") if isinstance(pg_user, dict) else None
         if raw_uid:
             pg_uid = int(raw_uid)
+        if plan_uses_panel_groups(plan):
+            assert_panel_assigned_group(pg_user if isinstance(pg_user, dict) else None)
 
         if shop_rid and getattr(pg, "_login_username", None) is None:
             owner_name = (pg_owner or "").strip()
@@ -1055,6 +1059,18 @@ async def _charge_quota_edit(
         raise ValueError(e.message) from e
 
 
+async def _reset_usage(
+    session: AsyncSession, pg: Any, service: UserService, charges: list[ResellerCharge]
+) -> tuple[list[ResellerCharge], bool]:
+    """Reset the panel usage; a failure keeps the quota edit going and settles the reset charge."""
+    try:
+        await pg.reset_user_by_id(int(service.pg_user_id))
+    except Exception as exc:
+        logger.debug("reset traffic failed uid=%s", service.pg_user_id, exc_info=True)
+        return await _settle_failed_reset(session, charges, exc), False
+    return charges, True
+
+
 async def _settle_failed_reset(
     session: AsyncSession, charges: list[ResellerCharge], exc: BaseException
 ) -> list[ResellerCharge]:
@@ -1124,12 +1140,7 @@ async def admin_set_service_quota(
         session, pg, service, hold, renew=renew, data_limit_bytes=data_limit_bytes, expire_ts=expire_ts,
         reset=do_reset,
     )
-    if do_reset:
-        try:
-            await pg.reset_user_by_id(int(service.pg_user_id))
-        except Exception as exc:
-            logger.debug("reset traffic failed uid=%s", service.pg_user_id, exc_info=True)
-            charges = await _settle_failed_reset(session, charges, exc)
+    charges, reset_done = await _reset_usage(session, pg, service, charges) if do_reset else (charges, False)
     payload = build_user_modify_payload(
         data_limit=data_limit_bytes,
         expire_ts=expire_ts,
@@ -1169,6 +1180,9 @@ async def admin_set_service_quota(
                 sync_service_quota_cache(service, live_info)
         except Exception:
             logger.debug("quota cache refresh failed uid=%s", service.pg_user_id, exc_info=True)
+    if renew or reset_done:
+        # A staff renewal writes absolute numbers and a reset zeroes usage: raw is the period now.
+        clear_period_start(service)
     service.notified_expire = False
     service.notified_traffic = False
     await release_volume_hold(session, hold)
@@ -1192,7 +1206,7 @@ async def admin_renew_service(
 ) -> ServiceSnapshot:
     """Admin renew: always a fresh period from now (does not follow plan carry).
 
-    Customer paid renewals, Mini App and automation use ``Plan.carry_remaining_quota``.
+    Customer paid renewals, Mini App and automation use the plan's volume/time carry switches.
     Staff renew from the users page stays the historical start-from-now + optional
     traffic reset so operators are not surprised after an upgrade.
     """

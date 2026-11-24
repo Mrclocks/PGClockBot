@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,7 +11,7 @@ import sqlalchemy as sa
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services.staff_audit import (
     PAGE_SIZE,
@@ -23,6 +22,7 @@ from app.services.staff_audit import (
     staff_action_views,
     staff_audit_scope,
 )
+from tests.postgres_support import add_shop_users, scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP_A = 71
@@ -69,15 +69,14 @@ class AuditDbHarness(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'audit.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(self.Session, SHOP_A, SHOP_B)
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
 
 class StaffAuditStoreTests(AuditDbHarness):
@@ -261,6 +260,26 @@ class StaffAuditPageTests(AuditDbHarness):
         self.assertNotIn("<b>ali</b>", response.text)
         self.assertIn("&lt;b&gt;ali&lt;/b&gt;", response.text)
 
+    async def test_a_shop_with_no_records_sees_the_table_empty_state(self):
+        async with self.Session() as session:
+            other = StaffActor(shop_id=SHOP_B, kind="shop_owner", user_id=SHOP_B, label="OTHERSHOP")
+            add_staff_action(session, other, action="gift_code_edit", target_type="gift_code", target_id=4)
+            await session.commit()
+        response = await self.client.get("/staff-actions")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("OTHERSHOP", response.text)
+        self.assertIn('class="table-empty"', response.text)
+        self.assertIn('colspan="6"', response.text)
+        self.assertIn("هنوز کاری ثبت نشده است.", response.text)
+        self.assertNotIn("تازه‌ترین کارها", response.text)
+
+    async def test_an_empty_older_page_links_back_to_the_newest_records(self):
+        response = await self.client.get("/staff-actions?before=5")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="table-empty"', response.text)
+        self.assertIn("کار قدیمی‌تری ثبت نشده است.", response.text)
+        self.assertIn('href="/staff-actions"', response.text)
+
     async def test_staff_without_a_shop_are_sent_home(self):
         self.staff = {"role": "pg_staff", "permissions": ["orders"]}
         response = await self.client.get("/staff-actions")
@@ -275,7 +294,7 @@ class StaffAuditMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("staff_actions_migration", ROOT / "alembic/versions/0078_shop_staff_actions.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))
             conn.execute(sa.text("INSERT INTO bot_users VALUES (1)"))

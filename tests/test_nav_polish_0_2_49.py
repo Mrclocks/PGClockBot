@@ -74,9 +74,9 @@ class QueueShortcutTests(unittest.TestCase):
         from app.bot.nav_inline import admin_groups_hub_keyboard
 
         kb = admin_groups_hub_keyboard({})
-        # First row should be hub groups, not shortcuts
+        # With no open work the panel starts with the command center and search, not a shortcut row
         cbs = [b.callback_data for b in kb.inline_keyboard[0]]
-        self.assertTrue(all(c.startswith("nv:adm:") for c in cbs))
+        self.assertEqual(cbs, ["cmd:h", "cmd:s"])
 
 
 class TicketActionsMarkupTests(unittest.TestCase):
@@ -101,16 +101,6 @@ class UserCardBackTests(unittest.TestCase):
         markup = admin_user_actions(42, is_blocked=False, role="user")
         cbs = [b.callback_data for row in markup.inline_keyboard for b in row]
         self.assertIn("adm:users:list:0", cbs)
-
-    def test_resellers_list_wraps_inline_back(self):
-        from pathlib import Path
-
-        src = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        chunk = src.split("async def adm_resellers_list")[1].split(
-            "RESELLER_SVCS_PAGE_SIZE"
-        )[0]
-        self.assertIn("with_inline_back", chunk)
-        self.assertIn("nv:adm:resellers", chunk)
 
 
 class TicketCancelReopenTests(unittest.IsolatedAsyncioTestCase):

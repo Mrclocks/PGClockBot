@@ -1,9 +1,10 @@
-"""Runtime manager for reseller-owned Telegram bots (multi-token polling)."""
+"""Runtime manager for reseller-owned Telegram bots: polling by default, webhook when configured."""
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -15,7 +16,13 @@ from app.services.bot_updates import BotUpdateScheduler, get_update_scheduler
 from app.services.secret_box import hash_bot_token, reveal_bot_token
 from app.db.session import SessionLocal
 
+if TYPE_CHECKING:
+    from app.services.shop_bot_webhook import ShopWebhookConfig
+
 log = logging.getLogger(__name__)
+
+# Registering or removing a webhook must not hold up starting or stopping the other shops.
+WEBHOOK_SETUP_SECONDS = 25
 
 _manager: "ResellerBotManager | None" = None
 _TOKEN_LOOKUP_CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
@@ -29,11 +36,20 @@ class ResellerBotManager:
     The scheduler runs customers in parallel and each customer's updates in order.
     """
 
-    def __init__(self, dispatcher: Dispatcher, scheduler: BotUpdateScheduler | None = None):
+    def __init__(
+        self,
+        dispatcher: Dispatcher,
+        scheduler: BotUpdateScheduler | None = None,
+        *,
+        webhook: ShopWebhookConfig | None = None,
+    ):
         self.dispatcher = dispatcher
         self._scheduler = scheduler or get_update_scheduler()
+        self._webhook = webhook
         self._tasks: dict[int, asyncio.Task] = {}
         self._bots: dict[int, Bot] = {}
+        # Shops whose updates arrive by webhook: no poll task, the shared route feeds the scheduler.
+        self._webhook_ids: set[int] = set()
         self._lock = asyncio.Lock()
         # Stopped bots still letting their in-flight updates finish (see _stop_locked).
         self._stopping: set[asyncio.Task[None]] = set()
@@ -110,11 +126,7 @@ class ResellerBotManager:
 
                 self._bots[reseller_profile_id] = bot
                 registered = True
-                task = asyncio.create_task(
-                    self._poll_loop(reseller_profile_id, bot),
-                    name=f"reseller-bot-{reseller_profile_id}",
-                )
-                self._tasks[reseller_profile_id] = task
+                await self._begin_delivery(reseller_profile_id, bot)
                 log.info("Started reseller bot profile=%s (@%s)", reseller_profile_id, uname)
                 return True
             except Exception as e:
@@ -127,8 +139,48 @@ class ResellerBotManager:
                     except Exception:
                         log.debug("start_reseller: ignored failure", exc_info=True)
 
+    async def _begin_delivery(self, reseller_profile_id: int, bot: Bot) -> None:
+        """Webhook when configured and Telegram accepts it; otherwise the poll loop, as before."""
+        if self._webhook is not None:
+            try:
+                await asyncio.wait_for(
+                    bot.set_webhook(
+                        self._webhook.url_for(reseller_profile_id),
+                        secret_token=self._webhook.secret_for(reseller_profile_id),
+                        drop_pending_updates=False,
+                        request_timeout=20,
+                    ),
+                    timeout=WEBHOOK_SETUP_SECONDS,
+                )
+            except Exception:  # any failure falls back to polling, which always works
+                log.warning("shop bot %s webhook not accepted; polling instead", reseller_profile_id, exc_info=True)
+            else:
+                self._webhook_ids.add(reseller_profile_id)
+                return
+        self._tasks[reseller_profile_id] = asyncio.create_task(
+            self._poll_loop(reseller_profile_id, bot),
+            name=f"reseller-bot-{reseller_profile_id}",
+        )
+
+    def webhook_bot(self, reseller_profile_id: int) -> Bot | None:
+        """The running shop bot whose updates come by webhook, or None."""
+        if reseller_profile_id not in self._webhook_ids:
+            return None
+        return self._bots.get(reseller_profile_id)
+
+    async def accept_webhook_update(self, bot: Bot, update: Any) -> None:
+        """Queue an update the shared webhook route received for one of this manager's bots."""
+        await self._scheduler.submit(self.dispatcher, bot, update)
+
     async def stop_reseller(self, reseller_profile_id: int) -> None:
+        """Stop a shop bot for good (token changed, shop off): Telegram stops posting its updates."""
         async with self._lock:
+            bot = self._bots.get(reseller_profile_id)
+            if bot is not None and reseller_profile_id in self._webhook_ids:
+                try:
+                    await asyncio.wait_for(bot.delete_webhook(request_timeout=12), timeout=WEBHOOK_SETUP_SECONDS)
+                except Exception:  # a webhook left behind only makes Telegram retry to a closed path
+                    log.warning("shop bot %s webhook not removed", reseller_profile_id, exc_info=True)
             await self._stop_locked(reseller_profile_id)
 
     async def stop_by_user_id(self, reseller_user_id: int) -> None:
@@ -139,6 +191,10 @@ class ResellerBotManager:
             pid = result.scalar_one_or_none()
         if pid is not None:
             await self.stop_reseller(int(pid))
+
+    def running_count(self) -> int:
+        """Shop bots this process is running now (polling or on a webhook)."""
+        return len(self._bots)
 
     async def restart_reseller_profile(self, profile_id: int) -> bool:
         async with SessionLocal() as session:
@@ -157,18 +213,22 @@ class ResellerBotManager:
         changed the token, or the next shop in stop_all, should not wait for."""
         task = self._tasks.pop(reseller_profile_id, None)
         bot = self._bots.pop(reseller_profile_id, None)
+        self._webhook_ids.discard(reseller_profile_id)
         if task is None and bot is None:
             return
         if task is not None:
             task.cancel()
-        finishing = asyncio.create_task(_finish_stop(task, bot), name=f"reseller-bot-stop-{reseller_profile_id}")
+        # A webhook bot has no poll loop to drain its updates; the stop task does it before closing.
+        drain = self._scheduler.drain_bot if task is None and bot is not None else None
+        finishing = asyncio.create_task(_finish_stop(task, bot, drain=drain), name=f"reseller-bot-stop-{reseller_profile_id}")
         self._stopping.add(finishing)
         finishing.add_done_callback(self._stopping.discard)
 
     async def stop_all(self) -> None:
         """Stop every shop bot and wait until all of them have finished draining, in parallel."""
         async with self._lock:
-            for rid in list(self._tasks.keys()):
+            # Webhooks stay registered on shutdown: Telegram keeps the updates until the next start.
+            for rid in list(self._bots.keys() | self._tasks.keys()):
                 await self._stop_locked(rid)
             stopping = set(self._stopping)
         if stopping:
@@ -325,9 +385,9 @@ async def open_notify_bot_for_reseller(session, reseller_user_id: int) -> tuple[
     return None, False
 
 
-def init_reseller_bot_manager(dispatcher: Dispatcher) -> ResellerBotManager:
+def init_reseller_bot_manager(dispatcher: Dispatcher, *, webhook: ShopWebhookConfig | None = None) -> ResellerBotManager:
     global _manager
-    _manager = ResellerBotManager(dispatcher)
+    _manager = ResellerBotManager(dispatcher, webhook=webhook)
     return _manager
 
 
@@ -418,8 +478,12 @@ async def sync_reseller_bot_runtime(profile: ResellerProfile) -> None:
         await mgr.restart_reseller_profile(profile_id)
 
 
-async def _finish_stop(task: asyncio.Task | None, bot: Bot | None) -> None:
-    """Wait for a cancelled poll loop to drain, then close the bot's session (closing twice is harmless)."""
+async def _finish_stop(
+    task: asyncio.Task | None, bot: Bot | None, *, drain: Callable[[int], Awaitable[None]] | None = None,
+) -> None:
+    """Wait for a cancelled poll loop (or ``drain``) to finish the bot's updates, then close its session."""
+    if drain is not None and bot is not None:
+        await drain(bot.id)
     if task is not None:
         try:
             await task

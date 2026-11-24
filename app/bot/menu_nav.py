@@ -13,6 +13,7 @@ from app.db.models import BotUser, Order, UserService
 from app.services.custom_service_name import needs_service_name
 from app.services.service_scope import shop_services_clause
 from app.services.staff_free_checkout import may_take_order_free
+from app.services.trial_offer import TRIAL_MENU_KEY, customer_trial_plans, shows_trial_on_keyboard
 from app.services.users import current_shop_reseller_id, get_all_settings
 import logging
 
@@ -92,14 +93,14 @@ async def user_sees_my_services(
 ) -> bool:
     """True when My Services should appear (VPN rows, reseller capacity, or the add-existing entry).
 
-    While «افزودن سرویس قبلی» is on the button is shown to everybody, because the add button
-    lives inside it and a customer without services has no other way to reach it.
+    While «افزودن سرویس قبلی» is on and its add button is placed in «سرویس‌های من», the button is
+    shown to everybody, because a customer without services has no other way to reach it.
     """
     if await user_has_services(session, int(db_user.id)):
         return True
-    from app.bot.service_import_ui import import_enabled
+    from app.bot.service_import_ui import import_in_services
 
-    if import_enabled(await get_all_settings(session)):
+    if import_in_services(await get_all_settings(session)):
         return True
     from app.services.reseller_access import load_reseller_my_service_profile
 
@@ -110,6 +111,17 @@ async def user_sees_my_services(
         reseller_owner_id=reseller_owner_id,
     )
     return profile is not None
+
+
+async def keyboard_shows_trial(session: AsyncSession, ui: dict, user_id: int) -> bool:
+    """«دریافت تست» belongs on this customer's main keyboard.
+
+    The cheap setting checks run first, so a shop that keeps the button in the home offer pays
+    no query for it on every menu.
+    """
+    if not shows_trial_on_keyboard(ui) or TRIAL_MENU_KEY not in kb._menu_order(ui):
+        return False
+    return bool(await customer_trial_plans(session, ui, int(user_id)))
 
 
 async def _platform_admin_menu_flags(
@@ -234,6 +246,8 @@ async def build_main_reply_keyboard(
         and "reseller_apply" in set(kb._menu_order(ui))
         and (as_user or role == "user")
     )
+    # Like the home offer: a customer menu only, never the admin's own keyboard.
+    show_trial = (as_user or role != "admin") and await keyboard_shows_trial(session, ui, int(db_user.id))
     markup = kb.main_reply_keyboard(
         role,
         has_services=has,
@@ -244,6 +258,7 @@ async def build_main_reply_keyboard(
         profile=owner_profile,
         pg_features=pg_feats,
         can_manage_representatives=can_reps,
+        show_trial=show_trial,
     )
     return markup, ui, role
 
@@ -512,9 +527,9 @@ async def show_nav_keyboard(
         # Customer keyboard only — never leak admin/reseller hub buttons
         from app.db.models import Role as _Role
 
-        from app.bot.service_import_ui import import_enabled
+        from app.bot.service_import_ui import import_in_services
 
-        has = await user_has_services(session, db_user.id) or import_enabled(ui)
+        has = await user_has_services(session, db_user.id) or import_in_services(ui)
         exit_action = (
             kb.REPLY_ACTION_RESELLER if is_reseller_bot else kb.REPLY_ACTION_ADMIN
         )
@@ -532,6 +547,7 @@ async def show_nav_keyboard(
             as_user=True,
             show_reseller_apply=preview_apply,
             preview_exit_action=exit_action,
+            show_trial=await keyboard_shows_trial(session, ui, int(db_user.id)),
         )
     elif level == NAV_REVIEW:
         # Approve/reject still uses a dedicated reply keyboard (FSM entity selected)

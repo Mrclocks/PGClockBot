@@ -3,22 +3,21 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import httpx
 from fastapi import FastAPI
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_review import register_miniapp_review
 from app.db.models import Base, BotUser, Order, Payment, ResellerProfile, ShopWallet, WalletTransaction
 from app.services.receipt_review import may_review_receipts
 from app.services.secret_box import seal_bot_token
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 ADMIN, OWNER, OWNER_NO_PERM, OTHER_OWNER, CUSTOMER = 1, 3, 4, 7, 5
 
@@ -28,8 +27,7 @@ class MiniAppReviewTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self) -> None:
         # A file database so concurrent requests each get their own session and connection.
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'review.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -93,7 +91,6 @@ class MiniAppReviewTestCase(unittest.IsolatedAsyncioTestCase):
         reset_shop_reseller_id(self.shop_token)
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def queue_ids(self) -> list[int]:
         response = await self.client.get("/api/mini/review")

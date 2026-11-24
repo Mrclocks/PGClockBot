@@ -10,10 +10,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-from app.services.panel_nav import NavViewer, build_sidebar
+from app.services.panel_nav import TOOLS_KEY, NavViewer, build_sidebar
 from app.services.resellers import RESELLER_SETTINGS_TABS
 from app.services.settings_search import SettingsSearchEntry, search_settings
-from app.services.settings_tab_groups import group_settings_tabs
+from app.services.settings_tab_groups import BOT_AREA, CUSTOMER_AREA, CUSTOMER_AREA_TITLE, group_settings_tabs
 from app.services.users import (
     PANEL_SETTINGS_TABS,
     PLATFORM_ONLY_SETTING_GROUPS,
@@ -68,10 +68,10 @@ def _tab_entries(
 
 
 def _settings_tab_entries(
-    base: str, tabs: Sequence[tuple[str, str]], area: str, *, for_shop: bool = False
+    base: str, tabs: Sequence[tuple[str, str]], area_key: str, area: str, *, for_shop: bool = False
 ) -> list[SettingsSearchEntry]:
     entries: list[SettingsSearchEntry] = []
-    for group in group_settings_tabs(tabs, ""):
+    for group in group_settings_tabs(tabs, "", area=area_key):
         for tab in group.tabs:
             if tab.sections:
                 entries.append(_entry(tab.label, f"{area} › {group.label}", tab.href or f"{base}?tab={tab.key}"))
@@ -110,10 +110,20 @@ def search_entries(viewer: NavViewer) -> list[SettingsSearchEntry]:
     # Modal settings (payment, support, referral) come before the long text and colour tabs.
     entries += _modal_entries({urlsplit(item.href).path: item.label for _, item in items})
     keys = {item.key for _, item in items}
+    # Each tool under the name of its area, as it sits in the area's list.
+    entries += [
+        _entry(label, item.label, href) for _, item in items if item.key == TOOLS_KEY for label, href in viewer.tool_links
+    ]
     if "bot_settings" in keys:
-        entries += _settings_tab_entries(OWNER_SETTINGS_BASE, SETTINGS_TABS, "تنظیمات ربات")
+        entries += _settings_tab_entries(OWNER_SETTINGS_BASE, SETTINGS_TABS, BOT_AREA, "تنظیمات ربات")
+        entries += _settings_tab_entries(OWNER_SETTINGS_BASE, SETTINGS_TABS, CUSTOMER_AREA, CUSTOMER_AREA_TITLE)
     if "shop_settings" in keys:
-        entries += _settings_tab_entries(SHOP_SETTINGS_BASE, RESELLER_SETTINGS_TABS, "تنظیمات فروشگاه", for_shop=True)
+        entries += _settings_tab_entries(
+            SHOP_SETTINGS_BASE, RESELLER_SETTINGS_TABS, BOT_AREA, "تنظیمات فروشگاه", for_shop=True
+        )
+        entries += _settings_tab_entries(
+            SHOP_SETTINGS_BASE, RESELLER_SETTINGS_TABS, CUSTOMER_AREA, CUSTOMER_AREA_TITLE, for_shop=True
+        )
     if "system_settings" in keys:
         entries += _system_entries()
     return entries

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import reseller as reseller_handlers
 from app.bot.handlers import reseller_package as handlers
@@ -15,6 +15,7 @@ from app.db.models import Base, BotUser, PgAdminSubscription, ResellerPlan, Rese
 from app.services import bot_feedback_texts as feedback
 from app.services.billing import GB
 from app.services.reseller_package import STALE_PAGE
+from tests.postgres_support import scoped_async_engine
 
 PERMS = '["orders","payments"]'
 
@@ -33,7 +34,7 @@ def buttons(markup) -> dict[str, str]:
 
 class ResellerPackageBotTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

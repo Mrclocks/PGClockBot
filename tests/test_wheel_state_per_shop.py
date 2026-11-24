@@ -3,22 +3,20 @@
 from __future__ import annotations
 
 import importlib.util
-import os
-import tempfile
 import unittest
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, LuckyWheelUserState
 from app.services.lucky_wheel import _get_or_create_state
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP_ID, CUSTOMER = 5, 7
@@ -26,8 +24,7 @@ SHOP_ID, CUSTOMER = 5, 7
 
 class WheelStatePerShopTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'w.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -40,7 +37,6 @@ class WheelStatePerShopTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def state(self, shop: int | None) -> LuckyWheelUserState:
         token = set_shop_reseller_id(shop)
@@ -74,7 +70,7 @@ class WheelStateMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("wheel_state_migration", ROOT / "alembic/versions/0062_wheel_state_per_shop.py")
         self.migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.migration)
-        self.engine = sa.create_engine("sqlite:///:memory:")
+        self.engine = scoped_sync_engine()
         self.addCleanup(self.engine.dispose)
         with self.engine.begin() as conn:
             conn.execute(sa.text(
@@ -93,7 +89,8 @@ class WheelStateMigrationTests(unittest.TestCase):
             self.run_migration(conn)
             self.run_migration(conn)  # idempotent
             conn.execute(sa.text("INSERT INTO lucky_wheel_user_state VALUES (3, 7, NULL, 0), (4, 7, 6, 0)"))
-            with self.assertRaises(sa.exc.IntegrityError):
+            # A failed statement aborts a PostgreSQL transaction; the savepoint keeps the rows above.
+            with self.assertRaises(sa.exc.IntegrityError), conn.begin_nested():
                 conn.execute(sa.text("INSERT INTO lucky_wheel_user_state VALUES (5, 7, 5, 0)"))
         with self.engine.begin() as conn:
             self.assertEqual(conn.execute(sa.text("SELECT COUNT(*) FROM lucky_wheel_user_state")).scalar(), 4)
@@ -105,7 +102,7 @@ class WheelStateMigrationTests(unittest.TestCase):
             self.run_migration(conn, down=True)
             rows = dict(conn.execute(sa.text("SELECT user_id, id FROM lucky_wheel_user_state")).all())
             self.assertEqual(rows, {7: 3, 8: 2})
-            with self.assertRaises(sa.exc.IntegrityError):
+            with self.assertRaises(sa.exc.IntegrityError), conn.begin_nested():
                 conn.execute(sa.text("INSERT INTO lucky_wheel_user_state VALUES (9, 7, 5, 0)"))
 
 
@@ -114,7 +111,7 @@ class WheelStateMigrationOtherNameTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("wheel_state_migration2", ROOT / "alembic/versions/0062_wheel_state_per_shop.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         self.addCleanup(engine.dispose)
         with engine.begin() as conn:
             conn.execute(sa.text(

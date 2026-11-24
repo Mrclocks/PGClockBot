@@ -13,6 +13,12 @@ sys.path.insert(0, str(ROOT))
 from app.services.web_auth import save_web_admin, validate_password_strength  # noqa: E402
 
 
+PASSWORD_RULES = (
+    "Password rejected. It needs at least 12 characters, 2 digits, 2 uppercase and 2 lowercase "
+    "English letters and one special character; no double quote (\"), not the username, not a "
+    "sample password, at most 72 bytes."
+)
+
 def _sync_env(user: str) -> None:
     """Keep WEB_ADMIN_USER in sync; never persist plaintext WEB_ADMIN_PASSWORD.
 
@@ -58,9 +64,10 @@ def main() -> None:
         if p1 != p2:
             print("Passwords do not match.")
             continue
-        ok, err = validate_password_strength(p1, username=user)
+        ok, _persian_reason = validate_password_strength(p1, username=user)
         if not ok:
-            print(err)
+            # The rule text is Persian (web panel); the terminal gets the same rules in English.
+            print(PASSWORD_RULES)
             continue
         break
     path = save_web_admin(user, p1)

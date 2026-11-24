@@ -23,7 +23,7 @@ target_metadata = Base.metadata
 
 # Alembic's default alembic_version.version_num is VARCHAR(32). Several
 # revision ids in this tree are longer (e.g. 0015_org_principal_web_identities).
-# SQLite ignores the limit; PostgreSQL truncates/errors — widen before migrate.
+# PostgreSQL would reject them — widen before migrate.
 _ALEMBIC_VERSION_NUM_LEN = 128
 
 
@@ -35,8 +35,6 @@ def get_sync_url() -> str:
 
 
 def _ensure_alembic_version_num_width(connection) -> None:
-    if connection.dialect.name != "postgresql":
-        return
     insp = inspect(connection)
     if not insp.has_table("alembic_version"):
         connection.execute(
@@ -65,7 +63,6 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
-        render_as_batch=url.startswith("sqlite"),
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -85,7 +82,6 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
-            render_as_batch=connection.dialect.name == "sqlite",
         )
         with context.begin_transaction():
             context.run_migrations()

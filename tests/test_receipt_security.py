@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import httpx
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, Order, Payment, ResellerProfile
 from app.services.receipt_files import (
@@ -17,6 +17,7 @@ from app.services.receipt_files import (
     safe_telegram_file_path,
 )
 from app.services.secret_box import seal_bot_token
+from tests.postgres_support import add_shop_users, scoped_async_engine
 
 
 
@@ -54,10 +55,12 @@ class ReceiptSourceGuardsTests(unittest.TestCase):
 
 class ReceiptBotTokenTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
+        sessions = async_sessionmaker(self.engine, expire_on_commit=False)
+        await add_shop_users(sessions, 3, 5)
+        self.session = sessions()
         self.session.add(ResellerProfile(user_id=3, bot_token=seal_bot_token("SHOP_TOKEN")))
         self.session.add(ResellerProfile(user_id=5, bot_token=None))
         await self.session.flush()

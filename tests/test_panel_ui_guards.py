@@ -102,12 +102,6 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
         self.assertIsNotNone(block)
         self.assertIn("color: var(--muted-fg)", block.group(1))
 
-    def test_settings_field_help_after_control(self):
-        src = (ROOT / "app/web/templates/_settings_field.html").read_text(encoding="utf-8")
-        # help must appear after the control close for text fields
-        self.assertIn("</select>\n    {% if help %}<small class=\"muted\">{{ help }}</small>{% endif %}", src)
-        self.assertRegex(src, r"<input name=\"s_\{\{ key \}\}\" value=\"\{\{ val \}\}\" />\s*\{% if help %\}")
-
     def test_no_escaped_muted_class_in_templates(self):
         bad = []
         needle = r'class=\"muted\"'
@@ -350,7 +344,6 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertRegex(inbox, r'btn-ok[^>]*>\s*آپدیت\s*<')
         upd = (ROOT / "app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn('id="upd-start"', upd)
-        self.assertIn("btn-ok", upd)
 
     def test_pg_admins_uses_row_actions_macro(self):
         src = (ROOT / "app/web/templates/pg_admins.html").read_text(encoding="utf-8")

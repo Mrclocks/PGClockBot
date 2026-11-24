@@ -6,10 +6,11 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import reseller, reseller_plan_extra_packs_admin as packs_admin
 from app.db.models import Base, BotUser, ResellerPlan, ResellerPlanExtraPack, Role
+from tests.postgres_support import scoped_async_engine
 
 HOSTILE_PLAN = "Gold <a href='https://evil.example'>x</a> & <b>"
 ESCAPED_PLAN = "Gold &lt;a href=&#x27;https://evil.example&#x27;&gt;x&lt;/a&gt; &amp; &lt;b&gt;"
@@ -78,7 +79,7 @@ class ResellerApplyMessageTests(unittest.IsolatedAsyncioTestCase):
 
 class ExtraPacksMessageTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

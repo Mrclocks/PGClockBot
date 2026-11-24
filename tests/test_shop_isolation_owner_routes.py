@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from urllib.parse import parse_qs, urlsplit
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from unittest.mock import AsyncMock, patch
 
@@ -89,7 +87,7 @@ class OwnerShopBoundaryTests(RoutesHarness):
     async def reject_as(self, session_cookie: dict, payment_id: int) -> AsyncMock:
         cookie = f"session={self.signer.dumps(session_cookie)}; csrf=token"
         headers = {"cookie": cookie, "x-csrf-token": "token", "origin": "http://panel.test"}
-        with patch("app.api.app.notify_payer", AsyncMock(return_value=True)) as notify:
+        with patch("app.api.order_review_pages.notify_payer", AsyncMock(return_value=True)) as notify:
             response = await self.client.post(f"/payments/{payment_id}/reject", headers=headers)
         self.assertEqual(response.status_code, 303)
         return notify

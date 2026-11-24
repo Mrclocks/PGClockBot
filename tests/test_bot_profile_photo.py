@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 from aiogram.exceptions import TelegramNetworkError
 from aiogram.methods import GetMe
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.datastructures import Headers, UploadFile
 
 from app.db.models import Base, BotUser, ResellerProfile
@@ -23,6 +23,7 @@ from app.services.miniapp_branding import brand_from_settings
 from app.services.miniapp_shop import PLATFORM_SWITCH, SHOP_SWITCH
 from app.services.secret_box import seal_bot_token
 from app.services.users import clear_settings_cache, get_all_settings, set_settings_bulk
+from tests.postgres_support import scoped_async_engine
 
 SHOP, OTHER_SHOP, NO_PERM_SHOP, OFF_SHOP = 5, 6, 7, 8
 PERMS = '["miniapp"]'
@@ -78,7 +79,7 @@ class StoreTests(unittest.IsolatedAsyncioTestCase):
         self.uploads = Path(self.tmp.name)
         self.dir_patch = patch.object(photos, "uploads_dir", return_value=self.uploads)
         self.dir_patch.start()
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

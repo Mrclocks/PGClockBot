@@ -41,7 +41,7 @@ class MoreScreenTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_more_opens_for_the_customers_own_service(self) -> None:
         callback = self._callback("svc:more:7")
-        svc = SimpleNamespace(id=7, pg_username="<b>me</b>")
+        svc = SimpleNamespace(id=7, pg_username="<b>me</b>", pg_user_id=None)
         with (
             patch.object(services, "customer_may_use_service", AsyncMock(return_value=True)),
             patch.object(services, "get_all_settings", AsyncMock(return_value={})),

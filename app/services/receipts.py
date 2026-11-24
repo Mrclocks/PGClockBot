@@ -3,19 +3,32 @@ from __future__ import annotations
 """Receipt submission: manual admin approve or optional auto-approve."""
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Order, Payment
+from app.db.models import Order, Payment, Plan
 from app.services.delivery import send_delivery_to_user
+from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_message
 from app.services.notifications import (
     notify_approved_delivery_stuck,
     notify_auto_approve,
+    notify_new_order,
     notify_new_subscription,
     notify_pending_approval,
     notify_wallet_topup_ok,
 )
-from app.services.orders import approve_payment, attach_receipt
+from app.services.delivery_recovery_policy import PENDING_STAFF_NOTE, is_delivered, pending_buyer_note
+from app.services.orders import DeliveryAttempt, approve_payment, attach_receipt, hold_unknown_delivery_for_review
+from app.services.pasarguard import failure_text
+from app.services.receipt_risk import (
+    ENABLED_KEY as RISK_ENABLED_KEY,
+    HOLD_KEY as RISK_HOLD_KEY,
+    ReceiptRisk,
+    assess_receipt,
+    risk_note,
+)
 from app.services.receipt_fingerprints import (
     download_receipt_sha256,
     find_duplicate_receipts,
@@ -77,26 +90,49 @@ async def submit_receipt(
         )
 
     await attach_receipt(session, payment, file_id, first_only=first_only)
+    payment_id = int(payment.id)
     try:
         await store_receipt_fingerprint(
             session,
-            payment_id=int(payment.id),
+            payment_id=payment_id,
             file_unique_id=file_unique_id,
             sha256=sha,
             commit=True,
         )
-    except Exception:
-        # Fingerprint is best-effort; payment attachment must stay durable.
-        pass
+    except SQLAlchemyError:
+        # Best effort: the receipt is already attached and committed. Roll the failed flush back,
+        # or the review below would run on a session that refuses every query.
+        logger.warning("receipt fingerprint not stored payment=%s", payment_id, exc_info=True)
+        await rollback_quiet(session)
+        # The rollback expired the payment; reload the committed row before reviewing it.
+        await session.refresh(payment)
 
     dup_note = format_dup_warning(matches) if matches else None
+    risk = await _assess_risk(session, payment, shop_id=shop_rid, duplicates=len(matches or []))
+    notes = [note for note in (dup_note, risk_note(risk) if risk else None) if note]
     return await process_receipt(
         session,
         payment,
         bot=bot,
         user_tg_id=user_tg_id,
-        reviewer_note=dup_note,
+        reviewer_note="\n\n".join(notes) or None,
+        risk=risk,
     )
+
+
+async def _assess_risk(
+    session: AsyncSession, payment: Payment, *, shop_id: int | None, duplicates: int
+) -> ReceiptRisk | None:
+    """The receipt's risk label when the shop shows it; a failed check only drops the label."""
+    if not on(await get_setting(session, RISK_ENABLED_KEY, "1", reseller_id=shop_id)):
+        return None
+    try:
+        return await assess_receipt(session, payment, shop_id=shop_id, duplicates=duplicates)
+    except SQLAlchemyError:
+        logger.warning("receipt risk not assessed payment=%s", payment.id, exc_info=True)
+        await rollback_quiet(session)
+        await session.refresh(payment)
+        return None
 
 
 async def auto_approve_receipt(
@@ -115,19 +151,12 @@ async def auto_approve_receipt(
     ``reason`` is shown to staff in the «تأیید خودکار» notice (why this one was automatic).
     """
     order = None
+    attempt = DeliveryAttempt()
     try:
-        order = await approve_payment(session, payment, reviewer_tg=0)
+        order = await approve_payment(session, payment, reviewer_tg=0, attempt=attempt)
         if user_tg_id:
-            try:
-                await send_delivery_to_user(bot, user_tg_id, session, payment, order)
-            except Exception as send_exc:
-                if order is not None:
-                    from app.services.ux20 import note_delivery_send_failure
-
-                    await note_delivery_send_failure(
-                        session, order=order, payment=payment, error=str(send_exc)
-                    )
-                raise
+            # A failed send is queued once by the handler below.
+            await send_delivery_to_user(bot, user_tg_id, session, payment, order)
         await notify_auto_approve(bot, session, payment, reason=reason)
         if payment.is_wallet_topup:
             await notify_wallet_topup_ok(bot, session, payment, user_tg_id)
@@ -163,32 +192,42 @@ async def auto_approve_receipt(
 
                 stuck_order = await session.get(Order, payment.order_id)
             if stuck_order is not None:
-                try:
-                    from app.services.ux20 import note_delivery_send_failure
-
-                    await note_delivery_send_failure(
-                        session,
-                        order=stuck_order,
-                        payment=payment,
-                        error=str(e),
-                    )
-                except Exception:
-                    logger.debug("process_receipt: ignored failure", exc_info=True)
+                await _queue_undelivered(session, stuck_order, payment, error=failure_text(e), attempt=attempt)
             await notify_approved_delivery_stuck(
-                bot, session, payment, user_tg_id, error=str(e)
+                bot, session, payment, user_tg_id, error=failure_text(e)
             )
-            return format_message(
-                "⚠️ رسید ثبت شد",
-                "پرداخت تأیید شد ولی تحویل کامل نشد.\n"
-                "ادمین می‌تواند «تلاش مجدد تحویل» را بزند یا از «تحویل ناموفق» پیگیری کند.",
-            )
+            if stuck_order is None:
+                return format_message("⚠️ رسید ثبت شد", PENDING_STAFF_NOTE)
+            if is_delivered(stuck_order):
+                return format_message(
+                    "✅ پرداخت تأیید شد",
+                    "سفارش انجام شد ولی ارسال پیام آن ناموفق بود؛ جزئیات را از «سرویس‌های من» ببینید.",
+                )
+            return format_message("⚠️ رسید ثبت شد", pending_buyer_note(stuck_order, payment))
+        logger.warning("receipt auto-approve failed payment=%s", payment.id, exc_info=True)
         await notify_pending_approval(
             bot, session, payment, user_tg_id, extra_note=reviewer_note
         )
         return format_message(
             "⚠️ رسید ثبت شد",
-            f"تأیید خودکار ناموفق بود ({e}).\nمنتظر تأیید دستی ادمین بمانید.",
+            "تأیید خودکار انجام نشد.\nرسید شما ثبت شده است؛ منتظر تأیید ادمین بمانید.",
         )
+
+
+async def _queue_undelivered(
+    session: AsyncSession, order: Order, payment: Payment, *, error: str, attempt: DeliveryAttempt
+) -> None:
+    """List an approved, undelivered order for the retry job and staff (unknown outcome stamped)."""
+    try:
+        if attempt.panel_may_hold_account:
+            await hold_unknown_delivery_for_review(session, order, error=error)
+            await session.refresh(payment)
+        else:
+            from app.services.delivery_failures import note_delivery_send_failure
+
+            await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    except SQLAlchemyError:
+        logger.warning("undelivered receipt order not queued order=%s", order.id, exc_info=True)
 
 
 async def _waits_for_schedule(session: AsyncSession, payment: Payment, shop_rid: int | None) -> bool:
@@ -199,6 +238,33 @@ async def _waits_for_schedule(session: AsyncSession, payment: Payment, shop_rid:
     return rule_from_settings(await get_all_settings(session, reseller_id=shop_rid)) is not None
 
 
+async def report_new_order(session: AsyncSession, payment: Payment, *, bot: Bot, user_tg_id: int | None) -> None:
+    """«🛒 سفارش جدید» for an order whose receipt now waits for staff; nothing for a wallet top-up.
+
+    The report used to go out when the buyer only picked a plan, so staff saw every abandoned
+    checkout. Orders paid without a review are reported by «اشتراک جدید» after delivery.
+    """
+    order = await session.get(Order, payment.order_id) if payment.order_id and not payment.is_wallet_topup else None
+    if order is None:
+        return
+    plan = await session.get(Plan, order.plan_id) if order.plan_id else None
+    plan_name = plan.name if plan is not None else None
+    if plan_name and int(order.quantity or 1) > 1:
+        plan_name = f"{plan_name} ×{int(order.quantity)}"
+    try:
+        await notify_new_order(bot, session, order=order, user_tg_id=user_tg_id, plan_name=plan_name)
+    except (TelegramAPIError, SQLAlchemyError):  # the receipt is saved; the review notice still follows
+        logger.warning("new order report failed order=%s", order.id, exc_info=True)
+        await rollback_quiet(session)
+
+
+async def _risk_holds(session: AsyncSession, risk: ReceiptRisk | None, shop_id: int | None) -> bool:
+    """A «بررسی دقیق» receipt waits for a person when the shop asks for it."""
+    if risk is None or not risk.needs_review:
+        return False
+    return on(await get_setting(session, RISK_HOLD_KEY, "0", reseller_id=shop_id))
+
+
 async def process_receipt(
     session: AsyncSession,
     payment: Payment,
@@ -206,6 +272,7 @@ async def process_receipt(
     bot: Bot,
     user_tg_id: int | None,
     reviewer_note: str | None = None,
+    risk: ReceiptRisk | None = None,
 ) -> str | None:
     """
     After receipt is attached:
@@ -243,10 +310,13 @@ async def process_receipt(
             auto = False
     if auto and await _waits_for_schedule(session, payment, shop_rid):
         auto = False
+    if auto and await _risk_holds(session, risk, shop_rid):
+        auto = False
     if auto:
         return await auto_approve_receipt(
             session, payment, bot=bot, user_tg_id=user_tg_id, reviewer_note=reviewer_note
         )
+    await report_new_order(session, payment, bot=bot, user_tg_id=user_tg_id)
     await notify_pending_approval(
         bot, session, payment, user_tg_id, extra_note=reviewer_note
     )

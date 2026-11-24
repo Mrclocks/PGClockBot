@@ -152,8 +152,11 @@ html[data-theme="light"] .btn-warn { color: var(--btn-fg, var(--brand-fg)) !impo
 .ds .ds-sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); margin: 0 0 var(--g2); }
 /* A title alone needs no room for an action, so the space above its letters is not padded out. */
 .ds .ds-sec-head:has(> :only-child) { min-height: 0; }
-/* The on/off switch of a section sits at the far end of its title row (rule 6). */
-.ds .ds-head-switch { display: inline-flex; align-items: center; flex: 0 0 auto; cursor: pointer; }
+/* A section that turns on and off (rule 6, ds_toggle_sec): the card's first row is its header (title, one line, switch);
+   the title reads as the card's title, and the body opens under it with the card's own gap. */
+.ds .ds-toggle-head .ui-switch-copy strong { font-size: var(--fs-3); font-weight: 700; color: var(--foreground); }
+.ds .ds-toggle-body { display: flex; flex-direction: column; gap: var(--box-gap); }
+.ds .ds-toggle-body > * { margin-block: 0; }
 /* A page form built of sections keeps the section gap to the box after it. */
 .ds .ds-page-form { margin: 0 0 var(--sec-gap); }
 /* While it is off only the title row shows: a card whose one body is hidden is not drawn. */
@@ -203,7 +206,6 @@ html[data-theme="light"] .btn-warn { color: var(--btn-fg, var(--brand-fg)) !impo
 .ds textarea { margin: 0; }
 .ds .ds-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--g2); min-height: var(--lbl-h); }
 .ds .ds-req { color: var(--destructive); font-weight: 700; }
-.ds .ds-error { margin: 0; color: var(--destructive); font-size: var(--fs-2); font-weight: 400; }
 .ds .ds-unit { position: relative; display: block; }
 /* The unit sits inside the field on its left; the number starts from the right edge, like the text around it, so it
    never drifts towards the unit. */
@@ -351,7 +353,6 @@ html[data-theme="dark"] .ds .ds-steps a.need { color: #fbbf24; }
 .ds .ds-tag:has(input:checked) svg, .ds .ui-switch-chip:has(input:checked)::before { display: block; }
 .ds .ui-switch-chip:has(input:checked) .ui-switch-copy strong { font-weight: 600; color: var(--sel-fg); }
 .ds .ds-tag:has(input:focus-visible), .ds .ui-switch-chip:has(input:focus-visible) { outline: 2px solid var(--sel-line); outline-offset: 2px; }
-.ds .ds-count { font-size: var(--fs-2); font-weight: 500; color: var(--muted-fg); }
 
 /* Status tags and counters. */
 .ds .badge, .ds .ds-badge, .ds .ds-meta {
@@ -369,6 +370,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   min-height: var(--ctl-h); align-items: center !important; gap: var(--g3);
 }
 .ds .ui-switch-copy { display: flex; flex-direction: column; gap: var(--g1); min-width: 0; }
+/* Risk switch: the switch, then its danger note, 12 apart inside one settings cell. */
+.ds .setting-item--risk:not([hidden]) { display: flex; flex-direction: column; gap: var(--g3); }
 .ds .ui-switch-copy strong { font-size: var(--fs-3); font-weight: 500; }
 .ds .ui-switch-copy small { font-size: var(--fs-2); line-height: 1.6; }
 /* Consecutive switches: one divided list, 12 above and below every divider; none at the ends. */
@@ -414,6 +417,7 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 /* A price typed in a list row is a compact box too, wide enough for a seven-digit amount. */
 .ds .ds-list-value > input { display: block; width: 100%; max-width: var(--money-w); }
 .ds .ds-list-row { position: relative; padding-block: var(--g3); margin: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+/* Buttons under a message: what the button opens and its text (with the link under it) share the width. */
 .ds .ds-list-row > * { margin: 0; }
 .ds .ds-list-row + .ds-list-row { border-top: 1px dashed var(--dash) !important; }
 .ds .ds-list-row input { height: var(--ctl-h); min-height: var(--ctl-h); font-size: var(--fs-3); font-weight: 600; }
@@ -423,7 +427,7 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
 .ds .ds-pack-amt .ds-unit-label { display: none; }
 .ds .ds-del {
   width: var(--ctl-h); height: var(--ctl-h); padding: 0; border-radius: var(--control-radius); border: 1px solid transparent; background: none;
-  color: var(--muted-fg); cursor: pointer; justify-self: center;
+  color: var(--destructive-fg); cursor: pointer; justify-self: center;
 }
 .ds .ds-del svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ds .ds-del:hover { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, transparent); }
@@ -515,14 +519,19 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   position: absolute; inset-inline: 0; top: calc(100% + var(--space-1)); z-index: 60;
   display: flex; flex-direction: column; max-height: min(60vh, 440px); overflow-y: auto; padding: var(--space-0);
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  /* The same lift as the header capsule and the bottom bar. */
+  box-shadow: var(--dock-glass-highlight), var(--dock-shadow);
 }
 :is(.side, .topbar) .side-search-results[hidden] { display: none; }
 :is(.side, .topbar) .side-search-hit {
-  display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: var(--btn-h);
+  position: relative; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: var(--btn-h);
   padding: var(--space-1) var(--space-1_5); border-radius: var(--inner-radius); color: var(--foreground); text-decoration: none;
 }
-:is(.side, .topbar) .side-search-hit + .side-search-hit { box-shadow: 0 -1px 0 color-mix(in srgb, var(--border) 70%, transparent); }
+:is(.side, .topbar) .side-search-hit + .side-search-hit::before {
+  /* A hairline between results, inset like the text: a ring on a rounded row would read as a card edge. */
+  content: ''; position: absolute; top: 0; inset-inline: var(--space-1_5); height: 1px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+}
 :is(.side, .topbar) .side-search-hit:hover, :is(.side, .topbar) .side-search-hit:focus-visible, :is(.side, .topbar) .side-search-hit.is-active {
   background: color-mix(in srgb, var(--brand) 10%, transparent); outline: none;
 }
@@ -608,7 +617,8 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   .topbar .side-search.topbar-search:is(:focus-within, :has(input:not(:placeholder-shown))) {
     border-color: color-mix(in srgb, var(--brand) 60%, transparent);
     background: var(--bg-card);
-    clip-path: inset(0 0 -100vh 0 round calc(var(--dock-inner) / 2));
+    /* Open below and to the sides, so the results' shadow is not cut into a rectangle at the field's edges. */
+    clip-path: inset(0 calc(-1 * var(--space-4)) -100vh calc(-1 * var(--space-4)) round calc(var(--dock-inner) / 2));
     transition:
       clip-path var(--dock-morph) var(--ease-out),
       background-color var(--motion-fast) var(--ease-standard),
@@ -644,6 +654,65 @@ html[data-theme="dark"] .ds .ds-badge[data-tone="warn"] { color: #fbbf24; }
   .topbar .topbar-search-close { transition: none !important; }
 }
 .side .side-theme-btn { min-height: var(--btn-h); padding: 0 var(--space-2); font-size: var(--fs-3); }
+
+/* ===================================================================== 14-1. Action-center modal
+   The header bell opens the action center as a modal (_inbox_modal_body.html): each item is a settings-list row
+   (§6-2) tinted by its tone, and the items that can be hidden end in a round «×» that opens the dismiss dialog.
+   A line under the list leads to the page while some items are hidden. */
+.ds .inbox-panel { display: flex; flex-direction: column; gap: var(--sec-gap); min-width: 0; }
+.ds .inbox-row { position: relative; display: flex; align-items: center; min-width: 0; --tile-tone: var(--foreground); }
+.ds .inbox-row.tone-warn { --tile-tone: var(--warn-fg); }
+.ds .inbox-row.tone-err { --tile-tone: var(--destructive-fg); }
+.ds .inbox-row-link { flex: 1 1 auto; min-width: 0; }
+/* Rows are wrapped with their «×», so the list's divider rule is drawn per wrapper, from beside the text. */
+.ds .inbox-row + .inbox-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  inset-inline: calc(var(--g3) + var(--cmp-h) + var(--g3)) var(--g3);
+  border-top: 1px solid var(--border);
+}
+.ds .inbox-row:has(.inbox-row-link:is(:hover, :focus-visible, :active))::before,
+.ds .inbox-row:has(.inbox-row-link:is(:hover, :focus-visible, :active)) + .inbox-row::before { opacity: 0; }
+.ds .inbox-row-dismiss {
+  display: grid;
+  place-items: center;
+  flex: 0 0 var(--cmp-h);
+  width: var(--cmp-h);
+  height: var(--cmp-h);
+  margin-inline: var(--g1) var(--g3);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--dock-tint);
+  color: var(--muted-fg);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.ds .inbox-row-dismiss svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ds .inbox-row-dismiss:hover { color: var(--foreground); }
+.ds .inbox-row-dismiss:active { transform: scale(0.96); }
+.ds .inbox-row-dismiss:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ds .inbox-hidden-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g2);
+  min-height: var(--ctl-h);
+  padding-inline: var(--g4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-fg);
+  font-size: var(--fs-2);
+  text-decoration: none;
+}
+.ds .inbox-hidden-go { display: inline-flex; align-items: center; gap: var(--g1); color: var(--foreground); font-weight: 600; }
+.ds .inbox-hidden-go svg { width: var(--ico-sm); height: var(--ico-sm); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .inbox-hidden-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .ds .inbox-row-dismiss { transition: none; }
+}
 
 /* ===================================================================== 15. Optical spacing
    Titles and field labels use a tight line box (1.25), so the space above their letters matches the space
@@ -801,6 +870,22 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .hub-row:is(:hover, :focus-visible, :active)::before,
 .ds .hub-row:is(:hover, :focus-visible, :active) + .hub-row::before { opacity: 0; }
 .ds .hub-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+/* Status list (system health): a row without a page to open is not a button, so it does not light up. */
+.ds .status-hub div.hub-row:hover { background: none; }
+.ds .status-hub .hub-row .badge { flex: 0 0 auto; }
+.ds .status-hub .hub-chev { min-width: var(--ico-sm); }
+/* A row that runs an action is a button inside its form: it keeps the row's look and the divider between rows. */
+.ds .status-hub .hub-row-form { margin: 0; }
+.ds .status-hub button.hub-row { width: 100%; border: 0; background: none; font: inherit; text-align: start; cursor: pointer; }
+.ds .status-hub .hub-row-form + .hub-row::before,
+.ds .status-hub .hub-row + .hub-row-form > .hub-row::before,
+.ds .status-hub .hub-row-form + .hub-row-form > .hub-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  inset-inline: calc(var(--g3) + var(--cmp-h) + var(--g3)) var(--g3);
+  border-top: 1px solid var(--border);
+}
 .ds .hub-ico {
   display: grid;
   place-items: center;
@@ -818,6 +903,119 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .hub-desc { overflow: hidden; color: var(--muted-fg); font-size: var(--fs-2); line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .ds .hub-chev { display: grid; flex: 0 0 auto; color: var(--muted-fg); }
 
+/* Settings list on a desktop (900 and up, DESIGN_SYSTEM.md §6-2): each page is its own tile, all tiles the same
+   height (two lines of description kept), in fixed columns so every group lines up with the others: two, and four
+   from 1400. Groups stack with their title above. Phones keep the list above. */
+@media (min-width: 900px) {
+  .ds.ds-settings > .settings-hub { grid-template-columns: minmax(0, 1fr); gap: var(--g6); }
+  .ds.ds-settings > .settings-hub .hub-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--g3);
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+  .ds.ds-settings > .settings-hub .hub-row {
+    align-items: flex-start;
+    height: 100%;
+    padding: var(--g4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    box-sizing: border-box;
+  }
+  .ds.ds-settings > .settings-hub .hub-row + .hub-row::before { content: none; }
+  .ds.ds-settings > .settings-hub .hub-row:hover { border-color: color-mix(in srgb, var(--tile-tone) 45%, var(--border)); }
+  .ds.ds-settings > .settings-hub .hub-ico { flex-basis: var(--ctl-h); width: var(--ctl-h); height: var(--ctl-h); }
+  .ds.ds-settings > .settings-hub .hub-text { gap: var(--g1); }
+  .ds.ds-settings > .settings-hub .hub-desc {
+    display: -webkit-box;
+    min-height: 3.2em;
+    line-height: 1.6;
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .ds.ds-settings > .settings-hub .hub-chev { align-self: center; }
+}
+@media (min-width: 1400px) {
+  .ds.ds-settings > .settings-hub .hub-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* Settings pages on a desktop (1200 and up, DESIGN_SYSTEM.md §6-2): the area's list becomes a menu beside the page
+   (settings_menu), so moving between pages is one click and the open one is marked. The header spans both columns;
+   everything else of the page sits in the content column, at most --settings-pane-w wide. The menu spans the content
+   rows, so the grid has no row gap (empty spanned rows would each add one): the header keeps 16 under it and every
+   later block keeps the page's 16 above it as a margin instead. Below 1200 the menu is hidden and the page keeps its back button to the list. */
+.ds .settings-nav { display: none; }
+@media (min-width: 1200px) {
+  #main .ds.ds-settings:has(> .settings-nav) {
+    --settings-nav-w: 272px;
+    --settings-pane-w: 880px;
+    display: grid;
+    grid-template-columns: var(--settings-nav-w) minmax(0, var(--settings-pane-w));
+    column-gap: var(--g6);
+    row-gap: 0;
+    align-items: start;
+  }
+  #main .ds.ds-settings:has(> .settings-nav) > * { grid-column: 2; min-width: 0; margin-top: var(--section-gap); }
+  /* The header carries the 16 above the menu and the first block (a section-tab row cannot take a margin). */
+  #main .ds.ds-settings:has(> .settings-nav) > .page-head { grid-column: 1 / -1; margin: 0 0 var(--section-gap); }
+  #main .ds.ds-settings > .settings-nav,
+  #main .ds.ds-settings > .settings-nav + * { margin-top: 0; }
+  .ds.ds-settings:has(> .settings-nav) > .page-head .page-back { display: none; }
+  #main .ds.ds-settings > .settings-nav {
+    position: sticky;
+    top: var(--g4);
+    grid-column: 1;
+    grid-row: 2 / span 60;
+    display: flex;
+    flex-direction: column;
+    gap: var(--g3);
+    max-height: calc(100vh - 2 * var(--g4));
+    overflow-y: auto;
+    padding: var(--g2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    box-sizing: border-box;
+  }
+}
+.ds .settings-nav { --tile-tone: var(--bot-line); }
+.ds .settings-nav--neutral { --tile-tone: var(--foreground); }
+.ds .settings-nav-group { display: flex; flex-direction: column; gap: 0; }
+.ds .settings-nav-title { margin: 0; padding: var(--g1) var(--g2); color: var(--muted-fg); font-size: var(--fs-1); font-weight: 600; line-height: 1.4; }
+.ds .settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--g2);
+  min-height: var(--cmp-h);
+  padding: var(--g1) var(--g2);
+  border-radius: var(--control-radius);
+  color: var(--foreground);
+  font-size: var(--fs-2);
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+.ds .settings-nav-item:hover { background: color-mix(in srgb, var(--foreground) 5%, transparent); }
+.ds .settings-nav-item:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.ds .settings-nav-item[aria-current="page"] { background: var(--sel-bg); color: var(--sel-fg); font-weight: 700; }
+.ds .settings-nav-ico {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--tile-tone) 10%, transparent);
+  color: var(--tile-tone);
+}
+.ds .settings-nav-item[aria-current="page"] .settings-nav-ico { background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--sel-fg); }
+.ds .settings-nav-ico svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .settings-nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* A settings modal as list → section (DESIGN_SYSTEM.md §3): the same rows, one column, as buttons that open the
    section in place. While a section is open the back circle takes the place of the title icon. */
 .ds .modal-list { grid-template-columns: minmax(0, 1fr); }
@@ -829,3 +1027,182 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 /* The one row of a settings page: its sections share the bar equally. */
 .ds .settings-sections { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; }
 .ds .settings-sections a { justify-content: center; text-align: center; }
+
+/* ===================================================================== 15. Group messages (DESIGN_SYSTEM.md §9)
+   Composer: audience cards, message, buttons and a Telegram-style preview. On wide screens the preview and the send
+   button stay beside the form; on phones everything is one column and the send button ends the form. */
+.ds .bc-compose { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); margin: 0; }
+.ds .bc-main, .ds .bc-side { display: flex; flex-direction: column; gap: var(--section-gap); min-width: 0; }
+.ds .bc-main > *, .ds .bc-side > * { margin: 0; }
+@media (min-width: 1100px) {
+  .ds .bc-compose { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); align-items: start; }
+  .ds .bc-side { position: sticky; top: var(--g4); }
+}
+.ds .bc-groups { width: 100%; }
+.ds .bc-groups button { flex: 1 1 0; }
+.ds .bc-reach {
+  display: flex; align-items: center; gap: var(--g3); padding: var(--g3) var(--g4);
+  border-radius: var(--inner-radius); background: var(--sel-bg); border: 1px solid var(--sel-line);
+}
+.ds .bc-reach-ico {
+  flex: 0 0 var(--ctl-h); height: var(--ctl-h); border-radius: var(--inner-radius); display: grid; place-items: center;
+  background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--sel-fg);
+}
+.ds .bc-reach-ico svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .bc-reach-copy { display: flex; flex-direction: column; gap: var(--g1); min-width: 0; }
+.ds .bc-reach-copy strong { font-size: var(--fs-4); font-weight: 700; color: var(--foreground); }
+.ds .bc-reach-copy small { font-size: var(--fs-2); color: var(--muted-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds .bc-reach.is-loading .bc-reach-copy strong { opacity: 0.5; }
+.ds .bc-reach.is-error { background: color-mix(in srgb, var(--destructive) 9%, transparent); border-color: color-mix(in srgb, var(--destructive) 30%, var(--line)); }
+.ds .bc-reach.is-error .bc-reach-ico { background: color-mix(in srgb, var(--destructive) 14%, transparent); color: var(--danger-text); }
+.ds .bc-reach.is-error small { color: var(--danger-text); white-space: normal; }
+.ds .bc-send { display: flex; margin: 0; }
+.ds .bc-send-btn { flex: 1 1 auto; }
+
+/* Buttons under a message: one collapsible row per button inside a framed list. */
+.ds .msg-btns { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--inner-radius); overflow: hidden; }
+.ds .msg-btns-rows:empty { display: none; }
+.ds .msg-btns .msg-btn:first-child { border-top: 0; }
+.ds .msg-btns-rows:not(:empty) + .ds-add { border-top: 1px dashed var(--dash); }
+.ds .msg-btn summary .ds-meta { max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.ds .msg-btn-dot, .ds .tg-key::before { flex: 0 0 auto; border-radius: var(--control-radius); }
+.ds .msg-btn-dot { width: 12px; height: 12px; border: 1px solid var(--line); background: var(--card); }
+.ds .msg-btn-dot[data-tone="primary"] { border-color: transparent; background: var(--info); }
+.ds .msg-btn-dot[data-tone="success"] { border-color: transparent; background: var(--ok); }
+.ds .msg-btn-dot[data-tone="danger"] { border-color: transparent; background: var(--destructive); }
+.ds .msg-btn-body { display: flex; flex-direction: column; gap: var(--g4); padding: 0 var(--g4) var(--g4); }
+.ds .msg-btn-body > * { margin: 0; }
+.ds .msg-btn-targets { display: flex; flex-direction: column; gap: var(--g3); }
+.ds .msg-btn-group { display: flex; flex-direction: column; gap: var(--g2); }
+.ds .msg-btn-group-title { font-size: var(--fs-2); color: var(--muted-fg); }
+.ds .msg-btn-chips { --ds-chip-cols: 3; }
+/* A target name is never cut: on a narrow phone it wraps to a second line inside its chip. */
+.ds .msg-btn-chips button { height: auto; min-height: var(--ctl-h); padding-block: var(--g1); white-space: normal; line-height: 1.35; }
+.ds .msg-btn-actions { display: flex; align-items: center; gap: var(--g2); }
+.ds .msg-btn-actions .btn-danger { margin-inline-start: auto; }
+.ds .msg-btn-actions svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ds .msg-btn-presets { display: flex; flex-wrap: wrap; gap: var(--g2); }
+@media (max-width: 600px) {
+  .ds .msg-btn-chips { --ds-chip-cols: 2; }
+}
+
+/* The message as the customer sees it: a chat background, the text bubble, then the buttons two to a row. */
+.ds .tg-preview {
+  display: flex; flex-direction: column; gap: var(--g1); padding: var(--g4);
+  border-radius: var(--inner-radius); background: color-mix(in srgb, var(--info) 7%, var(--muted));
+}
+.ds .tg-bubble { padding: var(--g3) var(--g4); border-radius: var(--inner-radius); background: var(--card); border: 1px solid var(--line); }
+.ds .tg-text { margin: 0; font-size: var(--fs-3); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
+.ds .tg-text.is-empty { color: var(--muted-fg); }
+.ds .tg-keys { display: flex; flex-direction: column; gap: var(--g1); }
+.ds .tg-keys:empty { display: none; }
+.ds .tg-key-row { display: flex; gap: var(--g1); }
+.ds .tg-key {
+  flex: 1 1 0; min-width: 0; min-height: var(--cmp-h); padding: 0 var(--g2); border: 0; border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--foreground) 9%, var(--card)); color: var(--foreground);
+  font: inherit; font-size: var(--fs-2); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.ds .tg-key:active { transform: scale(0.96); }
+.ds .tg-key[data-tone="primary"] { background: color-mix(in srgb, var(--info) 22%, var(--card)); color: var(--info-fg); }
+.ds .tg-key[data-tone="success"] { background: color-mix(in srgb, var(--ok) 22%, var(--card)); color: var(--ok-text); }
+.ds .tg-key[data-tone="danger"] { background: color-mix(in srgb, var(--destructive) 20%, var(--card)); color: var(--danger-text); }
+@media (prefers-reduced-motion: reduce) { .ds .tg-key { transition: none; } }
+
+/* Saved button sets in their modal. */
+.ds .msg-preset-list { list-style: none; margin: 0; padding: 0; }
+.ds .msg-preset-row { display: flex; align-items: center; gap: var(--g3); min-height: 56px; padding: var(--g2) var(--g4); }
+.ds .msg-preset-row + .msg-preset-row { border-top: 1px solid var(--line); }
+.ds .msg-preset-row form { margin: 0; }
+.ds .msg-preset-copy { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--g1); min-width: 0; }
+.ds .msg-preset-copy strong { font-size: var(--fs-3); font-weight: 600; }
+.ds .msg-preset-copy small { font-size: var(--fs-2); color: var(--muted-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds .msg-preset-empty { margin: 0; padding: var(--g4); font-size: var(--fs-2); }
+
+/* ===================================================================== 17. Panel update page (DESIGN_SYSTEM.md §6-4)
+   One version card whose colour is its state (data-tone), and a changelog card; side by side on a desktop. */
+.ds.upd { display: grid; gap: var(--section-gap); align-items: start; }
+@media (min-width: 1100px) { .ds.upd { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.ds.upd .upd-card { display: flex; flex-direction: column; gap: var(--box-gap); margin: 0; }
+.ds.upd .upd-head { display: flex; align-items: center; gap: var(--g3); min-height: var(--ctl-h); }
+.ds.upd .upd-head h2 { flex: 1 1 auto; margin: 0; font-size: var(--fs-4); font-weight: 700; }
+.ds.upd .upd-head small { color: var(--muted-fg); font-size: var(--fs-2); }
+.ds.upd .upd-head .icon-btn { border-radius: 50%; }
+.ds.upd .upd-go { width: 100%; }
+
+.ds .upd-hero {
+  --tone: var(--brand); --tone-fg: var(--brand-fg);
+  position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: var(--g3);
+  padding: var(--g6) var(--g4) var(--g4); border-radius: var(--inner-radius);
+  border: 1px solid color-mix(in srgb, var(--tone) 24%, transparent);
+  background: radial-gradient(110% 85% at 50% 0%, color-mix(in srgb, var(--tone) 22%, transparent), transparent 70%),
+    color-mix(in srgb, var(--foreground) 3%, transparent);
+}
+.ds .upd-hero::after {
+  content: ''; position: absolute; inset-inline: 20%; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tone) 80%, transparent), transparent);
+}
+.ds .upd-hero[data-tone="ok"] { --tone: var(--ok); --tone-fg: var(--ok-fg); }
+.ds .upd-hero[data-tone="warn"] { --tone: var(--warn); --tone-fg: var(--warn-fg); }
+.ds .upd-hero[data-tone="err"] { --tone: var(--destructive); --tone-fg: var(--destructive-fg); }
+.ds .upd-versions { display: flex; align-items: flex-end; justify-content: center; gap: var(--g4); }
+.ds .upd-ver { display: flex; flex-direction: column; align-items: center; gap: var(--g1); }
+.ds .upd-ver small { color: var(--muted-fg); font-size: var(--fs-2); }
+.ds .upd-ver strong {
+  font-size: var(--fs-5); line-height: 1.2; font-weight: 800; color: var(--tone-fg);
+  text-shadow: 0 0 24px color-mix(in srgb, var(--tone) 45%, transparent);
+}
+.ds .upd-ver.is-old strong { color: var(--muted-fg); font-size: var(--fs-4); font-weight: 600; text-shadow: none; }
+.ds .upd-arrow { display: grid; place-items: center; color: var(--tone-fg); margin-bottom: var(--g1); }
+.ds .upd-arrow .ico { width: 20px; height: 20px; }
+.ds .upd-status {
+  display: inline-flex; align-items: center; gap: var(--g2); max-width: 100%; padding: 6px 14px;
+  border-radius: var(--control-radius); background: color-mix(in srgb, var(--tone) 14%, transparent);
+  color: var(--tone-fg); font-size: var(--fs-2); font-weight: 600; text-align: center;
+}
+.ds .upd-status i {
+  flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 22%, transparent);
+}
+.ds .upd-status .ico { flex: 0 0 auto; width: 15px; height: 15px; stroke-width: 2.4; }
+.ds .upd-meta { margin: 0; color: var(--muted-fg); font-size: var(--fs-2); }
+.ds .upd-prog { width: 100%; display: flex; flex-direction: column; gap: var(--g2); }
+.ds .upd-bar { height: 8px; border-radius: var(--control-radius); overflow: hidden; background: color-mix(in srgb, var(--foreground) 9%, transparent); }
+.ds .upd-fill {
+  height: 100%; width: 100%; border-radius: inherit; transform-origin: right center; transform: scaleX(calc(var(--p, 0) / 100));
+  background: var(--tone); box-shadow: 0 0 12px color-mix(in srgb, var(--tone) 60%, transparent);
+  transition: transform var(--motion-med) ease;
+}
+.ds .upd-progline { display: flex; justify-content: space-between; gap: var(--g3); font-size: var(--fs-2); color: var(--muted-fg); }
+.ds .upd-progline b { color: var(--foreground); font-weight: 600; }
+
+.ds .upd-field { display: flex; flex-direction: column; gap: var(--g2); }
+.ds .upd-field > span { font-size: var(--fs-3); font-weight: 600; }
+.ds .upd-hint { color: var(--muted-fg); font-size: var(--fs-2); line-height: 1.7; }
+.ds .upd-note {
+  display: flex; gap: var(--g3); margin: 0; padding: var(--g3); border-radius: var(--inner-radius);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent); color: var(--muted-fg); font-size: var(--fs-2); line-height: 1.8;
+}
+.ds .upd-note .ico { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 2px; }
+/* While an update runs only its progress and the stay-on-page note show. */
+.ds.upd[data-show-ops="1"] .upd-busy-hide,
+.ds.upd[data-show-ops="0"] .upd-busy-only { display: none; }
+
+.ds .upd-notes { display: flex; flex-direction: column; }
+.ds .upd-notes-ver { margin: var(--g3) 0 var(--g1); color: var(--muted-fg); font-size: var(--fs-2); font-weight: 700; text-align: end; }
+.ds .upd-notes-ver:first-child { margin-top: 0; }
+.ds .upd-note-row { --c: var(--brand-fg); display: flex; gap: var(--g3); align-items: flex-start; padding: var(--g3) 0; border-top: 1px solid var(--border); }
+.ds .upd-note-row:first-child, .ds .upd-notes-ver + .upd-note-row { border-top: 0; padding-top: 0; }
+.ds .upd-note-row[data-tone="fix"] { --c: var(--ok-fg); }
+.ds .upd-note-row[data-tone="security"] { --c: var(--warn-fg); }
+.ds .upd-tag {
+  flex: 0 0 auto; min-width: 64px; padding: 3px 10px; border-radius: var(--control-radius); text-align: center; white-space: nowrap;
+  background: color-mix(in srgb, var(--c) 14%, transparent); color: var(--c); font-size: var(--fs-1); font-weight: 700; line-height: 1.6;
+}
+.ds .upd-note-row p { flex: 1 1 auto; margin: 0; font-size: var(--fs-3); line-height: 1.75; overflow-wrap: anywhere; }
+.ds .upd-note-row bdi { color: var(--muted-fg); font-size: var(--fs-1); }
+@media (prefers-reduced-motion: reduce) { .ds .upd-fill { transition: none; } }
+.ds .upd-hero[data-tone="ok"] .upd-status i,
+.ds .upd-hero:not([data-tone="ok"]) .upd-status .ico { display: none; }
+/* While installing, the progress line names the step, so the status capsule would repeat it. */
+.ds.upd[data-show-ops="1"] .upd-hero:not([data-tone="err"]) .upd-status { display: none; }

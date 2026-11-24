@@ -6,7 +6,6 @@ import asyncio
 import html
 import importlib.util
 import inspect
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,7 +15,7 @@ import httpx
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.shop_broadcast_pages import register_shop_broadcast_pages, shop_broadcast_scope
 from app.db.models import (
@@ -48,6 +47,7 @@ from app.services.shop_broadcast import (
     shop_audience_clause,
     shop_broadcast_html_snippet,
 )
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP_A = 20
@@ -70,8 +70,7 @@ class FakeBot:
 
 class ShopBroadcastCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'shop_bc.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -108,7 +107,6 @@ class ShopBroadcastCase(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
     async def run_all(self, log_id, bot=None, **kw):
         bot = bot or self.bot
@@ -376,6 +374,9 @@ class InputAndFailureTests(ShopBroadcastCase):
 
 class AuthzWebTests(ShopBroadcastCase):
     def test_shop_broadcast_scope_requires_broadcast_permission_and_shop(self):
+        self.assertEqual(
+            shop_broadcast_scope({"role": "reseller", "permissions": ["broadcast"], "bot_user_id": SHOP_A}), SHOP_A
+        )
         with self.assertRaises(HTTPException):
             shop_broadcast_scope({"role": "reseller", "permissions": ["campaigns"], "bot_user_id": SHOP_A})
         with self.assertRaises(HTTPException):
@@ -433,8 +434,10 @@ class MigrationTests(unittest.TestCase):
         )
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
+            # shop_id gets a foreign key to bot_users.
+            conn.execute(text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))
             conn.execute(
                 text(
                     "CREATE TABLE broadcast_logs (id INTEGER PRIMARY KEY, audience TEXT, text TEXT, "

@@ -7,13 +7,13 @@ telegram_id runs middleware get_or_create_user and inserts a fresh BotUser.
 
 from __future__ import annotations
 
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from tests.postgres_support import scoped_async_engine
 
 
 class DeleteBotUserBehaviorTests(unittest.IsolatedAsyncioTestCase):
@@ -21,16 +21,13 @@ class DeleteBotUserBehaviorTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "del.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _make_user(self, session, *, tid: int = 900001, wallet: int = 5000):
         from app.db.models import BotUser, Role
@@ -81,7 +78,7 @@ class DeleteBotUserBehaviorTests(unittest.IsolatedAsyncioTestCase):
             old_id = user.id
             tid = user.telegram_id
 
-            # Occupy the next id so SQLite won't reuse old_id on recreate
+            # Occupy the next id so the recreated user cannot reuse old_id
             filler = BotUser(
                 telegram_id=920099,
                 role=Role.USER.value,
@@ -140,7 +137,7 @@ class DeleteBotUserBehaviorTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_web_handler_only_oks_after_delete(self):
         """Success flash path is after delete_bot_user returns (post-commit)."""
-        api = Path("app/api/app.py").read_text(encoding="utf-8")
+        api = Path("app/api/user_list_pages.py").read_text(encoding="utf-8")
         block = api.split("async def users_delete", 1)[1].split(
             "async def menu_layout_page", 1
         )[0]

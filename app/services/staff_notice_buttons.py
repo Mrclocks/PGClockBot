@@ -15,6 +15,9 @@ SHOP_PANEL = ("🤝 پنل نماینده", "nv:res:home")
 RESELLERS_HUB = ("🤝 نمایندگان", "nv:adm:resellers")
 PASARGUARD_HUB = ("🖥 پاسارگارد", "nv:adm:pg")
 RESELLER_CARD_LABEL = "🤝 نماینده"
+# The «panel is down» scenario's confirmation, and the scenario list where it is ended.
+OUTAGE_SCENARIO = ("🚨 سناریوی «پنل قطع است»", "cmd:sc:down")
+SCENARIO_LIST = ("🎬 پایان سناریو", "cmd:sc")
 
 
 def _one(label_and_data: tuple[str, str]) -> InlineKeyboardMarkup:
@@ -38,6 +41,15 @@ def subordinate_report_markup(*, shop: bool) -> InlineKeyboardMarkup:
 
 def pasarguard_markup() -> InlineKeyboardMarkup:
     return _one(PASARGUARD_HUB)
+
+
+def link_alert_markup(*, is_down: bool) -> InlineKeyboardMarkup:
+    """Under a panel link alert: the PasarGuard hub, and starting (down) or ending (up) the outage scenario."""
+    follow_up = OUTAGE_SCENARIO if is_down else SCENARIO_LIST
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=text, callback_data=data)] for text, data in (PASARGUARD_HUB, follow_up)]
+    )
+    return notice_markup(markup) or markup
 
 
 def reseller_card_markup(user_id: int) -> InlineKeyboardMarkup:

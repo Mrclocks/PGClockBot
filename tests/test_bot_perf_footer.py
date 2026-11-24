@@ -57,9 +57,6 @@ class FooterRestoreTests(unittest.TestCase):
 
 
 class PerfWiringTests(unittest.TestCase):
-    def test_sqlite_wal_enabled(self):
-        src = Path("app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn("journal_mode=WAL", src)
 
     def test_shop_reuses_plans(self):
         src = Path("app/bot/handlers/shop.py").read_text(encoding="utf-8")

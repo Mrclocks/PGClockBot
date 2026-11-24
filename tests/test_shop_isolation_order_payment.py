@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot import keyboards  # noqa: F401  (import order: breaks a handler import cycle)
 from app.bot.handlers.shop import pay_back
@@ -18,6 +14,7 @@ from app.db import Base
 from app.db.models import BotUser, Order, OrderStatus
 from app.services.orders import is_customer_order_in_current_shop
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 SHOP_ID = 5
 PLATFORM_ORDER, SHOP_ORDER, OTHER_USER_ORDER = 1, 2, 3
@@ -25,8 +22,7 @@ PLATFORM_ORDER, SHOP_ORDER, OTHER_USER_ORDER = 1, 2, 3
 
 class OrderShopTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'o.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -48,7 +44,6 @@ class OrderShopTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def in_shop(self, order_id: int, shop: int | None, user_id: int = 7) -> bool:
         token = set_shop_reseller_id(shop)

@@ -33,7 +33,12 @@ from app.services.pg_access import (
     staff_from_platform_caps,
     staff_may_delete_pg_admin,
 )
-from app.services.pg_admin_roles import apply_admin_role, resolve_new_admin_role_id
+from app.services.pg_admin_roles import (
+    ROLE_LIST_UNREADABLE,
+    apply_admin_role,
+    is_missing_role_rejection,
+    resolve_new_admin_role_id,
+)
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.pg_panel_access import (
     close_access_warning,
@@ -60,12 +65,15 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("shop_settings", "تنظیمات ربات فروشگاه"),
     ("campaigns", "کمپین‌های هدفمند فروشگاه"),
     ("broadcast", "پیام گروهی به مشتریان فروشگاه"),
+    ("broadcast_links", "دکمهٔ لینک بیرونی زیر پیام‌های فروشگاه"),
     ("trial_users", "مشاهدهٔ کاربران تست و خریداران"),
     ("trial_users_manage", "پیام به کاربران تست"),
+    ("trial_reset", "اجازهٔ تست دوباره به کاربران تست بدون خرید"),
     ("catalog_discounts", "تخفیف و کاهش قیمت فروشگاه"),
     ("random_discounts", "تخفیف تصادفی فروشگاه"),
     ("gift_codes", "کد هدیه و کد تخفیف فروشگاه"),
     ("cashback", "کش‌بک خرید فروشگاه"),
+    ("discount_rules", "تخفیف خودکار فروشگاه"),
     ("wallet_adjust", "تنظیم دستی کیف پول مشتری"),
     ("loyalty_adjust", "تغییر دستی امتیاز مشتری"),
     ("customers_block", "مسدودسازی مشتری در فروشگاه"),
@@ -104,9 +112,9 @@ class FeaturePermGroup:
 FEATURE_PERM_LAYOUT: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
     ("فروش و سفارش", False, ("dashboard", "plans", "orders", "payments", "stats", "custom_service_name")),
     ("مشتریان", False, ("tickets", "customer_notes", "customer_services", "service_import_assign", "demo_users",
-                        "trial_users", "trial_users_manage", "customers_block", "customers_approve")),
-    ("بازاریابی و وفاداری", False, ("campaigns", "broadcast", "catalog_discounts", "random_discounts", "gift_codes", "cashback",
-                                   "loyalty")),
+                        "trial_users", "trial_users_manage", "trial_reset", "customers_block", "customers_approve")),
+    ("بازاریابی و وفاداری", False, ("campaigns", "broadcast", "broadcast_links", "catalog_discounts", "random_discounts", "gift_codes", "cashback",
+                                   "discount_rules", "loyalty")),
     ("فروشگاه و فنی", False, ("shop_settings", "miniapp", "service_import", "connection_status",
                              "connection_status_manage")),
     ("عملیات حساس مالی", True, ("payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "service_cleanup", "free_checkout")),
@@ -137,6 +145,8 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("qr", "QR اشتراک"),
     ("limits", "قوانین و محدودیت‌ها"),
     ("service_import", "افزودن سرویس قبلی"),
+    ("service_actions", "کارهای مشتری روی سرویس"),
+    ("service_cancel", "لغو سرویس"),
     ("guides", "آموزش اتصال"),
     ("naming", "قالب نام‌گذاری"),
     ("notifications", "هشدارها"),
@@ -603,7 +613,7 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
 
     from app.services.billing import BILLING_MODE_PAYG
     from app.services.formatting import format_toman
-    from app.services.pg_admin_subscription import is_addon_plan, plan_kind_of
+    from app.services.pg_admin_subscription import EXTRA_GB, EXTRA_USERS, is_addon_plan, plan_keeps_extra, plan_kind_of
 
     desc = html.escape((plan.description or "").strip() or "بدون توضیح")
     name = html.escape((plan.name or "").strip() or "—")
@@ -652,16 +662,16 @@ def format_reseller_plan_apply_detail(plan: ResellerPlan, *, currency: str) -> s
                 f"کاربر {format_toman(eu, currency) if eu else '—'})"
             )
         carry_period = bool(getattr(plan, "carry_remaining_period", True))
-        keep_extras = bool(getattr(plan, "keep_extras_on_renew", True))
+        keep_gb = plan_keeps_extra(plan, EXTRA_GB)
+        keep_users = plan_keeps_extra(plan, EXTRA_USERS)
         lines.append(
             "زمان مانده در تمدید: <b>"
             + ("منتقل می‌شود" if carry_period else "منتقل نمی‌شود")
             + "</b>"
         )
         lines.append(
-            "حجم/کاربر اضافه در تمدید: <b>"
-            + ("حفظ می‌شود" if keep_extras else "پاک می‌شود")
-            + "</b>"
+            "حجم اضافه در تمدید: <b>" + ("حفظ می‌شود" if keep_gb else "پاک می‌شود") + "</b> · "
+            "کاربر اضافه در تمدید: <b>" + ("حفظ می‌شود" if keep_users else "پاک می‌شود") + "</b>"
         )
     groups = (getattr(plan, "pg_group_ids", None) or "").strip()
     lines.append(
@@ -1323,6 +1333,9 @@ async def provision_reseller(
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
+            if role_id is None and is_missing_role_rejection(e):
+                # The role list was unreadable, so no role was sent; the panel created nothing.
+                raise ValueError(ROLE_LIST_UNREADABLE) from e
             # No second create: the first one may have succeeded on the panel.
             raise ValueError(f"ساخت ادمین پاسارگارد ناموفق: {user_safe_error(e)}") from e
 
@@ -1750,6 +1763,18 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
         "purchase_require_contact",
         "trial_require_iran_phone",
         "receipt_dup_policy",
+        "service_freeze_enabled",
+        "service_freeze_max_days",
+        "service_freeze_per_period",
+        "service_freeze_min_days_left",
+        "service_transfer_enabled",
+        "service_transfer_link_hours",
+        "service_transfer_per_period",
+        "service_transfer_new_link",
+        "service_transfer_plans",
+        "service_freeze_plans",
+        "receipt_risk_enabled",
+        "receipt_risk_hold_auto_approve",
         "connection_guides",
         "btn_guides",
         "btn_guide_open_link",

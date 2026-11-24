@@ -1,0 +1,33 @@
+{# «توقف و انتقال»: what a customer may do on their own service, one card per action (DESIGN_SYSTEM.md §6).
+   Each card's header is its title, one line and its switch (ds_toggle_sec); the body, with its save button, opens
+   only while the switch is on.
+   Expects: values, plan_scope_choices, service_action_bounds, settings_action, csrf_token. #}
+{% from "_ds.html" import ds_toggle_sec, ds_switch, ico %}
+{% from "_service_action_fields.html" import is_on, plan_scope_field, number_field with context %}
+
+<form method="post" action="{{ settings_action }}" class="form-stack ds-page-form" id="settings-form">
+  {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+
+  {% call ds_toggle_sec('توقف موقت سرویس', 'مشتری سرویسش را چند روز متوقف می‌کند و روزهای باقی‌مانده‌اش حفظ می‌شود.', 's_service_freeze_enabled', 'sf-enabled', is_on('service_freeze_enabled')) %}
+    <p class="ds-desc">از «⚙️ بیشتر» سرویس متوقف می‌شود؛ با «ادامهٔ سرویس» یا در پایان مهلت، با همان روزها دوباره فعال می‌شود.</p>
+    {{ plan_scope_field('service_freeze_plans', 'sf-plans') }}
+    <div class="ds-grid-2">
+      {{ number_field('service_freeze_max_days', 'حداکثر مدت توقف', 'روز', 'در پایان این مهلت سرویس خودکار فعال می‌شود') }}
+      {{ number_field('service_freeze_per_period', 'تعداد توقف در ۳۰ روز', 'بار') }}
+      {{ number_field('service_freeze_min_days_left', 'حداقل زمان باقی‌مانده', 'روز', '۰ یعنی بدون حداقل') }}
+    </div>
+    <div class="actions"><button class="btn" type="submit">ذخیرهٔ توقف موقت</button></div>
+  {% endcall %}
+
+  {% call ds_toggle_sec('انتقال سرویس', 'مشتری سرویسش را با یک لینک یک‌بارمصرف به کاربر دیگری در همین ربات می‌دهد.', 's_service_transfer_enabled', 'st-enabled', is_on('service_transfer_enabled')) %}
+    <p class="ds-desc">لینک از «⚙️ بیشتر» سرویس ساخته می‌شود و کسی که آن را بپذیرد صاحب سرویس می‌شود. تمدید خودکار سرویس خاموش می‌شود تا از کیف پول گیرنده بدون رضایتش برداشت نشود.</p>
+    {{ plan_scope_field('service_transfer_plans', 'st-plans') }}
+    <div class="ds-grid-2">
+      {{ number_field('service_transfer_link_hours', 'اعتبار لینک انتقال', 'ساعت', 'بعد از این مدت لینک کار نمی‌کند') }}
+      {{ number_field('service_transfer_per_period', 'تعداد انتقال در ۳۰ روز', 'بار') }}
+    </div>
+    <div class="ds-rows">{{ ds_switch('s_service_transfer_new_link', 'عوض شدن لینک اشتراک بعد از انتقال', help='پیشنهادی: روشن. لینک قبلی از کار می‌افتد تا صاحب قبلی دیگر به سرویس وصل نشود.', checked=is_on('service_transfer_new_link'), id='st-new-link') }}</div>
+    <div class="ds-note" data-tone="danger" role="note" data-ds-show-when="#st-new-link:0"{% if is_on('service_transfer_new_link') %} hidden{% endif %}>{{ ico('shield-alert') }}<span>بدون عوض شدن لینک، فرستنده بعد از انتقال هنوز با لینک قبلی به سرویس وصل می‌شود.</span></div>
+    <div class="actions"><button class="btn" type="submit">ذخیرهٔ انتقال سرویس</button></div>
+  {% endcall %}
+</form>

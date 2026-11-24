@@ -393,7 +393,7 @@ def register_principal_pages(app, *, render, require_admin, get_db, require_staf
         try:
             await assert_live_parent_for_child(session, staff)
         except RepresentativeUnifyError:
-            raise HTTPException(status_code=403, detail="forbidden")
+            raise HTTPException(status_code=403, detail="forbidden") from None
         qs = str(request.url.query or "")
         dest = "/resellers"
         if qs:

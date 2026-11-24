@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.api.reseller_pages import register_reseller_pages
 from app.db import Base
@@ -26,6 +24,7 @@ from app.services.reseller_wallet import (
     build_reseller_wallet_idempotency_key,
     change_notice,
 )
+from tests.postgres_support import scoped_async_engine
 
 PAYG_SHOP = 5
 FIXED_SHOP = 6
@@ -34,9 +33,9 @@ PAYG_SHOP_B = 7
 
 class _Db:
     async def setup(self) -> None:
-        self.engine = create_async_engine(
-            "sqlite+aiosqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-        )
+        # TestClient runs the app on its own event loop; asyncpg connections cannot move
+        # between loops, so every checkout opens a fresh one.
+        self.engine = scoped_async_engine(poolclass=NullPool)
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

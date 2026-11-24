@@ -35,3 +35,28 @@
   {%- if caller %}{{ caller('after') }}{% endif %}
 </div>
 {%- endmacro %}
+
+{# The role the bot applies to the person: «ادمین ربات» follows ADMIN_IDS, never the stored role alone. The panel
+   registers role_badge and is_bot_admin; an environment without them (a bare template render) shows the stored role. #}
+{% macro role_tag(user, class_name='') -%}
+{% if role_badge is defined %}{% set badge = role_badge(user) %}{% set css_class, label = badge.css_class, badge.label %}
+{% elif user.role == 'reseller' %}{% set css_class, label = 'role-reseller', 'نماینده' %}
+{% else %}{% set css_class, label = 'role-user', 'کاربر' %}{% endif %}
+<span class="badge {{ css_class }}{% if class_name %} {{ class_name }}{% endif %}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro role_label(user) -%}
+{% if role_badge is defined %}{{ role_badge(user).label }}{% elif user.role == 'reseller' %}نماینده{% else %}کاربر{% endif %}
+{%- endmacro %}
+
+{% macro shows_bot_admin(user) -%}
+{% if is_bot_admin is defined and is_bot_admin(user) %}1{% endif %}
+{%- endmacro %}
+
+{# Shown in place of the role form for a bot admin: the role comes from ADMIN_IDS, so the form would be undone. #}
+{% macro bot_admin_role_lock() -%}
+<div class="ds-note" role="note">{{ icon('info') }}<span>نقش «ادمین ربات» از «آیدی ادمین‌ها» در تنظیمات ربات می‌آید و از این فرم عوض نمی‌شود. برای برداشتن دسترسی، آیدی تلگرام این شخص را از همان‌جا پاک کنید.</span></div>
+<div class="actions">
+  <a class="btn btn-ghost" href="{{ bot_admin_settings_href }}">رفتن به تنظیمات ربات</a>
+</div>
+{%- endmacro %}

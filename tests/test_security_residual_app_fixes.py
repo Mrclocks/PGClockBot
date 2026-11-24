@@ -8,17 +8,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy import event, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from tests.postgres_support import scoped_async_engine
 
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def _enable_sqlite_fk(dbapi_conn, _connection_record):
-    cur = dbapi_conn.cursor()
-    cur.execute("PRAGMA foreign_keys=ON")
-    cur.close()
 
 
 class SourceContractTests(unittest.TestCase):
@@ -66,7 +61,7 @@ class SourceContractTests(unittest.TestCase):
             )
 
     def test_m10_import_uses_shop_allowlist_and_plan_gates(self):
-        src = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/services/shop_bundle.py").read_text(encoding="utf-8")
         self.assertIn("def shop_bundle_allowed_setting_keys", src)
         self.assertIn("async def _validate_import_plan", src)
         self.assertIn("plan_template_denial", src)
@@ -112,17 +107,13 @@ class WalletIsolationRepairTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "repair.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
-        event.listen(self.engine.sync_engine, "connect", _enable_sqlite_fk)
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _user(self, session, tg: int, *, reseller_id=None, wallet=0):
         from app.db.models import BotUser, Role
@@ -307,20 +298,17 @@ class ImportShopBundleAllowlistTests(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        db_path = Path(self._tmpdir.name) / "import.db"
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def test_reseller_import_drops_platform_only_keys(self):
         from app.db.models import BotUser, ResellerSetting, Role
-        from app.services.ux20 import import_shop_bundle
+        from app.services.shop_bundle import import_shop_bundle
 
         async with self.Session() as session:
             owner = BotUser(
@@ -333,7 +321,7 @@ class ImportShopBundleAllowlistTests(unittest.IsolatedAsyncioTestCase):
                 "pg_access": {"allowed_template_ids": [], "allowed_group_ids": []},
             }
             with patch(
-                "app.services.ux20._validate_import_plan",
+                "app.services.shop_bundle._validate_import_plan",
                 new=AsyncMock(return_value=None),
             ):
                 stats = await import_shop_bundle(
@@ -381,9 +369,7 @@ class BulkOrderPaymentsPermTests(unittest.IsolatedAsyncioTestCase):
         from app.services.table_bulk import bulk_order_action
 
         tmp = tempfile.TemporaryDirectory()
-        engine = create_async_engine(
-            f"sqlite+aiosqlite:///{Path(tmp.name) / 'bulk.db'}"
-        )
+        engine = scoped_async_engine()
         from app.db import Base
         import app.db.models  # noqa: F401
 

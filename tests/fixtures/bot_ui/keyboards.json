@@ -41,7 +41,7 @@
         },
         {
           "callback_data": "adm:broadcast:aud:users",
-          "text": "👥 کاربران عادی"
+          "text": "👥 مشتریان (بدون ادمین)"
         }
       ],
       [
@@ -56,13 +56,24 @@
       ],
       [
         {
+          "callback_data": "adm:bc:seg",
+          "style": "primary",
+          "text": "🎯 مخاطبان هدفمند"
+        },
+        {
+          "callback_data": "nv:adm:cmp",
+          "text": "📣 کمپین‌ها"
+        }
+      ],
+      [
+        {
           "callback_data": "bch:l",
           "text": "📜 تاریخچهٔ ارسال‌ها"
         }
       ],
       [
         {
-          "callback_data": "nv:adm:marketing",
+          "callback_data": "nv:adm:home",
           "text": "⬅️ بازگشت"
         }
       ]
@@ -71,6 +82,18 @@
   },
   "hub.admin.groups": {
     "inline_keyboard": [
+      [
+        {
+          "callback_data": "cmd:h",
+          "style": "primary",
+          "text": "⚡ مرکز فرمان"
+        },
+        {
+          "callback_data": "cmd:s",
+          "style": "primary",
+          "text": "🔎 جستجو"
+        }
+      ],
       [
         {
           "callback_data": "nv:adm:ops",
@@ -104,6 +127,16 @@
           "callback_data": "cma:home:0",
           "style": "primary",
           "text": "📡 وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:broadcast",
+          "text": "📢 پیام گروهی"
+        },
+        {
+          "callback_data": "qlk:v",
+          "text": "🔗 لینک‌های سریع"
         }
       ],
       [
@@ -142,6 +175,18 @@
       ],
       [
         {
+          "callback_data": "cmd:h",
+          "style": "primary",
+          "text": "⚡ مرکز فرمان"
+        },
+        {
+          "callback_data": "cmd:s",
+          "style": "primary",
+          "text": "🔎 جستجو"
+        }
+      ],
+      [
+        {
           "callback_data": "nv:adm:ops",
           "style": "success",
           "text": "🗓 عملیات روزانه (۶)"
@@ -173,6 +218,16 @@
           "callback_data": "cma:home:0",
           "style": "primary",
           "text": "📡 وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:broadcast",
+          "text": "📢 پیام گروهی"
+        },
+        {
+          "callback_data": "qlk:v",
+          "text": "🔗 لینک‌های سریع"
         }
       ],
       [
@@ -279,18 +334,8 @@
           "text": "⭐ باشگاه مشتریان"
         },
         {
-          "callback_data": "nv:adm:broadcast",
-          "text": "📢 پیام گروهی"
-        }
-      ],
-      [
-        {
           "callback_data": "nv:adm:gc",
           "text": "🎁 کدهای هدیه"
-        },
-        {
-          "callback_data": "nv:adm:cmp",
-          "text": "📣 کمپین‌ها"
         }
       ],
       [
@@ -741,7 +786,7 @@
     "inline_keyboard": [
       [
         {
-          "callback_data": "adm:st:find",
+          "callback_data": "cmd:hs",
           "text": "🔍 جستجو در تنظیمات"
         }
       ],
@@ -960,6 +1005,18 @@
       ],
       [
         {
+          "callback_data": "cmd:h",
+          "style": "primary",
+          "text": "⚡ مرکز فرمان"
+        },
+        {
+          "callback_data": "cmd:s",
+          "style": "primary",
+          "text": "🔎 جستجو"
+        }
+      ],
+      [
+        {
           "callback_data": "nv:res:grp:daily",
           "style": "success",
           "text": "📥 کارهای روزانه (۳)"
@@ -984,6 +1041,17 @@
       ],
       [
         {
+          "callback_data": "shp:bc:hub",
+          "style": "primary",
+          "text": "📢 پیام گروهی"
+        },
+        {
+          "callback_data": "qlk:v",
+          "text": "🔗 لینک‌های سریع"
+        }
+      ],
+      [
+        {
           "callback_data": "menu:home",
           "text": "⬅️ بازگشت"
         }
@@ -993,6 +1061,18 @@
   },
   "hub.reseller.manage_payg": {
     "inline_keyboard": [
+      [
+        {
+          "callback_data": "cmd:h",
+          "style": "primary",
+          "text": "⚡ مرکز فرمان"
+        },
+        {
+          "callback_data": "cmd:s",
+          "style": "primary",
+          "text": "🔎 جستجو"
+        }
+      ],
       [
         {
           "callback_data": "nv:res:grp:daily",
@@ -1015,6 +1095,17 @@
           "callback_data": "nv:res:grp:account",
           "style": "primary",
           "text": "💼 حساب من"
+        }
+      ],
+      [
+        {
+          "callback_data": "shp:bc:hub",
+          "style": "primary",
+          "text": "📢 پیام گروهی"
+        },
+        {
+          "callback_data": "qlk:v",
+          "text": "🔗 لینک‌های سریع"
         }
       ],
       [
@@ -1338,13 +1429,6 @@
         {
           "callback_data": "nv:w:tx",
           "text": "🟡📜 تراکنش‌ها"
-        }
-      ],
-      [
-        {
-          "callback_data": "nv:loy:home",
-          "style": "success",
-          "text": "⭐ باشگاه مشتریان"
         }
       ],
       [
@@ -3185,7 +3269,7 @@
           "text": "📢 همه"
         },
         {
-          "text": "👥 کاربران عادی"
+          "text": "👥 مشتریان (بدون ادمین)"
         }
       ],
       [
@@ -3240,6 +3324,11 @@
         {
           "style": "primary",
           "text": "📡 وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "text": "📢 پیام گروهی"
         }
       ],
       [
@@ -3344,9 +3433,6 @@
         {
           "style": "success",
           "text": "⭐ باشگاه مشتریان"
-        },
-        {
-          "text": "📢 پیام گروهی"
         }
       ],
       [

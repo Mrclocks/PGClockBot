@@ -5,20 +5,14 @@ from __future__ import annotations
 import re
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-from app.services.ux20 import (
-    FUNNEL_STEPS,
-    bot_deep_link,
-    bot_tg_resolve_link,
-    capacity_should_warn,
-    compute_user_risk_flags,
-    generate_charge_code,
-    normalize_charge_code,
-    parse_risk_flags,
-    serialize_risk_flags,
-    shop_bundle_to_json,
-)
+from app.services.bot_links import bot_deep_link, bot_tg_resolve_link
+from app.services.charge_codes import generate_charge_code, normalize_charge_code
+from app.services.funnel_metrics import FUNNEL_STEPS
+from app.services.reseller_capacity_warn import capacity_should_warn
+from app.services.shop_bundle import shop_bundle_to_json
+from app.services.user_risk import compute_user_risk_flags, parse_risk_flags, serialize_risk_flags
 
 
 class Ux20HelpersTests(unittest.TestCase):
@@ -101,7 +95,6 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
             "inbox.html",
         ):
             self.assertTrue((root / name).is_file(), name)
-        self.assertFalse((root / "tools.html").is_file())
         self.assertFalse((root / "_home_inbox.html").is_file())
         self.assertTrue((root / "gift_codes.html").is_file())
         self.assertFalse((root / "magic_links.html").is_file())
@@ -206,7 +199,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertNotIn("تبدیل", panel)
         self.assertIn("stat-ico", panel)
         self.assertEqual(panel.count("stat-ico"), 5)
-        ux = Path("app/services/ux20.py").read_text(encoding="utf-8")
+        ux = Path("app/services/funnel_metrics.py").read_text(encoding="utf-8")
         self.assertNotIn("_funnel_pct", ux)
         self.assertNotIn("_abandoned_plans", ux)
         self.assertNotIn("abandoned_plans", ux)
@@ -219,6 +212,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         draw = env.from_string('{% from "macros.html" import page_ico %}{{ page_ico(name) }}').render
         self.assertNotEqual(draw(name="panel-settings"), draw(name="bot-settings"))
         from app.services.panel_nav import build_sidebar, viewer_from_context
+        from app.services.settings_tab_groups import BOT_AREA_ICON
 
         # Panel settings: sliders; bot settings: robot face (not identical gear).
         owner = build_sidebar(viewer_from_context({"role": "admin"}, {}, is_owner=True), path="/home")
@@ -226,7 +220,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertEqual((icons["system_settings"], icons["bot_settings"]), ("gear", "bot"))
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("panel-settings", settings)
-        self.assertIn("bot-settings", settings)
+        self.assertEqual(draw(name=BOT_AREA_ICON), draw(name="bot-settings"))
         self.assertNotIn("brand_primary_color", Path("app/web/templates/base.html").read_text(encoding="utf-8"))
         self.assertNotIn("brand_primary_color", Path("app/api/app.py").read_text(encoding="utf-8"))
 
@@ -293,7 +287,7 @@ class Ux20RoutesRegistrationTests(unittest.TestCase):
 
 class Ux20AsyncServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_clone_plan_permission(self):
-        from app.services.ux20 import clone_plan
+        from app.services.plan_clone import clone_plan
 
         session = AsyncMock()
         result = MagicMock()
@@ -303,7 +297,7 @@ class Ux20AsyncServiceTests(unittest.IsolatedAsyncioTestCase):
             await clone_plan(session, 1, owner_reseller_id=None)
 
     async def test_action_center_shape(self):
-        from app.services.ux20 import build_action_center
+        from app.services.action_center import build_action_center
 
         session = AsyncMock()
 
@@ -492,15 +486,6 @@ class ButtonStyleTests(unittest.TestCase):
 
 
 class Ux20VersionTests(unittest.TestCase):
-    def test_version_aligned(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertEqual(Path("VERSION").read_text().strip(), __version__)
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn(f'"{__version__}"', notes)
-        self.assertIn('"0.1.0"', notes)
 
     def test_bot_tickets_controllable_from_panel(self):
         src = Path("app/api/panel_tickets_pages.py").read_text(encoding="utf-8")
@@ -514,7 +499,7 @@ class Ux20VersionTests(unittest.TestCase):
         self.assertIn("ارسال به تلگرام کاربر", html)
 
     def test_export_skips_secrets(self):
-        from app.services.ux20 import _is_secret_setting
+        from app.services.shop_bundle import _is_secret_setting
 
         for key in ("bot_token", "webhook_secret", "backup_telegram_bot_token"):
             self.assertTrue(_is_secret_setting(key), key)

@@ -12,12 +12,17 @@ from __future__ import annotations
 import html
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, OrgPrincipal, ResellerProfile, UserService
+from app.services.daily_report import previous_day_activity
+from app.services.finance_reports import shop_ops_snapshot
 from app.services.formatting import format_toman
+from app.services.pasarguard import get_pg
+from app.services.pg_overview import admin_usage_snapshot
 from app.services.service_scope import shop_services_clause
 from app.services.org_principals import (
     DEPTH_ONE,
@@ -110,17 +115,19 @@ async def collect_subordinate_stats(
     shops: list[SubordinateShop],
     *,
     traffic_by_user_id: dict[int, str] | None = None,
+    now: datetime | None = None,
 ) -> list[SubordinateStats]:
-    """Per-child shop stats (DB-scoped). Traffic text is optional/best-effort."""
-    from app.services.finance_reports import shop_ops_snapshot
-    from app.services.home_overview import shop_period_stats
+    """Per-child shop stats for the previous full Tehran day, the same day the daily report covers.
 
+    The digest is sent in the early hours, so «today» would hold only a few hours of activity.
+    Traffic text is optional/best-effort. The parent has few direct children, so the per-child
+    aggregate queries stay bounded.
+    """
     traffic_by_user_id = traffic_by_user_id or {}
     out: list[SubordinateStats] = []
     for shop in shops:
         rid = int(shop.reseller_user_id)
-        periods = await shop_period_stats(session, reseller_id=rid)
-        day = periods.get("day") or {}
+        day = await previous_day_activity(session, reseller_id=rid, now=now)
         ops = await shop_ops_snapshot(session, reseller_id=rid)
         svc_total = int(
             (
@@ -136,11 +143,11 @@ async def collect_subordinate_stats(
         out.append(
             SubordinateStats(
                 shop=shop,
-                users_new=int(day.get("new_users") or 0),
+                users_new=int(day.get("users_new") or 0),
                 users_total=int(ops.get("total_users") or 0),
-                orders_new=int(day.get("orders") or 0),
-                orders_delivered=int(day.get("delivered") or 0),
-                revenue_today=int(day.get("revenue") or 0),
+                orders_new=int(day.get("orders_new") or 0),
+                orders_delivered=int(day.get("orders_delivered") or 0),
+                revenue_today=int(day.get("revenue_today") or 0),
                 services_total=svc_total,
                 traffic_text=(traffic_by_user_id.get(rid) or "—"),
             )
@@ -152,7 +159,7 @@ def format_subordinate_report(
     rows: list[SubordinateStats],
     *,
     title: str = "گزارش نمایندگان",
-    period_label: str = "امروز",
+    period_label: str = "روز گذشته",
 ) -> str:
     """Telegram HTML digest — one block per direct child."""
     lines = [
@@ -184,20 +191,60 @@ async def build_subordinate_report_for_parent(
     *,
     parent: OrgPrincipal,
     traffic_by_user_id: dict[int, str] | None = None,
+    now: datetime | None = None,
 ) -> str | None:
     """Return report text, or ``None`` when parent has no reportable children."""
     shops = await list_direct_subordinate_shops(session, parent=parent)
     if not shops:
         return None
     stats = await collect_subordinate_stats(
-        session, shops, traffic_by_user_id=traffic_by_user_id
+        session, shops, traffic_by_user_id=traffic_by_user_id, now=now
     )
     title = (
         "گزارش نمایندگان"
         if is_owner_principal(parent)
         else "گزارش زیرنمایندگان"
     )
-    return format_subordinate_report(stats, title=title, period_label="امروز")
+    return format_subordinate_report(stats, title=title)
+
+
+def _role_index(roles: object) -> dict[int, dict]:
+    out: dict[int, dict] = {}
+    for role in roles if isinstance(roles, list) else []:
+        if isinstance(role, dict) and str(role.get("id") or "").isdigit():
+            out[int(role["id"])] = role
+    return out
+
+
+async def subordinate_traffic_map(session: AsyncSession, shops: list[SubordinateShop]) -> dict[int, str]:
+    """Shop user id -> the panel traffic label of its admin; best effort, never fails the digest.
+
+    Two panel reads for the whole digest (admins and roles), whatever the number of shops.
+    """
+    if not shops:
+        return {}
+    try:
+        pg = get_pg()
+        admins = await pg.get_admins()
+        roles = _role_index(await pg.get_admin_roles())
+    except Exception:  # noqa: BLE001 - the panel being down only blanks the traffic column
+        log.debug("subordinate report traffic skipped", exc_info=True)
+        return {}
+    by_username = {
+        str(a.get("username") or "").strip().lower(): a for a in admins or [] if isinstance(a, dict) and a.get("username")
+    }
+    profiles = await session.scalars(
+        select(ResellerProfile).where(ResellerProfile.id.in_([s.reseller_profile_id for s in shops]))
+    )
+    out: dict[int, str] = {}
+    for profile in profiles:
+        admin = by_username.get((profile.pg_admin_username or "").strip().lower())
+        if admin is None:
+            continue
+        role_id = admin.get("role_id")
+        role = roles.get(int(role_id)) if str(role_id or "").isdigit() else None
+        out[int(profile.user_id)] = str(admin_usage_snapshot(admin, role).get("traffic_text") or "—")
+    return out
 
 
 async def load_owner_parent(session: AsyncSession) -> OrgPrincipal | None:

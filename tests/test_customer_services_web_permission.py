@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from unittest.mock import AsyncMock, patch
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan, ResellerProfile, UserService
@@ -48,7 +47,7 @@ class CustomerServicesWebPermissionTests(RoutesHarness):
 
     async def set_shop_permissions(self, raw: str | None) -> None:
         async with AsyncSession(bind=self.engine) as session:
-            profile = await session.get(ResellerProfile, 1)
+            profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == SHOP_ID))
             profile.web_permissions = raw
             profile.bot_permissions = raw
             await session.commit()

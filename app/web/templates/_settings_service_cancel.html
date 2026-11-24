@@ -1,0 +1,37 @@
+{# «لغو سرویس»: the customer's cancellation of their own service, one card like «توقف و انتقال» (DESIGN_SYSTEM.md §6).
+   The header is the title, one line and the switch (ds_toggle_sec); the body, with its save button, opens only while
+   the switch is on. Fields that matter only for one choice follow that choice (data-ds-show-when).
+   Expects: values, plan_scope_choices, service_action_bounds, service_action_choices, settings_action, csrf_token. #}
+{% from "_ds.html" import ds_toggle_sec, ico %}
+{% from "_service_action_fields.html" import is_on, plan_scope_field, number_field, choice_field with context %}
+
+<form method="post" action="{{ settings_action }}" class="form-stack ds-page-form" id="settings-form">
+  {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+
+  {% call ds_toggle_sec('لغو سرویس', 'مشتری با نوشتن دلیل، لغو سرویسش را درخواست می‌کند و مبلغ برگشتی به کیف پول همین فروشگاه واریز می‌شود.', 's_service_cancel_enabled', 'sc-enabled', is_on('service_cancel_enabled')) %}
+    <p class="ds-desc">از «⚙️ بیشتر» سرویس ثبت می‌شود و مشتری پیش از ثبت، مبلغ برگشتی را می‌بیند. با لغو، سرویس در پنل غیرفعال و تمدید خودکارش خاموش می‌شود.</p>
+    {{ plan_scope_field('service_cancel_plans', 'sc-plans') }}
+
+    {% call choice_field('service_cancel_approval', 'روش تأیید', 'sc-approval') %}
+      <small class="muted" data-ds-show-when="#sc-approval:manual"{% if values.get('service_cancel_approval') == 'auto' %} hidden{% endif %}>درخواست در «مالی ← درخواست‌های لغو» و ربات ادمین می‌ماند؛ ادمین مبلغ پیشنهادی را می‌بیند و می‌تواند عوضش کند.</small>
+      <small class="muted" data-ds-show-when="#sc-approval:auto"{% if values.get('service_cancel_approval') != 'auto' %} hidden{% endif %}>سرویس همان لحظه لغو و مبلغ محاسبه‌شده به کیف پول واریز می‌شود. اگر پنل پاسخ ندهد یا مبلغ از سقف بیشتر باشد، درخواست برای ادمین می‌ماند.</small>
+    {% endcall %}
+
+    {% call choice_field('service_cancel_refund', 'مبلغ برگشتی', 'sc-refund') %}
+      {% set refund = values.get('service_cancel_refund', 'remaining') %}
+      <small class="muted" data-ds-show-when="#sc-refund:remaining"{% if refund != 'remaining' %} hidden{% endif %}>مبلغ دورهٔ فعلی (خرید یا آخرین تمدید و بسته‌های بعد از آن) ضرب در سهم باقی‌مانده؛ از زمان و حجم، هر کدام کمتر مانده باشد.</small>
+      <small class="muted" data-ds-show-when="#sc-refund:full"{% if refund != 'full' %} hidden{% endif %}>کل مبلغ دورهٔ فعلی، بدون توجه به مصرف.</small>
+      <small class="muted" data-ds-show-when="#sc-refund:none"{% if refund != 'none' %} hidden{% endif %}>سرویس لغو می‌شود و مبلغی برنمی‌گردد.</small>
+    {% endcall %}
+
+    <div class="ds-grid-2">
+      {{ number_field('service_cancel_fee_percent', 'کارمزد لغو', 'درصد', '۰ یعنی بدون کارمزد') }}
+      {{ number_field('service_cancel_window_days', 'مهلت لغو پس از خرید یا تمدید', 'روز', '۰ یعنی بدون مهلت') }}
+      <div data-ds-show-when="#sc-approval:auto"{% if values.get('service_cancel_approval') != 'auto' %} hidden{% endif %}>
+        {{ number_field('service_cancel_auto_max', 'سقف بازگشت خودکار', 'تومان', 'بیشتر از این، تأیید ادمین لازم است. ۰ یعنی بدون سقف') }}
+      </div>
+    </div>
+    <div class="ds-note" data-tone="danger" role="note" data-ds-show-when="#sc-approval:auto"{% if values.get('service_cancel_approval') != 'auto' %} hidden{% endif %}>{{ ico('shield-alert') }}<span>در حالت خودکار لغو بدون بررسی ادمین انجام می‌شود و برگشت‌پذیر نیست. با سقف بازگشت خودکار و مهلت لغو، خطر را محدود کنید.</span></div>
+    <div class="actions"><button class="btn" type="submit">ذخیرهٔ لغو سرویس</button></div>
+  {% endcall %}
+</form>

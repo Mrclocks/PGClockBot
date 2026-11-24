@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import shop
 from app.db.models import Base, BotUser, DeliveryFailure, Order, OrderStatus, Plan, TrialClaim
@@ -20,6 +20,7 @@ from app.services.orders import (
     settle_failed_free_delivery,
 )
 from app.services.pasarguard import PasarGuardError
+from tests.postgres_support import scoped_async_engine
 
 BUYER = 1
 TRIAL_PLAN = 1
@@ -27,7 +28,7 @@ TRIAL_PLAN = 1
 
 class TrialDeliveryTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()

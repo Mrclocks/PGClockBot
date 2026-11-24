@@ -5,7 +5,7 @@
   'account': 'user',
   'activity': 'pulse',
   'bot-settings': 'bot',
-  'broadcast': 'megaphone',
+  'broadcast': 'send',
   'custom': 'sliders',
   'delivery': 'alert',
   'expiring': 'time',
@@ -22,7 +22,7 @@
   'reseller-color': 'palette',
   'resellers': 'reseller',
   'settings': 'gear',
-  'shop_broadcast': 'megaphone',
+  'shop_broadcast': 'send',
   'templates': 'template',
   'tickets': 'ticket',
   'user-edit': 'user'
@@ -66,6 +66,7 @@
 {%- elif key == 'download' -%}<path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/>
 {%- elif key == 'phone' -%}<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/>
 {%- elif key == 'qr' -%}<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M14 14h2v2h-2zM18 14h2M14 18v2M18 18h2v2"/>
+{%- elif key == 'send' -%}<path d="M20.5 3.5 3.5 10.6l6.6 2.8 2.8 6.6z"/><path d="M10.1 13.4l4.3-4.3"/>
 {%- elif key == 'message' -%}<path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4V6a1 1 0 0 1 1-1z"/>
 {%- elif key == 'fixed' -%}<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>
 {%- elif key == 'gear' -%}<path d="M18.8 10.3 21.1 10.6v2.8l-2.3.3-.8 1.9 1.4 1.9-2 1.9-1.9-1.4-1.9.8-.3 2.3h-2.8l-.3-2.3-1.9-.8-1.9 1.4-1.9-1.9 1.4-1.9-.8-1.9-2.3-.3v-2.8l2.3-.3.8-1.9-1.4-1.9 1.9-1.9 1.9 1.4 1.9-.8.3-2.3h2.8l.3 2.3 1.9.8 1.9-1.4 1.9 1.9-1.4 1.9z"/><circle cx="12" cy="12" r="3"/>
@@ -106,6 +107,7 @@
 {%- elif key == 'ticket' -%}<path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/>
 {%- elif key == 'time' -%}<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>
 {%- elif key == 'traffic' -%}<path d="M4 19V5M4 19h16"/><path d="M7 15l4-4 3 3 5-6"/>
+{%- elif key == 'tools' -%}<path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L4 16.7a1.9 1.9 0 0 0 2.7 2.7l5.3-5.3a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.3-.4-.4-2.3 2.6-2.6z"/>
 {%- elif key == 'trash' -%}<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>
 {%- elif key == 'trial' -%}<circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 1.5M9 3h6"/>
 {%- elif key == 'user' -%}<circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/>

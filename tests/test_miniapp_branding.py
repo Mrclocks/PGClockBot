@@ -18,7 +18,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_brand_pages import register_miniapp_brand_pages
 from app.api.miniapp_pages import register_miniapp_pages
@@ -36,6 +36,7 @@ from app.services.miniapp_branding import (
 from app.services.miniapp_shop import PLATFORM_SWITCH, SHOP_SWITCH, new_shop_key
 from app.services.secret_box import seal_bot_token
 from app.services.users import clear_settings_cache, get_all_settings, set_settings_bulk
+from tests.postgres_support import scoped_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN_TOKEN = "111111:main-bot-token"
@@ -144,7 +145,7 @@ class BrandFormTemplateTests(unittest.TestCase):
 class BrandScopeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

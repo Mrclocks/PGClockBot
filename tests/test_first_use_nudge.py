@@ -1,19 +1,19 @@
 """First-use nudge: once per service, per-shop switch, shop bots only, and an unreachable panel retries."""
 import asyncio
 import importlib.util
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.exceptions import TelegramForbiddenError
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import event, text
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, BotUser, UserService
 from app.services import first_use_nudge as nudge
 from app.services.users import _SETTINGS_CACHE, SETTING_GROUPS, clear_settings_cache, set_setting
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 UNUSED = {"status": "active", "used_traffic": 0}
@@ -23,6 +23,10 @@ class FakePanel:
     def __init__(self):
         self.infos = {}
         self.calls = []
+
+    async def list_users_by_ids(self, ids):
+        # A panel that finds none of them: every service is read by its subscription, as before.
+        return {"users": []}
 
     async def subscription_info(self, token):
         self.calls.append(token)
@@ -34,8 +38,7 @@ class FakePanel:
 
 class NudgeCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'nudge.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -72,7 +75,6 @@ class NudgeCase(unittest.IsolatedAsyncioTestCase):
         await self.session.close()
         await self.engine.dispose()
         clear_settings_cache()
-        self.tmp.cleanup()
 
     def service(self, service_id, user_id, name, *, shop_id=None, age=30, remark="order:1", token="auto", is_cancelled=False):
         return UserService(
@@ -95,6 +97,33 @@ class NudgeCase(unittest.IsolatedAsyncioTestCase):
 
 
 class FirstUseNudgeTests(NudgeCase):
+    async def test_no_database_connection_is_held_while_the_panel_is_called(self):
+        held = {"connections": 0}
+        pool = self.engine.sync_engine.pool
+
+        def checked_out(*_args) -> None:
+            held["connections"] += 1
+
+        def checked_in(*_args) -> None:
+            held["connections"] -= 1
+
+        event.listen(pool, "checkout", checked_out)
+        event.listen(pool, "checkin", checked_in)
+        self.addCleanup(event.remove, pool, "checkout", checked_out)
+        self.addCleanup(event.remove, pool, "checkin", checked_in)
+        during_panel: list[int] = []
+        lookup = self.panel.subscription_info
+
+        async def counting_lookup(token):
+            during_panel.append(held["connections"])
+            return await lookup(token)
+
+        self.panel.subscription_info = counting_lookup
+        await self.session.close()  # the fixture's session is not the job's
+        self.assertEqual(await self.run_check(), 2)
+        self.assertTrue(during_panel)
+        self.assertEqual(set(during_panel), {0})
+
     async def test_only_unused_services_in_the_window_are_messaged_from_their_own_bot(self):
         self.assertEqual(await self.run_check(), 2)
         self.assertEqual([c.args[0] for c in self.platform_bot.send_message.await_args_list], [1001])
@@ -194,7 +223,7 @@ class FirstUseMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("first_use_migration", ROOT / "alembic/versions/0074_first_use_nudge.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text("CREATE TABLE user_services (id INTEGER PRIMARY KEY, pg_username TEXT, created_at TIMESTAMP)"))
             conn.execute(text("INSERT INTO user_services VALUES (1, 'old-service', '2026-01-01 00:00:00')"))

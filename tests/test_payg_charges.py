@@ -4,18 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import os
-import tempfile
 import unittest
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, ResellerBillingTransaction, ResellerCharge, ResellerPlan, ResellerProfile
@@ -30,6 +27,7 @@ from app.services.payg_charges import (
     settle_charge,
 )
 from app.services.payg_pricing import GB, ChargeEvent, PaygPriceError, ServiceChange
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 KEY = "a1b2c3d4e5f60718"
@@ -47,8 +45,7 @@ def create(gb: int = 10, *, key: str = KEY, expected: int | None = None) -> Char
 
 class LedgerCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'c.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -70,7 +67,6 @@ class LedgerCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def reserve(self, request: ChargeRequest, shop: int = 1) -> ResellerCharge | None:
         async with self.Session() as session:
@@ -236,7 +232,7 @@ def _load_migration():
 class MigrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.migration = _load_migration()
-        self.engine = sa.create_engine("sqlite:///:memory:")
+        self.engine = scoped_sync_engine()
         self.addCleanup(self.engine.dispose)
         with self.engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))

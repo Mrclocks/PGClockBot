@@ -3,16 +3,15 @@ and the phone bottom bar."""
 
 from __future__ import annotations
 
-import os
 import re
 import unittest
 from types import SimpleNamespace
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.api.app import create_api_app, templates
 from app.services.guide_catalog import TOPICS
 from app.services.marketing_nav import MarketingSection
+from app.services.tools_nav import ToolSection
 from app.services.panel_nav import (
     DOCK_SLOTS,
     MINIAPP_OWNER_SHORTCUTS,
@@ -27,12 +26,14 @@ ALL_PG = frozenset({"pg_overview", "pg_users", "pg_admins", "pg_nodes", "pg_grou
 
 
 def viewer(role: str = "admin", *, perms: tuple[str, ...] = (), pg: frozenset[str] = frozenset(), owner: bool = False,
-           add_rep: bool = False, manage_rep: bool = False, marketing: tuple[str, ...] = ()) -> NavViewer:
+           add_rep: bool = False, manage_rep: bool = False, marketing: tuple[str, ...] = (),
+           tools: tuple[tuple[str, str], ...] = ()) -> NavViewer:
     return NavViewer(role=role, perms=frozenset(perms), pg_perms=pg, is_owner=owner, can_add_representative=add_rep,
-                     can_manage_representatives=manage_rep, marketing_hrefs=marketing)
+                     can_manage_representatives=manage_rep, marketing_hrefs=marketing, tool_links=tools)
 
 
-OWNER = viewer(pg=ALL_PG, owner=True, manage_rep=True, marketing=("/loyalty?tab=overview", "/broadcast"))
+OWNER = viewer(pg=ALL_PG, owner=True, manage_rep=True, marketing=("/loyalty?tab=overview", "/broadcast"),
+               tools=(("پاکسازی سرویس‌ها", "/service-cleanup"), ("بکاپ", "/settings?tab=backup")))
 RESELLER = viewer("reseller", perms=("dashboard", "orders", "plans", "tickets", "shop_settings"), add_rep=True,
                   marketing=("/catalog-discounts",))
 PG_STAFF = viewer("pg_staff", pg=frozenset({"pg_users", "pg_hosts"}))
@@ -51,7 +52,7 @@ class SidebarPerRoleTests(unittest.TestCase):
         nav = labels(OWNER)
         self.assertEqual(nav["system"], ["داشبورد", "مرکز اقدام", "تنظیمات سیستم"])
         self.assertEqual(nav["shop"], ["نمای کلی فروشگاه", "کاربران ربات", "نمایندگان", "مالی", "پلن‌ها", "پشتیبانی",
-                                       "بازاریابی", "پاکسازی سرویس‌ها", "گزارش کارکنان", "تنظیمات ربات"])
+                                       "پیام گروهی", "بازاریابی", "ابزار و پاکسازی", "گزارش کارکنان", "مشتری و سرویس", "تنظیمات ربات"])
         self.assertEqual(nav["pg"][0], "نمای کلی پاسارگارد")
         self.assertEqual(nav["pg"][-1], "تست اتصال سرویس")
 
@@ -96,8 +97,43 @@ class ActiveItemTests(unittest.TestCase):
         self.assertEqual(active(OWNER, "/security"), ["تنظیمات سیستم"])
         self.assertEqual(active(OWNER, "/message-variables"), ["تنظیمات ربات"])
 
+    def test_customer_and_service_pages_light_their_own_entry_not_bot_settings(self) -> None:
+        for tab in ("customer", "links", "limits", "delivery", "naming", "qr", "guides", "customer_services", "service_cancel"):
+            with self.subTest(tab=tab):
+                self.assertEqual(active(OWNER, "/settings", tab), ["مشتری و سرویس"])
+                self.assertEqual(active(RESELLER, "/shop-settings", tab), ["مشتری و سرویس"])
+        self.assertEqual(active(RESELLER, "/shop-settings", "messages"), ["تنظیمات فروشگاه"])
+        self.assertEqual(active(RESELLER, "/shop-settings"), ["تنظیمات فروشگاه"])
+
+    def test_the_customer_entry_opens_its_list_for_each_role(self) -> None:
+        def entry(v):
+            return next(i for s in build_sidebar(v, path="/home") for i in s.items if i.label == "مشتری و سرویس")
+
+        self.assertEqual(entry(OWNER).href, "/settings?tab=customer")
+        self.assertEqual(entry(RESELLER).href, "/shop-settings?tab=customer")
+        self.assertNotIn("مشتری و سرویس", labels(viewer("reseller", perms=("dashboard",)))["shop"])
+
     def test_marketing_pages_light_the_marketing_entry(self) -> None:
-        self.assertEqual(active(OWNER, "/broadcast"), ["بازاریابی"])
+        self.assertEqual(active(OWNER, "/loyalty"), ["بازاریابی"])
+
+    def test_group_messages_have_their_own_entry_in_the_shop_section(self) -> None:
+        self.assertEqual(active(OWNER, "/broadcast"), ["پیام گروهی"])
+        shop = viewer("reseller", perms=("broadcast",), marketing=("/shop-broadcast",))
+        items = {i.key: i for s in build_sidebar(shop, path="/shop-broadcast") for i in s.items}
+        self.assertEqual(items["broadcast"].href, "/shop-broadcast")
+        self.assertTrue(items["broadcast"].active)
+        # A shop whose only marketing page is group messages gets no empty «بازاریابی» entry.
+        self.assertNotIn("marketing", items)
+
+    def test_campaigns_light_marketing_for_staff_without_group_messages(self) -> None:
+        campaigns_only = viewer("reseller", perms=("campaigns",), marketing=("/campaigns",))
+        self.assertEqual(active(campaigns_only, "/campaigns"), ["بازاریابی"])
+        both = viewer("reseller", perms=("campaigns", "broadcast"), marketing=("/campaigns", "/shop-broadcast"))
+        self.assertEqual(active(both, "/campaigns"), ["پیام گروهی"])
+        self.assertNotIn("بازاریابی", labels(both)["shop"])
+
+    def test_group_messages_entry_follows_the_route_guard(self) -> None:
+        self.assertNotIn("پیام گروهی", labels(RESELLER)["shop"])
 
     def test_finance_subpages_light_finance(self) -> None:
         self.assertEqual(active(OWNER, "/service-cancellations"), ["مالی"])
@@ -157,9 +193,10 @@ class RenderedSidebarTests(unittest.TestCase):
             self.assertIn(f'data-nav-collapse="{key}" aria-expanded="false"', html)
             self.assertIn(f'id="nav-panel-{key}"', html)
 
-    def test_service_cleanup_sidebar_item_has_an_icon(self) -> None:
-        html = self.render({"role": "admin", "permissions": []}, {"kind": "owner"}, is_owner=True)
-        link = re.search(r'<a href="/service-cleanup" class="nav-item[^"]*"[^>]*>.*?</a>', html, re.S)
+    def test_tools_sidebar_item_has_an_icon(self) -> None:
+        tools = (ToolSection("service_cleanup", "پاکسازی سرویس‌ها", "/service-cleanup", "", "trash"),)
+        html = self.render({"role": "admin", "permissions": []}, {"kind": "owner"}, is_owner=True, tool_sections=tools)
+        link = re.search(r'<a href="/tools" class="nav-item[^"]*"[^>]*>.*?</a>', html, re.S)
         self.assertIsNotNone(link)
         self.assertRegex(link.group(0), r'<svg class="nav-ico"[^>]*>\s*<path ')
 
@@ -169,18 +206,24 @@ def dock_keys(v: NavViewer, path: str = "/home") -> list[str]:
 
 
 class BottomBarTests(unittest.TestCase):
-    def test_owner_bar_holds_dashboard_action_center_finance_and_users(self) -> None:
+    def test_owner_bar_holds_dashboard_plans_finance_and_users(self) -> None:
         dock = build_dock(build_sidebar(OWNER, path="/home"))
-        self.assertEqual([i.key for i in dock.items], ["home", "inbox", "finance", "users"])
-        self.assertEqual([i.short_label for i in dock.items], ["داشبورد", "مرکز اقدام", "مالی", "کاربران"])
+        self.assertEqual([i.key for i in dock.items], ["home", "plans", "finance", "users"])
+        self.assertEqual([i.short_label for i in dock.items], ["داشبورد", "پلن‌ها", "مالی", "کاربران"])
+
+    def test_action_center_is_not_in_the_default_bar(self) -> None:
+        for v in (OWNER, RESELLER, PG_STAFF, viewer("reseller", perms=("dashboard",)), viewer("staff")):
+            self.assertNotIn("inbox", dock_keys(v))
 
     def test_reseller_bar_uses_customers_and_skips_pages_without_permission(self) -> None:
-        self.assertEqual(dock_keys(RESELLER), ["home", "inbox", "finance", "customers"])
+        self.assertEqual(dock_keys(RESELLER), ["home", "plans", "finance", "customers"])
         self.assertEqual(dock_keys(viewer("reseller", perms=("dashboard", "tickets"))),
-                         ["home", "inbox", "customers", "tickets"])
+                         ["home", "customers", "tickets"])
 
     def test_pasarguard_staff_bar_has_only_their_pages(self) -> None:
-        self.assertEqual(dock_keys(PG_STAFF), ["home", "inbox", "pg_tickets", "pg_users"])
+        self.assertEqual(dock_keys(PG_STAFF), ["home", "pg_tickets", "pg_users"])
+        with_overview = viewer("pg_staff", perms=("tickets",), pg=frozenset({"pg_users", "pg_overview"}))
+        self.assertEqual(dock_keys(with_overview), ["home", "tickets", "pg_users", "pg_overview"])
 
     def test_a_page_reached_from_two_sidebar_entries_is_in_the_bar_once(self) -> None:
         both_supports = viewer("pg_staff", perms=("tickets",), pg=frozenset({"pg_users"}))
@@ -201,13 +244,12 @@ class BottomBarTests(unittest.TestCase):
         on_finance = build_dock(build_sidebar(OWNER, path="/service-cancellations"))
         self.assertEqual([i.key for i in on_finance.items if i.active], ["finance"])
         self.assertFalse(on_finance.more_active)
-        on_plans = build_dock(build_sidebar(OWNER, path="/plans"))
-        self.assertFalse(any(i.active for i in on_plans.items))
-        self.assertTrue(on_plans.more_active)
+        on_cleanup = build_dock(build_sidebar(OWNER, path="/service-cleanup"))
+        self.assertFalse(any(i.active for i in on_cleanup.items))
+        self.assertTrue(on_cleanup.more_active)
 
     def test_bar_keeps_the_unread_flag_of_its_items(self) -> None:
         items = {i.key: i for i in build_dock(build_sidebar(OWNER, path="/home")).items}
-        self.assertEqual(items["inbox"].dot, "inbox_alert")
         self.assertEqual(items["finance"].dot, "cancel_alert")
 
 
@@ -227,8 +269,8 @@ class RenderedBottomBarTests(unittest.TestCase):
         html = _render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True)
         bar = self.bar(html)
         self.assertEqual(re.findall(r'<a href="([^"]+)" class="bottom-dock-item', bar),
-                         ["/home", "/inbox", "/finance", "/users"])
-        self.assertIn('aria-current="page"', bar.split('href="/inbox"')[0])
+                         ["/home", "/plans", "/finance", "/users"])
+        self.assertIn('aria-current="page"', bar.split('href="/plans"')[0])
         menu = re.search(r'<button[^>]*data-drawer-open[^>]*>.*?</button>', bar, re.S).group(0)
         self.assertIn('aria-expanded="false"', menu)
         self.assertIn("منو", menu)
@@ -253,16 +295,58 @@ class RenderedBottomBarTests(unittest.TestCase):
         self.assertEqual(html.count("data-panel-search-results"), 2)
 
     def test_unread_dot_is_shown_on_the_bar_item(self) -> None:
-        bar = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, inbox_alert=True))
-        inbox = re.search(r'<a href="/inbox".*?</a>', bar, re.S).group(0)
-        self.assertIn('aria-label="اعلان خوانده‌نشده"', inbox)
-        quiet = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, inbox_alert=False))
-        self.assertNotIn("nav-dot", re.search(r'<a href="/inbox".*?</a>', quiet, re.S).group(0))
+        bar = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, cancel_alert=True))
+        finance = re.search(r'<a href="/finance".*?</a>', bar, re.S).group(0)
+        self.assertIn('aria-label="درخواست لغو در انتظار"', finance)
+        quiet = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, cancel_alert=False))
+        self.assertNotIn("nav-dot", re.search(r'<a href="/finance".*?</a>', quiet, re.S).group(0))
 
     def test_menu_is_lit_on_a_page_outside_the_bar(self) -> None:
-        bar = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, path="/plans"))
+        bar = self.bar(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, path="/service-cleanup"))
         self.assertIn('class="bottom-dock-item is-active" data-drawer-open', bar)
         self.assertNotIn('aria-current="page"', bar)
+
+    @staticmethod
+    def header_inbox(html: str) -> str:
+        header = html.split('<header class="topbar')[1].split("</header>")[0]
+        return re.search(r'<a class="topbar-inbox[^"]*" href="/inbox".*?</a>', header, re.S).group(0)
+
+    def test_phone_header_shows_the_action_center_with_its_count(self) -> None:
+        html = _render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, inbox_badge_count=3)
+        button = self.header_inbox(html)
+        self.assertIn('<span class="topbar-inbox-count" aria-hidden="true">۳</span>', button)
+        self.assertIn('aria-label="مرکز اقدام، ۳ اعلان"', button)
+        self.assertNotIn("aria-current", button)
+
+    def test_header_action_center_has_no_count_when_nothing_is_waiting(self) -> None:
+        button = self.header_inbox(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, inbox_badge_count=0))
+        self.assertNotIn("topbar-inbox-count", button)
+        self.assertIn('aria-label="مرکز اقدام"', button)
+
+    def test_header_count_is_capped_at_ninety_nine(self) -> None:
+        button = self.header_inbox(_render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True, inbox_badge_count=150))
+        self.assertIn(">۹۹+</span>", button)
+
+    def test_header_action_center_opens_the_modal(self) -> None:
+        html = _render_page(self.OWNER_STAFF, {"kind": "owner"}, is_owner=True)
+        button = self.header_inbox(html)
+        self.assertIn('data-modal-open="modal-inbox"', button)
+        self.assertIn('data-modal-load="/inbox/panel"', button)
+        self.assertIn('data-modal-load-target="inbox-modal-body"', button)
+        modal = html.split('id="modal-inbox"')[1].split('id="modal-inbox-dismiss"')[0]
+        self.assertIn('id="inbox-modal-body" class="edit-modal-body" data-load-fragment', modal)
+        self.assertIn('aria-labelledby="modal-inbox-title"', modal)
+
+    def test_header_action_center_is_a_plain_link_on_the_inbox(self) -> None:
+        staff = {"role": "reseller", "permissions": ["dashboard"]}
+        button = self.header_inbox(_render_page(staff, {"kind": "l1"}, is_owner=False, path="/inbox"))
+        self.assertNotIn("data-modal-open", button)
+
+    def test_header_action_center_is_lit_on_the_inbox(self) -> None:
+        staff = {"role": "reseller", "permissions": ["dashboard"]}
+        button = self.header_inbox(_render_page(staff, {"kind": "l1"}, is_owner=False, path="/inbox"))
+        self.assertIn('class="topbar-inbox is-active"', button)
+        self.assertIn('aria-current="page"', button)
 
     def test_signed_out_pages_have_no_bar(self) -> None:
         html = _render_page(None, {}, is_owner=False, path="/login")

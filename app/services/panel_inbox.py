@@ -10,16 +10,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ResellerProfile
+from app.services.authz import authz_from_staff, can_shop
 from app.services.payg_charges import count_review_charges
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.usage_alert_messages import alerts_off_settings_page
 
 logger = logging.getLogger(__name__)
 
 _EMPTY_ACTION = {"entries": [], "has_items": False}
 _EMPTY_PAYG = {"suspended": [], "low": [], "threshold": 0, "review": 0, "has_items": False}
 
-# Soft cache for sidebar dot — avoid rebuilding action center on every navigation.
-_SIDEBAR_CACHE: dict[str, tuple[float, bool]] = {}
+# Soft cache for the header badge — avoid rebuilding the action center on every navigation.
+_SIDEBAR_CACHE: dict[str, tuple[float, int]] = {}
 _SIDEBAR_TTL_SEC = 45.0
 
 
@@ -47,6 +49,8 @@ def inbox_alert_count(ctx: dict[str, Any]) -> int:
     if ctx.get("shop_maintenance"):
         n += 1
     if ctx.get("capacity_warn"):
+        n += 1
+    if ctx.get("customer_alerts_off"):
         n += 1
     pr = ctx.get("payg_risk") or {}
     if pr.get("suspended"):
@@ -149,7 +153,7 @@ async def _safe_action_center(
     session: AsyncSession, *, reseller_id: int | None, expire_days: int
 ) -> dict:
     from app.services.db_safe import rollback_quiet
-    from app.services.ux20 import build_action_center
+    from app.services.action_center import build_action_center
 
     try:
         return await build_action_center(
@@ -159,6 +163,12 @@ async def _safe_action_center(
         logger.exception("action_center failed reseller_id=%s", reseller_id)
         await rollback_quiet(session)
         return dict(_EMPTY_ACTION)
+
+
+def _customer_alerts_off_page(staff: dict, ui: dict, *, is_owner: bool) -> str | None:
+    """Settings page to switch customer low-service alerts on, shown as an inbox item while they are off."""
+    can_edit_shop = is_owner or can_shop(authz_from_staff(staff), "shop_settings")
+    return alerts_off_settings_page(ui, is_owner=is_owner, can_edit_shop=can_edit_shop)
 
 
 async def build_inbox_context(
@@ -218,7 +228,7 @@ async def build_inbox_context(
     action_center_ok = True
     if has_scope:
         try:
-            from app.services.ux20 import build_action_center
+            from app.services.action_center import build_action_center
 
             action_center = await build_action_center(
                 session,
@@ -232,6 +242,7 @@ async def build_inbox_context(
             action_center_ok = False
 
     shop_maintenance = on(ui.get("shop_maintenance_enabled"))
+    customer_alerts_off = _customer_alerts_off_page(staff, ui, is_owner=admin_scope)
     capacity_warn = False
     payg_risk = dict(_EMPTY_PAYG)
 
@@ -245,7 +256,7 @@ async def build_inbox_context(
     elif rid and staff.get("pg_admin_username"):
         try:
             from app.services.pg_overview import build_reseller_pg_overview
-            from app.services.ux20 import capacity_should_warn
+            from app.services.reseller_capacity_warn import capacity_should_warn
 
             ov = await build_reseller_pg_overview(staff, session=session)
             if ov.get("ready"):
@@ -268,6 +279,7 @@ async def build_inbox_context(
         "action_center": action_center or dict(_EMPTY_ACTION),
         "shop_maintenance": shop_maintenance,
         "capacity_warn": capacity_warn,
+        "customer_alerts_off": customer_alerts_off,
         "payg_risk": payg_risk,
         "inbox_count": 0,
         "inbox_has": False,
@@ -295,18 +307,18 @@ async def build_inbox_context(
         await rollback_quiet(session)
 
     # Refresh sidebar cache from authoritative page build.
-    _SIDEBAR_CACHE[_cache_key(staff)] = (time.monotonic(), bool(ctx["inbox_has"]))
+    _SIDEBAR_CACHE[_cache_key(staff)] = (time.monotonic(), int(ctx["inbox_count"]))
     return ctx
 
 
-async def sidebar_inbox_has_alerts(
+async def sidebar_inbox_count(
     session: AsyncSession,
     request,
     staff: dict,
     *,
     force: bool = False,
-) -> bool:
-    """Boolean for sidebar nav-dot (cached briefly)."""
+) -> int:
+    """Visible inbox items for the header badge and sidebar dot (cached briefly)."""
     key = _cache_key(staff)
     now = time.monotonic()
     if not force:
@@ -316,10 +328,10 @@ async def sidebar_inbox_has_alerts(
 
     try:
         ctx = await build_inbox_context(session, request, staff)
-        has = bool(ctx.get("inbox_has"))
+        count = int(ctx.get("inbox_count") or 0)
     except Exception:
-        logger.exception("sidebar_inbox_has_alerts failed")
-        has = False
+        logger.exception("sidebar_inbox_count failed")
+        count = 0
 
-    _SIDEBAR_CACHE[key] = (now, has)
-    return has
+    _SIDEBAR_CACHE[key] = (now, count)
+    return count

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -19,6 +19,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy import event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -148,6 +149,17 @@ class PlanCategory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+def _legacy_carry_default(context) -> bool:
+    """Insert default of the split carry switches: the old combined switch when it was given."""
+    value = context.get_current_parameters().get("carry_remaining_quota")
+    return True if value is None else bool(value)
+
+
+def _legacy_keep_extras_default(context) -> bool:
+    value = context.get_current_parameters().get("keep_extras_on_renew")
+    return True if value is None else bool(value)
+
+
 class Plan(Base):
     __tablename__ = "plans"
 
@@ -160,6 +172,10 @@ class Plan(Base):
     data_limit_gb: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     pg_template_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     pg_group_ids: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Group mode with no chosen group: PasarGuard gives the user the groups of the shop's admin.
+    pg_panel_groups: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
     # Optional per-plan username naming; NULL/empty → fall back to global settings
     pg_username_prefix: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     pg_username_suffix: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -178,10 +194,18 @@ class Plan(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
-    # When true (default), renewal/upgrade/downgrade adds leftover volume and time.
-    # When false, the new period is exactly this plan's volume and duration.
+    # Superseded by carry_remaining_volume / carry_remaining_time; kept one release, no longer read.
     carry_remaining_quota: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
+    )
+    # When true (default), a renewal/upgrade/downgrade adds the leftover volume (time) to the
+    # plan's; when false, that part of the new period is exactly this plan's. A row inserted
+    # with only the old switch copies it.
+    carry_remaining_volume: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_carry_default, server_default=text("true")
+    )
+    carry_remaining_time: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_carry_default, server_default=text("true")
     )
     # Plan-scoped customer extra stairs (volume GB / duration months), like reseller fixed.
     allow_buy_extra: Mapped[bool] = mapped_column(
@@ -252,7 +276,6 @@ class Order(Base):
         Index("ix_orders_created_at", "created_at"),
         Index(
             "uq_orders_service_quota_mutation", "service_id", unique=True,
-            sqlite_where=text("service_mutation_pending = true"),
             postgresql_where=text("service_mutation_pending = true"),
         ),
         # One open order per shop may hold a chosen service name (platform orders: shop 0).
@@ -261,10 +284,11 @@ class Order(Base):
             text("coalesce(reseller_id, 0)"),
             "requested_username",
             unique=True,
-            sqlite_where=text(OPEN_NAMED_ORDER_SQL),
             postgresql_where=text(OPEN_NAMED_ORDER_SQL),
         ),
         Index("ix_orders_shop_amount_created", "reseller_id", "amount", "created_at"),
+        # Daily reports count deliveries of one shop in one day.
+        Index("ix_orders_shop_delivered_at", "reseller_id", "delivered_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -307,10 +331,30 @@ class Order(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    # When the order first became delivered. ``updated_at`` moves on every later edit, so reports
+    # that count a day's deliveries and revenue read this instead.
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped["BotUser"] = relationship(back_populates="orders", foreign_keys=[user_id])
     plan: Mapped[Optional["Plan"]] = relationship()
     payments: Mapped[list["Payment"]] = relationship(back_populates="order")
+
+
+def delivered_stamp(status: str, *, now: datetime | None = None) -> dict[str, object]:
+    """Extra ``update(Order).values(...)`` for a bulk status change: stamps the first delivery time.
+
+    A bulk ``UPDATE`` skips the attribute event below, so callers that may set ``delivered``
+    through one add these values.
+    """
+    if status != OrderStatus.DELIVERED.value:
+        return {}
+    return {"delivered_at": func.coalesce(Order.delivered_at, now or datetime.now(timezone.utc))}
+
+
+@event.listens_for(Order.status, "set")
+def _stamp_first_delivery(target: Order, value: str, _old: object, _initiator: object) -> None:
+    if value == OrderStatus.DELIVERED.value and target.delivered_at is None:
+        target.delivered_at = datetime.now(timezone.utc)
 
 
 class Payment(Base):
@@ -319,7 +363,6 @@ class Payment(Base):
         # Receipts waiting for a decision, oldest first: what the scheduled approval scans.
         Index(
             "ix_payments_pending_receipt", "receipt_at",
-            sqlite_where=text("status = 'pending' AND receipt_at IS NOT NULL"),
             postgresql_where=text("status = 'pending' AND receipt_at IS NOT NULL"),
         ),
         Index("ix_payments_wallet_shop_amount", "wallet_shop_id", "amount", "created_at"),
@@ -397,7 +440,6 @@ class PaymentSettlement(Base):
             "payment_id",
             "channel",
             unique=True,
-            sqlite_where=text("status IN ('created','awaiting','settling')"),
             postgresql_where=text("status IN ('created','awaiting','settling')"),
         ),
         # Duplicate provider events within a tenant.
@@ -408,7 +450,6 @@ class PaymentSettlement(Base):
             "tenant_key",
             "external_ref",
             unique=True,
-            sqlite_where=text("external_ref IS NOT NULL AND status IN ('settling','settled')"),
             postgresql_where=text("external_ref IS NOT NULL AND status IN ('settling','settled')"),
         ),
     )
@@ -460,7 +501,6 @@ class UserService(Base):
         # A panel user can be imported into «سرویس‌های من» by one customer only.
         Index(
             "uq_user_services_imported_pg_user", "pg_user_id", unique=True,
-            sqlite_where=text("remark = 'imported'"),
             postgresql_where=text("remark = 'imported'"),
         ),
         # New services waiting for the first-use check; the check stamps the row, so it leaves the index.
@@ -468,17 +508,14 @@ class UserService(Base):
         Index("ix_user_services_quota_expire_at", "quota_expire_at"),
         Index(
             "ix_user_services_volume_exhausted", "volume_exhausted_at",
-            sqlite_where=text("volume_exhausted_at IS NOT NULL"),
             postgresql_where=text("volume_exhausted_at IS NOT NULL"),
         ),
         Index(
             "ix_user_services_panel_missing", "shop_id",
-            sqlite_where=text("panel_missing_at IS NOT NULL"),
             postgresql_where=text("panel_missing_at IS NOT NULL"),
         ),
         Index(
             "ix_user_services_first_use_pending", "created_at",
-            sqlite_where=text("first_use_checked_at IS NULL"),
             postgresql_where=text("first_use_checked_at IS NULL"),
         ),
     )
@@ -510,6 +547,10 @@ class UserService(Base):
         DateTime(timezone=True), nullable=True
     )
     quota_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Panel usage (and lifetime usage) when the last renewal opened the current period;
+    # display and alerts subtract it (service_period). NULL = the raw numbers are the period.
+    period_used_baseline_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    period_lifetime_baseline_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -591,12 +632,10 @@ class BotUserShop(Base):
     __table_args__ = (
         Index(
             "uq_bot_user_shops_shop", "bot_user_id", "shop_id", unique=True,
-            sqlite_where=text("shop_id IS NOT NULL"),
             postgresql_where=text("shop_id IS NOT NULL"),
         ),
         Index(
             "uq_bot_user_shops_platform", "bot_user_id", unique=True,
-            sqlite_where=text("shop_id IS NULL"),
             postgresql_where=text("shop_id IS NULL"),
         ),
         Index("ix_bot_user_shops_shop_user", "shop_id", "bot_user_id"),
@@ -647,7 +686,6 @@ class ServiceImportRequest(Base):
             "bot_user_id",
             "panel_user_id",
             unique=True,
-            sqlite_where=text("status = 'pending'"),
             postgresql_where=text("status = 'pending'"),
         ),
         Index("ix_service_import_requests_shop_status", "shop_id", "status"),
@@ -776,6 +814,79 @@ class ServiceAutomation(Base):
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set once when the customer is offered automatic renewal (auto_renew_offer); never offered again.
+    renew_offered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ServiceFreeze(Base):
+    """A customer's pause of one service: ``pausing`` -> ``frozen`` -> ``resuming`` -> ``done``.
+
+    ``closed`` ends a freeze whose service was cancelled or removed meanwhile (never re-enabled).
+
+    The time left is saved before the panel is told to disable the user, and the target expiry is
+    saved before the resume call, so a retry after a timeout reuses the same numbers. At most one
+    open freeze per service (partial unique index).
+    """
+
+    __tablename__ = "service_freezes"
+    __table_args__ = (
+        Index("ix_service_freezes_status_resume_by", "status", "resume_by"),
+        Index("ix_service_freezes_service_created", "service_id", "created_at"),
+        Index(
+            "uq_service_freezes_open",
+            "service_id",
+            unique=True,
+            postgresql_where=text("status IN ('pausing', 'frozen', 'resuming')"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_id: Mapped[int] = mapped_column(ForeignKey("user_services.id", ondelete="CASCADE"))
+    shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    status: Mapped[str] = mapped_column(String(16), default="pausing", server_default="pausing")
+    remaining_seconds: Mapped[int] = mapped_column(Integer)
+    # The panel expiry when the service was paused: a change staff make while it is frozen is kept.
+    frozen_expire: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    resume_by: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    target_expire: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    resumed_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    resumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ServiceTransfer(Base):
+    """A one-time link that hands a service to another customer of the same shop.
+
+    ``open`` -> ``accepted`` / ``cancelled`` / ``expired``. Only the SHA-256 of the token is kept.
+    At most one open transfer per service (partial unique index).
+    """
+
+    __tablename__ = "service_transfers"
+    __table_args__ = (
+        Index("uq_service_transfers_token", "token_hash", unique=True),
+        Index("ix_service_transfers_service_created", "service_id", "created_at"),
+        Index("ix_service_transfers_rotation_pending", "id", postgresql_where=text("link_rotation_pending")),
+        Index(
+            "uq_service_transfers_open",
+            "service_id",
+            unique=True,
+            postgresql_where=text("status = 'open'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_id: Mapped[int] = mapped_column(ForeignKey("user_services.id", ondelete="CASCADE"))
+    shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    from_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    to_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    token_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default="open", server_default="open")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set with the acceptance when the shop rotates links; cleared once the panel did it (job retries).
+    link_rotation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Ticket(Base):
@@ -879,6 +990,19 @@ class DiscountCode(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class MessageButtonPreset(Base):
+    """A saved set of buttons staff put under broadcasts and direct messages; one shop's own (0 = platform)."""
+
+    __tablename__ = "message_button_presets"
+    __table_args__ = (UniqueConstraint("shop_key", "name", name="uq_message_button_presets_shop_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_key: Mapped[int] = mapped_column(Integer, default=0, server_default="0", index=True)
+    name: Mapped[str] = mapped_column(String(40))
+    buttons: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class BroadcastLog(Base):
     __tablename__ = "broadcast_logs"
     __table_args__ = (
@@ -887,7 +1011,6 @@ class BroadcastLog(Base):
             "uq_broadcast_logs_request_key",
             "request_key",
             unique=True,
-            sqlite_where=text("request_key IS NOT NULL"),
             postgresql_where=text("request_key IS NOT NULL"),
         ),
     )
@@ -896,7 +1019,12 @@ class BroadcastLog(Base):
     # None = platform/owner broadcast; a shop id never shares history or audience with another shop.
     shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
     audience: Mapped[str] = mapped_column(String(32), default="all")
+    # Segment, filters and reference time as broadcast_audience.AudienceSpec JSON; NULL on rows queued before
+    # filters existed, which keep their ``audience`` key.
+    audience_spec: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     text: Mapped[str] = mapped_column(Text)
+    # Buttons under the message, as message_buttons.dump_buttons wrote them; validated again before sending.
+    buttons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     total: Mapped[int] = mapped_column(Integer, default=0)
     ok_count: Mapped[int] = mapped_column(Integer, default=0)
     fail_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -1136,15 +1264,23 @@ class CashbackRule(Base):
 
 
 class CashbackGrant(Base):
-    """Cashback of one delivered order: pending, then credited to the buyer's shop wallet.
+    """Cashback of one delivered order or approved wallet top-up: pending, then credited to the
+    buyer's shop wallet.
 
-    One per order (unique ``order_id``). The rule's numbers are stored, so a later rule
+    One per order (unique ``order_id``) and one per top-up payment (unique ``payment_id``). The rule's numbers are stored, so a later rule
     edit never changes a grant.
     """
 
     __tablename__ = "cashback_grants"
     __table_args__ = (
         UniqueConstraint("order_id", name="uq_cashback_grant_order"),
+        # A wallet top-up earns at most one grant; order grants leave payment_id NULL.
+        Index(
+            "uq_cashback_grant_payment",
+            "payment_id",
+            unique=True,
+            postgresql_where=text("payment_id IS NOT NULL"),
+        ),
         Index("ix_cashback_grants_status_available", "status", "available_at"),
         Index("ix_cashback_grants_shop_user_created", "shop_id", "user_id", "created_at"),
     )
@@ -1152,7 +1288,9 @@ class CashbackGrant(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
-    order_id: Mapped[int] = mapped_column(Integer)
+    # Exactly one of order_id (a delivered purchase) and payment_id (an approved wallet top-up).
+    order_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    payment_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     rule_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     base_amount: Mapped[int] = mapped_column(Integer)
     amount: Mapped[int] = mapped_column(Integer)
@@ -1340,9 +1478,16 @@ class ResellerPlan(Base):
     carry_remaining_period: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
     )
-    # When true (default), purchased extra GB/user slots survive into the next period.
+    # Superseded by keep_extra_gb_on_renew / keep_extra_users_on_renew; kept one release, no longer read.
     keep_extras_on_renew: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
+    )
+    # When true (default), purchased extra GB (user slots) survive into the next period.
+    keep_extra_gb_on_renew: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_keep_extras_default, server_default=text("true")
+    )
+    keep_extra_users_on_renew: Mapped[bool] = mapped_column(
+        Boolean, default=_legacy_keep_extras_default, server_default=text("true")
     )
     # NULL = inherit plan-kind btn_style_*; "" = explicit Telegram default (white)
     button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
@@ -1479,7 +1624,6 @@ class WalletTransaction(Base):
             "uq_wallet_tx_idempotency",
             "idempotency_key",
             unique=True,
-            sqlite_where=text("idempotency_key IS NOT NULL"),
             postgresql_where=text("idempotency_key IS NOT NULL"),
         ),
     )
@@ -1554,7 +1698,6 @@ class OrgPrincipal(Base):
             "uq_org_principals_single_owner",
             "depth",
             unique=True,
-            sqlite_where=text("depth = 0 AND parent_id IS NULL"),
             postgresql_where=text("depth = 0 AND parent_id IS NULL"),
         ),
     )
@@ -1841,6 +1984,13 @@ class LoyaltyDiscountEntitlement(Base):
     __tablename__ = "loyalty_discount_entitlements"
     __table_args__ = (
         UniqueConstraint("code", name="uq_loyalty_discount_code"),
+        # An automatic coupon (next purchase, referral) is issued once per event key.
+        Index(
+            "uq_loyalty_discount_issue_key",
+            "issue_key",
+            unique=True,
+            postgresql_where=text("issue_key IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -1857,6 +2007,7 @@ class LoyaltyDiscountEntitlement(Base):
         ForeignKey("lucky_wheel_spins.id"), nullable=True, index=True
     )
     code: Mapped[str] = mapped_column(String(64), index=True)
+    issue_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     percent: Mapped[int] = mapped_column(Integer)
     min_purchase_toman: Mapped[int] = mapped_column(Integer, default=0)
     max_discount_toman: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -1915,6 +2066,13 @@ class DeliveryFailure(Base):
     """Orders that failed Telegram/PG delivery and need retry."""
 
     __tablename__ = "delivery_failures"
+    __table_args__ = (
+        # What the retry job scans: open rows still under automatic handling.
+        Index(
+            "ix_delivery_failures_auto_retry", "next_auto_retry_at",
+            postgresql_where=text("resolved_at IS NULL AND auto_retry_stopped_at IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
@@ -1929,6 +2087,11 @@ class DeliveryFailure(Base):
     )
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Automatic retry: attempts made while the panel answered, when the next one is due, and
+    # when automatic handling ended (refunded, or handed to staff). NULL due time = not scheduled.
+    auto_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    next_auto_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    auto_retry_stopped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ChargeCode(Base):
@@ -2083,12 +2246,10 @@ class LuckyWheelUserState(Base):
     __table_args__ = (
         Index(
             "uq_lucky_wheel_state_shop", "user_id", "reseller_id", unique=True,
-            sqlite_where=text("reseller_id IS NOT NULL"),
             postgresql_where=text("reseller_id IS NOT NULL"),
         ),
         Index(
             "uq_lucky_wheel_state_platform", "user_id", unique=True,
-            sqlite_where=text("reseller_id IS NULL"),
             postgresql_where=text("reseller_id IS NULL"),
         ),
     )
@@ -2164,7 +2325,6 @@ class ServiceCancellation(Base):
     __tablename__ = "service_cancellations"
     __table_args__ = (Index("ix_service_cancellations_notification", "notification_status", "id"), Index(
         "uq_service_cancellations_open", "service_id", unique=True,
-        sqlite_where=text("status IN ('pending','processing','review','approved')"),
         postgresql_where=text("status IN ('pending','processing','review','approved')"),
     ),)
 
@@ -2176,6 +2336,10 @@ class ServiceCancellation(Base):
     pg_user_id: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
     refund_amount: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    # The shop's refund rule applied when the request was made; NULL when the panel did not answer.
+    paid_amount: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    remaining_percent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    suggested_refund: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     operator_note: Mapped[str] = mapped_column(Text, default="")
     processed_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
@@ -2191,7 +2355,6 @@ class TargetedCampaign(Base):
     __table_args__ = (
         Index(
             "uq_targeted_campaigns_request_key", "request_key", unique=True,
-            sqlite_where=text("request_key IS NOT NULL"),
             postgresql_where=text("request_key IS NOT NULL"),
         ),
     )
@@ -2302,7 +2465,7 @@ class ConnectionMonitorState(Base):
     __table_args__ = (
         UniqueConstraint("reseller_id", "probe_id", name="uq_monitor_state_shop_probe"),
         Index("uq_monitor_state_main_probe", "probe_id", unique=True,
-              sqlite_where=text("reseller_id IS NULL"), postgresql_where=text("reseller_id IS NULL")),
+              postgresql_where=text("reseller_id IS NULL")),
         Index("ix_monitor_state_lease", "probe_id", "cycle_lease_until"),
     )
 
@@ -2327,10 +2490,9 @@ class ConnectionMonitorTarget(Base):
         UniqueConstraint("reseller_id", "pg_host_id", name="uq_monitor_target_shop_host"),
         Index("uq_monitor_target_shop_config", "reseller_id", "subscription_key", unique=True),
         Index("uq_monitor_target_main_config", "subscription_key", unique=True,
-              sqlite_where=text("reseller_id IS NULL AND subscription_key IS NOT NULL"),
               postgresql_where=text("reseller_id IS NULL AND subscription_key IS NOT NULL")),
         Index("uq_monitor_target_main_host", "pg_host_id", unique=True,
-              sqlite_where=text("reseller_id IS NULL"), postgresql_where=text("reseller_id IS NULL")),
+              postgresql_where=text("reseller_id IS NULL")),
         Index("ix_monitor_target_due", "reseller_id", "test_enabled", "next_check_at", "id"),
         Index("ix_monitor_target_public", "reseller_id", "test_enabled", "is_public", "display_order", "id"),
         Index("ix_monitor_target_lease", "reseller_id", "claim_until"),
@@ -2401,7 +2563,6 @@ class ShopStaffAction(Base):
             "uq_shop_staff_actions_request_key",
             "request_key",
             unique=True,
-            sqlite_where=text("request_key IS NOT NULL"),
             postgresql_where=text("request_key IS NOT NULL"),
         ),
     )
@@ -2453,6 +2614,18 @@ class ShopBroadCampaignDay(Base):
 
     __tablename__ = "shop_broad_campaign_days"
     __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_broad_campaign_days_shop_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    day: Mapped[str] = mapped_column(String(10))
+    used: Mapped[int] = mapped_column(BigInteger, server_default="0")
+
+
+class ShopTargetedMessageDay(Base):
+    """How many group messages and campaigns to a narrower segment a shop sent on one UTC day (daily cap)."""
+
+    __tablename__ = "shop_targeted_message_days"
+    __table_args__ = (UniqueConstraint("shop_id", "day", name="uq_shop_targeted_message_days_shop_day"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     shop_id: Mapped[int] = mapped_column(Integer)
@@ -2525,3 +2698,145 @@ class RandomDiscountReservation(Base):
     final_amount: Mapped[int] = mapped_column(Integer)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
     protected_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class SwitchRevert(Base):
+    """A quick switch changed for a while: the value to put back, and when (NULL = by hand).
+
+    ``shop_id`` is 0 for the platform shop so the partial unique index can allow at most one
+    pending revert per shop and setting. The revert is claimed and applied in one commit.
+    """
+
+    __tablename__ = "switch_reverts"
+    __table_args__ = (
+        Index("ix_switch_reverts_status_revert_at", "status", "revert_at"),
+        Index(
+            "uq_switch_reverts_pending",
+            "shop_id",
+            "setting_key",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer, server_default="0")
+    setting_key: Mapped[str] = mapped_column(String(64))
+    set_value: Mapped[bool] = mapped_column(Boolean)
+    revert_value: Mapped[bool] = mapped_column(Boolean)
+    revert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scenario: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), server_default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OrderDiscount(Base):
+    """One reduction on one order: where it came from, what it referred to and how much.
+
+    Every reduction source writes its own line (a code, a loyalty or gift entitlement, a
+    random draw, an automatic rule), so reports and per-customer limits read one table. The
+    order's own ``discount_amount`` stays the total the customer saw. ``shop_key`` is 0 for the
+    platform shop. ``released_at`` is set when an unpaid order gives the reduction back.
+    """
+
+    __tablename__ = "order_discounts"
+    __table_args__ = (
+        UniqueConstraint("order_id", "source", name="uq_order_discounts_order_source"),
+        Index("ix_order_discounts_shop_source_ref", "shop_key", "source", "source_ref"),
+        Index("ix_order_discounts_shop_user", "shop_key", "user_id"),
+        # A once-per-customer reduction (first purchase, a rule's per-customer slot) is held by
+        # at most one live line, so two concurrent checkouts cannot both take it.
+        Index(
+            "uq_order_discounts_live_claim",
+            "shop_key",
+            "user_id",
+            "claim_key",
+            unique=True,
+            postgresql_where=text("claim_key IS NOT NULL AND released_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
+    shop_key: Mapped[int] = mapped_column(Integer, server_default="0")
+    user_id: Mapped[int] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(String(16))
+    source_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    amount: Mapped[int] = mapped_column(Integer)
+    claim_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DiscountRule(Base):
+    """A shop's automatic checkout discount: who gets it, on what, and how much.
+
+    Rules apply when an order is created, without a code; the best matching rule of the
+    order's shop wins. ``audience`` picks the customers (all, first purchase, repeat buyers,
+    returning after ``audience_days`` without a purchase, or renewals within
+    ``audience_days`` of expiry). ``used_count`` is claimed atomically against ``max_uses``
+    and given back when an unpaid order is cancelled. ``shop_id`` NULL is the platform shop.
+    """
+
+    __tablename__ = "discount_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    audience: Mapped[str] = mapped_column(String(16), default="all", server_default="all")
+    min_purchases: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    audience_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    events: Mapped[str] = mapped_column(String(64), default="new", server_default="new")
+    plan_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mode: Mapped[str] = mapped_column(String(16), default="percent", server_default="percent")
+    percent_bps: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    fixed_amount: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    max_per_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    min_order_amount: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    customer_max_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CouponProgram(Base):
+    """A shop's automatic personal coupon: issued on an event, used like a loyalty discount.
+
+    ``trigger`` is ``next_purchase`` (after a delivered purchase), ``referral_welcome`` (to a
+    customer who joined through a referral link) or ``referral_reward`` (to the referrer after
+    the friend's first delivered purchase). One row per shop and trigger; ``shop_key`` is 0 for
+    the platform shop. ``win_back`` is issued by a daily job to customers without a purchase for
+    ``inactive_days``.
+    """
+
+    __tablename__ = "coupon_programs"
+    __table_args__ = (UniqueConstraint("shop_key", "trigger", name="uq_coupon_programs_shop_trigger"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_key: Mapped[int] = mapped_column(Integer, server_default="0")
+    trigger: Mapped[str] = mapped_column(String(24))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    percent: Mapped[int] = mapped_column(Integer, default=10, server_default="10")
+    max_discount: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    min_purchase: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    valid_days: Mapped[int] = mapped_column(Integer, default=14, server_default="14")
+    monthly_cap: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # win_back only: days since the customer's last delivered purchase.
+    inactive_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class DiscountBudget(Base):
+    """Automatic-rule discount a shop gave in one calendar month, checked atomically against its budget."""
+
+    __tablename__ = "discount_budgets"
+    __table_args__ = (UniqueConstraint("shop_key", "month", name="uq_discount_budget_month"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # The shop's user id, or 0 for the platform shop.
+    shop_key: Mapped[int] = mapped_column(Integer)
+    month: Mapped[str] = mapped_column(String(7))
+    used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

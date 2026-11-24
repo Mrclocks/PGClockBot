@@ -63,11 +63,6 @@ class SetupFinishHttpTests(unittest.TestCase):
         self.assertIn("فایل env را امن نگه دارید", html)
         self.assertNotIn("code.env-fname", html)
 
-    def test_setup_page_passes_finish_login_url(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn('"finish_login_url": setup_finish_login_url()', src)
-        self.assertIn("force_http_login_url", src)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -41,11 +41,21 @@ from app.services.miniapp_shop import (
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
 from app.services.panel_brand import load_own_values
-from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
+from app.services.settings_tab_groups import (
+    area_page_tab,
+    group_settings_tabs,
+    resolve_merged_tab,
+    settings_area,
+    tabs_with_message_variables,
+)
 from app.services.rich_text import merge_rich_settings_on_save, prepare_settings_values_for_web
 from app.services.screen_titles import SCREEN_TEXT_TAB, platform_only_screen_text_keys, validate_screen_text_settings
+from app.services.alert_thresholds import normalize_threshold_form
+from app.services.plan_scope import normalize_plan_scopes, scope_selection
+from app.services.service_actions_page import SERVICE_ACTION_TABS, normalize_service_action_values, service_actions_context
 from app.services.users import (
     IMAGE_KEYS,
+    PLAN_SCOPE_KEYS,
     PLATFORM_ONLY_SETTING_GROUPS,
     PLATFORM_ONLY_SETTING_KEYS,
     RESETTABLE_SETTINGS_TABS,
@@ -113,6 +123,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         catalog_meta = {
             "connection_status": {"label": "وضعیت اتصال", "required": False},
             "shop": {"label": "خرید سرویس", "required": True},
+            "trial": {"label": "دریافت تست", "required": False},
             "services": {"label": "سرویس‌های من", "required": False},
             "wallet": {"label": "کیف پول", "required": False},
             "support": {"label": "پشتیبانی", "required": False},
@@ -206,6 +217,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             return _deny_scope()
 
         tab = resolve_merged_tab((request.query_params.get("tab") or "welcome").strip())
+        tab, area_key, is_area_list = area_page_tab(tab)
         if tab == "security":
             return RedirectResponse("/security", status_code=303)
         if tab in SHOP_SETTINGS_DOMAIN_REDIRECTS:
@@ -274,8 +286,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             "groups": groups,
             "tab_groups": list(groups.keys()),
             "tabs": RESELLER_SETTINGS_TABS,
-            "tab_nav": group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, staff), tab),
+            "tab_nav": group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, staff), tab, area=area_key),
             "tab": tab,
+            "settings_area": settings_area(area_key, base="/shop-settings", bot_title="تنظیمات فروشگاه"),
+            "is_area_list": is_area_list,
             "saved": request.query_params.get("saved") == "1",
             "saved_msg": request.query_params.get("msg") or "",
             "shop_mode": True,
@@ -311,7 +325,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         elif tab == "miniapp":
             ctx.update(await _miniapp_switch_context(session, profile))
         elif tab == "links":
-            from app.services.ux20 import build_magic_links_context
+            from app.services.quick_links import build_magic_links_context
 
             ctx.update(await build_magic_links_context(session, staff))
         elif tab == "appearance":
@@ -340,14 +354,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             )
             ctx["notify_items"] = shop_notify_catalog(perms)
             ctx["notify_prefs"] = await get_shop_notify_prefs(session, rid)
-            # Ops/capacity keys are Owner-only — keep shop notifications = user alerts.
-            groups = {
-                name: fields
-                for name, fields in groups.items()
-                if name == "هشدار سرویس کاربر"
-            }
-            ctx["groups"] = groups
-            ctx["tab_groups"] = list(groups.keys())
+        elif tab in SERVICE_ACTION_TABS:
+            ctx.update(await service_actions_context(session, rid))
         elif tab == "daily_report":
             from app.services.daily_report import (
                 ACTOR_SHOP,
@@ -488,8 +496,12 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         for key in TOGGLE_KEYS:
             if key in known:
                 payload[key] = "1" if form.get(f"s_{key}") else "0"
+        payload.update(await normalize_plan_scopes(session, {
+            key: scope_selection(form.get(f"s_{key}_mode"), form.getlist(f"s_{key}"))
+            for key in PLAN_SCOPE_KEYS & known
+        }, shop_id=rid))
         for key in known:
-            if key in TOGGLE_KEYS or key in IMAGE_KEYS:
+            if key in TOGGLE_KEYS or key in IMAGE_KEYS or key in PLAN_SCOPE_KEYS:
                 continue
             raw = form.get(f"s_{key}")
             if raw is not None and not isinstance(raw, UploadFile):
@@ -500,10 +512,6 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                     from app.services.button_styles import normalize_style
 
                     val = normalize_style(val)
-                if key in ("user_alert_low_traffic_pct", "user_alert_low_time_pct"):
-                    from app.services.users import clamp_alert_percent
-
-                    val = clamp_alert_percent(val)
                 if key == "force_join_channel":
                     from app.services.users import normalize_force_join_channel_value
 
@@ -519,6 +527,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
                     val = normalize_setting_value(key, val)
                 payload[key] = val
+        normalize_threshold_form(payload)
+        normalize_service_action_values(payload)
 
         if tab == "daily_report":
             from app.services.daily_report import (

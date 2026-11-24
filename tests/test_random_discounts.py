@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import os
 import secrets
-import tempfile
 import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -28,8 +27,10 @@ from app.services.orders import (
 from app.services.random_discounts import (
     RandomDiscountInput, apply_random_discount, create_random_discount, stop_random_discount,
 )
+from app.services.order_discounts import live_order_discounts
 from app.services.service_addons import create_addon_order
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
 SHOP = {"role": "reseller", "bot_user_id": 2, "permissions": ["random_discounts"]}
@@ -37,7 +38,6 @@ SHOP = {"role": "reseller", "bot_user_id": 2, "permissions": ["random_discounts"
 
 class RandomDiscountTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
         test_url = os.environ.get("PGCLOCKBOT_RANDOM_TEST_URL")
         self.admin_engine = None
         if test_url:
@@ -47,7 +47,7 @@ class RandomDiscountTests(unittest.IsolatedAsyncioTestCase):
                 await connection.execute(CreateSchema(self.schema))
             self.engine = create_async_engine(test_url, connect_args={"server_settings": {"search_path": self.schema}})
         else:
-            self.engine = create_async_engine(f"sqlite+aiosqlite:///{self.tmp.name}/random.db")
+            self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -83,7 +83,6 @@ class RandomDiscountTests(unittest.IsolatedAsyncioTestCase):
             async with self.admin_engine.begin() as connection:
                 await connection.execute(DropSchema(self.schema, cascade=True))
             await self.admin_engine.dispose()
-        self.tmp.cleanup()
         reset_shop_reseller_id(self.token)
         _SETTINGS_CACHE.clear()
 
@@ -108,6 +107,18 @@ class RandomDiscountTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(order.amount + order.discount_amount, 1000)
             self.assertEqual(order.random_discount_amount, order.discount_amount)
         self.assertIn("تخفیف تصادفی", await checkout_summary(self.session, orders[0], currency="تومان"))
+
+    async def test_draw_records_one_random_ledger_line_and_cancel_releases_it(self) -> None:
+        policy = await self.policy()
+        order = await create_order(self.session, user_id=1, plan_id=1)
+        self.assertTrue(await apply_random_discount(self.session, order))
+        await self.session.commit()
+        lines = await live_order_discounts(self.session, order.id)
+        self.assertEqual([(line.source, line.source_ref, line.amount) for line in lines],
+                         [("random", str(policy.id), order.discount_amount)])
+        await cancel_order(self.session, order)
+        await self.session.commit()
+        self.assertEqual(await live_order_discounts(self.session, order.id), [])
 
     async def test_exhaustion_never_repeats_or_exceeds_discount_range(self) -> None:
         await self.policy(minimum=10, maximum=11)

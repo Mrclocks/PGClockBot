@@ -8,11 +8,13 @@ import math
 import secrets
 from datetime import datetime, timedelta, timezone
 
+from aiogram.exceptions import TelegramAPIError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import or_, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.pasarguard import failure_text
 from app.db.models import (
     BotUser,
     Order,
@@ -25,7 +27,11 @@ from app.db.models import (
     ServiceAutomation,
     UserService,
 )
+from app.services import auto_renew_timing as timing
 from app.services.catalog_pricing import annotate_prices, displayed_quote, sale_price
+from app.services.renewal_category import Leftover, offered_plans
+from app.services.service_renewals import current_plan_of
+from app.services.service_freeze_guard import is_frozen
 from app.services.service_scope import service_shop_id
 from app.services.notice_links import notice_open_data
 from app.services.support_button import support_row
@@ -41,6 +47,8 @@ from app.services.chat_records import keeps_sent
 
 log = logging.getLogger(__name__)
 TOPUP_CALLBACK = "nv:w:topup"
+# The wallet's preset-amount callback; the handler validates the amount again.
+TOPUP_AMOUNT_PREFIX = "nv:w:amt:"
 ACTIONS = ("renew", "duration", "volume")
 LABELS = {
     "renew": "تمدید خودکار",
@@ -93,14 +101,21 @@ async def get_automation(
     return row
 
 
-async def automation_choices(session: AsyncSession) -> dict[str, list]:
+# Automatic renewal runs while volume or time may still be left: only plans that may take it.
+AUTO_RENEW_LEFTOVER = Leftover(volume=True, time=True)
+
+
+async def automation_choices(session: AsyncSession, service: UserService | None = None) -> dict[str, list]:
     from app.services.orders import list_active_plans
     from app.services.service_addons import list_shop_packs
 
-    plans = await list_active_plans(session, include_trial=False)
+    plans = [p for p in await list_active_plans(session, include_trial=False) if p.price >= 0]
+    if service is not None:
+        current = await current_plan_of(session, service)
+        plans = offered_plans(plans, current_plan=current, leftover=AUTO_RENEW_LEFTOVER)
     packs = await list_shop_packs(session)
     return {
-        "renew": [p for p in plans if p.price >= 0],
+        "renew": plans,
         "duration": [p for p in packs if p.kind == "duration" and valid_pack(p)],
         "volume": [p for p in packs if p.kind == "volume" and valid_pack(p)],
     }
@@ -111,7 +126,7 @@ async def automation_settings(
 ) -> dict:
     service = await owned_automation_service(session, user, service_id)
     row = await get_automation(session, service)
-    choices = await automation_choices(session)
+    choices = await automation_choices(session, service)
     result = {
         "service_id": service_id,
         "needs_review": row.needs_review,
@@ -166,8 +181,17 @@ async def selected_choice(session: AsyncSession, row: ServiceAutomation, action:
     if not choice or not choice.is_active or choice.owner_reseller_id != row.shop_id:
         return None
     if action == "renew":
-        return choice if not choice.is_trial and choice.price >= 0 else None
+        if choice.is_trial or choice.price < 0:
+            return None
+        return choice if await _renewal_allowed(session, row, choice) else None
     return choice if choice.kind == action and valid_pack(choice) else None
+
+
+async def _renewal_allowed(session: AsyncSession, row: ServiceAutomation, choice: Plan) -> bool:
+    """Another category's plan is valid only when it would carry nothing over (renewal_category)."""
+    service = await session.get(UserService, row.service_id)
+    current = await current_plan_of(session, service) if service is not None else None
+    return bool(offered_plans([choice], current_plan=current, leftover=AUTO_RENEW_LEFTOVER))
 
 
 async def claim_automation(session: AsyncSession, service_id: int) -> str | None:
@@ -294,6 +318,8 @@ async def notify_once(
     action: str,
     code: str,
     body: str,
+    *,
+    topup_amount: int | None = None,
 ) -> bool:
     if getattr(row, f"{action}_notice") == code:
         return True
@@ -304,7 +330,7 @@ async def notify_once(
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    *([[InlineKeyboardButton(text="➕ شارژ کیف پول", callback_data=TOPUP_CALLBACK)]] if code == "low_wallet" else []),
+                    *_topup_rows(code, topup_amount),
                     [
                         InlineKeyboardButton(
                             text="⚙️ تنظیمات خودکار سرویس",
@@ -323,6 +349,78 @@ async def notify_once(
     setattr(row, f"{action}_notice", code)
     await session.commit()
     return True
+
+
+def _topup_rows(code: str, amount: int | None) -> list[list[InlineKeyboardButton]]:
+    """A top-up of exactly ``amount`` when it is known, else the plain top-up on a short-wallet notice."""
+    if amount:
+        return [[InlineKeyboardButton(text=f"➕ شارژ {format_toman(amount)}", callback_data=f"{TOPUP_AMOUNT_PREFIX}{amount}")]]
+    if code == "low_wallet":
+        return [[InlineKeyboardButton(text="➕ شارژ کیف پول", callback_data=TOPUP_CALLBACK)]]
+    return []
+
+
+async def _clear_short_wallet_notices(session: AsyncSession, row: ServiceAutomation) -> None:
+    """Forget a short-wallet notice once nothing is due, so the next period can send it again."""
+    stale = [a for a in ACTIONS if getattr(row, f"{a}_notice") == "low_wallet"]
+    for action in stale:
+        setattr(row, f"{action}_notice", None)
+    if stale:
+        await session.commit()
+
+
+async def _remind_short_wallet(
+    session: AsyncSession, row: ServiceAutomation, service: UserService, user: BotUser, bot,
+    *, choices: dict, expire: datetime | None, now: datetime, schedule: timing.RenewTiming,
+) -> None:
+    """One reminder per stage before the expiry when the wallet cannot pay the time purchase."""
+    # Deferred: wallet imports the order services that import this module.
+    from app.services.wallet import get_wallet_balance
+
+    action = timing.time_action(
+        renew_enabled=bool(row.renew_enabled), duration_enabled=bool(row.duration_enabled), choices=choices
+    )
+    if action is None or expire is None or expire <= now:
+        return
+    stage = timing.reminder_stage(expire=expire, now=now, timing=schedule)
+    if stage is None:
+        return
+    price = sale_price(choices[action])
+    balance = await get_wallet_balance(session, user, shop_id=row.shop_id)
+    if balance >= price:
+        return
+    body = timing.reminder_text(
+        label=LABELS[action], hours_left=(expire - now).total_seconds() / 3600, price=price, balance=balance
+    )
+    await notify_once(
+        session, row, service, user, bot, action, timing.reminder_code(stage, expire), body,
+        topup_amount=timing.topup_amount(price=price, balance=balance),
+    )
+
+
+async def _due_dimensions(
+    session: AsyncSession, row: ServiceAutomation, service: UserService, user: BotUser, bot,
+    *, choices: dict, info: dict, ui: dict,
+) -> tuple[bool, bool]:
+    """Which quotas are due now: run out, or time within the shop's renew-ahead window."""
+    now = datetime.now(timezone.utc)
+    time_done, volume_done = exhausted_dimensions(info, now)
+    if time_done or not timing.is_active(info):
+        return time_done, volume_done
+    schedule = timing.renew_timing(ui)
+    expire = parse_expire(info.get("expire") or info.get("expire_date"))
+    action = timing.time_action(
+        renew_enabled=bool(row.renew_enabled), duration_enabled=bool(row.duration_enabled), choices=choices
+    )
+    choice = choices.get(action) if action else None
+    if timing.is_due_ahead(action=action, choice=choice, expire=expire, now=now, timing=schedule):
+        return True, volume_done
+    if not volume_done:
+        await _clear_short_wallet_notices(session, row)
+    await _remind_short_wallet(
+        session, row, service, user, bot, choices=choices, expire=expire, now=now, schedule=schedule
+    )
+    return False, volume_done
 
 
 async def _finish_order(session, row, service, user, bot, order) -> None:
@@ -348,6 +446,27 @@ async def _finish_order(session, row, service, user, bot, order) -> None:
         await session.commit()
 
 
+async def _queue_failed_order(session: AsyncSession, order: Order, user: BotUser, bot, *, error: str) -> None:
+    """List the paid order for the retry job (which refunds it if it never applies) and alert its staff."""
+    from app.services.notifications import notify_approved_delivery_stuck
+    from app.services.delivery_failures import note_delivery_send_failure
+
+    payment = await session.scalar(
+        select(Payment)
+        .where(Payment.order_id == order.id, Payment.status == PaymentStatus.APPROVED.value)
+        .order_by(Payment.id.desc())
+        .limit(1)
+    )
+    await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    if payment is None:
+        return
+    try:
+        await notify_approved_delivery_stuck(bot, session, payment, user.telegram_id, error=error)
+    except (TelegramAPIError, SQLAlchemyError, ValueError):
+        # The order is listed under failed deliveries either way.
+        log.warning("automation stuck notice failed order=%s", order.id, exc_info=True)
+
+
 async def _process_locked(session, row, service, user, bot) -> None:
     from app.services.orders import (
         _claim_payable_order,
@@ -361,6 +480,13 @@ async def _process_locked(session, row, service, user, bot) -> None:
         order = await session.get(Order, row.pending_order_id)
         if order and order.status == OrderStatus.DELIVERED.value:
             await _finish_order(session, row, service, user, bot, order)
+        elif order and order.status == OrderStatus.CANCELLED.value:
+            # Closed after a failed delivery (refunded or settled by staff, who told the
+            # customer); the next due period may buy again.
+            row.pending_order_id = None
+            row.pending_action = None
+            row.needs_review = False
+            await session.commit()
         elif order:
             # A restart or network failure after debit is ambiguous. Never buy
             # again or repeat a remote mutation; the normal admin order flow
@@ -445,8 +571,10 @@ async def _process_locked(session, row, service, user, bot) -> None:
 
     sync_service_quota_cache(service, info)
     await session.commit()
-    time_done, volume_done = exhausted_dimensions(info, datetime.now(timezone.utc))
     await annotate_prices(session, list(choices.values()), shop_id=row.shop_id)
+    time_done, volume_done = await _due_dimensions(
+        session, row, service, user, bot, choices=choices, info=info, ui=ui
+    )
     for action in actions_for_exhaustion(row, time_done, volume_done):
         choice = choices.get(action)
         if choice is None:
@@ -455,7 +583,8 @@ async def _process_locked(session, row, service, user, bot) -> None:
         await session.refresh(user)
         if user.is_blocked:
             return
-        if await get_wallet_balance(session, user, shop_id=row.shop_id) < sale_price(choice):
+        balance = await get_wallet_balance(session, user, shop_id=row.shop_id)
+        if balance < sale_price(choice):
             await notify_once(
                 session,
                 row,
@@ -466,6 +595,7 @@ async def _process_locked(session, row, service, user, bot) -> None:
                 "low_wallet",
                 f"موجودی کیف پول کافی نیست. هزینه فعلی: <b>{format_toman(sale_price(choice))}</b>. "
                 "کیف پول همین فروشگاه را شارژ کنید؛ اجرای خودکار دوباره تلاش می‌کند.",
+                topup_amount=timing.topup_amount(price=sale_price(choice), balance=balance),
             )
             continue
         # Revalidate immediately before taking money (catalog may change during PG read).
@@ -516,7 +646,7 @@ async def _process_locked(session, row, service, user, bot) -> None:
         # for review, avoiding a refund followed by another capacity purchase.
         try:
             if action == "renew":
-                from app.services.service_renewals import plan_carries_remaining_quota
+                from app.services.renewal_carry import CARRY_VOLUME, plan_carries
 
                 # Modern renewals freeze carry in renewal_snapshot and ignore
                 # reset_traffic. Legacy auto orders without a snapshot still
@@ -526,16 +656,17 @@ async def _process_locked(session, row, service, user, bot) -> None:
                     order,
                     service,
                     choice,
-                    reset_traffic=not plan_carries_remaining_quota(choice),
+                    reset_traffic=not plan_carries(choice, CARRY_VOLUME),
                 )
             else:
                 order = await apply_service_addon(session, order)
-        except Exception:
+        except Exception as exc:
             log.exception(
                 "automatic delivery needs review service=%s order=%s",
                 service.id,
                 order.id,
             )
+            delivery_error = failure_text(exc)
             await session.rollback()
             await session.refresh(row)
             await session.refresh(order)
@@ -544,6 +675,7 @@ async def _process_locked(session, row, service, user, bot) -> None:
             if order.status != OrderStatus.DELIVERED.value:
                 row.needs_review = True
                 await session.commit()
+                await _queue_failed_order(session, order, user, bot, error=delivery_error)
                 await notify_once(
                     session,
                     row,
@@ -576,6 +708,9 @@ async def process_service_automation(
         if not service.pg_user_id or (service.remark or "").strip() == "linked":
             return
         if await service_shop_id(session, service) != row.shop_id:
+            return
+        # A frozen service keeps its time in the freeze row; buying now would be overwritten on resume.
+        if await is_frozen(session, service_id):
             return
         context_token = set_shop_reseller_id(row.shop_id)
         await _process_locked(session, row, service, user, bot)

@@ -8,9 +8,11 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ShopBroadCampaignDay, ShopPointsAdjustDay, ShopWalletAdjustDay
+from app.db.models import ShopBroadCampaignDay, ShopPointsAdjustDay, ShopTargetedMessageDay, ShopWalletAdjustDay
 
-DayCounter = type[ShopWalletAdjustDay] | type[ShopPointsAdjustDay] | type[ShopBroadCampaignDay]
+DayCounter = (
+    type[ShopWalletAdjustDay] | type[ShopPointsAdjustDay] | type[ShopBroadCampaignDay] | type[ShopTargetedMessageDay]
+)
 
 
 def utc_day() -> str:

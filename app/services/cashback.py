@@ -10,6 +10,9 @@ cashback; the money only ever moves inside that shop's wallet purse.
 3. ``reverse_order_cashback`` runs when a purchase is voided or cancelled with a refund:
    a pending grant is cancelled; a credited one is taken back as far as the wallet allows
    and the rest is recorded as unrecoverable.
+
+Rules with the ``topup`` event pay on approved wallet top-ups instead (``cashback_topup``);
+those grants carry ``payment_id`` and mature and reverse the same way.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, CashbackBudget, CashbackGrant, CashbackRule, Order, OrderStatus
 from app.py_compat import StrEnum
 from app.services.customer_notice_buttons import customer_notice_markup
-from app.services.db_safe import rollback_quiet
+from app.services.db_safe import rollback_and_reload, rollback_quiet
 from app.services.formatting import format_toman
 from app.services.platform_identity import deliverable_telegram_id
 from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_user
@@ -54,6 +57,7 @@ class GrantStatus(StrEnum):
 EVENT_NEW = "new"
 EVENT_RENEW = "renew"
 EVENT_ADDON = "addon"
+EVENT_TOPUP = "topup"
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,23 +132,23 @@ def order_event(order: Order) -> str:
     return EVENT_NEW
 
 
-async def _setting(session: AsyncSession, key: str, default: str, shop_id: int | None) -> str:
+async def shop_setting(session: AsyncSession, key: str, default: str, shop_id: int | None) -> str:
     return str(await get_setting(session, key, default, reseller_id=shop_id) or default)
 
 
 async def cashback_enabled(session: AsyncSession, shop_id: int | None) -> bool:
-    return (await _setting(session, "cashback_enabled", "0", shop_id)).strip().lower() in {"1", "true", "on", "yes"}
+    return (await shop_setting(session, "cashback_enabled", "0", shop_id)).strip().lower() in {"1", "true", "on", "yes"}
 
 
-async def _int_setting(session: AsyncSession, key: str, default: int, shop_id: int | None, *, upper: int) -> int:
+async def int_setting(session: AsyncSession, key: str, default: int, shop_id: int | None, *, upper: int) -> int:
     try:
-        value = int(await _setting(session, key, str(default), shop_id))
+        value = int(await shop_setting(session, key, str(default), shop_id))
     except ValueError:
         return default
     return value if 0 <= value <= upper else default
 
 
-async def _rules(session: AsyncSession, shop_id: int | None) -> list[CashbackRule]:
+async def active_rules(session: AsyncSession, shop_id: int | None) -> list[CashbackRule]:
     scope = CashbackRule.shop_id.is_(None) if shop_id is None else CashbackRule.shop_id == int(shop_id)
     return list((await session.scalars(
         select(CashbackRule).where(scope, CashbackRule.enabled.is_(True))
@@ -170,13 +174,13 @@ def _month_start(at: datetime) -> datetime:
     return at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
-async def _within_customer_caps(session: AsyncSession, rule: CashbackRule, order: Order, amount: int,
-                                *, at: datetime) -> bool:
+async def within_customer_caps(session: AsyncSession, rule: CashbackRule, *, user_id: int,
+                               shop_id: int | None, amount: int, at: datetime) -> bool:
     if rule.customer_max_count is None and rule.customer_max_amount is None:
         return True
     count, total = (await session.execute(
         select(func.count(), func.coalesce(func.sum(CashbackGrant.amount), 0)).where(
-            CashbackGrant.user_id == int(order.user_id), _shop_scope(CashbackGrant.shop_id, order.reseller_id),
+            CashbackGrant.user_id == int(user_id), _shop_scope(CashbackGrant.shop_id, shop_id),
             CashbackGrant.rule_id == int(rule.id), CashbackGrant.created_at >= _month_start(at),
             CashbackGrant.status.in_([str(GrantStatus.PENDING), str(GrantStatus.AVAILABLE)]),
         )
@@ -197,17 +201,19 @@ async def quote_cashback(session: AsyncSession, order: Order, *, at: datetime) -
         first_purchase=await _first_purchase(session, order), at=at,
     )
     amounts: list[tuple[CashbackRule, int]] = []
-    for rule in await _rules(session, shop_id):
+    for rule in await active_rules(session, shop_id):
         amount = rule_amount(rule, purchase)
-        if amount and await _within_customer_caps(session, rule, order, amount, at=at):
+        if amount and await within_customer_caps(
+            session, rule, user_id=int(order.user_id), shop_id=shop_id, amount=amount, at=at
+        ):
             amounts.append((rule, amount))
-    mode = await _setting(session, "cashback_combine", "best", shop_id)
+    mode = await shop_setting(session, "cashback_combine", "best", shop_id)
     return combine(amounts, mode=mode, price=purchase.amount)
 
 
-async def _claim_budget(session: AsyncSession, shop_id: int | None, amount: int, *, at: datetime) -> bool:
+async def claim_budget(session: AsyncSession, shop_id: int | None, amount: int, *, at: datetime) -> bool:
     """Add ``amount`` to this month's use if the budget allows (0 = no budget); caller commits."""
-    budget = await _int_setting(session, "cashback_monthly_budget", 0, shop_id, upper=2_000_000_000)
+    budget = await int_setting(session, "cashback_monthly_budget", 0, shop_id, upper=2_000_000_000)
     if budget == 0:
         return True
     key, month = int(shop_id or 0), at.strftime("%Y-%m")
@@ -240,11 +246,11 @@ async def grant_for_order(session: AsyncSession, order: Order, *, now: datetime 
     rule_id, amount = await quote_cashback(session, order, at=now)
     if amount <= 0:
         return None
-    if not await _claim_budget(session, shop_id, amount, at=now):
+    if not await claim_budget(session, shop_id, amount, at=now):
         await session.rollback()
         logger.info("cashback budget exhausted shop=%s order=%s", shop_id, order_id)
         return None
-    hours = await _int_setting(session, "cashback_hold_hours", DEFAULT_HOLD_HOURS, shop_id, upper=MAX_HOLD_HOURS)
+    hours = await int_setting(session, "cashback_hold_hours", DEFAULT_HOLD_HOURS, shop_id, upper=MAX_HOLD_HOURS)
     grant = CashbackGrant(
         shop_id=shop_id, user_id=user_id, order_id=order_id, rule_id=rule_id,
         base_amount=price, amount=amount, status=str(GrantStatus.PENDING),
@@ -281,27 +287,45 @@ async def mature_grants(session: AsyncSession, *, now: datetime | None = None) -
         .where(CashbackGrant.status == str(GrantStatus.PENDING), CashbackGrant.available_at <= now)
         .order_by(CashbackGrant.id).limit(MATURE_BATCH)
     )).all()
-    credited: list[CashbackGrant] = []
-    for grant in due:
+    credited_ids: list[int] = []
+    for grant_id in [int(grant.id) for grant in due]:
         try:
-            if not await _claim_status(session, grant, frm=GrantStatus.PENDING, to=GrantStatus.AVAILABLE, at=now):
+            # Read from the identity map; only a rollback for an earlier grant makes this a query.
+            grant = await session.get(CashbackGrant, grant_id)
+            if grant is None or not await _claim_status(
+                session, grant, frm=GrantStatus.PENDING, to=GrantStatus.AVAILABLE, at=now
+            ):
                 continue
             user = await session.get(BotUser, int(grant.user_id))
             # One commit for the claim and the credit: a failure rolls both back.
-            await credit_wallet(session, user, int(grant.amount), f"کش‌بک سفارش #{int(grant.order_id)}",
-                                shop_id=grant.shop_id, commit=True, idempotency_key=f"cashback:{int(grant.id)}")
-            credited.append(grant)
+            await credit_wallet(session, user, int(grant.amount), f"کش‌بک {grant_label(grant)}",
+                                shop_id=grant.shop_id, commit=True, idempotency_key=f"cashback:{grant_id}")
+            credited_ids.append(grant_id)
         except Exception:  # noqa: BLE001 - per-row isolation in a background job; the row stays pending
-            logger.warning("cashback credit failed grant=%s", grant.id, exc_info=True)
+            logger.warning("cashback credit failed grant=%s", grant_id, exc_info=True)
             await rollback_quiet(session)
-    await notify_credited(session, credited)
-    return len(credited)
+    if credited_ids:
+        # Fresh rows: a later grant's rollback expired the ones already credited.
+        credited = list(await session.scalars(
+            select(CashbackGrant).where(CashbackGrant.id.in_(credited_ids)).order_by(CashbackGrant.id)
+            .execution_options(populate_existing=True)
+        ))
+        await notify_credited(session, credited)
+    return len(credited_ids)
+
+
+def grant_label(grant: CashbackGrant) -> str:
+    """What the grant was earned on, for ledger reasons and the customer's notice."""
+    payment_id = getattr(grant, "payment_id", None)
+    if payment_id is not None:
+        return f"شارژ کیف پول #{int(payment_id)}"
+    return f"سفارش #{int(grant.order_id)}"
 
 
 def credited_text(grant: CashbackGrant) -> str:
     return (
         f"🎁 <b>کش‌بک {format_toman(int(grant.amount))}</b> به کیف پول شما اضافه شد\n"
-        f"برای سفارش #{int(grant.order_id)}"
+        f"برای {grant_label(grant)}"
     )
 
 
@@ -351,6 +375,11 @@ async def reverse_order_cashback(session: AsyncSession, order_id: int, *, reason
     grant = await session.scalar(select(CashbackGrant).where(CashbackGrant.order_id == int(order_id)))
     if grant is None:
         return None
+    return await reverse_grant(session, grant, reason=reason, now=now)
+
+
+async def reverse_grant(session: AsyncSession, grant: CashbackGrant, *, reason: str, now: datetime) -> CashbackGrant:
+    """Cancel a pending grant, or take a credited one back as far as the wallet allows."""
     if await _claim_status(session, grant, frm=GrantStatus.PENDING, to=GrantStatus.CANCELLED, at=now):
         await session.commit()
         return grant
@@ -366,7 +395,7 @@ async def reverse_order_cashback(session: AsyncSession, order_id: int, *, reason
     )
     if recoverable:
         # One commit for the claim, the amounts and the debit: a failure rolls all back.
-        await debit_wallet(session, user, recoverable, f"برگشت کش‌بک سفارش #{int(order_id)}: {reason}"[:255],
+        await debit_wallet(session, user, recoverable, f"برگشت کش‌بک {grant_label(grant)}: {reason}"[:255],
                            shop_id=grant.shop_id, commit=True, idempotency_key=f"cashback-reverse:{int(grant.id)}")
     else:
         await session.commit()
@@ -391,7 +420,7 @@ async def grant_after_delivery(session: AsyncSession, order: Order) -> None:
         await grant_for_order(session, order)
     except Exception:  # noqa: BLE001 - optional reward after a committed delivery; logged
         logger.warning("cashback grant failed order=%s", order_id, exc_info=True)
-        await rollback_quiet(session)
+        await rollback_and_reload(session, order)  # the caller still reads the delivered order
 
 
 async def reverse_after_refund(session: AsyncSession, *, service_id: int | None = None,

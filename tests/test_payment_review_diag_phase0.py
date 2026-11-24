@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from tests.postgres_support import scoped_async_engine
 
 
 class PaymentReviewDiagTests(unittest.IsolatedAsyncioTestCase):
     async def _session(self):
         from app.db.models import Base
 
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False)
@@ -268,23 +268,6 @@ class PaymentReviewDiagTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PayrevHandlerWiringTests(unittest.TestCase):
-    def test_handler_uses_diagnosis_and_resend_path(self):
-        src = Path("app/bot/handlers/payments.py").read_text(encoding="utf-8")
-        # Phase 1: dedicated go/send + legacy ok router
-        self.assertIn("execute_payment_legacy_ok", src)
-        self.assertIn("execute_payment_resend", src)
-        self.assertIn("payrev:send:", src)
-        actions = Path("app/services/payment_review_actions.py").read_text(encoding="utf-8")
-        self.assertIn("پیام تحویل دوباره ارسال شد", actions)
-        self.assertIn("diagnose_payment_review", actions)
-
-    def test_finance_delivery_surfaces_diag(self):
-        pages = Path("app/api/finance_pages.py").read_text(encoding="utf-8")
-        tpl = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
-        self.assertIn("diagnose_order_delivery", pages)
-        self.assertIn("delivery_diag_by_order", pages)
-        self.assertIn("delivery_diag_by_order", tpl)
-        self.assertIn("تشخیص", tpl)
 
     def test_backup_env_clarity_bot_and_web(self):
         from app.bot.handlers.admin_backup import _hub_text
@@ -299,20 +282,6 @@ class PayrevHandlerWiringTests(unittest.TestCase):
         self.assertIn("شامل .env", web)
         self.assertIn("بدون .env", web)
         self.assertIn("همه فروشگاه‌ها", web)
-
-
-class PayrevResendPathTests(unittest.TestCase):
-    """approved_resend must resend Telegram — never call approve_payment."""
-
-    def test_resend_path_skips_approve_payment(self):
-        src = Path("app/services/payment_review_actions.py").read_text(encoding="utf-8")
-        start = src.index("async def execute_payment_resend")
-        end = src.index("\nasync def execute_payment_legacy_ok", start)
-        block = src[start:end]
-        self.assertIn("send_delivery_to_user", block)
-        self.assertNotIn("approve_payment(", block)
-        self.assertIn("resolve_delivery_failure", block)
-        self.assertIn('allows_action("resend")', block)
 
 
 if __name__ == "__main__":

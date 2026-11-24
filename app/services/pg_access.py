@@ -96,9 +96,9 @@ def _client_capability_ident(pg: Any) -> str:
         if inspect.isawaitable(value):
             # AsyncMock or similar — ignore and fall back to attributes.
             try:
-                value.close()  # type: ignore[attr-defined]
-            except Exception:
-                pass
+                value.close()  # type: ignore[attr-defined]  # awaitables without close() are skipped
+            except (AttributeError, RuntimeError):
+                logger.debug("read cache ident awaitable could not be closed", exc_info=True)
     uname = str(getattr(pg, "_login_username", "") or "").strip()
     base = str(getattr(pg, "base_url", "") or "")
     partition = str(getattr(pg, "_cache_partition", "role") or "role")

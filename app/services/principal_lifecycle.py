@@ -487,11 +487,11 @@ async def reject_hierarchy_mutation(
     if staff is not None:
         try:
             assert_owner_lifecycle_actor(staff)
-        except PrincipalLifecycleError:
+        except PrincipalLifecycleError as exc:
             raise PrincipalLifecycleError(
                 "تغییر والد/عمق مجاز نیست",
                 code="hierarchy_immutable",
-            )
+            ) from exc
     if promote_to_owner or depth == DEPTH_OWNER or parent_id is None and depth == 0:
         raise PrincipalLifecycleError(
             "تبدیل به مالک یا ایجاد مالک دوم مجاز نیست",

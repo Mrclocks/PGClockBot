@@ -1,11 +1,8 @@
-"""Idempotent additive monitor schema and rollback on both supported databases."""
+"""Idempotent additive monitor schema and rollback on PostgreSQL."""
 
 from __future__ import annotations
 
 import importlib.util
-import os
-import secrets
-import tempfile
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,9 +12,9 @@ import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget
+from tests.postgres_support import isolated_database
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,20 +42,9 @@ class MonitorMigrationTests(unittest.IsolatedAsyncioTestCase):
             spec.loader.exec_module(module)
             modules.append(module)
         migration = MonitorMigrations(tuple(modules))
-        with tempfile.TemporaryDirectory(prefix="pgclock-monitor-migration-") as folder:
-            url = os.environ.get("PGCLOCK_CONNECTION_TEST_URL") or f"sqlite+aiosqlite:///{Path(folder) / 'existing.db'}"
-            engine = create_async_engine(url)
-            schema = "monitor_migration_" + secrets.token_hex(8)
-            try:
-                async with engine.begin() as conn:
-                    if conn.dialect.name == "postgresql":
-                        await conn.execute(sa.text(f'CREATE SCHEMA "{schema}"'))
-                        await conn.execute(sa.text(f'SET LOCAL search_path TO "{schema}"'))
-                    await conn.run_sync(lambda sync: self.check_migration(sync, migration))
-                    if conn.dialect.name == "postgresql":
-                        await conn.execute(sa.text(f'DROP SCHEMA "{schema}" CASCADE'))
-            finally:
-                await engine.dispose()
+        async with isolated_database() as database:
+            async with database.engine.begin() as conn:
+                await conn.run_sync(lambda sync: self.check_migration(sync, migration))
 
     def check_migration(self, conn: sa.Connection, migration: MonitorMigrations) -> None:
         conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))

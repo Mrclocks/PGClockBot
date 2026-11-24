@@ -8,17 +8,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class Version366Tests(unittest.TestCase):
-    def test_version(self):
-        from app.version import __version__
-        from app.services.updates import is_same_or_newer
-
-        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
-        notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"0.1.0"', notes)
-
-
 class CancelSkipHandlerTests(unittest.TestCase):
     def test_orphan_cancel_imports_from_bases(self):
         src = (ROOT / "app/bot/handlers/start.py").read_text(encoding="utf-8")
@@ -82,11 +71,6 @@ class TicketShopScopeTests(unittest.TestCase):
         from app.db.models import Ticket
 
         self.assertTrue(hasattr(Ticket, "reseller_id"))
-
-    def test_migration_adds_column(self):
-        src = (ROOT / "app/db/session.py").read_text(encoding="utf-8")
-        self.assertIn('ADD COLUMN reseller_id INTEGER', src)
-        self.assertIn('has_table("tickets")', src)
 
     def test_create_ticket_uses_shop_context(self):
         src = (ROOT / "app/services/tickets.py").read_text(encoding="utf-8")

@@ -14,6 +14,7 @@ from app.services import purchase_notices
 from app.services.wallet import credit_wallet
 from tests.test_miniapp_shop_extras import SHOP_PLAN, ShopExtrasFixture
 from tests.test_miniapp_shop_readonly import SHOP
+from tests.postgres_support import scoped_sync_engine
 
 OWNER_TELEGRAM_ID = 5005
 OTHER_SHOP_OWNER_TELEGRAM_ID = 6006
@@ -109,7 +110,7 @@ class StaffNotifiedMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("staff_notified_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(sa.text("CREATE TABLE orders (id INTEGER PRIMARY KEY, amount INTEGER)"))
             conn.execute(sa.text("INSERT INTO orders (id, amount) VALUES (1, 500)"))

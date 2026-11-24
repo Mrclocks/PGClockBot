@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -18,9 +18,9 @@ from app.bot.auth import (
     is_bot_owner_principal,
     is_migrated_pg_soft_callback,
 )
-from app.services.bot_pg_catalog_pilot import authorize_bot_pg_catalog_op
-from app.services.bot_pg_object_pilot import authorize_bot_pg_object_op
-from app.services.bot_pg_user_pilot import authorize_bot_pg_user_op
+from app.services.bot_pg_catalog_authz import authorize_bot_pg_catalog_op
+from app.services.bot_pg_object_authz import authorize_bot_pg_object_op
+from app.services.bot_pg_user_authz import authorize_bot_pg_user_op
 from app.services.bot_principal_identity import (
     bot_pg_client_for_resolution,
     resolve_bot_org_principal,
@@ -35,6 +35,7 @@ from app.services.org_principals import (
     resolve_org_principal_for_staff,
 )
 from app.services.pg_access import map_pg_role_to_features
+from tests.postgres_support import scoped_async_engine
 
 
 USERS_FULL = {
@@ -102,7 +103,7 @@ def _fake_msg():
 
 class Phase4HOwnerClientBoundaryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

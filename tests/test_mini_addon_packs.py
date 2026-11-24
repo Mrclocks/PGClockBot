@@ -7,19 +7,20 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_pages import register_miniapp_pages
 from app.db.models import Base, BotUser, Plan, PlanCategory, ServiceAddonPack, UserService
+from tests.postgres_support import add_rows, scoped_async_engine
 
 
 class MiniAddonPackTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
-        self.session.add_all([
+        await add_rows(self.session, [
             BotUser(id=1, telegram_id=101, referral_code="u1", role="user"),
             BotUser(id=2, telegram_id=102, referral_code="u2", role="user"),
             PlanCategory(id=1, name="VIP", audience="users"),

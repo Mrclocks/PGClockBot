@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -17,9 +17,9 @@ from app.bot.auth import (
     is_migrated_pg_soft_callback,
 )
 from app.services.bot_l2_bind import bind_l2_bot_telegram
-from app.services.bot_pg_catalog_pilot import authorize_bot_pg_catalog_op
-from app.services.bot_pg_object_pilot import authorize_bot_pg_object_op
-from app.services.bot_pg_user_pilot import (
+from app.services.bot_pg_catalog_authz import authorize_bot_pg_catalog_op
+from app.services.bot_pg_object_authz import authorize_bot_pg_object_op
+from app.services.bot_pg_user_authz import (
     authorize_bot_pg_user_op,
     list_scoped_pg_users,
 )
@@ -31,6 +31,7 @@ from app.services.org_principals import (
     ensure_owner_principal,
 )
 from app.services.pg_access import map_pg_role_to_features
+from tests.postgres_support import scoped_async_engine
 
 
 USERS_FULL = {
@@ -124,7 +125,7 @@ def _obj(oid: int, admin: str | None, **extra) -> dict:
 
 class Phase5CBotL2PgParityTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

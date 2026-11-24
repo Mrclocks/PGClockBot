@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.cli.context import CliContext, require_confirm
-from app.cli.output import CliError, header, info, kv, ok, warn
+from app.cli.output import CliError, header, human_size, info, kv, ok, terminal_text, warn
 
 
 def _bind_paths(ctx: CliContext) -> None:
@@ -36,7 +36,7 @@ def cmd_backup(ctx: CliContext, *, note: str = "", include_env: bool = False) ->
     kv("id", result.get("id"))
     kv("path", result.get("path"))
     kv("engine", result.get("db_engine"))
-    kv("size", result.get("size_human"))
+    kv("size", human_size(result.get("size")))
     kv("sha256", (result.get("sha256") or "")[:16] + "…")
     return 0
 
@@ -61,7 +61,7 @@ def cmd_restore(
         items = list_backups()[:10]
         warn("Backup not found. Recent backups:")
         for it in items:
-            info(f"{it.get('id')}  {it.get('size_human')}  {it.get('created_at')}")
+            info(f"{it.get('id')}  {human_size(it.get('size'))}  {it.get('created_at')}")
         raise CliError(f"Unknown backup id: {backup_id}")
 
     require_confirm(
@@ -76,8 +76,10 @@ def cmd_restore(
         actor="cli",
     )
     if not result.get("ok"):
-        raise CliError(result.get("error") or "Restore failed")
-    ok(result.get("message") or "restore complete")
+        detail = result.get("error")
+        raise CliError(f"Restore failed: {terminal_text(detail)}" if detail else "Restore failed")
+    # The service's own message is Persian (it is shown in the web panel too).
+    ok("restore complete")
     kv("safety_id", result.get("safety_id"))
     kv("restart", result.get("restart_scheduled"))
     return 0
@@ -94,7 +96,7 @@ def cmd_backup_list(ctx: CliContext) -> int:
         return 0
     for it in items:
         print(
-            f"  {it.get('id')}  {it.get('size_human'):>8}  "
+            f"  {it.get('id')}  {human_size(it.get('size')):>8}  "
             f"engine={it.get('app_version')}  {it.get('created_at')}"
         )
     # Also print db_engine from sidecar when present

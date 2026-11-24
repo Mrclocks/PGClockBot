@@ -11,12 +11,13 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.reseller_subscription_pages import register_reseller_subscription_pages
 from app.db.models import Base, BotUser, PgAdminSubscription, ResellerPlan, ResellerProfile
 from app.services.billing import GB
 from app.services.reseller_package import STALE_PAGE
+from tests.postgres_support import scoped_async_engine
 
 PERMS = '["orders","payments"]'
 
@@ -31,7 +32,7 @@ def plan(plan_id: int, *, users: int, gb: int, price: int, **extra) -> ResellerP
 
 class MySubscriptionPageTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

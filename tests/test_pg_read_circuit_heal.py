@@ -131,10 +131,12 @@ class CircuitHealTests(unittest.IsolatedAsyncioTestCase):
         # A real probe failure would double to 10s from now.
         self.assertNotAlmostEqual(state.blocked_until - self.clock.now, 10.0, places=1)
 
-    async def test_genuine_three_failures_still_pause(self) -> None:
+    async def test_genuine_confirmed_failures_still_pause(self) -> None:
         self.answers["/down"] = httpx.ConnectError("offline")
-        for _ in range(resilience.FAILURES_TO_PAUSE):
+        for _ in range(resilience.FAILURES_TO_PAUSE - 1):
             await self._page_read("/down")
+        self.assertFalse(resilience.circuit_status()["paused"])
+        await self._page_read("/down")
         self.assertTrue(resilience.circuit_status()["paused"])
 
     async def test_cooldown_doubles_on_real_probe_failures(self) -> None:

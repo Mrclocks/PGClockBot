@@ -203,8 +203,8 @@ async def shop_ops_snapshot(
                 if exp.tzinfo is None:
                     exp = exp.replace(tzinfo=timezone.utc)
                 exp = exp + timedelta(days=int(days))
-            except Exception:
-                continue
+            except (TypeError, ValueError, OverflowError):
+                continue  # a row with a duration that is not a whole number of days is not counted
             if now <= exp <= cutoff:
                 expiring += 1
     out["expiring_services"] = expiring
@@ -223,7 +223,7 @@ async def shop_payment_method_breakdown(
     else:
         scope = Order.reseller_id == int(reseller_id)
     # Label + group_by(same label) — required for PostgreSQL GROUP BY rules
-    # (SQLite is looser and hid this). Do not repeat coalesce() in group_by.
+    # Do not repeat coalesce() in group_by.
     method_col = func.coalesce(Order.payment_method, "—").label("pay_method")
     rows = (
         await session.execute(

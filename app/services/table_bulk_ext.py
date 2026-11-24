@@ -97,8 +97,8 @@ async def bulk_revoke_resellers(
     *,
     reason: str,
 ) -> tuple[int, int]:
-    from app.services.notifications import actor_label_from_staff, notify_reseller_revoked
-    from app.services.resellers import revoke_reseller
+    from app.services.notifications import actor_label_from_staff
+    from app.services.resellers import notify_reseller_revoked, revoke_reseller
 
     reason = (reason or "").strip()
     if len(reason) < 3:

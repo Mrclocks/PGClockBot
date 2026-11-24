@@ -1,23 +1,16 @@
-"""Isolated SQLite/PostgreSQL databases shared by monitor behavior tests."""
+"""Isolated PostgreSQL schemas shared by monitor behavior tests."""
 
 from __future__ import annotations
 
-import os
 import json
-import secrets
-import tempfile
-import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-from app.db import Base
 from app.db.models import BotUser, OrgPrincipal
 from app.services.authz import authz_from_staff
 from app.services.connection_monitor_access import MonitorAccess
 from app.services.connection_monitor_subscription import subscription_entries
+from tests.postgres_support import PostgresTestCase
 
 
 OWNER_STAFF = {
@@ -35,22 +28,9 @@ def monitor_access(**changes: object) -> MonitorAccess:
     return MonitorAccess(authz_from_staff({**OWNER_STAFF, **changes}), True)
 
 
-class MonitorDatabaseCase(unittest.IsolatedAsyncioTestCase):
+class MonitorDatabaseCase(PostgresTestCase):
     async def asyncSetUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(prefix="pgclock-monitor-tests-")
-        self.admin_engine = None
-        url = os.environ.get("PGCLOCK_CONNECTION_TEST_URL")
-        if url:
-            self.schema = "monitor_test_" + secrets.token_hex(8)
-            self.admin_engine = create_async_engine(url)
-            async with self.admin_engine.begin() as conn:
-                await conn.execute(text(f'CREATE SCHEMA "{self.schema}"'))
-            self.engine = create_async_engine(url, connect_args={"server_settings": {"search_path": self.schema}})
-        else:
-            self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.temporary.name) / 'monitor.db'}")
-        async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        await super().asyncSetUp()
         self.now = datetime.now(timezone.utc)
         self.access = monitor_access()
         async with self.Session() as session:
@@ -65,10 +45,3 @@ class MonitorDatabaseCase(unittest.IsolatedAsyncioTestCase):
             ])
             await session.commit()
 
-    async def asyncTearDown(self) -> None:
-        await self.engine.dispose()
-        if self.admin_engine is not None:
-            async with self.admin_engine.begin() as conn:
-                await conn.execute(text(f'DROP SCHEMA "{self.schema}" CASCADE'))
-            await self.admin_engine.dispose()
-        self.temporary.cleanup()

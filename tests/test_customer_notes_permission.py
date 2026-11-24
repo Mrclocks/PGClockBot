@@ -8,14 +8,13 @@ another shop's (or the platform's) note or tag.
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from pathlib import Path
 
 import sqlalchemy as sa
 from fastapi import FastAPI
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services.customer_marks import (
     CUSTOMER_NOTES_PERMISSION,
@@ -26,6 +25,7 @@ from app.services.customer_marks import (
     may_edit_private_marks,
 )
 from app.services.resellers import DEFAULT_FEATURE_PERMS, FEATURE_PERMS, normalize_feature_perms, parse_perms
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP_A = 1001
@@ -75,8 +75,7 @@ class MarksHarness(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         from app.db.models import BotUser, BotUserShop
 
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'notes.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -103,7 +102,6 @@ class MarksHarness(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _write(self, staff: dict, user_id: int, *, note: str | None = None, tag: str | None = None) -> None:
         async with self.Session() as session:
@@ -234,13 +232,13 @@ class MarksMigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("marks", ROOT / "alembic/versions/0083_shop_customer_marks.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
             conn.execute(sa.text(
                 "CREATE TABLE bot_users (id INTEGER PRIMARY KEY, reseller_id INTEGER, staff_note TEXT, color_tag VARCHAR(16))"
             ))
             conn.execute(sa.text(
-                "CREATE TABLE bot_user_shops (id INTEGER PRIMARY KEY, bot_user_id INTEGER NOT NULL, shop_id INTEGER, created_at TIMESTAMP)"
+                "CREATE TABLE bot_user_shops (id SERIAL PRIMARY KEY, bot_user_id INTEGER NOT NULL, shop_id INTEGER, created_at TIMESTAMP)"
             ))
             conn.execute(sa.text(
                 "CREATE UNIQUE INDEX uq_bot_user_shops_shop ON bot_user_shops (bot_user_id, shop_id) WHERE shop_id IS NOT NULL"

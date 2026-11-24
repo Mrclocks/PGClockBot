@@ -1,11 +1,9 @@
 """Owner search among resellers in the bot: same rules as the customer search, owner only."""
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import admin
 from app.bot.handlers import subscription_lookup as bot
@@ -13,6 +11,7 @@ from app.bot.nav_input import CANCEL_REGISTRY
 from app.bot.nav_inline import admin_resellers_hub_keyboard
 from app.db.models import Base, BotUser
 from app.services.users import DEFAULT_SETTINGS
+from tests.postgres_support import scoped_async_engine
 
 
 def buttons(markup) -> list[str]:
@@ -21,8 +20,7 @@ def buttons(markup) -> list[str]:
 
 class ResellerSearchCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'res.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -37,7 +35,6 @@ class ResellerSearchCase(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
 
 
 class ResellerSearchTests(ResellerSearchCase):

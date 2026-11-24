@@ -11,15 +11,15 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("WEB_SECRET", "x" * 48)
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.services import backup_schedule as schedule
 from app.services import backup_telegram as tg
 from app.services.users import get_setting, set_setting
+from tests.postgres_support import scoped_async_engine
 
 AT_THREE = datetime(2026, 11, 2, 3, 5, tzinfo=timezone.utc)
 
@@ -27,7 +27,7 @@ AT_THREE = datetime(2026, 11, 2, 3, 5, tzinfo=timezone.utc)
 class _Case(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 't.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -38,13 +38,14 @@ class _Case(unittest.IsolatedAsyncioTestCase):
         self.bot.send_message = AsyncMock()
         self.bot.session.close = AsyncMock()
         self.build_threads: list[int] = []
+        self.build_kwargs: list[dict] = []
         self.verified = True
         for patcher in (
             patch.object(tg, "_open_bot", return_value=self.bot),
             patch.object(tg, "get_settings", return_value=SimpleNamespace(bot_token="999:PANEL", admin_ids=[11])),
             patch.object(schedule, "create_backup", side_effect=self._build),
             patch.object(schedule, "validate_backup_archive", side_effect=lambda path: (self.verified, "bad", {})),
-            patch.object(schedule, "prune_backups", return_value=0),
+            patch.object(schedule, "prune_to_configured_retention", AsyncMock(return_value=0)),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -55,7 +56,8 @@ class _Case(unittest.IsolatedAsyncioTestCase):
 
     def _build(self, **kwargs) -> dict:
         self.build_threads.append(threading.get_ident())
-        return {"path": str(self.archive), "id": "x", "include_env": False}
+        self.build_kwargs.append(kwargs)
+        return {"path": str(self.archive), "id": "x", "include_env": bool(kwargs.get("include_env"))}
 
     async def run_at(self, moment: datetime) -> str:
         async with self.Session() as session:
@@ -107,6 +109,24 @@ class NightlyBackupTests(_Case):
         self.assertEqual(self.bot.send_message.await_args.args[1], schedule.UNVERIFIED_MESSAGE)
         self.bot.send_document.assert_not_awaited()
 
+    async def test_scheduled_backup_with_env_is_sent_only_after_the_risk_is_acknowledged(self) -> None:
+        await self.enable_delivery()
+        async with self.Session() as session:
+            await set_setting(session, schedule.INCLUDE_ENV_KEY, "1")
+            await session.commit()
+        self.assertEqual(await self.run_at(AT_THREE), "ok")
+        self.assertTrue(self.build_kwargs[0]["include_env"])
+        self.bot.send_document.assert_not_awaited()
+
+        async with self.Session() as session:
+            await set_setting(session, tg.ALLOW_ENV_KEY, "1")
+            await set_setting(session, schedule.LAST_ATTEMPT_KEY, "")
+            await set_setting(session, schedule.LAST_OK_KEY, "")
+            await session.commit()
+        self.assertEqual(await self.run_at(AT_THREE), "ok")
+        self.bot.send_document.assert_awaited_once()
+        self.assertIn(".env", self.bot.send_document.await_args.kwargs["caption"])
+
     async def test_disabled_schedule_does_nothing(self) -> None:
         async with self.Session() as session:
             await set_setting(session, schedule.ENABLED_KEY, "0")
@@ -156,6 +176,23 @@ class BotUploadLimitTests(unittest.IsolatedAsyncioTestCase):
             await handler(message, db_user=SimpleNamespace(id=1), state=AsyncMock())
         download.assert_not_awaited()
         self.assertIn("وب‌پنل", message.answer.await_args.args[0])
+
+    async def test_a_refused_upload_reason_is_escaped_for_telegram_html(self) -> None:
+        from app.bot.handlers import admin_backup
+
+        message = MagicMock()
+        message.answer = AsyncMock()
+        message.document = SimpleNamespace(file_name="b.zip", file_size=1000)
+        refused = {"ok": False, "error": "فایل اعلام‌شده در بکاپ نیست: data/<b>x</b>"}
+        with patch("app.bot.auth.require_bot_owner", new=AsyncMock(return_value=True)), patch.object(
+            admin_backup, "_is_admin", return_value=True
+        ), patch.object(admin_backup, "_download_upload_bytes", new=AsyncMock(return_value=b"z")), patch.object(
+            admin_backup, "save_uploaded_backup", return_value=refused
+        ):
+            await admin_backup.backup_upload_file(message, db_user=SimpleNamespace(id=1), state=AsyncMock())
+        text = message.answer.await_args.args[0]
+        self.assertIn("&lt;b&gt;x&lt;/b&gt;", text)
+        self.assertNotIn("<b>", text)
 
 
 if __name__ == "__main__":

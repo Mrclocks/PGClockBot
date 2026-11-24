@@ -64,7 +64,11 @@ class BotButtonLabelCoverageTests(unittest.TestCase):
         from app.bot.handlers.reseller_settings import SECTIONS as res_s
 
         for sections, platform in ((admin_s, True), (res_s, False)):
-            self.assertEqual({s[0] for s in sections["shop"]["subs"]} - {"invite"}, {"identity", "texts"})
+            # «نام و متن‌ها» holds message texts only; button labels live in their own section.
+            self.assertEqual(
+                {s[0] for s in sections["shop"]["subs"]} - {"invite"},
+                {"identity", "texts", "profile", "guide_texts", "result_texts", "status_texts"},
+            )
             sub_ids = {s[0] for s in sections["labels"]["subs"]}
             self.assertIn("btn_main", sub_ids)
             self.assertIn("btn_loyalty_sub", sub_ids)

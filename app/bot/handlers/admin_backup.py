@@ -23,6 +23,7 @@ from aiogram.types import (
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner_handler
+from app.bot.backup_entry import backup_settings_button
 from app.bot.nav_inline import admin_backup_hub_keyboard, with_inline_back
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
@@ -36,6 +37,7 @@ from app.services.backup import (
     restore_backup,
     save_uploaded_backup,
 )
+from app.services.backup_settings import prune_to_configured_retention
 from app.services.updates import local_version
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading
@@ -61,6 +63,7 @@ def backup_hub_markup(backups: list[dict] | None, ui: dict | None) -> InlineKeyb
     """The backup panel: create / upload actions, the backup files, «بازگشت» to the system hub."""
     hub = admin_backup_hub_keyboard(ui)
     actions = [list(row) for row in hub.inline_keyboard[:-1]]  # its own «بازگشت» comes after the files
+    actions.append([backup_settings_button(ui)])
     files = with_inline_back(kb.backup_files_keyboard(backups), ui, "nv:adm:system")
     return InlineKeyboardMarkup(inline_keyboard=actions + [list(row) for row in files.inline_keyboard])
 
@@ -192,6 +195,7 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser, session: Asyn
         if callback.message:
             await callback.message.answer(f"❌ ساخت بکاپ انجام نشد:\n{user_safe_error(e)}")
         return
+    await prune_to_configured_retention(session)
     path = Path(result["path"])
     caption = (
         f"✅ بکاپ آماده\n"
@@ -365,7 +369,8 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
         actor=f"tg:{db_user.telegram_id}",
     )
     if not result.get("ok"):
-        await message.answer(f"❌ ریستور انجام نشد:\n{result.get('error')}")
+        # The reason can quote a path from inside an uploaded archive.
+        await message.answer(f"❌ ریستور انجام نشد:\n{html.escape(str(result.get('error') or ''))}")
         return
     msg = "✅ ریستور انجام شد."
     for warning in result.get("warnings") or []:
@@ -448,7 +453,7 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
         return
     await state.clear()
     if not result.get("ok"):
-        await message.answer(f"❌ {result.get('error')}")
+        await message.answer(f"❌ {html.escape(str(result.get('error') or ''))}")
         return
     await message.answer(
         f"✅ آپلود شد: <code>{result.get('filename')}</code>\n"

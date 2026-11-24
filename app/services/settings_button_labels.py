@@ -28,6 +28,9 @@ PLATFORM_ONLY_BTN_KEYS: frozenset[str] = frozenset(
         "btn_adm_broadcast",
         "btn_adm_preview",
         "btn_adm_edit_mode",
+        "btn_adm_quick_links",
+        "btn_adm_command_center",
+        "btn_adm_search",
         "btn_adm_hub_ops",
         "btn_adm_hub_people",
         "btn_adm_hub_product",
@@ -123,6 +126,7 @@ BTN_STORE_EXTRA: list[Field] = [
 # The shop's first step; a shop renames its own copy, like the other customer buttons.
 BTN_SHOP_KINDS: list[Field] = [
     ("btn_shop_kind_trial", "تست", "text"),
+    ("btn_trial", "دریافت تست (کیبورد اصلی)", "text"),
     ("btn_shop_kind_fixed", "پلن ثابت", "text"),
     ("btn_shop_kind_custom", "پلن دلخواه", "text"),
 ]
@@ -134,6 +138,8 @@ BTN_ADMIN_HUBS: list[Field] = [
     ("btn_adm_hub_marketing", "گروه بازاریابی", "text"),
     ("btn_adm_hub_system", "گروه سیستم", "text"),
     ("btn_adm_edit_mode", "حالت ویرایش منوها", "text"),
+    ("btn_adm_quick_links", "لینک‌های سریع", "text"),
+    ("btn_adm_command_center", "مرکز فرمان", "text"),
 ]
 
 BTN_ADMIN_HUB_ITEMS: list[Field] = [
@@ -143,6 +149,7 @@ BTN_ADMIN_HUB_ITEMS: list[Field] = [
     ("btn_adm_loyalty", "باشگاه (ادمین)", "text"),
     ("btn_adm_backup", "بکاپ / ریستور", "text"),
     ("btn_adm_exit_preview", "خروج از پیش‌نمایش", "text"),
+    ("btn_adm_search", "جستجو", "text"),
 ]
 
 BTN_ADMIN_SERVICE_CARE: list[Field] = [
@@ -193,11 +200,14 @@ BTN_ADMIN_SETTINGS_MORE: list[Field] = [
     ("btn_adm_st_notify", "تنظیمات: اعلان‌ها", "text"),
 ]
 
-BTN_ADMIN_BACKUP_BROADCAST: list[Field] = [
+BTN_ADMIN_BACKUP: list[Field] = [
     ("btn_backup_create", "ساخت بکاپ", "text"),
     ("btn_backup_create_env", "بکاپ همراه .env", "text"),
     ("btn_backup_upload", "آپلود فایل بکاپ", "text"),
     ("btn_backup_refresh", "تازه‌سازی لیست بکاپ", "text"),
+    ("btn_backup_settings", "تنظیمات بکاپ", "text"),
+]
+BTN_ADMIN_BROADCAST: list[Field] = [
     ("btn_bc_aud_all", "پیام همگانی: همه", "text"),
     ("btn_bc_aud_users", "پیام همگانی: کاربران", "text"),
     ("btn_bc_aud_resellers", "پیام همگانی: نمایندگان", "text"),
@@ -233,6 +243,14 @@ BTN_SERVICE_MORE: list[Field] = [
     ("btn_svc_add_existing", "اتصال اشتراک قبلی", "text"),
 ]
 
+# A group of its own: with «مدیریت سرویس» they would pass the per-screen field budget.
+BTN_SERVICE_PAUSE_TRANSFER: list[Field] = [
+    ("btn_svc_freeze", "توقف موقت سرویس", "text"),
+    ("btn_svc_unfreeze", "ادامهٔ سرویس", "text"),
+    ("btn_svc_transfer", "انتقال به شخص دیگر", "text"),
+    ("btn_svc_transfer_cancel", "لغو لینک انتقال", "text"),
+]
+
 BTN_ADMIN_PLAN_KINDS: list[Field] = [
     ("btn_adm_plans_kind_res_fixed", "اشتراک ثابت", "text"),
     ("btn_adm_plans_kind_res_payg", "اشتراک PAYG", "text"),
@@ -254,6 +272,9 @@ BTN_RESELLER_GROUPS: list[Field] = [
     ("btn_res_grp_customers", "گروه مشتریان", "text"),
     ("btn_res_grp_shop", "گروه فروشگاه من", "text"),
     ("btn_res_grp_account", "گروه حساب من", "text"),
+    ("btn_res_quick_links", "لینک‌های سریع", "text"),
+    ("btn_res_command_center", "مرکز فرمان", "text"),
+    ("btn_res_search", "جستجو", "text"),
 ]
 
 BTN_RESELLER_HUB: list[Field] = [
@@ -332,7 +353,8 @@ PLATFORM_ONLY_BTN_KEYS = PLATFORM_ONLY_BTN_KEYS | frozenset(
         BTN_ADMIN_PEOPLE_SUB,
         BTN_ADMIN_SETTINGS_SUB,
         BTN_ADMIN_SETTINGS_MORE,
-        BTN_ADMIN_BACKUP_BROADCAST,
+        BTN_ADMIN_BACKUP,
+        BTN_ADMIN_BROADCAST,
         BTN_ADMIN_PLANS_SUB,
         BTN_ADMIN_PLAN_KINDS,
         BTN_ADMIN_LOYALTY_SUB,
@@ -353,7 +375,6 @@ PLATFORM_ONLY_BTN_KEYS = PLATFORM_ONLY_BTN_KEYS | frozenset(
 def appearance_button_subs() -> list[tuple]:
     """Owner-only button labels that no other settings screen exposes."""
     return [
-        ("btn_store_extra", "دکمه‌های خرید و مینی‌اپ", BTN_STORE_EXTRA),
         ("btn_adm_hubs", "دکمه‌های ادمین — گروه‌ها", BTN_ADMIN_HUBS),
         ("btn_adm_items", "دکمه‌های ادمین — بخش‌ها", BTN_ADMIN_HUB_ITEMS),
     ]
@@ -386,6 +407,7 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
     pairs: list[tuple[str, str, list[Field]]] = [
         ("btn_main", "دکمه‌های منوی اصلی", BTN_MAIN_MENU),
         ("btn_shop_kinds", "دکمه‌های قدم اول خرید", BTN_SHOP_KINDS),
+        ("btn_store_extra", "دکمه‌های خرید و مینی‌اپ", BTN_STORE_EXTRA),
         ("btn_wallet_sub", "دکمه‌های کیف پول", BTN_WALLET_SUB),
         ("btn_support_sub", "دکمه‌های پشتیبانی", BTN_SUPPORT_SUB),
         ("btn_loyalty_sub", "دکمه‌های باشگاه", BTN_LOYALTY_SUB),
@@ -400,12 +422,14 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         ("btn_adm_people_sub", "دکمه‌های ادمین — کاربران و نمایندگان", BTN_ADMIN_PEOPLE_SUB),
         ("btn_adm_settings_sub", "دکمه‌های ادمین — بخش‌های تنظیمات", BTN_ADMIN_SETTINGS_SUB),
         ("btn_adm_settings_more", "دکمه‌های ادمین — قوانین و پشتیبانی در تنظیمات", BTN_ADMIN_SETTINGS_MORE),
-        ("btn_adm_backup_sub", "دکمه‌های ادمین — بکاپ و پیام همگانی", BTN_ADMIN_BACKUP_BROADCAST),
+        ("btn_adm_backup_sub", "دکمه‌های ادمین — بکاپ", BTN_ADMIN_BACKUP),
+        ("btn_adm_broadcast_sub", "دکمه‌های ادمین — پیام همگانی", BTN_ADMIN_BROADCAST),
         ("btn_adm_plans_sub", "دکمه‌های ادمین — پلن‌ها", BTN_ADMIN_PLANS_SUB),
         ("btn_adm_plan_kinds", "دکمه‌های ادمین — نوع پلن نمایندگی", BTN_ADMIN_PLAN_KINDS),
         ("btn_adm_loy_sub", "دکمه‌های ادمین — باشگاه", BTN_ADMIN_LOYALTY_SUB),
         ("btn_adm_mkt_sub", "دکمه‌های ادمین — بازاریابی", BTN_ADMIN_MARKETING_SUB),
         ("btn_service_more", "دکمه‌های مدیریت سرویس", BTN_SERVICE_MORE),
+        ("btn_service_pause", "دکمه‌های توقف و انتقال سرویس", BTN_SERVICE_PAUSE_TRANSFER),
         ("btn_res_groups", "دکمه‌های پنل نماینده — گروه‌ها", BTN_RESELLER_GROUPS),
         ("btn_res_hub", "دکمه‌های پنل نماینده", BTN_RESELLER_HUB),
         ("btn_res_hub_more", "دکمه‌های پنل نماینده — مشتریان و حساب", BTN_RESELLER_HUB_MORE),

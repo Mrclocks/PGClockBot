@@ -8,9 +8,12 @@ import logging
 import re
 from typing import Iterable
 
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan, UserService
+from app.services.message_buttons import ButtonInput, ButtonRules, build_keyboard, make_buttons, shop_may_link
+from app.services.service_scope import list_customer_services
 from app.services.users_ops import (
     UserOpsRow,
     approx_expire_at,
@@ -59,10 +62,13 @@ async def send_staff_dm(
     shop_id: int | None,
     actor: str | None = None,
     sender_tg: int | None = None,
+    buttons: list[ButtonInput] | None = None,
 ) -> None:
     """Send a scoped staff DM through the acting shop's bot (None = platform bot).
 
-    Opens a ticket so the delivered message carries پاسخ / بستن like ticket notices.
+    Opens a ticket so the delivered message carries پاسخ / بستن like ticket notices. ``buttons`` (one
+    to four, see ``message_buttons``) go above those two; they are checked before anything is stored,
+    so a refused button leaves no ticket behind. «تمدید» renews the customer's most urgent service.
     """
     if user.is_blocked:
         raise ValueError("کاربر مسدود است — ابتدا مسدودی را بردارید")
@@ -70,6 +76,7 @@ async def send_staff_dm(
         raise ValueError("شناسه تلگرام کاربر مشخص نیست")
     plain = normalize_staff_message(text)
     payload = wrap_staff_dm(html.escape(plain), actor=actor)
+    extra_rows = await _dm_button_rows(session, user, shop_id, buttons)
 
     from app.services.notifications import ticket_action_markup
     from app.services.reseller_bots import open_notify_bot_for_user
@@ -83,6 +90,8 @@ async def send_staff_dm(
         reseller_id=shop_id,
     )
     markup = ticket_action_markup(int(ticket.id))
+    if extra_rows:
+        markup = InlineKeyboardMarkup(inline_keyboard=[*extra_rows, *markup.inline_keyboard])
 
     bot, should_close = await open_notify_bot_for_user(session, user, shop_id=shop_id)
     try:
@@ -95,6 +104,19 @@ async def send_staff_dm(
     finally:
         if should_close:
             await bot.session.close()
+
+
+async def _dm_button_rows(
+    session: AsyncSession, user: BotUser, shop_id: int | None, buttons: list[ButtonInput] | None
+) -> list[list[InlineKeyboardButton]]:
+    if not buttons:
+        return []
+    service = pick_critical_service(await list_customer_services(session, int(user.id), shop_id))
+    rules = ButtonRules(
+        allow_links=await shop_may_link(session, shop_id),
+        renew_service_id=int(service.id) if service is not None else None,
+    )
+    return build_keyboard(make_buttons(buttons, rules))
 
 
 def pick_critical_service(services: list[UserService]) -> UserService | None:

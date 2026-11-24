@@ -1,19 +1,18 @@
 """Approving and rejecting service cancellations from the bot: scope, permissions, amount and back steps."""
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.handlers import cancellation_review as review
 from app.db.models import Base, BotUser, ServiceCancellation, ShopWallet, UserService
 from app.services import bot_feedback_texts as feedback
 from app.services.service_cancellations import request_cancellation
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 CTX = {"is_reseller_bot": False, "reseller_owner_id": None}
 
@@ -41,8 +40,7 @@ def buttons(markup) -> list[str]:
 
 class ReviewCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self.tmp.name) / 'review.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)()
@@ -70,15 +68,14 @@ class ReviewCase(unittest.IsolatedAsyncioTestCase):
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
-        self.platform_request = (await request_cancellation(self.session, self.platform_customer, 11, shop_id=None, reason="دیگر نیاز ندارم"))["id"]
-        self.shop_request = (await request_cancellation(self.session, self.shop_customer, 12, shop_id=2, reason="<b>x</b>"))["id"]
+        self.platform_request = (await request_cancellation(self.session, self.platform_customer, 11, shop_id=None, ui={}, reason="دیگر نیاز ندارم"))["id"]
+        self.shop_request = (await request_cancellation(self.session, self.shop_customer, 12, shop_id=2, ui={}, reason="<b>x</b>"))["id"]
 
     async def asyncTearDown(self):
         await self.session.close()
         await self.engine.dispose()
         reset_shop_reseller_id(self.token)
         _SETTINGS_CACHE.clear()
-        self.tmp.cleanup()
 
     def callback(self, data):
         callback = AsyncMock()
@@ -90,12 +87,13 @@ class ReviewCase(unittest.IsolatedAsyncioTestCase):
         """Run the handler for ``data`` as a shop operator holding ``perms`` (or the platform Owner)."""
         handler = {
             "a": review.approve_start, "r": review.reject_ask, "ok": review.approve_run,
-            "rn": review.reject_run, "v": review.view_card,
+            "rn": review.reject_run, "v": review.view_card, "sg": review.approve_suggested,
         }[data.split(":")[1]]
         callback = self.callback(data)
         user = SimpleNamespace(id=9, telegram_id=777)
         actor = (None, None) if owner else (shop_id, object())
-        kwargs = {"state": state or AsyncMock()} if handler in (review.approve_start, review.view_card) else {}
+        with_state = (review.approve_start, review.view_card, review.approve_suggested)
+        kwargs = {"state": state or AsyncMock()} if handler in with_state else {}
         with patch.object(review, "load_reseller_actor", AsyncMock(return_value=actor)), \
                 patch.object(review, "has_bot_perm", MagicMock(side_effect=lambda profile, key, **kw: key in perms)), \
                 patch.object(review, "require_bot_owner", AsyncMock(return_value=owner)), \
@@ -260,6 +258,38 @@ class CancellationReviewBotTests(ReviewCase):
         callback.answer.assert_awaited_with(feedback.INVALID, show_alert=True)
         callback, _, _ = await self.press(f"cnrv:ok:{self.shop_request}:99999999999"[:-1])
         self.assertEqual(self.panel.writes, 0)
+
+
+class SuggestedAmountTests(ReviewCase):
+    async def suggest(self, amount: int) -> None:
+        row = await self.session.get(ServiceCancellation, self.shop_request)
+        row.suggested_refund, row.paid_amount, row.remaining_percent = amount, 20_000, 35
+        await self.session.commit()
+
+    async def test_amount_step_offers_the_stored_suggestion_and_it_opens_the_confirm_screen(self):
+        await self.suggest(7000)
+        _, _, ask = await self.press(f"cnrv:a:{self.shop_request}")
+        self.assertIn(f"cnrv:sg:{self.shop_request}", buttons(ask.await_args.kwargs["extra_inline"]))
+        callback, edit, _ = await self.press(f"cnrv:sg:{self.shop_request}")
+        self.assertIn(f"cnrv:ok:{self.shop_request}:7000", self.shown(edit)[1])
+        self.assertEqual(await self.status(self.shop_request), "pending", "the suggestion alone approves nothing")
+
+    async def test_suggestion_needs_payments_permission_and_the_requests_own_shop(self):
+        await self.suggest(7000)
+        for kwargs in ({"perms": ("orders",)}, {"shop_id": 3}, {"owner": True}):
+            with self.subTest(**kwargs):
+                callback, edit, _ = await self.press(f"cnrv:sg:{self.shop_request}", **kwargs)
+                edit.assert_not_awaited()
+                self.assertTrue(callback.answer.await_args.kwargs.get("show_alert"))
+
+    async def test_without_a_suggestion_the_amount_step_has_no_shortcut(self):
+        row = await self.session.get(ServiceCancellation, self.shop_request)
+        row.suggested_refund = None
+        await self.session.commit()
+        _, _, ask = await self.press(f"cnrv:a:{self.shop_request}")
+        self.assertIsNone(ask.await_args.kwargs["extra_inline"])
+        callback, edit, _ = await self.press(f"cnrv:sg:{self.shop_request}")
+        edit.assert_not_awaited()
 
 
 class AmountStepTests(ReviewCase):

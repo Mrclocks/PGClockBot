@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import importlib.util
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import Base, ResellerPlan, ResellerPlanExtraPack, ResellerProfile
 from app.services.reseller_capacity import unit_offer, unit_offer_for_plan
@@ -26,6 +25,7 @@ from app.services.reseller_plan_extra_packs import (
     replace_kind_packs,
     resolve_extra_pack_button_style,
 )
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -58,7 +58,7 @@ class ParseHelpersTests(unittest.TestCase):
 
 class ExtraPackServiceTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -176,7 +176,7 @@ class ExtraPackServiceTests(unittest.IsolatedAsyncioTestCase):
 
 class ExtraPackFormApplyTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -249,45 +249,44 @@ class ExtraPackMigrationTests(unittest.TestCase):
         assert spec.loader is not None
         spec.loader.exec_module(migration)
 
-        with tempfile.TemporaryDirectory() as tmp:
-            engine = sa.create_engine(f"sqlite:///{Path(tmp) / 'm.db'}")
-            with engine.begin() as conn:
-                conn.execute(
-                    sa.text(
-                        "CREATE TABLE reseller_plans ("
-                        "id INTEGER PRIMARY KEY, name VARCHAR(128), allow_buy_extra BOOLEAN NOT NULL DEFAULT 0)"
-                    )
+        engine = scoped_sync_engine()
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "CREATE TABLE reseller_plans ("
+                    "id INTEGER PRIMARY KEY, name VARCHAR(128), allow_buy_extra BOOLEAN NOT NULL DEFAULT false)"
                 )
-                conn.execute(
-                    sa.text(
-                        "INSERT INTO reseller_plans (id, name, allow_buy_extra) VALUES "
-                        "(1, 'with', 1), (2, 'without', 0)"
-                    )
+            )
+            conn.execute(
+                sa.text(
+                    "INSERT INTO reseller_plans (id, name, allow_buy_extra) VALUES "
+                    "(1, 'with', true), (2, 'without', false)"
                 )
-                with Operations.context(MigrationContext.configure(conn)):
-                    migration.upgrade()
-                    migration.upgrade()
-                    names = set(sa.inspect(conn).get_table_names())
-                    self.assertIn("reseller_plan_extra_packs", names)
-                    rows = conn.execute(
-                        sa.text(
-                            "SELECT plan_id, kind, amount FROM reseller_plan_extra_packs "
-                            "ORDER BY plan_id, kind, amount"
-                        )
-                    ).fetchall()
-                    gb = {(r[0], r[2]) for r in rows if r[1] == "gb"}
-                    users = {(r[0], r[2]) for r in rows if r[1] == "users"}
-                    self.assertEqual(gb, {(1, n) for n in DEFAULT_EXTRA_GB_AMOUNTS})
-                    self.assertEqual(users, {(1, n) for n in DEFAULT_EXTRA_USER_AMOUNTS})
-                    self.assertFalse(any(r[0] == 2 for r in rows))
-                    migration.downgrade()
-                    self.assertNotIn(
-                        "reseller_plan_extra_packs", set(sa.inspect(conn).get_table_names())
+            )
+            with Operations.context(MigrationContext.configure(conn)):
+                migration.upgrade()
+                migration.upgrade()
+                names = set(sa.inspect(conn).get_table_names())
+                self.assertIn("reseller_plan_extra_packs", names)
+                rows = conn.execute(
+                    sa.text(
+                        "SELECT plan_id, kind, amount FROM reseller_plan_extra_packs "
+                        "ORDER BY plan_id, kind, amount"
                     )
-                    self.assertEqual(
-                        conn.execute(sa.text("SELECT COUNT(*) FROM reseller_plans")).scalar(), 2
-                    )
-            engine.dispose()
+                ).fetchall()
+                gb = {(r[0], r[2]) for r in rows if r[1] == "gb"}
+                users = {(r[0], r[2]) for r in rows if r[1] == "users"}
+                self.assertEqual(gb, {(1, n) for n in DEFAULT_EXTRA_GB_AMOUNTS})
+                self.assertEqual(users, {(1, n) for n in DEFAULT_EXTRA_USER_AMOUNTS})
+                self.assertFalse(any(r[0] == 2 for r in rows))
+                migration.downgrade()
+                self.assertNotIn(
+                    "reseller_plan_extra_packs", set(sa.inspect(conn).get_table_names())
+                )
+                self.assertEqual(
+                    conn.execute(sa.text("SELECT COUNT(*) FROM reseller_plans")).scalar(), 2
+                )
+        engine.dispose()
 
 
 if __name__ == "__main__":

@@ -470,7 +470,7 @@ async def attach_verified(
     ``enforce_cap=False`` skips the per-customer cap, which limits what customers add themselves,
     for an attachment staff make on the customer's behalf.
     """
-    # Serialise this customer's imports (no effect on SQLite) so the per-user cap below holds.
+    # Serialise this customer's imports so the per-user cap below holds.
     await session.scalar(select(BotUser.id).where(BotUser.id == user.id).with_for_update())
     mine: UserService | None = None
     for row in await existing_rows(session, verified.panel_id, verified.token):
@@ -484,7 +484,12 @@ async def attach_verified(
             return await _commit(session, mine, verified.record, ImportOutcome.UPGRADED)
         return ImportResult(ImportOutcome.ALREADY_YOURS, mine, verified.record)
 
-    if enforce_cap and renewable and await _imported_count(session, user.id) >= config.max_per_user:
+    if (
+        enforce_cap
+        and renewable
+        and not config.is_unlimited
+        and await _imported_count(session, user.id) >= config.max_per_user
+    ):
         raise ServiceImportError(LIMIT_REACHED, Reason.LIMIT_REACHED)
     if ask_approval and renewable and config.needs_approval:
         return await _queue_request(session, user, verified, shop_id)

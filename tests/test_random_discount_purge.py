@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import secrets
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
-from sqlalchemy import delete, event, func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.models import (
     Base, BotUser, Order, Payment, RandomDiscount, RandomDiscountDraw, RandomDiscountReservation,
@@ -18,20 +16,13 @@ from app.services.order_purge import (
 )
 from app.services.user_purge import purge_user_references
 from app.services.users import clear_settings_cache
-
-
-def _enable_foreign_keys(connection: Any, _record: Any) -> None:
-    cursor = connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+from tests.postgres_support import scoped_async_engine
 
 
 class RandomDiscountPurgeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
-        self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{self.tmp.name}/purge.db")
-        event.listen(self.engine.sync_engine, "connect", _enable_foreign_keys)
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -47,7 +38,6 @@ class RandomDiscountPurgeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.session.close()
         await self.engine.dispose()
-        self.tmp.cleanup()
         clear_settings_cache()
 
     async def fixture(self, *, shop_id: int = 2, user_id: int = 1) -> tuple[Order, Payment, RandomDiscountDraw, RandomDiscountReservation]:

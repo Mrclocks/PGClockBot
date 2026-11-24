@@ -50,7 +50,7 @@ class SidebarMenuOrderTests(unittest.TestCase):
         self.assertEqual(
             labels(nav["shop"]),
             ["نمای کلی فروشگاه", "کاربران ربات", "نمایندگان", "مالی", "پلن‌ها", "پشتیبانی", "بازاریابی",
-             "پاکسازی سرویس‌ها", "گزارش کارکنان", "تنظیمات ربات"],
+             "ابزار و پاکسازی", "گزارش کارکنان", "مشتری و سرویس", "تنظیمات ربات"],
         )
         self.assertEqual(nav["shop"][0][1], "/dashboard")
         self.assertNotIn("تیکت‌ها", labels(nav["shop"]))

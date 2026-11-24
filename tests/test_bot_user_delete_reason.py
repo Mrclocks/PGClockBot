@@ -7,12 +7,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
+ADMIN_STATES = (ROOT / "app/bot/handlers/admin_states.py").read_text(encoding="utf-8")
 KB = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
 
 
 class BotUserDeleteReasonTests(unittest.TestCase):
     def test_delete_user_reason_state_exists(self):
-        self.assertIn("delete_user_reason = State()", ADMIN)
+        self.assertIn("delete_user_reason = State()", ADMIN_STATES)
 
     def test_confirm_callback_asks_for_reason_not_deletes(self):
         # Confirm button handler should enter FSM, not call delete_bot_user.

@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 import importlib.util
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Order, Payment, PaymentReceiptFingerprint, Role
@@ -29,6 +26,7 @@ from app.services.scheduled_approval import (
     shops_with_waiting_receipts,
 )
 from app.services.users import DEFAULT_SETTINGS, SETTING_GROUPS
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
@@ -62,8 +60,7 @@ class RuleTests(unittest.TestCase):
 
 class ApprovalTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'a.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -75,7 +72,6 @@ class ApprovalTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _user(self, session, *, role: str = Role.USER.value, blocked: bool = False) -> BotUser:
         self.counter += 1
@@ -433,7 +429,7 @@ class MigrationTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("receipt_at_migration", ROOT / "alembic/versions/0075_payment_receipt_at.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         with engine.begin() as conn:
             conn.execute(text("CREATE TABLE payments (id INTEGER PRIMARY KEY, status TEXT, amount INTEGER)"))
             conn.execute(text("INSERT INTO payments VALUES (1, 'pending', 90000)"))

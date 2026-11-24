@@ -119,12 +119,23 @@
   margin: 0;
 }
 .list-editor-actions > .icon-btn {
+  /* A row's edit and delete are bare icons inside the capsule: no circle of their own. */
   flex: 0 0 auto;
   width: var(--space-4_5);
   height: var(--space-4_5);
   min-height: var(--space-4_5);
   margin: 0;
 }
+/* Above the light theme's tinted circle for add/remove buttons. */
+.list-editor-row .list-editor-actions > .icon-btn,
+.list-editor-row .list-editor-actions > .icon-btn.icon-add,
+.list-editor-row .list-editor-actions > .icon-btn.icon-remove {
+  border-color: transparent;
+  background: none;
+}
+.list-editor-row .list-editor-actions > .icon-btn { color: var(--muted-fg); }
+.list-editor-row .list-editor-actions > .icon-btn.icon-remove { color: var(--destructive-fg); }
+.list-editor-row .list-editor-actions > .icon-btn.icon-add { color: var(--ok-fg); }
 .list-editor .icon-btn:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;

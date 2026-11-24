@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import Base
 import app.db.models  # noqa: F401
@@ -36,6 +36,7 @@ from app.services.principal_web_identity import (
     session_contains_plaintext_secret,
 )
 from app.services.secret_box import decrypt_secret, encrypt_secret
+from tests.postgres_support import scoped_async_engine
 
 
 _API_KEY = "pg_key_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -97,7 +98,7 @@ class PasarGuardClientApiKeyTests(unittest.IsolatedAsyncioTestCase):
 
 class GetPgApiKeyPriorityTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(
@@ -463,7 +464,7 @@ class InvalidateStaffCacheTests(unittest.TestCase):
 
 class ResellerApplyApiKeyTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

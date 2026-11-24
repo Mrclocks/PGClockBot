@@ -19,6 +19,8 @@ from typing import Any, Protocol
 
 from aiogram.types.update import UpdateTypeLookupError
 
+from app.services.pg_read_resilience import finish_web_read_budget
+
 log = logging.getLogger(__name__)
 
 # Handlers running at the same time across every bot in this process, and for one bot.
@@ -232,6 +234,9 @@ def _handler(dispatcher: UpdateFeeder, bot: Any, update: Any) -> Job:
     bot_id = int(bot.id)
 
     async def handle() -> None:
+        # This task copied the webhook request's context: drop its page read deadline so a
+        # purchase or renewal reads the panel with the client's own timeouts.
+        finish_web_read_budget()
         try:
             await dispatcher.feed_update(bot, update)
         except asyncio.CancelledError:

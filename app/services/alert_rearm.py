@@ -8,7 +8,6 @@ once the remaining share is clearly above the shop's threshold.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
@@ -20,43 +19,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import UserService
 from app.services.formatting import parse_expire
-from app.services.usage_alerts import (
-    period_seconds,
-    plan_durations,
-    should_rearm,
-    time_remaining_pct,
-    traffic_remaining_pct,
-)
+from app.services.panel_user_batch import panel_infos
+from app.services.alert_thresholds import AlertThreshold, should_rearm_time, should_rearm_traffic
+from app.services.service_period import period_usage
+from app.services.usage_alerts import period_seconds, plan_durations
 
 logger = logging.getLogger(__name__)
 
 SWEEP_LIMIT = 100
 # A service whose quota changed this recently is looked at first: its change is the likeliest reason to re-arm.
 RECENT_CHANGE_WINDOW = timedelta(hours=12)
-FETCH_TIMEOUT_SECONDS = 12
-FETCH_CONCURRENCY = 8
 
-Thresholds = tuple[bool, int, int]  # (alerts on, traffic %, time %)
+Thresholds = tuple[bool, AlertThreshold, AlertThreshold]  # (alerts on, volume, time)
 ThresholdsFor = Callable[[int | None], Awaitable[Thresholds]]
 
 
-async def _fetch(pg: Any, gate: asyncio.Semaphore, token: str) -> dict | None:
-    async with gate:
-        try:
-            info = await asyncio.wait_for(pg.subscription_info(token), timeout=FETCH_TIMEOUT_SECONDS)
-        except Exception:  # noqa: BLE001 - one unreadable service must not stop the sweep
-            logger.debug("alert re-arm lookup failed", exc_info=True)
-            return None
-    return info if isinstance(info, dict) else None
-
-
-def _rearm_one(service: UserService, info: dict, *, now: datetime, plan_days: int | None, time_pct: int, traffic_pct: int) -> bool:
+def _rearm_one(
+    service: UserService, info: dict, *, now: datetime, plan_days: int | None,
+    time_limit: AlertThreshold, traffic_limit: AlertThreshold,
+) -> bool:
     """Clear the flags of ``service`` that no longer apply; True when something changed."""
     changed = False
     expire = parse_expire(info.get("expire"))
     if service.notified_expire and expire is not None:
         period = period_seconds(plan_days=plan_days, created_at=service.created_at, expire=expire)
-        if should_rearm(time_remaining_pct(expire, now=now, period=period), time_pct):
+        if should_rearm_time((expire - now).total_seconds(), period, time_limit):
             service.notified_expire = False
             changed = True
     if service.notified_traffic and info.get("data_limit"):
@@ -64,7 +51,8 @@ def _rearm_one(service: UserService, info: dict, *, now: datetime, plan_days: in
             used, limit = float(info.get("used_traffic") or 0), float(info["data_limit"])
         except (TypeError, ValueError):
             return changed
-        if should_rearm(traffic_remaining_pct(used, limit), traffic_pct):
+        used, limit = period_usage(service, used, limit, info.get("lifetime_used_traffic"))
+        if should_rearm_traffic(used, limit, traffic_limit):
             service.notified_traffic = False
             changed = True
     return changed
@@ -95,7 +83,7 @@ async def _enabled_shops(session: AsyncSession, thresholds_for: ThresholdsFor) -
         )
     ).all()
     settings = {shop: await thresholds_for(shop) for shop in shops}
-    return {shop for shop, (enabled, _t, _m) in settings.items() if enabled}, settings
+    return {shop for shop, thresholds in settings.items() if thresholds[0]}, settings
 
 
 async def _pick(session: AsyncSession, enabled: set[int | None], *, now: datetime, after_id: int, limit: int) -> tuple[list[UserService], int]:
@@ -151,11 +139,13 @@ async def rearm_flagged_alerts(
     if not services:
         return SweepResult(0, 0)
     plans = await plan_durations(session, services)
-    gate = asyncio.Semaphore(FETCH_CONCURRENCY)
-    infos = await asyncio.gather(*(_fetch(pg, gate, s.subscription_token) for s in services))
+    # No connection waits idle in a transaction on the panel; loaded rows stay usable because the
+    # app's sessions do not expire on commit, and the changes below get their own commit.
+    await session.commit()
+    infos = await panel_infos(pg, services)
     rearmed = 0
     for service, info in zip(services, infos, strict=True):
-        _enabled, traffic_pct, time_pct = settings[service.shop_id]
+        _enabled, traffic_limit, time_limit = settings[service.shop_id]
         if info is None:
             continue
         checked = validate_service_info(info)
@@ -163,7 +153,7 @@ async def rearm_flagged_alerts(
             sync_service_quota_cache(service, info=checked)
         if _rearm_one(
             service, info, now=now, plan_days=plans.get(int(service.plan_id)) if service.plan_id else None,
-            time_pct=time_pct, traffic_pct=traffic_pct,
+            time_limit=time_limit, traffic_limit=traffic_limit,
         ):
             rearmed += 1
     await session.commit()

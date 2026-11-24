@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram import Bot
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.orm import selectinload
 
 from app.db import Base
@@ -19,11 +19,12 @@ from app.db.models import (
 )
 from app.services.orders import approve_payment, reject_payment
 from app.services.payment_review_messages import remember_review_message, sync_review_messages
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 
 class AsyncDatabaseTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -327,13 +328,13 @@ class ReviewMessageMigrationTests(unittest.TestCase):
         from pathlib import Path
         from alembic.operations import Operations
         from alembic.runtime.migration import MigrationContext
-        from sqlalchemy import Column, Integer, MetaData, Table, create_engine, inspect
+        from sqlalchemy import Column, Integer, MetaData, Table, inspect
 
         path = Path(__file__).resolve().parents[1] / "alembic/versions/0035_payment_review_messages.py"
         spec = importlib.util.spec_from_file_location("review_message_migration", path)
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
-        engine = create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         try:
             with engine.begin() as conn:
                 Table("payments", MetaData(), Column("id", Integer, primary_key=True)).create(conn)

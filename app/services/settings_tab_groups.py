@@ -1,9 +1,10 @@
-"""Group the flat bot-settings tab list into a few labelled sections.
+"""Group the flat bot-settings tab list into two settings areas, each with a few labelled sections.
 
-The bot settings page (platform owner and shop owner variants) lists many tabs.
-Grouping only changes how the existing tab keys are presented; the keys, the
-``?tab=`` URLs and the set of tabs each role receives are untouched. A tab that
-no group claims falls into a trailing group so it can never disappear.
+The bot settings page (platform owner and shop owner variants) lists many tabs. They are split into the
+«تنظیمات ربات» area and the «مشتری و سرویس» area, each with its own list, menu and sidebar entry. Grouping
+only changes how the existing tab keys are presented; the keys, the ``?tab=`` URLs and the set of tabs each
+role receives are untouched. A tab that no group claims falls into a trailing group of the bot area so it
+can never disappear.
 """
 
 from __future__ import annotations
@@ -22,16 +23,28 @@ MESSAGE_VARIABLES_PERMISSION = "shop_settings"
 # Tabs that open their own page instead of ``<settings base>?tab=<key>``.
 _TAB_PAGES = {MESSAGE_VARIABLES_TAB_KEY: "/message-variables"}
 
-# (group key, label, tab keys in display order). Related tabs sit together:
-# what the bot looks like, what it says, what a sale delivers, what it reports.
-_GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("look", "ظاهر ربات", ("welcome", "appearance", "brand", "menu", "miniapp", "links")),
+BOT_AREA = "bot"
+CUSTOMER_AREA = "customer"
+# ``?tab=customer`` is the list of the «مشتری و سرویس» area; its pages keep their own tab keys.
+CUSTOMER_LIST_TAB = "customer"
+
+GroupLayout = tuple[tuple[str, str, tuple[str, ...]], ...]
+
+# (group key, label, tab keys in display order). The bot settings area: what the bot looks like, what it
+# says, what it reports, and its own connection.
+_GROUP_LAYOUT: GroupLayout = (
+    ("look", "ظاهر ربات", ("welcome", "appearance", "brand", "menu", "miniapp")),
     ("texts", "متن‌ها", ("messages", "buttons", "colors", "screens", MESSAGE_VARIABLES_TAB_KEY)),
-    ("service", "فروش و سرویس", ("naming", "qr", "guides", "limits", "service_import")),
     ("alerts", "هشدار و گزارش", ("notifications", "daily_report")),
-    # A reseller's own shop bot (the Owner's bot connection is a system setting).
     ("connect", "ربات اختصاصی", ("bot",)),
 )
+# The «مشتری و سرویس» area: what the customer may do, and how a service reaches them and is handled later.
+_CUSTOMER_GROUP_LAYOUT: GroupLayout = (
+    ("customer", "مشتری", ("links", "limits")),
+    ("service", "سرویس", ("naming", "qr", "guides", "service_import", "service_actions", "service_cancel")),
+)
+_AREA_LAYOUTS: dict[str, GroupLayout] = {BOT_AREA: _GROUP_LAYOUT, CUSTOMER_AREA: _CUSTOMER_GROUP_LAYOUT}
+_CUSTOMER_TAB_KEYS = frozenset(key for _group, _label, keys in _CUSTOMER_GROUP_LAYOUT for key in keys)
 
 
 # Small tabs about one subject share one entry; each keeps its own ``?tab=`` key, form and save
@@ -40,11 +53,15 @@ _MERGED_TABS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("identity", "هویت ربات", ("welcome", "appearance")),
     ("buttons", "دکمه‌ها", ("buttons", "colors")),
     ("delivery", "تحویل سرویس", ("naming", "qr", "guides")),
+    ("customer_services", "سرویس‌های مشتری", ("service_import", "service_actions", "service_cancel")),
 )
 # Section names inside a merged tab, where the old tab name no longer fits.
 _SECTION_LABELS = {
     "welcome": "خوش‌آمد",
     "appearance": "پروفایل تلگرام",
+    "service_import": "افزودن سرویس قبلی",
+    "service_actions": "توقف و انتقال",
+    "service_cancel": "لغو سرویس",
     "buttons": "متن دکمه‌ها",
 }
 
@@ -84,14 +101,62 @@ def tabs_with_message_variables(
     return merged
 
 
+CUSTOMER_AREA_TITLE = "مشتری و سرویس"
+CUSTOMER_AREA_ICON = "users-pair"
+BOT_AREA_ICON = "bot"
+SETTINGS_HELP_TOPIC = "settings-bot"
+
+
+@dataclass(frozen=True, slots=True)
+class SettingsArea:
+    """What a settings page needs to know about its area: the title and icon of its list, and where it lives."""
+
+    key: str
+    title: str
+    icon: str
+    list_href: str
+    help: str = SETTINGS_HELP_TOPIC
+
+
+def settings_area(key: str, *, base: str, bot_title: str) -> SettingsArea:
+    """The area ``key`` on a settings page at ``base`` (``/settings`` or ``/shop-settings``)."""
+    if key == CUSTOMER_AREA:
+        return SettingsArea(CUSTOMER_AREA, CUSTOMER_AREA_TITLE, CUSTOMER_AREA_ICON, f"{base}?tab={CUSTOMER_LIST_TAB}")
+    return SettingsArea(BOT_AREA, bot_title, BOT_AREA_ICON, base)
+
+
+def area_page_tab(tab: str) -> tuple[str, str, bool]:
+    """(page tab to render, its area, whether this is the area's list) for a resolved ``?tab=`` value.
+
+    The «مشتری و سرویس» list renders over its first page's context, as the system settings list does.
+    """
+    if tab == CUSTOMER_LIST_TAB:
+        return _CUSTOMER_GROUP_LAYOUT[0][2][0], CUSTOMER_AREA, True
+    return tab, settings_area_of(tab), False
+
+
+def settings_area_of(key: str) -> str:
+    """The area a tab key (a page, a section of a merged page, or an area list) belongs to."""
+    members = next((members for merged, _label, members in _MERGED_TABS if merged == key), (key,))
+    if key == CUSTOMER_LIST_TAB or any(member in _CUSTOMER_TAB_KEYS for member in members):
+        return CUSTOMER_AREA
+    return BOT_AREA
+
+
 def group_settings_tabs(
-    tabs: Sequence[tuple[str, str]], active: str
+    tabs: Sequence[tuple[str, str]], active: str, *, area: str | None = None
 ) -> tuple[SettingsTabGroup, ...]:
-    """Split ``tabs`` into groups, keeping only tabs the caller already holds."""
-    available, alias = _merge_tabs({key: SettingsTab(key, label, _TAB_PAGES.get(key)) for key, label in tabs})
+    """Split ``tabs`` into groups, keeping only tabs the caller already holds.
+
+    With ``area`` only that area's groups are built (a tab of the other area never falls into «سایر»);
+    without it every area's groups come in order, as the panel search lists them.
+    """
+    held = [(key, label) for key, label in tabs if area is None or settings_area_of(key) == area]
+    layout = _AREA_LAYOUTS[area] if area is not None else (*_GROUP_LAYOUT, *_CUSTOMER_GROUP_LAYOUT)
+    available, alias = _merge_tabs({key: SettingsTab(key, label, _TAB_PAGES.get(key)) for key, label in held})
     claimed: set[str] = set()
     groups: list[SettingsTabGroup] = []
-    for group_key, label, keys in _GROUP_LAYOUT:
+    for group_key, label, keys in layout:
         merged_keys = dict.fromkeys(alias.get(key, key) for key in keys)
         members = tuple(available[key] for key in merged_keys if key in available)
         claimed.update(tab.key for tab in members)

@@ -83,11 +83,13 @@ def decrypt_secret(token: str | None) -> str | None:
     raw = (token or "").strip()
     if not raw:
         return None
+    from cryptography.fernet import InvalidToken  # deferred like decrypts_with_secret below
+
     for key in _fernet_keys():
         try:
             return _fernet(key).decrypt(raw.encode("ascii")).decode("utf-8")
-        except Exception:
-            continue
+        except (InvalidToken, ValueError):
+            continue  # not this key: try the next (legacy) one
     logger.warning("decrypt_secret failed — secret unreadable")
     return None
 

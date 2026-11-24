@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_codes import register_miniapp_codes
 from app.api.miniapp_feeds import register_miniapp_feeds
@@ -33,6 +33,7 @@ from app.services.secret_box import seal_bot_token
 from app.services.users import clear_settings_cache, set_setting
 from app.services.wallet import credit_wallet
 from tests.test_miniapp_shop_scope import MAIN_TOKEN, OTHER_SHOP_TOKEN, SHOP_TOKEN, signed
+from tests.postgres_support import scoped_async_engine
 
 SHOP, OTHER_SHOP = 5, 6
 KEY, OTHER_KEY = new_shop_key(), new_shop_key()
@@ -51,7 +52,7 @@ class ShopFixture(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         clear_settings_cache()
         _recent_sends.clear()
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)

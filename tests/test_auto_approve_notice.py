@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, Order, Payment, Plan, ResellerProfile, Role, UserService
@@ -20,6 +16,7 @@ from app.bot.handlers.payment_voids import ID as VOID_ID
 from app.services import notifications
 from app.services.payment_voids import load_void_candidate
 from app.services.notifications import customer_markup, _receipt_photo, notify_auto_approve
+from tests.postgres_support import scoped_async_engine
 
 FILE_ID = "AgACAgQAAxkBAAIBQ2Z-receiptphotofileid"
 CALLBACK_LIMIT = 64
@@ -31,15 +28,13 @@ def _callbacks(markup) -> list[str]:
 
 class NoticeTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'n.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmpdir.cleanup()
 
     async def _seed(self, session, *, shop: int | None = None, name: str = "Sara", note: str | None = None):
         user = BotUser(telegram_id=501, username="sara", full_name=name, role=Role.USER.value, referral_code="R501")

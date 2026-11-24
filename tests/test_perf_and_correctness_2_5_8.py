@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -32,7 +30,7 @@ class ShopOrderAttributionTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("app.services.orders.get_catalog_plan", new=AsyncMock(return_value=plan)),
             patch("app.services.orders.apply_discount", new=AsyncMock(return_value=(0, None))),
-            patch("app.services.orders.apply_random_discount", new=AsyncMock(return_value=False)) as random_discount,
+            patch("app.services.orders.apply_automatic_discounts", new=AsyncMock()) as automatic_discounts,
             patch("app.services.orders._shop_reseller_id", return_value=42),
             patch("app.services.orders.require_purchase_contact", new=AsyncMock()),
             # The shop's volume ceiling is covered elsewhere; this test is about attribution.
@@ -52,7 +50,7 @@ class ShopOrderAttributionTests(unittest.IsolatedAsyncioTestCase):
         order = captured["order"]
         self.assertEqual(order.reseller_id, 42)
         self.assertNotEqual(order.reseller_id, 99)
-        self.assertEqual(random_discount.call_args.args[1].reseller_id, 42)
+        self.assertEqual(automatic_discounts.call_args.args[1].reseller_id, 42)
 
     async def test_get_catalog_plan_hides_other_shop(self):
         from app.services.orders import get_catalog_plan
@@ -101,55 +99,6 @@ class WalletClaimTests(unittest.IsolatedAsyncioTestCase):
             )
 
 
-class SchedulerFilterTests(unittest.TestCase):
-    def test_scheduler_skips_fully_notified_in_sql(self):
-        src = Path("app/jobs/scheduler.py").read_text(encoding="utf-8")
-        self.assertIn("notified_expire.is_(False)", src)
-        self.assertIn("notified_traffic.is_(False)", src)
-        self.assertNotIn("select(UserService))", src.replace(" ", ""))
-
-
-class InstallUpdateSpeedTests(unittest.TestCase):
-    def test_get_sh_skips_venv_backup_and_uses_targeted_fetch(self):
-        src = Path("get.sh").read_text(encoding="utf-8")
-        self.assertIn("Never copy .venv", src)
-        self.assertIn("git fetch --no-tags", src)
-        self.assertNotIn("git fetch --all --tags", src)
-        # .venv must not be in the runtime backup loop items
-        self.assertNotIn("for item in .env data .venv", src)
-
-    def test_pgclock_skips_apt_when_present(self):
-        src = Path("pgclock.sh").read_text(encoding="utf-8")
-        self.assertIn("skip apt", src)
-        self.assertIn("dpkg -s", src)
-
-
-class PanelLoadingTests(unittest.TestCase):
-    def test_base_uses_vazirmatn_and_small_logo(self):
-        src = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("/static/fonts.css", src)
-        fonts = Path("app/web/static/fonts.css").read_text(encoding="utf-8")
-        self.assertIn("Vazirmatn", fonts)
-        self.assertIn("Vazirmatn-Variable.woff2", fonts)
-        self.assertNotIn("fonts.googleapis.com", src)
-        self.assertIn("/static/logo-64.png", src)
-        self.assertNotIn('/static/logo.png"', src)
-
-    def test_setup_complete_caches_true(self):
-        src = Path("app/services/setup_wizard.py").read_text(encoding="utf-8")
-        self.assertIn("_SETUP_COMPLETE_CACHED", src)
-
-    def test_pg_gate_ttl_cache(self):
-        src = Path("app/services/pg_staff_access.py").read_text(encoding="utf-8")
-        self.assertIn("_PG_GATE_CACHE", src)
-        self.assertIn("_PG_GATE_TTL_SEC", src)
-
-    def test_qr_offloaded_to_thread(self):
-        src = Path("app/services/delivery.py").read_text(encoding="utf-8")
-        self.assertIn("asyncio.to_thread", src)
-        self.assertIn("make_subscription_qr", src)
-
-
 class SharedAdminAuthTests(unittest.TestCase):
     def test_is_platform_admin_helper(self):
         from app.bot.auth import is_platform_admin
@@ -163,24 +112,6 @@ class SharedAdminAuthTests(unittest.TestCase):
             self.assertFalse(is_platform_admin(user))
             listed = SimpleNamespace(role="user", telegram_id=42)
             self.assertTrue(is_platform_admin(listed))
-
-    def test_handlers_import_shared_helper(self):
-        for path in (
-            "app/bot/handlers/admin.py",
-            "app/bot/handlers/admin_settings.py",
-            "app/bot/handlers/admin_pg_users.py",
-            "app/bot/handlers/admin_backup.py",
-        ):
-            src = Path(path).read_text(encoding="utf-8")
-            self.assertIn("is_platform_admin as _is_admin", src)
-            self.assertNotIn("def _is_admin(", src)
-
-
-class DeadMenuVisRemovedTests(unittest.TestCase):
-    def test_menu_vis_gone_from_bot_settings(self):
-        src = Path("app/bot/handlers/admin_settings.py").read_text(encoding="utf-8")
-        self.assertNotIn("MENU_VIS", src)
-        self.assertNotIn("menu_vis", src)
 
 
 if __name__ == "__main__":

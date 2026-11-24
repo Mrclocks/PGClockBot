@@ -7,22 +7,21 @@ table shows its empty-state row.
 
 from __future__ import annotations
 
-import os
 import unittest
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from types import SimpleNamespace
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.payg_charge_pages import REVIEW_PATH, register_payg_charge_pages
 from app.db.models import Base
 from app.services.cashback_rules import CashbackSettings
+from tests.postgres_support import scoped_async_engine
 
 NOW = datetime(2026, 11, 8, 12, tzinfo=timezone.utc)
 OWNER = {"role": "admin", "permissions": [], "org_principal_id": 1, "org_depth": 0, "org_parent_id": None,
@@ -135,6 +134,14 @@ class PhoneListTests(unittest.TestCase):
                 for cells in rows:
                     self.assertTrue(any("empty-row" in c for c in cells), cells)
 
+    def test_the_cashback_switch_is_the_header_of_its_card(self) -> None:
+        html = _pages(filled=False)["cashback"]
+        card = html.split('<section class="ds-sec ds-toggle-sec">', 1)[1].split("</section>", 1)[0]
+        self.assertIn('<label class="ui-switch-row ds-switch ds-toggle-head">', card)
+        self.assertIn("<strong>کش‌بک</strong>", card)
+        self.assertIn('id="cb-enabled" data-ds-submit-on-change checked', card)
+        self.assertIn('data-ds-show-when="#cb-enabled:1">', card)
+
     def test_customer_text_is_escaped(self) -> None:
         html = _pages(filled=True)["cashback"]
         self.assertNotIn("<b>rule</b>", html)
@@ -169,7 +176,7 @@ class ResellerCreditCardTests(unittest.TestCase):
 
 class ReviewRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_the_review_page_is_rendered_for_the_signed_in_owner(self) -> None:
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = scoped_async_engine()
         self.addAsyncCleanup(engine.dispose)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

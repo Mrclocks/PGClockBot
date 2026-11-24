@@ -72,7 +72,7 @@
     </p>
     <div class="update-meta">
       <div><span class="muted">نسخه فعلی</span> <strong>{{ local_version }}</strong></div>
-      <div><span class="muted">دیتابیس</span> <strong class="mono" dir="ltr">{{ db_path }}</strong></div>
+      <div><span class="muted">دیتابیس</span> <strong class="mono" dir="ltr">{{ db_label }}</strong></div>
       <div><span class="muted">تعداد بکاپ‌ها</span> <strong>{{ backups|length }}</strong></div>
       {% if values.get('backup_last_ok_at') %}
       <div><span class="muted">آخرین بکاپ خودکار</span> <strong class="mono" dir="ltr">{{ values.get('backup_last_ok_at') }}</strong></div>
@@ -105,6 +105,14 @@
           <strong>هشدار امنیتی:</strong>
           با روشن کردن این گزینه، توکن ربات تلگرام، رمزها و اسرار سرور داخل ZIP می‌روند.
           حتی بدون .env، فایل <code dir="ltr">web_admin.json</code> (ورود وب‌پنل) همچنان در بکاپ هست — فایل را جای امن نگه دارید.
+          {% set on_values = ['1', 'true', 'yes', 'on'] %}
+          {% if values.get('backup_telegram_enabled') in on_values %}
+            {% if values.get('backup_telegram_allow_env') in on_values %}
+            «تأیید ریسک» ارسال .env روشن است، پس این بکاپ به تلگرام هم فرستاده می‌شود.
+            {% else %}
+            این بکاپ به تلگرام فرستاده نمی‌شود، چون «تأیید ریسک: ارسال بکاپ همراه .env» خاموش است.
+            {% endif %}
+          {% endif %}
         </div>
         <label class="support-enabled backup-auto-toggle">
           <span>تأیید می‌کنم که .env (اسرار) داخل بکاپ برود</span>

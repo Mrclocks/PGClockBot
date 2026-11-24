@@ -44,6 +44,15 @@ VIEW_SCREENS: frozenset[str] = frozenset({
     "adm:dash", "adm:orders", "adm:cancellations", "adm:resapp:list", "adm:tickets",
     "autorv:list", "payvoid:list",
     "res:dash", "res:orders", "res:tickets", "res:cancellations",
+    "qlk:v",
+    # The scenario list and the «panel is down» scenario's confirmation: nothing changes before a tap.
+    # The command center itself (cmd:h) is an input prompt, not a view: recording it made the panel
+    # home's «بازگشت» lead back into it.
+    "cmd:sc", "cmd:sc:down",
+    "shop:list",
+    # Customer screens a group-message button opens (message_buttons.SCREENS): lists and texts only;
+    # the trial and custom pickers and the top-up amounts only offer choices until the customer confirms.
+    "shop:kind:trial", "shop:kind:custom", "nv:w:topup", "nv:loy:ref", "nv:loy:wheel", "help:guide", "help:faq",
 })
 # Read-only screen families: the part before the id or page.
 VIEW_FAMILIES: tuple[str, ...] = (
@@ -54,6 +63,8 @@ VIEW_FAMILIES: tuple[str, ...] = (
     "res:users:", "res:user:", "res:cancel:view:",
     "cnrv:v:", "payvoid:v:", "autorv:v:", "stk:l:", "stk:v:", "tru:l:", "saud:l:",
     "svc:auto:",
+    # Renewal and pack pickers only list choices until the customer confirms.
+    "svc:renew:", "svc:addon:",
 )
 
 PanelKey = tuple[int, int, int]

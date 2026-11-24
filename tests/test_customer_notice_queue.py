@@ -4,23 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import CustomerNotice
 from app.services import customer_notice_queue as queue
+from tests.postgres_support import scoped_async_engine, scoped_sync_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 T0 = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
@@ -28,8 +26,7 @@ T0 = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
 
 class QueueCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'q.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -37,7 +34,6 @@ class QueueCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def add(self, count: int = 1) -> None:
         async with self.Session() as session:
@@ -75,13 +71,13 @@ class ProcessBatchTests(QueueCase):
         await self.add()
         await self.run_batch(queue.NoticeOutcome(queue.OUTCOME_SENT))
         await self.run_batch(queue.NoticeOutcome(queue.OUTCOME_SENT), at=T0 + timedelta(minutes=10))
-        self.assertEqual(self.sent, [1])
+        self.assertEqual(self.sent, [row.id for row in await self.rows()])
         self.assertEqual([r.status for r in await self.rows()], [queue.STATUS_SENT])
 
     async def test_a_batch_is_bounded_and_takes_the_oldest_first(self) -> None:
         await self.add(5)
         self.assertEqual(await self.run_batch(queue.NoticeOutcome(queue.OUTCOME_SENT), limit=2), 2)
-        self.assertEqual(self.sent, [1, 2])
+        self.assertEqual(self.sent, [row.id for row in await self.rows()][:2])
 
     async def test_a_retry_waits_for_its_backoff_then_gives_up_after_the_attempt_limit(self) -> None:
         await self.add()
@@ -121,7 +117,7 @@ class ProcessBatchTests(QueueCase):
             return await self.run_batch(queue.NoticeOutcome(queue.OUTCOME_SENT))
 
         await asyncio.gather(worker(), worker())
-        self.assertEqual(sorted(self.sent), [1, 2, 3])
+        self.assertEqual(sorted(self.sent), sorted(row.id for row in await self.rows()))
 
 
 class QueueMigrationTests(unittest.TestCase):
@@ -130,7 +126,7 @@ class QueueMigrationTests(unittest.TestCase):
         migration = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(migration)
-        engine = sa.create_engine("sqlite:///:memory:")
+        engine = scoped_sync_engine()
         self.addCleanup(engine.dispose)
         with engine.begin() as conn:
             for down in (False, False, True, True):

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -32,7 +30,9 @@ class MarketingListServiceTests(unittest.TestCase):
     def test_owner_rows_are_the_owner_sections_with_description_and_icon(self) -> None:
         sections = marketing_sections(OWNER)
         hub = marketing_hub_sections(sections)
-        self.assertEqual(sorted(hrefs(hub)), sorted(s.href for s in sections))
+        # Group messages (with the campaigns merged into them) are a sidebar entry of their own, not a list row.
+        listed = [s.href for s in sections if s.href not in ("/broadcast", "/shop-broadcast", "/campaigns")]
+        self.assertEqual(sorted(hrefs(hub)), sorted(listed))
         for section in hub:
             for row in section.rows:
                 self.assertTrue(row.description and row.icon, row.label)

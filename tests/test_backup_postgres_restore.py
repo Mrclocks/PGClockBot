@@ -1,7 +1,7 @@
 """PostgreSQL backups restore all or nothing, and refuse what this install cannot run.
 
-Tests marked ``requires_pg`` use a disposable PostgreSQL database
-(``PGCLOCK_TEST_PG_URL``) and are skipped when it is not reachable.
+Each test restores into its own throwaway PostgreSQL database, made by
+tests/postgres_support.py; pg_dump and pg_restore must be installed.
 """
 
 from __future__ import annotations
@@ -14,29 +14,11 @@ import pytest
 
 from app.services import backup as backup_mod
 from app.services import backup_postgres as pg_backup
+from tests.postgres_support import scoped_database_url
 
-PG_URL = os.environ.get(
-    "PGCLOCK_TEST_PG_URL",
-    "postgresql+asyncpg://pgclock:pgclock@127.0.0.1:5432/pgclock_mig",
-)
-
-
-def _pg_available() -> bool:
-    try:
-        from sqlalchemy import create_engine, text
-
-        from app.db.engine_url import to_sync_url
-
-        engine = create_engine(to_sync_url(PG_URL), connect_args={"connect_timeout": 3})
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        engine.dispose()
-    except Exception:  # noqa: BLE001 - any failure means the optional database is absent
-        return False
-    return pg_backup.find_tool("pg_dump") is not None and pg_backup.find_tool("pg_restore") is not None
-
-
-requires_pg = pytest.mark.skipif(not _pg_available(), reason="PostgreSQL test DB unavailable")
+def pg_url() -> str:
+    """This test's own empty PostgreSQL database (tests/postgres_support.py)."""
+    return scoped_database_url(tables=False)
 
 
 def _sync_engine():
@@ -44,7 +26,7 @@ def _sync_engine():
 
     from app.db.engine_url import to_sync_url
 
-    return create_engine(to_sync_url(PG_URL))
+    return create_engine(to_sync_url(pg_url()))
 
 
 def _scalar(sql: str):
@@ -76,13 +58,13 @@ def pg_install(tmp_path, monkeypatch):
     from app.db.alembic_runner import upgrade_head
     import app.config as config
 
-    _execute("DROP SCHEMA public CASCADE", "CREATE SCHEMA public", "GRANT ALL ON SCHEMA public TO pgclock")
-    monkeypatch.setenv("DATABASE_URL", PG_URL)
+    url = pg_url()
+    monkeypatch.setenv("DATABASE_URL", url)
     config.get_settings.cache_clear()
-    upgrade_head(PG_URL)
+    upgrade_head(url)
     data_dir = tmp_path / "data"
     (data_dir / "backups").mkdir(parents=True)
-    (tmp_path / ".env").write_text(f'DATABASE_URL="{PG_URL}"\n', encoding="utf-8")
+    (tmp_path / ".env").write_text(f'DATABASE_URL="{url}"\n', encoding="utf-8")
     monkeypatch.setattr(backup_mod, "ROOT_DIR", tmp_path)
     monkeypatch.setattr(backup_mod, "DATA_DIR", data_dir)
     monkeypatch.setattr(backup_mod, "BACKUP_DIR", data_dir / "backups")
@@ -100,7 +82,6 @@ def _restore(path: Path, **kwargs):
     return backup_mod.restore_backup(path, restore_env=False, restart=False, actor="test", **kwargs)
 
 
-@requires_pg
 def test_restore_brings_back_the_snapshot_and_records_the_schema(pg_install):
     created = backup_mod.create_backup(note="t", created_by="test")
     manifest = backup_mod.read_manifest(Path(created["path"]))
@@ -115,7 +96,6 @@ def test_restore_brings_back_the_snapshot_and_records_the_schema(pg_install):
     assert backup_mod.read_restore_status()["state"] == "done"
 
 
-@requires_pg
 def test_failing_restore_leaves_the_database_unchanged(pg_install):
     created = backup_mod.create_backup(note="t", created_by="test")
     # A live object depending on a backed-up table makes the clean step fail midway.
@@ -135,7 +115,6 @@ def test_failing_restore_leaves_the_database_unchanged(pg_install):
     assert "pg_restore" not in status["message"]
 
 
-@requires_pg
 def test_unreadable_dump_is_refused_before_any_change(pg_install):
     created = backup_mod.create_backup(note="t", created_by="test")
     broken = _with_replaced_dump(Path(created["path"]), os.urandom(4096))
@@ -150,7 +129,6 @@ def test_unreadable_dump_is_refused_before_any_change(pg_install):
     assert {p.name for p in backup_mod.BACKUP_DIR.glob("*.zip")} == before, "no safety backup for a bad archive"
 
 
-@requires_pg
 def test_session_left_open_on_a_table_does_not_block_the_restore(pg_install):
     from sqlalchemy import text
 
@@ -171,7 +149,6 @@ def test_session_left_open_on_a_table_does_not_block_the_restore(pg_install):
     assert _probe() == "snapshot"
 
 
-@requires_pg
 def test_backup_from_a_newer_schema_is_refused(pg_install):
     created = backup_mod.create_backup(note="t", created_by="test")
     newer = _with_manifest(Path(created["path"]), alembic_revision="9999_from_the_future", app_version="99.0.0")

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_header, act_label %}
+{% from "_settings_hub.html" import status_hub %}
+{% block title %}نگهداری سرور{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
+{% block content %}
+<div class="ds">
+{% call(slot) page_header('sliders', 'نگهداری سرور', back='/tools', back_label='ابزار و پاکسازی') %}
+  {%- if slot == 'primary' %}
+  <a class="btn btn-ghost page-act-icon" href="/tools/maintenance">{{ act_label('تازه‌سازی', icon_name='refresh') }}</a>
+  {%- endif %}
+{% endcall %}
+{%- if restarting_from %}
+<div class="ds-note" role="status" data-restart-wait="{{ restarting_from }}">پنل در حال راه‌اندازی مجدد است؛ این صفحه وقتی پنل دوباره روشن شد خودش تازه می‌شود.</div>
+<script src="/static/restart-wait.js?v={{ asset_v('restart-wait.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
+{%- endif %}
+{{ status_hub(groups) }}
+</div>
+{% endblock %}

@@ -5,20 +5,21 @@ from __future__ import annotations
 import unittest
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import app.db.models  # noqa: F401
 from app.db import Base
 from app.db.models import BotUser, ResellerBillingTransaction, ResellerPlan, ResellerProfile, Role
 from app.services.billing import GB, tick_reseller_usage
 from app.services.resellers import make_reseller
+from tests.postgres_support import scoped_async_engine
 
 RATE = 1000
 
 
 class ShortfallBillingTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(

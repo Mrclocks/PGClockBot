@@ -23,6 +23,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.feature_staff import resolve_feature_staff
+from app.bot.handlers.shop_broadcast import resolve_shop_id as group_message_shop_id
 from app.bot.marketing_panels import (
     MARKETING_HUB_CALLBACK,
     SHOP_CAMPAIGN_ACTION_PATTERN,
@@ -48,7 +49,7 @@ from app.services.gift_codes import describe_code, list_gift_codes, set_gift_cod
 from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
 from app.services.user_errors import domain_error_text
 from app.services.users import get_all_settings
-from app.services.ux20 import FUNNEL_STEPS, funnel_summary
+from app.services.funnel_metrics import FUNNEL_STEPS, funnel_summary
 
 logger = logging.getLogger(__name__)
 router = Router(name="shop_marketing_bot")
@@ -164,13 +165,25 @@ async def set_shop_gift_state(
 # ---- campaigns (shop bot) ----------------------------------------------------------------------
 
 
-async def _show_campaign_panel(message: Message, session: AsyncSession, state: FSMContext | None, shop_id: int) -> None:
+async def _campaign_back(
+    session: AsyncSession, db_user: BotUser, *, is_reseller_bot: bool, reseller_owner_id: int | None
+) -> str:
+    """The list opens from the group-message hub, or from the shop group for staff without group messages."""
+    in_group_messages = await group_message_shop_id(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    return back_callback_for("res_campaigns", nested=in_group_messages is not None)
+
+
+async def _show_campaign_panel(
+    message: Message, session: AsyncSession, state: FSMContext | None, shop_id: int, *, back_callback: str
+) -> None:
     ui = await get_all_settings(session)
     campaigns = await list_recent_campaigns(session, shop_id=shop_id, limit=CAMPAIGN_LIST_LIMIT)
     progress = await campaign_progress_map(session, [campaign.id for campaign in campaigns])
     text, markup = campaigns_panel(
         campaigns, progress, ui=ui, web_url=panel_page_url("/campaigns"),
-        action_prefix="res", back_callback=back_callback_for("res_campaigns"),
+        action_prefix="res", back_callback=back_callback,
     )
     await present_nav_panel(message, text=text, inline=markup, state=state)
 
@@ -186,7 +199,8 @@ async def open_shop_campaign_panel(
         return
     if state is not None:
         await state.clear()
-    await _show_campaign_panel(message, session, state, int(actor.shop_id))
+    back = await _campaign_back(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    await _show_campaign_panel(message, session, state, int(actor.shop_id), back_callback=back)
 
 
 @router.callback_query(F.data == SHOP_CAMPAIGN_PANEL_CALLBACK)
@@ -201,7 +215,8 @@ async def open_shop_campaign_cb(
     await callback.answer()
     if callback.message is not None:
         await state.clear()
-        await _show_campaign_panel(callback.message, session, state, int(actor.shop_id))
+        back = await _campaign_back(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+        await _show_campaign_panel(callback.message, session, state, int(actor.shop_id), back_callback=back)
 
 
 @router.callback_query(F.data.regexp(SHOP_CAMPAIGN_ACTION_PATTERN.pattern))
@@ -222,7 +237,8 @@ async def change_shop_campaign(
     else:
         await callback.answer(DONE)
     if callback.message is not None:
-        await _show_campaign_panel(callback.message, session, state, int(actor.shop_id))
+        back = await _campaign_back(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+        await _show_campaign_panel(callback.message, session, state, int(actor.shop_id), back_callback=back)
 
 
 # ---- catalog discounts (owner and shops) -------------------------------------------------------

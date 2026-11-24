@@ -53,7 +53,7 @@ class TimedRenewalTests(RenewalTestCase):
         self.assertEqual(result["warnings"], [])
         self.assertIn("دست‌نخورده", renewal_effect(result))
         sub = await self.sub()
-        self.assertGreater(sub.expires_at, old_expiry or datetime.now(timezone.utc).replace(tzinfo=None))
+        self.assertGreater(sub.expires_at, old_expiry or datetime.now(timezone.utc))
         self.assertEqual(await self.wallet(), 900_000)
 
     async def test_expired_subscription_is_active_again_after_paying(self) -> None:

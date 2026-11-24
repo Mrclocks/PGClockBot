@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timezone
-from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.menu_nav import user_has_services
 from app.db import Base
@@ -24,6 +20,7 @@ from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_u
 from app.services.lucky_wheel import _resolve_service
 from app.services.tickets import list_open_tickets
 from app.services.users import delete_bot_user, reset_shop_reseller_id, set_shop_reseller_id
+from tests.postgres_support import scoped_async_engine
 
 SHOP_ID, OTHER_SHOP, CUSTOMER = 5, 6, 7
 PLATFORM_SVC, SHOP_SVC, OTHER_SHOP_SVC = 31, 32, 33
@@ -31,8 +28,7 @@ PLATFORM_SVC, SHOP_SVC, OTHER_SHOP_SVC = 31, 32, 33
 
 class AuditFixTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmp.name) / 'a.db'}")
+        self.engine = scoped_async_engine()
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
@@ -58,7 +54,6 @@ class AuditFixTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
-        self._tmp.cleanup()
 
     async def test_deleting_a_shop_removes_its_wheel_state_and_releases_its_services(self):
         async with self.Session() as session:

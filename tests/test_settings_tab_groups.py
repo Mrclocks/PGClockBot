@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -14,6 +12,7 @@ from app.services.resellers import RESELLER_SETTINGS_TABS
 from app.services.settings_tab_groups import (
     FALLBACK_GROUP_KEY,
     group_settings_tabs,
+    settings_area_of,
 )
 from app.services.settings_hub import hub_sections, settings_place
 from app.services.users import SETTINGS_TABS
@@ -142,12 +141,33 @@ if __name__ == "__main__":
 
 class RegroupedLayoutTests(unittest.TestCase):
     def test_owner_tabs_are_grouped_by_what_they_change(self):
-        groups = group_settings_tabs(SETTINGS_TABS, "welcome")
+        groups = group_settings_tabs(SETTINGS_TABS, "welcome", area="bot")
         layout = {g.label: [t.key for t in g.tabs] for g in groups}
-        self.assertEqual(list(layout), ["ظاهر ربات", "متن‌ها", "فروش و سرویس", "هشدار و گزارش"])
+        self.assertEqual(list(layout), ["ظاهر ربات", "متن‌ها", "هشدار و گزارش"])
         self.assertEqual(layout["متن‌ها"], ["messages", "buttons", "screens"])
-        self.assertIn("links", layout["ظاهر ربات"])
+        self.assertNotIn("links", layout["ظاهر ربات"])
         self.assertNotIn("bot", [k for keys in layout.values() for k in keys])
+
+    def test_customer_and_service_tabs_are_their_own_area(self):
+        for tabs in (SETTINGS_TABS, RESELLER_SETTINGS_TABS):
+            groups = group_settings_tabs(tabs, "naming", area="customer")
+            layout = {g.label: [t.key for t in g.tabs] for g in groups}
+            self.assertEqual(layout, {"مشتری": ["links", "limits"], "سرویس": ["delivery", "customer_services"]})
+            self.assertEqual([g.label for g in groups if g.is_active], ["سرویس"])
+
+    def test_every_tab_is_in_exactly_one_area_and_none_is_lost(self):
+        for tabs in (SETTINGS_TABS, RESELLER_SETTINGS_TABS):
+            every = group_settings_tabs(tabs, "")
+            split = (*group_settings_tabs(tabs, "", area="bot"), *group_settings_tabs(tabs, "", area="customer"))
+            keys = lambda groups: sorted(t.key for g in groups for t in g.tabs)  # noqa: E731 - tiny local reader
+            self.assertEqual(keys(split), keys(every))
+            self.assertEqual(len(keys(split)), len(set(keys(split))))
+
+    def test_each_key_names_its_area(self):
+        for key in ("customer", "links", "limits", "delivery", "naming", "qr", "guides", "customer_services", "service_import"):
+            self.assertEqual(settings_area_of(key), "customer", key)
+        for key in ("", "welcome", "identity", "messages", "variables", "notifications", "bot", "unknown"):
+            self.assertEqual(settings_area_of(key), "bot", key)
 
     def test_a_reseller_keeps_their_own_bot_in_its_own_group(self):
         groups = group_settings_tabs(RESELLER_SETTINGS_TABS, "bot")

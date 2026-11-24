@@ -20,6 +20,7 @@ from app.services.formatting import copyable, format_message, format_plan_durati
 from app.services.custom_service_name import preview_username
 from app.services.cashback import quote_cashback
 from app.services.db_safe import rollback_quiet
+from app.services.discount_rules import rule_name_for_order
 from app.services.orders import CUSTOM_ORDER_NOTE
 
 logger = logging.getLogger(__name__)
@@ -70,10 +71,21 @@ async def _cashback_line(session: AsyncSession, order: Order, currency: str) -> 
     return kv_line("🎁", "کش‌بک این خرید", f"<b>{format_toman(amount, currency)}</b> (بعد از تحویل، در کیف پول)")
 
 
-def _discount_lines(order: Order, currency: str) -> list[str]:
+async def _rule_name(session: AsyncSession, order: Order) -> str | None:
+    """Name of the automatic rule behind the order's discount; a failure falls back to «تخفیف»."""
+    try:
+        return await rule_name_for_order(session, order)
+    except SQLAlchemyError:
+        logger.warning("discount rule lookup failed order=%s", order.id, exc_info=True)
+        await rollback_quiet(session)
+        return None
+
+
+def _discount_lines(order: Order, currency: str, *, rule_name: str | None = None) -> list[str]:
     random_discount = int(order.random_discount_amount or 0)
+    label = f"تخفیف خودکار ({html.escape(rule_name)})" if rule_name else "تخفیف"
     reductions = (
-        (int(order.discount_amount or 0) - random_discount, "تخفیف"),
+        (int(order.discount_amount or 0) - random_discount, label),
         (random_discount, "تخفیف تصادفی"),
     )
     return [
@@ -95,7 +107,7 @@ async def checkout_summary(
     if order.requested_username:
         username = await preview_username(session, order, order.requested_username)
         lines.append(kv_line("✏️", "نام سرویس", copyable(username)))
-    lines.extend(_discount_lines(order, currency))
+    lines.extend(_discount_lines(order, currency, rule_name=await _rule_name(session, order)))
     if notice:
         lines.append(notice)
     lines.append(kv_line("💰", "مبلغ قابل پرداخت", f"<b>{format_toman(order.amount, currency)}</b>"))

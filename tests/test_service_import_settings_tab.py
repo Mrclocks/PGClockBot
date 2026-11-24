@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select, update
 
@@ -105,11 +103,89 @@ class TabPageTests(TabHarness):
         shop = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_import")
         for response, base in ((owner, "/settings"), (shop, "/shop-settings")):
             head = response.text.split("settings-layout", 1)[0]
-            self.assertIn("<h1>افزودن سرویس قبلی</h1>", head)
-            self.assertIn(f'<a class="page-back" href="{base}"', head)
+            # A section of the merged «سرویس‌های مشتری» tab, next to the customer's freeze settings.
+            self.assertIn("<h1>سرویس\u200cهای مشتری</h1>", head)
+            # It lives in the «مشتری و سرویس» area, so the way back is that area's list.
+            self.assertIn(f'<a class="page-back" href="{base}?tab=customer"', head)
+            self.assertIn(f'href="{base}?tab=service_actions"', response.text)
         for base, session in (("/settings", OWNER_SESSION), ("/shop-settings", SHOP_SESSION)):
-            listing = await self.call(session, "GET", base)
-            self.assertIn(f'href="{base}?tab=service_import"', listing.text)
+            listing = await self.call(session, "GET", f"{base}?tab=customer")
+            self.assertIn(f'href="{base}?tab=customer_services"', listing.text)
+            bot_listing = await self.call(session, "GET", base)
+            self.assertNotIn(f'class="hub-row" href="{base}?tab=customer_services"', bot_listing.text)
+            merged = await self.call(session, "GET", f"{base}?tab=customer_services")
+            self.assertIn("<h1>سرویس\u200cهای مشتری</h1>", merged.text)
+
+
+class FreezeSettingsPageTests(TabHarness):
+    async def test_the_freeze_card_opens_off_and_each_side_saves_its_own_copy(self):
+        for session, base in ((OWNER_SESSION, "/settings"), (SHOP_SESSION, "/shop-settings")):
+            page = (await self.call(session, "GET", f"{base}?tab=service_actions")).text
+            self.assertIn('name="s_service_freeze_enabled" value="1" id="sf-enabled"', page)
+            self.assertNotIn('id="sf-enabled" aria-label="توقف موقت سرویس" data-ds-submit-on-change checked', page)
+            self.assertIn('data-ds-show-when="#sf-enabled:1" hidden', page)
+            self.assertIn('name="s_service_freeze_max_days" type="number" min="1" max="90"', page)
+            self.assertIn('name="s_service_transfer_enabled" value="1" id="st-enabled"', page)
+            self.assertIn('data-ds-show-when="#st-enabled:1" hidden', page)
+            self.assertIn('name="s_service_transfer_link_hours" type="number" min="1" max="168"', page)
+            # Link rotation is on by default, so the warning about turning it off starts hidden.
+            self.assertIn('data-ds-show-when="#st-new-link:0" hidden', page)
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
+            "s_service_freeze_enabled": "1", "s_service_freeze_max_days": "7",
+            "s_service_freeze_per_period": "2", "s_service_freeze_min_days_left": "1",
+        })
+        shop, owner = await self.stored(5), await self.stored(None)
+        self.assertEqual((shop["service_freeze_enabled"], shop["service_freeze_max_days"]), ("1", "7"))
+        self.assertEqual((owner["service_freeze_enabled"], owner["service_freeze_plans"]), ("0", ""))
+        self.assertEqual((owner["service_transfer_enabled"], owner["service_transfer_plans"]), ("0", ""))
+
+    async def test_each_action_is_one_card_with_its_title_and_switch_in_the_header(self):
+        page = (await self.call(OWNER_SESSION, "GET", "/settings?tab=service_actions")).text
+        for title, switch_id in (("توقف موقت سرویس", "sf-enabled"), ("انتقال سرویس", "st-enabled")):
+            card = page.split(f'<strong>{title}</strong>', 1)[0].rsplit('<div class="ds-card">', 1)[1]
+            self.assertIn('class="ui-switch-row ds-switch ds-toggle-head"', card, title)
+            head = page.split(f'<strong>{title}</strong>', 1)[1].split("</label>", 1)[0]
+            self.assertIn(f'id="{switch_id}" data-ds-submit-on-change', head, title)
+            body = page.split(f'<div class="ds-toggle-body" data-ds-show-when="#{switch_id}:1"', 1)[1][:10]
+            self.assertTrue(body.startswith(" hidden"), f"{title}: the body stays closed while the switch is off")
+        self.assertNotIn("ds-sec-head", page.split('id="settings-form"', 1)[1].split("</form>", 1)[0])
+
+    async def test_out_of_range_numbers_are_stored_as_the_limit(self):
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
+            "s_service_freeze_enabled": "1", "s_service_freeze_max_days": "900",
+            "s_service_freeze_per_period": "-3", "s_service_freeze_min_days_left": "abc",
+        })
+        shop = await self.stored(5)
+        self.assertEqual((shop["service_freeze_max_days"], shop["service_freeze_per_period"]), ("90", "1"))
+        self.assertEqual(shop["service_freeze_min_days_left"], "1")
+
+    async def test_the_plan_chips_show_and_keep_only_the_shops_own_plans(self):
+        from app.db.models import Plan
+
+        async with self._session_factory()() as session:
+            session.add_all([
+                Plan(id=71, name="پلن پلتفرم", price=1),
+                Plan(id=72, name="پلن شاپ", price=1, owner_reseller_id=5),
+            ])
+            await session.commit()
+        page = (await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_actions")).text
+        self.assertIn('<input type="checkbox" name="s_service_freeze_plans" value="72" />', page)
+        self.assertNotIn('value="71"', page)
+        self.assertIn('<input type="checkbox" name="s_service_transfer_plans" value="72" />', page)
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
+            "s_service_freeze_enabled": "1", "s_service_freeze_plans_mode": "some", "s_service_freeze_plans": ["72", "71"],
+        })
+        self.assertEqual((await self.stored(5))["service_freeze_plans"], "72")
+        page = (await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_actions")).text
+        self.assertIn('name="s_service_freeze_plans" value="72" checked', page)
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
+            "s_service_freeze_enabled": "1", "s_service_freeze_plans_mode": "all", "s_service_freeze_plans": ["72"],
+        })
+        self.assertEqual((await self.stored(5))["service_freeze_plans"], "all")
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
+            "s_service_freeze_enabled": "1", "s_service_freeze_plans_mode": "some",
+        })
+        self.assertEqual((await self.stored(5))["service_freeze_plans"], "")
 
 
 class SavePlumbingTests(TabHarness):
@@ -121,7 +197,7 @@ class SavePlumbingTests(TabHarness):
         self.assertEqual(response.status_code, 303)
         values = await self.stored(None)
         self.assertEqual(values["service_import_enabled"], "1")
-        self.assertEqual(values["service_import_max_per_user"], "20")
+        self.assertEqual(values["service_import_max_per_user"], "99")
         self.assertEqual(values["service_import_paths"], "/sub\n/hamid")
         self.assertEqual(values["service_import_admins"], "admin1\nbad")
 
@@ -137,6 +213,28 @@ class SavePlumbingTests(TabHarness):
         platform = await self.stored(None)
         self.assertEqual(platform["service_import_enabled"], "1")
         self.assertEqual((platform["service_import_paths"], platform["service_import_admins"]), ("", ""))
+
+    async def test_the_unlimited_button_saves_no_cap_and_shows_pressed_again(self):
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_import", {"s_service_import_max_per_user": ""})
+        self.assertEqual((await self.stored(5))["service_import_max_per_user"], "unlimited")
+        page = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_import")
+        self.assertRegex(page.text, r'aria-pressed="true" data-ds-unlimited="#s-service_import_max_per_user"')
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_import", {"s_service_import_max_per_user": "40"})
+        self.assertEqual((await self.stored(5))["service_import_max_per_user"], "40")
+        page = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_import")
+        self.assertRegex(page.text, r'aria-pressed="false" data-ds-unlimited="#s-service_import_max_per_user"')
+        self.assertIn('value="40"', page.text)
+
+    async def test_a_stored_empty_cap_shows_the_default_and_a_resave_keeps_a_cap(self):
+        async with self._session_factory()() as session:
+            from app.services.users import set_settings_bulk
+
+            await set_settings_bulk(session, {"service_import_max_per_user": ""}, reseller_id=5)
+        page = await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_import")
+        self.assertRegex(page.text, r'aria-pressed="false" data-ds-unlimited="#s-service_import_max_per_user"')
+        self.assertIn('id="s-service_import_max_per_user" type="number" min="1" step="1" value="5"', page.text)
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_import", {"s_service_import_max_per_user": "5"})
+        self.assertEqual((await self.stored(5))["service_import_max_per_user"], "5")
 
     async def test_a_shops_own_values_never_change_the_platforms(self):
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_import", {"s_service_import_max_per_user": "2"})

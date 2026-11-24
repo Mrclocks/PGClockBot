@@ -24,6 +24,7 @@ from app.bot.handlers.shop_marketing_bot import SHOP_LEAF_OPENERS
 from app.bot.menu_nav import restore_main_reply
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.reply_keyboards import _reply_admin_marketing_entries
+from app.bot.verbatim_input import is_verbatim_text_input
 from app.db.models import BotUser, Order, ResellerProfile, Role
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_message
@@ -208,7 +209,10 @@ class ReplyMenuTextFilter(BaseFilter):
         text = (message.text or "").strip()
         if not text or kb.is_cancel_text(text):
             return False
-        free_text = await state.get_state() in FREE_TEXT_INPUT_STATES
+        current_state = await state.get_state()
+        if is_verbatim_text_input(current_state):
+            return False
+        free_text = current_state in FREE_TEXT_INPUT_STATES
         ui, role, has, show_creds = await _nav_context(
             session,
             db_user,
@@ -425,9 +429,9 @@ async def open_services_list(
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SERVICES, push=push)
-    from app.bot.service_import_ui import EMPTY_LIST_HINT, empty_services_keyboard, import_enabled
+    from app.bot.service_import_ui import EMPTY_LIST_HINT, empty_services_keyboard, import_in_services
 
-    allow_import = import_enabled(ui)
+    allow_import = import_in_services(ui)
     if not services and not reseller_label:
         from app.services.rich_text import outbound_setting_text
 

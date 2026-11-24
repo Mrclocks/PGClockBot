@@ -26,7 +26,7 @@ PANEL_MISSING_TEXT = "این مورد در پاسارگارد وجود ندار�
 _PERSIAN_LETTER_RE = re.compile(r"[؀-ۿ]")
 _ENGLISH_NOISE_RE = re.compile(
     r"(traceback|invalid literal|object has no attribute|\bNoneType\b|\bKeyError\b|"
-    r"\bsqlalchemy\b|\bhttpx\b|\basyncpg\b|\baiosqlite\b|\bstatus[_ ]code\b)",
+    r"\bsqlalchemy\b|\bhttpx\b|\basyncpg\b|\bstatus[_ ]code\b)",
     re.IGNORECASE,
 )
 

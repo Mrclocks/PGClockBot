@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import unittest
 from unittest.mock import AsyncMock, patch
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from sqlalchemy import select
 
@@ -57,11 +55,17 @@ class FailedAttemptLimitHoldsUnderBurstTests(ImportCase):
         self.assertGreaterEqual(sum(1 for r in results if str(r) == RATE_LIMITED), 12 - si.MAX_FAILED_ATTEMPTS)
 
     async def test_a_try_that_was_rate_limited_is_not_kept_as_another_failure(self):
-        await asyncio.gather(*(self.run_import(1, f"guess-{i:08d}") for i in range(12)), return_exceptions=True)
+        results = await asyncio.gather(
+            *(self.run_import(1, f"guess-{i:08d}") for i in range(12)), return_exceptions=True
+        )
+        # How many simultaneous guesses get through depends on how they interleave; whatever
+        # the split, only the tries that were not rate limited are stored, and never more than the limit.
+        checked = sum(1 for r in results if str(r) != RATE_LIMITED)
         async with self.Session() as session:
             rows = (await session.scalars(select(ServiceImportAttempt))).all()
-        self.assertEqual(len(rows), si.MAX_FAILED_ATTEMPTS)
-        self.assertEqual({r.outcome for r in rows}, {"refused"})
+        self.assertEqual(len(rows), checked)
+        self.assertLessEqual(len(rows), si.MAX_FAILED_ATTEMPTS)
+        self.assertTrue(all(r.outcome == "refused" for r in rows), [r.outcome for r in rows])
 
     async def test_a_try_that_never_finished_counts_as_failed_until_the_window_passes(self):
         async with self.Session() as session:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
 import secrets
 import string
 import time
@@ -11,12 +12,16 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.auto_renew_offer import queue_auto_renew_offer
 from app.services.custom_plans import discard_unsold_custom_plan
+from app.services.db_safe import rollback_and_reload
+from app.services.panel_user_note import build_panel_user_note
 from app.services.funnel_events import STEP_DELIVERED, STEP_RECEIPT, record_order_funnel
 from app.services.catalog_pricing import PriceTarget, active_discounts, annotate_prices, assert_expected_price, displayed_quote, quote_price, quote_product, sale_price
 from app.db.models import (
@@ -36,18 +41,27 @@ from app.db.models import (
     ResellerCharge,
 )
 from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
+from app.services.payment_decision_audit import ACTION_APPROVE, ACTION_REJECT, record_payment_decision
+from app.services.delivery_recovery_policy import DELIVERING_STALE_AFTER, DELIVERY_IN_PROGRESS
+from app.services.pg_read_resilience import outside_web_read_budget
 from app.services.pasarguard import (
     PasarGuardError,
+    explain_missing_group,
     extract_sub_token,
     get_pg,
     parse_group_ids,
     user_subscription_url,
 )
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
+from app.services.plan_panel_groups import assert_panel_assigned_group, plan_uses_panel_groups
 from app.services.random_discounts import apply_random_discount
+from app.services.order_discounts import record_code_discount, release_order_discounts
+from app.services.discount_rules import apply_automatic_discounts, release_rule_discount, replace_rule_with_code
 from app.services.trial_guard import assert_trial_account_age
 from app.services.shop_membership import ensure_member
 from app.services.cashback import grant_after_delivery
+from app.services.coupon_programs import issue_after_delivery, issue_referral_reward
+from app.services.cashback_topup import grant_after_topup
 from app.services.payg_gate import (
     SHORTFALL_FOR_CUSTOMER,
     assert_shop_can_afford,
@@ -75,6 +89,8 @@ from app.services.volume_allocation import (
     is_hard_panel_rejection,
     release_volume_hold,
 )
+from app.services.staff_audit import StaffActor
+from app.services.service_period import clear_period_start, record_period_start
 from app.services.wallet import credit_wallet, debit_wallet
 
 logger = logging.getLogger(__name__)
@@ -100,6 +116,7 @@ def is_addon_order_note(note: str | None) -> bool:
     return (note or "").strip().startswith("svc_addon:")
 
 
+@outside_web_read_budget
 async def fulfill_paid_order(
     session: AsyncSession, order: Order, *, attempt: DeliveryAttempt | None = None
 ) -> Order:
@@ -125,7 +142,9 @@ async def fulfill_paid_order(
         plan = await session.get(Plan, order.plan_id)
         if not service or not plan:
             raise ValueError("سرویس یا پلن تمدید یافت نشد")
-        return await apply_renewal(session, order, service, plan, reset_traffic=note.endswith(":auto"))
+        return await _apply_renewal_noting_outcome(
+            session, order, service, plan, attempt=attempt, reset_traffic=note.endswith(":auto")
+        )
     if is_addon_order_note(note):
         from app.services.service_addons import apply_service_addon
 
@@ -141,6 +160,56 @@ async def fulfill_paid_order(
     return await deliver_order(session, order, attempt=attempt)
 
 
+async def _apply_renewal_noting_outcome(
+    session: AsyncSession, order: Order, service: UserService, plan: Plan,
+    *, attempt: DeliveryAttempt | None, reset_traffic: bool,
+) -> Order:
+    """Apply a renewal; an unknown panel outcome marks ``attempt`` so no caller refunds it."""
+    from app.services.service_renewals import RenewalPendingReview
+
+    try:
+        return await apply_renewal(session, order, service, plan, reset_traffic=reset_traffic)
+    except RenewalPendingReview:
+        if attempt is not None:
+            attempt.panel_may_hold_account = True
+        raise
+
+
+async def _referred_buyer(session: AsyncSession, order: Order) -> BotUser | None:
+    """The buyer when ``order`` is a paid, non-trial purchase in the shop that referred them."""
+    if is_mutation_order_note(_order_note(order)) or int(order.amount or 0) <= 0:
+        return None
+    # Prefer already-loaded relationship; never trigger async lazy-load.
+    buyer = order.__dict__.get("user")
+    if buyer is None:
+        buyer = await session.get(BotUser, order.user_id)
+    shop_id = int(order.reseller_id) if order.reseller_id else None
+    # Only a purchase in the shop the referral was made in pays that shop's bonus.
+    if not buyer or not is_referral_of_shop(buyer, shop_id):
+        return None
+    if order.plan_id:
+        from app.db.models import Plan
+
+        plan = await session.get(Plan, int(order.plan_id))
+        if plan is not None and bool(getattr(plan, "is_trial", False)):
+            return None
+    return buyer
+
+
+async def _issue_referrer_coupon(session: AsyncSession, order: Order) -> None:
+    """Best effort after delivery: the referrer's coupon for the friend's first purchase."""
+    try:
+        buyer = await _referred_buyer(session, order)
+        referrer = await session.get(BotUser, int(buyer.referred_by_id)) if buyer is not None else None
+    except Exception:  # noqa: BLE001 - optional reward after a committed delivery; logged and rolled back
+        logger.warning("referrer coupon lookup failed order=%s", order.id, exc_info=True)
+        await rollback_and_reload(session, order)
+        return
+    if buyer is not None and referrer is not None:
+        shop_id = int(order.reseller_id) if order.reseller_id else None
+        await issue_referral_reward(session, referrer=referrer, buyer=buyer, shop_id=shop_id, keep=(order,))
+
+
 async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None:
     """Credit referrer wallet once after invitee's first successful purchase delivery.
 
@@ -149,25 +218,10 @@ async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None
     spendable platform balance. Skips renewals, reseller fees, trials, and
     zero-amount orders. Idempotent via wallet reason.
     """
-    note = _order_note(order)
-    if is_mutation_order_note(note):
-        return
-    if int(order.amount or 0) <= 0:
-        return
-    # Prefer already-loaded relationship; never trigger async lazy-load.
-    buyer = order.__dict__.get("user")
+    buyer = await _referred_buyer(session, order)
     if buyer is None:
-        buyer = await session.get(BotUser, order.user_id)
-    shop_id = int(order.reseller_id) if order.reseller_id else None
-    # Only a purchase in the shop the referral was made in pays that shop's bonus.
-    if not buyer or not is_referral_of_shop(buyer, shop_id):
         return
-    if order.plan_id:
-        from app.db.models import Plan
-
-        plan = await session.get(Plan, int(order.plan_id))
-        if plan is not None and bool(getattr(plan, "is_trial", False)):
-            return
+    shop_id = int(order.reseller_id) if order.reseller_id else None
     from app.services.users import get_setting
 
     # 0 pins the platform's setting; None would read the settings of the bot in use.
@@ -196,20 +250,16 @@ async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None
     referrer = await session.get(BotUser, int(buyer.referred_by_id))
     if not referrer:
         return
+    buyer_id, referrer_id = int(buyer.id), int(referrer.id)  # readable after a rollback below
     try:
         await credit_wallet(
             session, referrer, bonus, reason, shop_id=shop_id
         )
-    except IntegrityError:
-        # Unique (user_id, reason) — concurrent first-delivery race
-        pass
     except Exception:
-        logger.warning(
-            "referral bonus failed buyer=%s referrer=%s",
-            getattr(buyer, "id", None),
-            getattr(referrer, "id", None),
-            exc_info=True,
-        )
+        # A failed ledger write leaves the shared session unusable, and the caller goes on to the
+        # loyalty and cashback steps of the same order: roll back and reload the order for them.
+        logger.warning("referral bonus failed buyer=%s referrer=%s", buyer_id, referrer_id, exc_info=True)
+        await rollback_and_reload(session, order)
 
 
 async def _reseller_pg_link(
@@ -237,7 +287,11 @@ DEFAULT_USERNAME_PREFIX = "clk"
 USERNAME_TAKEN_STATUS = 409
 # Longest buyer-chosen name; a taken name keeps this length after its random ending.
 CHOSEN_NAME_MAX_LENGTH = 20
-CHOSEN_NAME_ENDING_LENGTH = 4
+# A buyer's name is stored as "ali" or, once taken, "ali-2": the "-" cannot occur in a
+# valid name, so the number can go after the shop's suffix instead of inside the name.
+CHOSEN_NAME_NUMBER_SEPARATOR = "-"
+FIRST_TAKEN_NAME_NUMBER = 2
+NAME_FALLBACK_TRIES = 5
 
 
 def _random_alnum(length: int = 8) -> str:
@@ -245,15 +299,31 @@ def _random_alnum(length: int = 8) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+def split_chosen_name(stored: str) -> tuple[str, str]:
+    """``("ali", "2")`` for ``"ali-2"``; ``("ali", "")`` for a name without a number."""
+    base, separator, number = stored.rpartition(CHOSEN_NAME_NUMBER_SEPARATOR)
+    if separator and base and number.isdigit():
+        return base, number
+    return stored, ""
+
+
 def chosen_name_variant(name: str) -> str:
-    """The buyer's name with a short random ending, for when the name is taken."""
-    keep = CHOSEN_NAME_MAX_LENGTH - CHOSEN_NAME_ENDING_LENGTH - 1
-    return f"{name[:keep]}_{_random_alnum(CHOSEN_NAME_ENDING_LENGTH)}"
+    """The buyer's name with the next number ("ali" -> "ali-2" -> "ali-3"), for when it is taken."""
+    base, number = split_chosen_name(name)
+    next_number = str(int(number) + 1 if number else FIRST_TAKEN_NAME_NUMBER)
+    keep = CHOSEN_NAME_MAX_LENGTH - len(CHOSEN_NAME_NUMBER_SEPARATOR) - len(next_number)
+    return f"{base[:keep]}{CHOSEN_NAME_NUMBER_SEPARATOR}{next_number}"
 
 
 PG_USERNAME_MIN_LENGTH = 3
 PG_USERNAME_MAX_LENGTH = 32
 _PG_USERNAME_ALLOWED = frozenset(string.ascii_letters + string.digits + "_")
+# PasarGuard refuses two special characters in a row («a__b») with HTTP 422.
+_REPEATED_SEPARATORS = re.compile(r"_{2,}")
+
+
+def _single_separators(name: str) -> str:
+    return _REPEATED_SEPARATORS.sub("_", name).strip("_")
 
 
 def _sanitize_naming_username(raw: str | None, *, fallback: str) -> str:
@@ -265,7 +335,7 @@ def _sanitize_naming_username(raw: str | None, *, fallback: str) -> str:
 
 
 def _fit_panel_username(built: str, *, keep_unique: bool) -> str:
-    """Coerce a rendered pattern into the panel's ``[A-Za-z0-9_]{3,32}`` format.
+    """Coerce a rendered pattern into the panel's ``[A-Za-z0-9_]{3,32}`` format, one «_» at a time.
 
     Admin patterns can contain ``.``/``-``/spaces or a fractional ``{plan_volume}``
     (``0.5``), and ``{username}`` alone can be too short; the panel rejects those
@@ -273,13 +343,15 @@ def _fit_panel_username(built: str, *, keep_unique: bool) -> str:
     per-purchase variable.
     """
     name = "".join(ch if ch in _PG_USERNAME_ALLOWED else "_" for ch in built.strip())
-    # An empty {prefix}/{suffix} leaves a dangling separator ("_a8k2x9q1").
-    name = name.strip("_")
+    # Replaced characters next to a separator, a Telegram username such as «ali__x» or an empty
+    # {prefix}/{suffix} leave «__» or a dangling «_»; the panel refuses the first.
+    name = _single_separators(name)
     if keep_unique:
         name = f"{name}_{_random_alnum(4)}" if name else _random_alnum(8)
     if len(name) > PG_USERNAME_MAX_LENGTH:
         tail = name[-8:]
-        name = name[: PG_USERNAME_MAX_LENGTH - len(tail)] + tail
+        # The cut can put a separator on both sides of the join.
+        name = _single_separators(name[: PG_USERNAME_MAX_LENGTH - len(tail)] + tail)
     if not name:
         name = _random_alnum(8)
     elif len(name) < PG_USERNAME_MIN_LENGTH:
@@ -439,15 +511,18 @@ async def generate_pg_username(
     volume = getattr(plan, "data_limit_gb", None)
     fallback_id = "" if user_id is None else str(user_id)
     tg_fallback = str(getattr(user, "telegram_id", None) or fallback_id)
-    return _random_username(
+    base_name, number = split_chosen_name(chosen_name) if chosen_name else (None, "")
+    built = _random_username(
         prefix=prefix,
         suffix=suffix,
         pattern=pattern,
         user_id=user_id,
         username=getattr(user, "username", None) or tg_fallback,
         plan_volume=f"{volume:g}" if volume is not None and volume > 0 else "unlimited",
-        chosen_name=chosen_name,
+        chosen_name=base_name,
     )
+    # The number of a taken name closes the username, after the shop's suffix.
+    return f"{built[: PG_USERNAME_MAX_LENGTH - len(number)]}{number}"
 
 
 async def list_active_plans(
@@ -591,10 +666,12 @@ async def apply_discount_to_order(
             discount, used_code = await _reserve_discount_code(session, code, base, order=order)
         if not used_code:
             raise ValueError("کد تخفیف نامعتبر است")
+        await replace_rule_with_code(session, int(order.id), discount)
         order.discount_amount = discount
         order.discount_code = used_code
         order.amount = max(0, base - discount)
         await session.flush()
+        await record_code_discount(session, order, amount=discount)
     await session.commit()
     await session.refresh(order)
     return order
@@ -657,8 +734,8 @@ async def _apply_new_order_discount(
         order.amount = max(0, int(order.amount) - discount)
         order.discount_amount = int(order.discount_amount or 0) + discount
         order.discount_code = used_code
-        if automatic:
-            await apply_random_discount(session, order)
+        await record_code_discount(session, order, amount=discount)
+        await apply_automatic_discounts(session, order, random=automatic)
     except ValueError:
         await session.rollback()
         raise
@@ -1170,6 +1247,8 @@ async def create_wholesale_order(
     )
     session.add(order)
     await ensure_member(session, user_id, shop_rid)
+    await session.flush()
+    await record_code_discount(session, order, amount=discount)
     await apply_random_discount(session, order)
     await session.commit()
     await session.refresh(order)
@@ -1362,9 +1441,17 @@ async def _resume_unfinished_wallet_order(session: AsyncSession, order: Order, u
     if existing.review_note == UNKNOWN_DELIVERY_NOTE:
         # The panel may already hold this buyer's account; staff decide, not a re-tap.
         raise DeliveryOutcomeUnknown()
-    return await _resume_paid_wallet_order(session, order, user)
+    resumed = await _resume_paid_wallet_order(session, order, user)
+    if resumed.status == OrderStatus.DELIVERED.value:
+        # Local import: delivery_failures imports this module.
+        from app.services.delivery_failures import resolve_delivery_failure
+
+        await resolve_delivery_failure(session, int(resumed.id))
+        await session.commit()
+    return resumed
 
 
+@outside_web_read_budget
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     if order.status == OrderStatus.DELIVERED.value:
         return order
@@ -1424,7 +1511,9 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         from app.services.service_renewals import RenewalPendingReview
 
         if isinstance(exc, RenewalPendingReview):
-            # A lost panel response is not evidence that the paid renewal failed.
+            # A lost panel response is not evidence that the paid renewal failed: keep the
+            # money, list the order for the retry job (it re-sends the saved target) and staff.
+            await hold_unknown_delivery_for_review(session, order, error=str(exc))
             raise
         if attempt.panel_may_hold_account:
             # The panel may have created the account: refunding now would sell it for free.
@@ -1476,6 +1565,11 @@ async def mark_order_free_paid(session: AsyncSession, order: Order, user_id: int
     return order
 
 
+def is_unsent_panel_request(exc: BaseException) -> bool:
+    """True when the panel never received the request (no connection), so nothing was created."""
+    return isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout))
+
+
 @dataclass(slots=True)
 class DeliveryAttempt:
     """What a failed ``deliver_order`` may have left on the panel."""
@@ -1510,11 +1604,13 @@ async def hold_unknown_delivery_for_review(
         .order_by(Payment.id.desc())
         .limit(1)
     )
-    if payment is not None:
+    # The stamp stops a second account. A renewal re-sends its saved absolute target instead,
+    # so a retry (a buyer's re-tap or the retry job) stays allowed.
+    if payment is not None and not _order_note(order).startswith("renew:"):
         payment.review_note = UNKNOWN_DELIVERY_NOTE
         await session.commit()
-    # Local import: ux20 imports this module.
-    from app.services.ux20 import note_delivery_send_failure
+    # Local import: delivery_failures imports this module.
+    from app.services.delivery_failures import note_delivery_send_failure
 
     await note_delivery_send_failure(session, order=order, payment=payment, error=error)
     return DeliveryOutcomeUnknown()
@@ -1544,8 +1640,8 @@ async def settle_failed_free_delivery(
         .order_by(Payment.id.desc())
         .limit(1)
     )
-    # Local import: ux20 imports this module.
-    from app.services.ux20 import note_delivery_send_failure
+    # Local import: delivery_failures imports this module.
+    from app.services.delivery_failures import note_delivery_send_failure
 
     await note_delivery_send_failure(session, order=order, payment=payment, error=error)
     return payment
@@ -1603,19 +1699,32 @@ async def _release_discount_code(session: AsyncSession, code: str | None, *, ord
     )
 
 
+async def _release_reserved_discount(session: AsyncSession, order: Order) -> None:
+    """Give back the code or loyalty entitlement an unpaid order holds and release its ledger lines.
+
+    The order's amounts are left alone; nothing is committed.
+    """
+    if order.discount_code:
+        if str(order.discount_code).upper().startswith("LOY"):
+            from app.services.loyalty import release_loyalty_discount_for_order
+
+            await release_loyalty_discount_for_order(session, order)
+        else:
+            await _release_discount_code(session, order.discount_code, order=order)
+    await release_rule_discount(session, int(order.id))
+    await release_order_discounts(session, int(order.id))
+
+
 async def _release_order_discount(session: AsyncSession, order: Order) -> None:
-    """Release both shop DiscountCode uses and loyalty entitlements for an unpaid order."""
+    """Undo the code reduction of an order that stays payable (a rejected or failed attempt).
+
+    A random draw is kept: its amount is reserved for this order until the window ends.
+    """
     if order.random_discount_id is not None:
         return
-    code = order.discount_code
-    if not code:
+    if not order.discount_code:
         return
-    if str(code).upper().startswith("LOY"):
-        from app.services.loyalty import release_loyalty_discount_for_order
-
-        await release_loyalty_discount_for_order(session, order)
-    else:
-        await _release_discount_code(session, code, order=order)
+    await _release_reserved_discount(session, order)
     order.amount = int(order.amount) + int(order.discount_amount or 0)
     order.discount_amount = 0
     order.discount_code = None
@@ -1731,13 +1840,7 @@ async def release_unpaid_order_holds(session: AsyncSession, order: Order, *, rea
     application. Call it only after the caller's own atomic claim moved the order to cancelled,
     so two runs never release twice.
     """
-    if order.discount_code:
-        if str(order.discount_code).upper().startswith("LOY"):
-            from app.services.loyalty import release_loyalty_discount_for_order
-
-            await release_loyalty_discount_for_order(session, order)
-        else:
-            await _release_discount_code(session, order.discount_code, order=order)
+    await _release_reserved_discount(session, order)
     # Always attempt trial release (create_order never sets note="trial:…").
     await _release_trial_claim_for_order(session, order)
     await discard_unsold_custom_plan(session, order)
@@ -1843,7 +1946,10 @@ async def _resume_approved_payment(
     - APPROVED + incomplete work is retriable; APPROVED + complete is terminal.
     """
     if payment.is_wallet_topup:
+        topup_payment_id = int(payment.id)
         if await _wallet_topup_already_credited(session, payment):
+            # A crash may have come between the credit and its bonus; granting is idempotent.
+            await grant_after_topup(session, topup_payment_id)
             return None
         user = await session.get(BotUser, payment.user_id)
         if not user:
@@ -1878,6 +1984,7 @@ async def _resume_approved_payment(
             )
             await session.commit()
             raise
+        await grant_after_topup(session, topup_payment_id)
         return None
 
     if not payment.order_id:
@@ -1894,22 +2001,26 @@ async def _resume_approved_payment(
         # Truly complete — do not re-run delivery / notifications as a new approve.
         raise ValueError("این پرداخت قبلاً تأیید شده")
 
-    # Heal mid-flight / crashed delivery back to PAID so fulfill can claim again.
+    # Heal a crashed delivery back to PAID so fulfill can claim again. A fresh DELIVERING
+    # order may be mid-write in another worker: reopening it would run a second attempt.
     if order.status == OrderStatus.DELIVERING.value and not (
         bool(order.service_id) and not is_mutation
     ):
         with session.no_autoflush:
-            await session.execute(
+            healed = await session.execute(
                 update(Order)
                 .where(
                     Order.id == int(order.id),
                     Order.status == OrderStatus.DELIVERING.value,
+                    Order.updated_at <= datetime.now(timezone.utc) - DELIVERING_STALE_AFTER,
                 )
                 .values(status=OrderStatus.PAID.value)
                 .execution_options(synchronize_session=False)
             )
         await session.commit()
         await session.refresh(order)
+        if healed.rowcount != 1 and order.status == OrderStatus.DELIVERING.value:
+            raise ValueError(DELIVERY_IN_PROGRESS)
 
     if order.status in {
         OrderStatus.PENDING.value,
@@ -1975,6 +2086,7 @@ async def _sync_payment_review_messages(
         logger.warning("payment review sync failed payment=%s", payment_id, exc_info=True)
 
 
+@outside_web_read_budget
 async def approve_payment(
     session: AsyncSession,
     payment: Payment,
@@ -1982,7 +2094,9 @@ async def approve_payment(
     *,
     bot=None,
     attempt: DeliveryAttempt | None = None,
+    actor: StaffActor | None = None,
 ) -> Order | None:
+    """Approve a pending payment; ``actor`` (web) or ``reviewer_tg`` (bot) is written to the staff log."""
     payment_id = int(payment.id)
     # DB-only claim: disable autoflush so a dirty in-memory status cannot
     # rewrite the row to pending before the conditional UPDATE runs.
@@ -2048,7 +2162,9 @@ async def approve_payment(
             )
             await session.commit()
             raise
+        await record_payment_decision(session, payment, None, action=ACTION_APPROVE, reviewer_tg=reviewer_tg, actor=actor)
         await session.commit()
+        await grant_after_topup(session, payment_id)
         await _sync_payment_review_messages(session, payment_id, bot=bot)
         return None
     order = await session.get(Order, payment.order_id)
@@ -2117,6 +2233,7 @@ async def approve_payment(
             raise ValueError("این سفارش قبلاً پرداخت شده")
         await session.commit()
         raise ValueError("این سفارش قابل تأیید نیست")
+    await record_payment_decision(session, payment, order, action=ACTION_APPROVE, reviewer_tg=reviewer_tg, actor=actor)
     await session.commit()
     await session.refresh(order)
     await _sync_payment_review_messages(session, payment_id, bot=bot)
@@ -2124,8 +2241,15 @@ async def approve_payment(
 
 
 async def reject_payment(
-    session: AsyncSession, payment: Payment, reviewer_tg: int, note: str = "", *, bot=None
+    session: AsyncSession,
+    payment: Payment,
+    reviewer_tg: int,
+    note: str = "",
+    *,
+    bot=None,
+    actor: StaffActor | None = None,
 ) -> None:
+    """Reject a pending payment; ``actor`` (web) or ``reviewer_tg`` (bot) is written to the staff log."""
     payment_id = int(payment.id)
     with session.no_autoflush:
         claim = await session.execute(
@@ -2165,6 +2289,8 @@ async def reject_payment(
             await _release_order_discount(session, rejected_order)
             await _release_trial_claim_for_order(session, rejected_order)
             await discard_unsold_custom_plan(session, rejected_order)
+    order = await session.get(Order, int(payment.order_id)) if payment.order_id else None
+    await record_payment_decision(session, payment, order, action=ACTION_REJECT, reviewer_tg=reviewer_tg, actor=actor)
     await session.commit()
     await _sync_payment_review_messages(session, payment_id, bot=bot)
 
@@ -2230,13 +2356,7 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
         .execution_options(synchronize_session=False)
     )
     await session.refresh(order)
-    if order.discount_code:
-        from app.services.loyalty import release_loyalty_discount_for_order
-
-        if str(order.discount_code).upper().startswith("LOY"):
-            await release_loyalty_discount_for_order(session, order)
-        else:
-            await _release_discount_code(session, order.discount_code, order=order)
+    await _release_reserved_discount(session, order)
     await _release_trial_claim_for_order(session, order)
     await discard_unsold_custom_plan(session, order)
     if (order.note or "").startswith("reseller_app:"):
@@ -2295,6 +2415,7 @@ async def reject_order(session: AsyncSession, order: Order, *, note: str = "") -
     return order
 
 
+@outside_web_read_budget
 async def deliver_order(
     session: AsyncSession, order: Order, *, attempt: DeliveryAttempt | None = None
 ) -> Order:
@@ -2333,7 +2454,7 @@ async def deliver_order(
         await session.commit()
         await session.refresh(order)
         return order
-    # Atomic delivery claim (SQLite has no real row locks — status flip is the mutex)
+    # Atomic delivery claim: the status flip is the mutex.
     with session.no_autoflush:
         claim = await session.execute(
             update(Order)
@@ -2387,7 +2508,7 @@ async def deliver_order(
         )
         await session.commit()
 
-    panel = {"touched": False}
+    panel = {"touched": False, "orphan": False}
     try:
         # Shop deliveries authenticate as the reseller's PG admin (role limits apply).
         # Platform orders use the owner client.
@@ -2429,7 +2550,7 @@ async def deliver_order(
         group_ids = None
         if not plan.pg_template_id:
             group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
-            if not group_ids:
+            if not group_ids and not plan_uses_panel_groups(plan):
                 raise ValueError(
                     "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
                 )
@@ -2464,30 +2585,47 @@ async def deliver_order(
                 }
                 pg_user = await pg.create_user_from_template(payload)
             else:
-                pg_user = await pg.create_user(
-                    build_user_create_payload(
-                        username=username,
-                        group_ids=group_ids or [],
-                        data_limit=data_limit,
-                        expire_ts=expire,
-                        note=note,
+                try:
+                    pg_user = await pg.create_user(
+                        build_user_create_payload(
+                            username=username,
+                            group_ids=group_ids or [],
+                            data_limit=data_limit,
+                            expire_ts=expire,
+                            note=note,
+                        )
                     )
-                )
+                except PasarGuardError as exc:
+                    raise explain_missing_group(exc, group_ids or []) from exc
             return pg_user
 
         async def _create_one(index: int) -> UserService:
             username = await _username(chosen_name)
-            note = f"PGClockBot order #{order.id}"
-            if qty > 1:
-                note = f"{note} ({index}/{qty})"
+            note = build_panel_user_note(
+                order_id=int(order.id),
+                telegram_id=getattr(order.user, "telegram_id", None),
+                telegram_username=getattr(order.user, "username", None),
+                index=index,
+                quantity=qty,
+            )
+            attempt_name = chosen_name
+
+            async def _next_username() -> str:
+                nonlocal attempt_name
+                attempt_name = chosen_name_variant(attempt_name)
+                return await _username(attempt_name)
+
             pg_user, username = await create_with_name_fallback(
                 lambda name: _create_panel_user(name, note),
                 username,
-                regenerate=(lambda: _username(chosen_name_variant(chosen_name))) if chosen_name else None,
+                regenerate=_next_username if chosen_name else None,
             )
             pg_uid = pg_user.get("id")
             if pg_uid:
                 created_pg_ids.append(int(pg_uid))
+            if plan_uses_panel_groups(plan):
+                # After recording the id, so the rollback below deletes the groupless user.
+                assert_panel_assigned_group(pg_user)
             if plan.pg_template_id and _order_note(order) == CUSTOM_ORDER_NOTE and pg_uid:
                 # A template brings its own volume and expiry; the buyer paid for the chosen ones.
                 applied = await pg.modify_user_by_id(
@@ -2547,7 +2685,9 @@ async def deliver_order(
                 try:
                     await pg.delete_user_by_id(int(pg_uid))
                 except Exception:
-                    logger.debug("deliver_order: ignored failure", exc_info=True)
+                    # The created user stays on the panel: a retry must not create another.
+                    panel["orphan"] = True
+                    logger.warning("deliver_order: rollback delete failed order=%s", order_id, exc_info=True)
             # Drop flushed UserService rows so _release_delivery_claim() commit
             # cannot leave orphans pointing at deleted PG users.
             for svc in list(services):
@@ -2568,10 +2708,13 @@ async def deliver_order(
         await finish_charge(session, payg_charge, commit=False)
         await session.commit()
         await session.refresh(order)
+        # The order is committed as delivered. Each reward below is best effort, and a failed one rolls
+        # the shared session back so the next one (cashback last) still runs.
         try:
             await _maybe_pay_referral_bonus(session, order)
         except Exception:
-            logger.debug("deliver_order: ignored failure", exc_info=True)
+            logger.warning("referral bonus step failed order=%s", order_id, exc_info=True)
+            await rollback_and_reload(session, order)
         try:
             from app.services.loyalty import consume_loyalty_discount_for_order, on_order_delivered
 
@@ -2579,14 +2722,19 @@ async def deliver_order(
             await session.commit()
             await on_order_delivered(session, order)
         except Exception:
-            logger.warning("loyalty on_order_delivered failed order=%s", order.id, exc_info=True)
+            logger.warning("loyalty on_order_delivered failed order=%s", order_id, exc_info=True)
+            await rollback_and_reload(session, order)
         await grant_after_delivery(session, order)
+        await issue_after_delivery(session, order)
+        await _issue_referrer_coupon(session, order)
         await record_order_funnel(session, order, STEP_DELIVERED, key=f"delivered:order:{order.id}")
         return order
     except Exception as exc:
         if attempt is not None:
             # Fail closed: only a definite refusal proves the panel created nothing.
-            attempt.panel_may_hold_account = panel["touched"] and not is_hard_panel_rejection(exc)
+            attempt.panel_may_hold_account = bool(panel.get("orphan")) or (
+                panel["touched"] and not is_hard_panel_rejection(exc) and not is_unsent_panel_request(exc)
+            )
         try:
             await _release_delivery_claim()
         except Exception:
@@ -2600,20 +2748,22 @@ async def create_with_name_fallback(
     *,
     regenerate: Callable[[], Awaitable[str]] | None,
 ) -> tuple[dict, str]:
-    """Create the panel user; a chosen name the panel already holds gets a random ending.
+    """Create the panel user; a chosen name the panel already holds gets the next number.
 
     Returns the panel reply and the username actually used. The panel answers 409 before
-    creating anything, so the second call cannot duplicate a user, and a paid order is
+    creating anything, so each retry cannot duplicate a user, and a paid order is
     never left undelivered because of the buyer's name.
     """
-    try:
-        return await create(username), username
-    except PasarGuardError as exc:
-        if regenerate is None or exc.status_code != USERNAME_TAKEN_STATUS:
-            raise
-        logger.info("chosen service name taken on the panel; adding a random ending")
-    generated = await regenerate()
-    return await create(generated), generated
+    candidate = username
+    for attempt in range(NAME_FALLBACK_TRIES + 1):
+        try:
+            return await create(candidate), candidate
+        except PasarGuardError as exc:
+            if regenerate is None or exc.status_code != USERNAME_TAKEN_STATUS or attempt == NAME_FALLBACK_TRIES:
+                raise
+            logger.info("chosen service name taken on the panel; adding a number")
+        candidate = await regenerate()
+    raise AssertionError("unreachable")  # pragma: no cover - the loop returns or raises
 
 
 MIN_TOPUP_AMOUNT = 1000
@@ -2665,7 +2815,7 @@ async def renew_service_with_plan(
     expected_price: int | None = None,
 ) -> Order:
     """Create a pending renewal order. Caller shows pay_methods (or uses pay_with_wallet)."""
-    from app.services.service_renewals import validate_renewal_selection
+    from app.services.service_renewals import assert_renewal_category, validate_renewal_selection
 
     shop_rid = _shop_reseller_id()
     if request_key is not None:
@@ -2679,6 +2829,7 @@ async def renew_service_with_plan(
     terms = await validate_renewal_selection(
         session, user_id=user_id, service=service, plan=plan, shop_id=shop_rid,
     )
+    await assert_renewal_category(session, service=service, plan=plan, terms=terms, shop_id=shop_rid)
     if shop_rid is not None:
         await _assert_affordable(session, int(shop_rid), ServiceChange(
             ChargeEvent.RENEW,
@@ -2702,12 +2853,6 @@ async def renew_service_with_plan(
     if request_key is None:
         session.add(order)
     else:
-        # SQLite's legacy transaction mode needs BEGIN before a first SAVEPOINT.
-        connection = await session.connection()
-        if connection.dialect.name == "sqlite":
-            raw = await connection.get_raw_connection()
-            if not raw.driver_connection.in_transaction:
-                await connection.exec_driver_sql("BEGIN")
         try:
             async with session.begin_nested():
                 session.add(order)
@@ -2719,7 +2864,7 @@ async def renew_service_with_plan(
             if (existing.user_id, existing.service_id, existing.plan_id, existing.reseller_id) != (user_id, service.id, plan.id, shop_rid):
                 raise ValueError("درخواست تمدید نامعتبر است") from None
             return existing
-    await apply_random_discount(session, order)
+    await apply_automatic_discounts(session, order)
     if commit:
         await session.commit()
         await session.refresh(order)
@@ -2818,7 +2963,10 @@ async def _renewal_targets(pg, service: UserService, plan: Plan, snapshot: dict 
     if payload is None:
         from app.services.service_renewals import calculate_renewal
 
-        payload = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), snapshot)["payload"]
+        result = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), snapshot)
+        payload = result["payload"]
+        # Saved with the target before the panel write, so a retry keeps the same period start.
+        snapshot["period_start"] = result["period_start"]
     gate_expire = payload["expire"]
     if payload.get("on_hold_expire_duration"):
         gate_expire = int(time.time()) + payload["on_hold_expire_duration"]
@@ -2923,6 +3071,18 @@ def _record_renewed_service(
         sync_service_quota_cache(
             service, expire_ts=expire, data_limit_bytes=data_limit, fallback_duration_days=plan_days,
         )
+    _record_period_start(service, run.snapshot, data_limit=data_limit)
+
+
+def _record_period_start(service: UserService, snapshot: dict | None, *, data_limit: int | None) -> None:
+    """Open the new period on the service (legacy orders without a snapshot keep raw numbers)."""
+    start = (snapshot or {}).get("period_start")
+    if not isinstance(start, dict):
+        clear_period_start(service)
+        return
+    record_period_start(
+        service, used=start.get("used"), lifetime=start.get("lifetime"), finite_limit=bool(data_limit),
+    )
 
 
 async def _notify_renewal_delivered(session: AsyncSession, order: Order) -> None:
@@ -2935,6 +3095,8 @@ async def _notify_renewal_delivered(session: AsyncSession, order: Order) -> None
     except Exception:
         logger.warning("loyalty on_order_delivered renew failed order=%s", order.id, exc_info=True)
     await grant_after_delivery(session, order)
+    await issue_after_delivery(session, order)
+    await queue_auto_renew_offer(session, order)
 
 
 async def _release_failed_renewal(session: AsyncSession, order: Order, run: _RenewalRun, exc: Exception) -> bool:
@@ -3006,6 +3168,7 @@ async def _charge_renewal(
         raise ValueError(SHORTFALL_FOR_CUSTOMER) from e
 
 
+@outside_web_read_budget
 async def apply_renewal(
     session: AsyncSession, order: Order, service: UserService, plan: Plan,
     *, reset_traffic: bool = False,

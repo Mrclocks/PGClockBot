@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.api.app import templates
 from app.services.resellers import RESELLER_SETTINGS_TABS

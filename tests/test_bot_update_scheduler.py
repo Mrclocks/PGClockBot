@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import unittest
 from datetime import datetime, timezone
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from aiogram.types import Update
 

@@ -11,6 +11,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import keyboards as kb
+from app.services.users import get_all_settings
 from app.bot.auth import is_platform_admin
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, ResellerPlan, ResellerPlanExtraPack
@@ -76,7 +78,7 @@ def _style_label(stored: str | None) -> str:
     return _STYLE_LABELS.get(stored, stored or "سفید")
 
 
-def _packs_home_kb(plan_id: int) -> InlineKeyboardMarkup:
+def _packs_home_kb(plan_id: int, ui: dict[str, str]) -> InlineKeyboardMarkup:
     pid = int(plan_id)
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -92,13 +94,13 @@ def _packs_home_kb(plan_id: int) -> InlineKeyboardMarkup:
                     callback_data=f"adm:resx:k:{pid}:users",
                 )
             ],
-            [InlineKeyboardButton(text="◀️ بازگشت", callback_data=f"adm:resplan:view:{pid}")],
+            [kb.back_button(ui, f"adm:resplan:view:{pid}")],
         ]
     )
 
 
 def _kind_list_kb(
-    plan: ResellerPlan, packs: list[ResellerPlanExtraPack], kind: str
+    plan: ResellerPlan, packs: list[ResellerPlanExtraPack], kind: str, ui: dict[str, str]
 ) -> InlineKeyboardMarkup:
     pid = int(plan.id)
     rows: list[list[InlineKeyboardButton]] = []
@@ -122,7 +124,7 @@ def _kind_list_kb(
             )
         ]
     )
-    rows.append([InlineKeyboardButton(text="◀️ بازگشت", callback_data=f"adm:resx:l:{pid}")])
+    rows.append([kb.back_button(ui, f"adm:resx:l:{pid}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -144,12 +146,11 @@ def _pack_detail_kb(pack: ResellerPlanExtraPack) -> InlineKeyboardMarkup:
     )
 
 
-def _color_picker_kb(pack: ResellerPlanExtraPack) -> InlineKeyboardMarkup:
+def _color_picker_kb(pack: ResellerPlanExtraPack, ui: dict[str, str]) -> InlineKeyboardMarkup:
     pk = int(pack.id)
     rows = []
     for code, value in _STYLE_CODES.items():
         label = _style_label(value)
-        style = None if value is None else (value or None)
         # White is stored as ""; Telegram omits style.
         btn_style = value if value else None
         rows.append(
@@ -161,7 +162,7 @@ def _color_picker_kb(pack: ResellerPlanExtraPack) -> InlineKeyboardMarkup:
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="◀️ بازگشت", callback_data=f"adm:resx:v:{pk}")])
+    rows.append([kb.back_button(ui, f"adm:resx:v:{pk}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -205,7 +206,7 @@ async def extrapacks_home(
         await safe_edit_text(
             callback.message,
             f"📦 بسته‌های پلن «{html.escape(plan.name)}»\nفقط روی همین پلن دیده می‌شوند.",
-            reply_markup=_packs_home_kb(int(plan.id)),
+            reply_markup=_packs_home_kb(int(plan.id), await get_all_settings(session)),
         )
 
 
@@ -232,7 +233,7 @@ async def extrapacks_kind(
         await safe_edit_text(
             callback.message,
             f"بسته‌های {_kind_label(kind)} — «{html.escape(plan.name)}»",
-            reply_markup=_kind_list_kb(plan, packs, kind),
+            reply_markup=_kind_list_kb(plan, packs, kind, await get_all_settings(session)),
         )
 
 
@@ -393,7 +394,7 @@ async def extrapacks_amount_save(
     packs = await list_packs(session, plan_id, kind=kind, active_only=True)
     await message.answer(
         feedback.UPDATED,
-        reply_markup=_kind_list_kb(plan, packs, kind),
+        reply_markup=_kind_list_kb(plan, packs, kind, await get_all_settings(session)),
     )
 
 
@@ -413,7 +414,7 @@ async def extrapacks_color_menu(
         await safe_edit_text(
             callback.message,
             f"رنگ دکمه بسته {int(pack.amount)} {_kind_label(pack.kind)}:",
-            reply_markup=_color_picker_kb(pack),
+            reply_markup=_color_picker_kb(pack, await get_all_settings(session)),
         )
 
 
@@ -505,5 +506,5 @@ async def extrapacks_del_ok(
         await safe_edit_text(
             callback.message,
             f"بسته‌های {_kind_label(kind)} — «{html.escape(plan.name)}»",
-            reply_markup=_kind_list_kb(plan, packs, kind),
+            reply_markup=_kind_list_kb(plan, packs, kind, await get_all_settings(session)),
         )

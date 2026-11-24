@@ -629,6 +629,7 @@ def detect_server_ip() -> str:
             if ip and " " not in ip and len(ip) < 64 and not ip.lower().startswith("<"):
                 return ip
         except Exception:
+            logger.debug("public IP lookup failed url=%s", url, exc_info=True)
             continue
     try:
         hostname = socket.gethostname()

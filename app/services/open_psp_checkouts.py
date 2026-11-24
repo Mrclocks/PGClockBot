@@ -66,7 +66,7 @@ async def open_psp_checkouts(
 
 
 def _as_utc(value: datetime) -> datetime:
-    # SQLite returns naive datetimes for timezone-aware columns; they are stored as UTC.
+    # Stored timestamps are UTC; a naive value (from Python code or a test) is read as UTC.
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 

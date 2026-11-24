@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot.handlers.shop_credit_bot import (
     HELP_LINE,

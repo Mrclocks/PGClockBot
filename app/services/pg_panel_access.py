@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from sqlalchemy import update
+from sqlalchemy import or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import OrgPrincipal, ResellerProfile
@@ -226,6 +226,20 @@ def open_pg_panel_access(profile: ResellerProfile) -> None:
     profile.pg_password_rotation_enc = None
 
 
+async def _claim_close(session: AsyncSession, profile: ResellerProfile) -> bool:
+    """Close access only if it is still open; whether this call is the one that closed it."""
+    column = ResellerProfile.allow_pg_panel_access
+    result = await session.execute(
+        update(ResellerProfile)
+        .where(ResellerProfile.id == int(profile.id), or_(column.is_(None), column.is_(True)))
+        .values(allow_pg_panel_access=False)
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    await session.refresh(profile)
+    return bool(result.rowcount)
+
+
 async def set_pg_panel_access(
     session: AsyncSession, profile: ResellerProfile, allowed: bool
 ) -> AccessChange:
@@ -238,8 +252,9 @@ async def set_pg_panel_access(
         open_pg_panel_access(profile)
         await session.commit()
         return AccessChange(previous, target, RotationOutcome.NOT_NEEDED)
-    profile.allow_pg_panel_access = False
-    await session.commit()
+    if not await _claim_close(session, profile):
+        # Another request closed access first and owns the password change.
+        return AccessChange(previous, target, RotationOutcome.NOT_NEEDED)
     if not (profile.pg_admin_username or "").strip():
         return AccessChange(previous, target, RotationOutcome.NOT_NEEDED)
     await _claim_rotation_secret(session, profile)

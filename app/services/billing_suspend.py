@@ -14,6 +14,7 @@ from app.services.billing import (
     get_low_balance_threshold,
     is_payg,
 )
+from app.services.service_freeze_guard import frozen_pg_user_ids
 from app.services.staff_notice_buttons import shop_panel_markup
 
 logger = logging.getLogger(__name__)
@@ -190,7 +191,13 @@ async def restore_payg_reseller(
     pg = get_pg()
     if uname:
         await _set_admin_enabled(pg, uname, enabled=True)
-        for uid in _parse_id_list(profile.billing_suspended_user_ids):
+        cut_ids = _parse_id_list(profile.billing_suspended_user_ids)
+        # A service the customer froze stays off; its own resume brings it back with its days.
+        frozen = await frozen_pg_user_ids(session, cut_ids)
+        for uid in cut_ids:
+            if uid in frozen:
+                stats["skipped"] += 1
+                continue
             try:
                 await pg.set_disabled_by_id(uid, False)
                 stats["users_restored"] += 1
