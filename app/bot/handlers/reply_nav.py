@@ -429,9 +429,9 @@ async def open_services_list(
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SERVICES, push=push)
-    from app.bot.service_import_ui import EMPTY_LIST_HINT, empty_services_keyboard, import_enabled
+    from app.bot.service_import_ui import EMPTY_LIST_HINT, empty_services_keyboard, import_in_services
 
-    allow_import = import_enabled(ui)
+    allow_import = import_in_services(ui)
     if not services and not reseller_label:
         from app.services.rich_text import outbound_setting_text
 

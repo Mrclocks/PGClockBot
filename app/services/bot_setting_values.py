@@ -23,8 +23,10 @@ from app.services.numbers import normalize_number_text, to_fa_digits
 from app.services.service_import_config import (
     KEY_MAX_PER_USER as IMPORT_KEY_MAX_PER_USER,
     KEY_MODE as IMPORT_KEY_MODE,
+    KEY_PLACEMENT as IMPORT_KEY_PLACEMENT,
     MAX_PER_USER_LIMIT as IMPORT_MAX_PER_USER_LIMIT,
     MIN_PER_USER as IMPORT_MIN_PER_USER,
+    PLACEMENT_CHOICES as IMPORT_PLACEMENT_CHOICES,
     UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
     UNLIMITED_WORDS as IMPORT_UNLIMITED_WORDS,
 )
@@ -78,6 +80,7 @@ UNLIMITED_LABEL = "نامحدود"
 SELECT_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "billing_on_empty": (("block_provision", "مسدود کردن ساخت و تمدید سرویس"),),
     IMPORT_KEY_MODE: (("instant", "فوری"), ("approval", "با تأیید ادمین")),
+    IMPORT_KEY_PLACEMENT: IMPORT_PLACEMENT_CHOICES,
     **CANCEL_CHOICES,
     **ALERT_UNIT_OPTIONS,
     crypto_rates.MODE_KEY: (

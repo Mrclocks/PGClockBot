@@ -92,6 +92,14 @@ class VisibilityTests(MenuCase):
         self.assertFalse(await self.sees(6, shop=5))
 
 
+    async def test_with_the_add_button_only_on_the_welcome_a_customer_without_services_does_not_see_it(self):
+        await self.switch(True)
+        async with self.Session() as session:
+            await set_settings_bulk(session, {"service_import_button_placement": "offer"}, reseller_id=None)
+        clear_settings_cache()
+        self.assertFalse(await self.sees(1))
+        self.assertTrue(await self.sees(2))
+
 class KeyboardTests(MenuCase):
     async def keyboard_texts(self, user_id: int, *, shop: int | None = None) -> list[str]:
         token = set_shop_reseller_id(shop)

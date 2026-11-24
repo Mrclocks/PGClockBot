@@ -21,6 +21,10 @@ from app.services.button_styles import setting_group_fields as button_style_sett
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
 from app.services.service_import_config import (
     DEFAULT_MAX_PER_USER as IMPORT_DEFAULT_MAX_PER_USER,
+    DEFAULT_PLACEMENT as IMPORT_DEFAULT_PLACEMENT,
+    KEY_OFFER_HIDE_BUTTON as IMPORT_KEY_OFFER_HIDE_BUTTON,
+    KEY_PLACEMENT as IMPORT_KEY_PLACEMENT,
+    PLACEMENT_CHOICES as IMPORT_PLACEMENT_CHOICES,
     UNLIMITED_VALUE as IMPORT_UNLIMITED_VALUE,
 )
 from app.services.customer_notice_texts import (
@@ -1298,6 +1302,8 @@ DEFAULT_SETTINGS = {
     "miniapp_notice": "",
     "service_import_mode": "instant",
     "service_import_max_per_user": str(IMPORT_DEFAULT_MAX_PER_USER),
+    IMPORT_KEY_PLACEMENT: IMPORT_DEFAULT_PLACEMENT,
+    IMPORT_KEY_OFFER_HIDE_BUTTON: "1",
     "service_import_paths": "",
     "service_import_admins": "",
 }
@@ -2093,6 +2099,19 @@ SETTING_GROUPS = {
             "با دکمهٔ «نامحدود» سقفی نمی‌ماند — پیش‌فرض ۵",
             # (value stored by the «نامحدود» button, number shown when nothing valid is stored)
             (IMPORT_UNLIMITED_VALUE, str(IMPORT_DEFAULT_MAX_PER_USER)),
+        ),
+        (
+            IMPORT_KEY_PLACEMENT,
+            "محل نمایش دکمهٔ «اتصال اشتراک قبلی»",
+            "select",
+            "پیام ورودی: زیر پیام خوش‌آمد برای مشتری بدون سرویس. منوی سرویس‌ها: داخل «سرویس‌های من».",
+            list(IMPORT_PLACEMENT_CHOICES),
+        ),
+        (
+            IMPORT_KEY_OFFER_HIDE_BUTTON,
+            "دکمهٔ «نمایش نده» در پیام ورودی",
+            "toggle",
+            "مشتری با زدن آن، دیگر این پیام را در همین فروشگاه نمی‌بیند.",
         ),
     ],
     "مسیرها و ادمین‌های مجاز": [

@@ -8,6 +8,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot.keyboards import _ikb, _t, back_button
 from app.services.service_import import SETTING_KEY
+from app.services.service_import_config import shows_in_offer, shows_in_services
 from app.services.users import current_shop_reseller_id, on
 
 ADD_CALLBACK = "svc:add"
@@ -16,6 +17,16 @@ EMPTY_LIST_HINT = "اگر سرویسی بیرون از ربات گرفته‌ا�
 
 def import_enabled(ui: Mapping[str, str] | None) -> bool:
     return on((ui or {}).get(SETTING_KEY, "0"))
+
+
+def import_in_services(ui: Mapping[str, str] | None) -> bool:
+    """The add button belongs in «سرویس‌های من» (the feature is on and placed there)."""
+    return import_enabled(ui) and shows_in_services(ui)
+
+
+def import_in_offer(ui: Mapping[str, str] | None) -> bool:
+    """The add button belongs in the home offer under the welcome."""
+    return import_enabled(ui) and shows_in_offer(ui)
 
 
 def add_existing_row(ui: dict | None) -> list[InlineKeyboardButton]:

@@ -15,6 +15,9 @@ from app.bot import import_prompt as prompt
 from app.bot.handlers import service_import as flow
 from app.bot.handlers import start
 from app.bot.handlers import home_trial
+from app.bot.nav_inline import services_list_keyboard
+from app.bot.service_import_ui import ADD_CALLBACK, import_in_offer, import_in_services
+from app.services import service_import_config as cfg
 from app.db.models import BotUser, Plan, TrialClaim, UserService
 from app.services.trial_offer import offerable_trial_plans
 from app.services.service_import_offer import dismiss_offer, is_offer_dismissed
@@ -23,6 +26,8 @@ from tests.test_service_import import ImportCase
 
 ON = {"service_import_enabled": "1"}
 OFF = {"service_import_enabled": "0"}
+# The layout tests below look at the add and trial buttons; the hide button has its own tests.
+NO_HIDE = {"service_import_offer_hide_button": "0"}
 
 
 class OfferRuleTests(unittest.TestCase):
@@ -35,11 +40,11 @@ class OfferRuleTests(unittest.TestCase):
 
     def test_the_add_button_takes_the_colour_set_for_it_and_keeps_its_fixed_label(self):
         for colour in ("success", "primary", "danger"):
-            (add,) = prompt.build_import_prompt({**ON, "btn_style_svc_add_existing": colour}).blocks[1].buttons
+            (add,) = prompt.build_import_prompt({**ON, **NO_HIDE, "btn_style_svc_add_existing": colour}).blocks[1].buttons
             self.assertEqual((add.text, add.style), ("اتصال اشتراک قبلی", colour))
 
-    def test_the_message_has_the_note_above_a_single_add_button_and_no_hide_button(self):
-        blocks = prompt.build_import_prompt(ON).blocks
+    def test_with_the_hide_switch_off_the_message_has_the_note_above_a_single_add_button(self):
+        blocks = prompt.build_import_prompt({**ON, **NO_HIDE}).blocks
         self.assertEqual(blocks[0].text, prompt.HOME_ADD_NOTE)
         self.assertIn("از بخش «سرویس‌های من»", prompt.HOME_ADD_NOTE)
         self.assertEqual(len(blocks), 2)
@@ -47,7 +52,7 @@ class OfferRuleTests(unittest.TestCase):
         self.assertEqual((add.text, add.callback_data), ("اتصال اشتراک قبلی", prompt.HOME_ADD_CALLBACK))
 
     def test_the_trial_button_sits_beside_the_add_button_and_nothing_follows_it(self):
-        blocks = prompt.build_import_prompt(ON, trial_available=True).blocks
+        blocks = prompt.build_import_prompt({**ON, **NO_HIDE}, trial_available=True).blocks
         self.assertEqual(blocks[0].text, prompt.HOME_BOTH_NOTE)
         add, trial = blocks[1].buttons
         self.assertEqual(add.callback_data, prompt.HOME_ADD_CALLBACK)
@@ -56,7 +61,7 @@ class OfferRuleTests(unittest.TestCase):
             self.assertLessEqual(len(data.encode()), 64)
 
     def test_a_shop_without_adding_old_services_offers_the_trial_alone(self):
-        blocks = prompt.build_import_prompt(OFF, trial_available=True).blocks
+        blocks = prompt.build_import_prompt({**OFF, **NO_HIDE}, trial_available=True).blocks
         self.assertEqual(blocks[0].text, prompt.HOME_TRIAL_NOTE)
         (trial,) = blocks[1].buttons
         self.assertEqual(trial.callback_data, prompt.HOME_TRIAL_CALLBACK)
@@ -67,6 +72,52 @@ class OfferRuleTests(unittest.TestCase):
         # with no trial available and adding old services on gets nothing.
         self.assertFalse(prompt.should_offer_import(ON, has_services=True, dismissed=False, trial_available=False))
         self.assertFalse(prompt.should_offer_import(OFF, has_services=False, dismissed=True, trial_available=True))
+
+
+class OfferSettingsTests(unittest.TestCase):
+    def test_the_hide_button_closes_the_offer_by_default_and_the_switch_removes_it(self):
+        add, hide = prompt.build_import_prompt(ON).blocks[1].buttons
+        self.assertEqual(add.callback_data, prompt.HOME_ADD_CALLBACK)
+        self.assertEqual((hide.text, hide.style, hide.callback_data), ("نمایش نده", "danger", prompt.HOME_HIDE_CALLBACK))
+        (only,) = prompt.build_import_prompt({**ON, **NO_HIDE}).blocks[1].buttons
+        self.assertEqual(only.callback_data, prompt.HOME_ADD_CALLBACK)
+
+    def test_the_hide_button_also_follows_a_trial_only_offer(self):
+        trial, hide = prompt.build_import_prompt(OFF, trial_available=True).blocks[1].buttons
+        self.assertEqual((trial.callback_data, hide.callback_data), (prompt.HOME_TRIAL_CALLBACK, prompt.HOME_HIDE_CALLBACK))
+
+    def test_placed_only_in_the_services_menu_the_welcome_offers_no_add_button(self):
+        services_only = {**ON, "service_import_button_placement": "services"}
+        self.assertFalse(prompt.should_offer_import(services_only, has_services=False, dismissed=False))
+        # A trial can still be offered, without the add button.
+        self.assertTrue(prompt.should_offer_import(services_only, has_services=False, dismissed=False, trial_available=True))
+        buttons = prompt.build_import_prompt({**services_only, **NO_HIDE}, trial_available=True).blocks[1].buttons
+        self.assertEqual([b.callback_data for b in buttons], [prompt.HOME_TRIAL_CALLBACK])
+        self.assertFalse(import_in_offer(services_only))
+        self.assertTrue(import_in_services(services_only))
+
+    def test_placed_only_in_the_welcome_the_services_menu_has_no_add_button_and_the_note_does_not_point_there(self):
+        offer_only = {**ON, **NO_HIDE, "service_import_button_placement": "offer"}
+        self.assertTrue(prompt.should_offer_import(offer_only, has_services=False, dismissed=False))
+        blocks = prompt.build_import_prompt(offer_only).blocks
+        self.assertEqual(blocks[0].text, prompt.HOME_ADD_ONLY_NOTE)
+        self.assertNotIn("سرویس‌های من", blocks[0].text)
+        self.assertFalse(import_in_services(offer_only))
+        keyboard = services_list_keyboard([], offer_only, allow_import=import_in_services(offer_only))
+        self.assertNotIn(ADD_CALLBACK, [b.callback_data for row in keyboard.inline_keyboard for b in row])
+
+    def test_an_unknown_or_missing_placement_keeps_both_places(self):
+        for raw in (None, "", "everywhere"):
+            ui = {**ON, "service_import_button_placement": raw}
+            with self.subTest(raw=raw):
+                self.assertTrue(import_in_offer(ui))
+                self.assertTrue(import_in_services(ui))
+        self.assertFalse(import_in_offer({**OFF, "service_import_button_placement": "offer"}))
+        self.assertFalse(import_in_services({**OFF, "service_import_button_placement": "services"}))
+
+    def test_a_saved_placement_is_stored_only_as_a_known_choice(self):
+        self.assertEqual(cfg.normalize_setting_value(cfg.KEY_PLACEMENT, "services"), "services")
+        self.assertEqual(cfg.normalize_setting_value(cfg.KEY_PLACEMENT, "<b>x</b>"), cfg.DEFAULT_PLACEMENT)
 
 
 class SendTests(unittest.IsolatedAsyncioTestCase):
@@ -151,6 +202,11 @@ class HomeTests(ImportCase):
 
     async def test_nothing_is_offered_while_the_feature_is_off(self):
         message = await self._home(OFF)
+        message.offer.assert_not_awaited()
+
+    async def test_with_the_add_button_only_in_the_services_menu_the_welcome_comes_alone(self):
+        message = await self._home({**ON, "service_import_button_placement": "services"})
+        message.answer.assert_awaited_once()
         message.offer.assert_not_awaited()
 
     async def test_a_customer_who_chose_not_to_see_it_gets_the_plain_welcome_only(self):
