@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PGClockBot bootstrap — clone if missing, update if present, then open the menu.
 #
-# Default channel is main (stable 0.5). Development builds use PGCLOCK_CHANNEL=dev.
+# Default channel is main (stable 0.7). Development builds use PGCLOCK_CHANNEL=dev.
 #
 # Fresh or existing server (from any directory):
 #   bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
