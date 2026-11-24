@@ -1058,6 +1058,17 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .bc-reach.is-error small { color: var(--danger-text); white-space: normal; }
 .ds .bc-send { display: flex; margin: 0; }
 .ds .bc-send-btn { flex: 1 1 auto; }
+/* Detail of one sent message: divided lines of a label (with a one-line hint) and its count. */
+.ds .bc-lines { list-style: none; display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; }
+.ds .bc-lines > li { display: flex; align-items: center; justify-content: space-between; gap: var(--g3); min-height: var(--ctl-h); margin: 0; padding: var(--g3) 0; }
+.ds .bc-lines > li:first-child { padding-top: 0; }
+.ds .bc-lines > li:last-child { padding-bottom: 0; }
+.ds .bc-lines > li + li { border-top: 1px dashed var(--dash); }
+.ds .bc-line-copy { display: flex; flex-direction: column; gap: var(--g1); min-width: 0; }
+.ds .bc-line-copy strong { font-size: var(--fs-3); font-weight: 500; }
+.ds .bc-line-copy small { font-size: var(--fs-2); line-height: 1.6; color: var(--muted-fg); }
+.ds .bc-line-value { flex: 0 0 auto; font-size: var(--fs-3); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ds .bc-detail-text { margin: 0; font-size: var(--fs-3); line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Buttons under a message: one collapsible row per button inside a framed list. */
 .ds .msg-btns { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--inner-radius); overflow: hidden; }

@@ -153,6 +153,7 @@
         <td class="muted col-hide-sm"><bdi dir="auto">{{ row.created_by or '—' }}</bdi></td>
         <td class="col-actions">
           {% call row_actions() %}
+          <a class="btn btn-ghost btn-sm" href="{{ page_path }}/history/{{ row.id }}">جزئیات و علت ناموفق‌ها</a>
           {% if row.status in ['queued', 'running'] %}
           <form method="post" action="{{ page_path }}/history/{{ row.id }}/cancel"
                 data-confirm="ارسال متوقف شود؟ پیام‌های فرستاده‌شده برنمی‌گردند."

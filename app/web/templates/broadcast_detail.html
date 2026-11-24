@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_header, empty_state %}
+{% from "_ds.html" import ds_sec, ico %}
+{% set log = report.log %}
+{% block title %}پیام گروهی {{ log.id }}{% endblock %}
+{% block content %}
+<div class="ds ds-settings">
+{{ page_header('broadcast', 'پیام گروهی ' ~ (log.id | fa), back=page_path ~ '#bc-history', back_label='تاریخچهٔ ارسال') }}
+<div class="ds-page-stack">
+
+  {% call ds_sec('نتیجه') %}
+    <ul class="bc-lines">
+      <li><span class="bc-line-copy"><strong>مخاطبان</strong><small dir="auto">{{ audience_label }}</small></span><span class="bc-line-value">{{ log.total | num }}</span></li>
+      <li><span class="bc-line-copy"><strong>رسید</strong></span><span class="bc-line-value">{{ log.ok_count | num }}</span></li>
+      <li><span class="bc-line-copy"><strong>ناموفق</strong></span><span class="bc-line-value">{{ log.fail_count | num }}</span></li>
+      {% if log.review_count %}
+      <li><span class="bc-line-copy"><strong>{{ unknown_kind.label }}</strong><small>{{ unknown_kind.hint }}</small></span><span class="bc-line-value">{{ log.review_count | num }}</span></li>
+      {% endif %}
+      <li><span class="bc-line-copy"><strong>وضعیت</strong><small><bdi dir="ltr">{{ (log.created_at | string)[:16] }}</bdi>{% if log.created_by %} · <bdi dir="auto">{{ log.created_by }}</bdi>{% endif %}</small></span><span class="bc-line-value">{{ status_labels.get(log.status, log.status) }}</span></li>
+    </ul>
+  {% endcall %}
+
+  {% call ds_sec('علت ناموفق‌ها') %}
+    {% if report.reasons %}
+    <ul class="bc-lines">
+      {% for reason in report.reasons %}
+      <li><span class="bc-line-copy"><strong>{{ reason.kind.label }}</strong><small>{{ reason.kind.hint }}</small></span><span class="bc-line-value">{{ reason.count | num }}</span></li>
+      {% endfor %}
+    </ul>
+    {% elif not report.unrecorded %}
+    {{ empty_state('همهٔ پیام‌ها رسید', 'check-circle') }}
+    {% endif %}
+    {% if report.unrecorded %}
+    <div class="ds-note">{{ ico('info') }}<span>برای {{ report.unrecorded | num }} نفر علتی ثبت نشده؛ این پیام پیش از ثبت علت‌ها فرستاده شده است.</span></div>
+    {% endif %}
+  {% endcall %}
+
+  {% call ds_sec('متن پیام') %}
+    <p class="bc-detail-text" dir="auto">{{ log.text }}</p>
+  {% endcall %}
+
+</div>
+</div>
+{% endblock %}
