@@ -33,7 +33,7 @@ FILTER_LABELS: dict[str, str] = {
 DEFAULT_FILTER: TrialFilter = "all"
 
 TrialState = Literal["active", "ended", "unknown"]
-_ENDED_STATUSES = frozenset({"expired", "limited", "disabled"})
+ENDED_TRIAL_STATUSES = frozenset({"expired", "limited", "disabled"})
 
 
 @dataclass(slots=True)
@@ -130,8 +130,8 @@ def trial_state(service: UserService | None, *, now: datetime) -> tuple[TrialSta
         return "unknown", "نامشخص"
     status = (service.quota_status or "").strip().lower()
     expires = _as_utc(service.quota_expire_at)
-    if status in _ENDED_STATUSES or (expires is not None and expires <= now):
-        return "ended", status_label_plain(status) if status in _ENDED_STATUSES else "منقضی"
+    if status in ENDED_TRIAL_STATUSES or (expires is not None and expires <= now):
+        return "ended", status_label_plain(status) if status in ENDED_TRIAL_STATUSES else "منقضی"
     return "active", status_label_plain(status) if status else "فعال"
 
 

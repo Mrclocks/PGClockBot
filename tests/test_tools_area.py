@@ -13,7 +13,7 @@ from app.services.mobile_bar import parse_bar_order
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION, RoutesHarness
 
 ROW_HREF = re.compile(r'<a class="hub-row" href="([^"]+)"')
-OWNER_TOOLS = ["/service-cleanup", "/finance?tab=orders&amp;settings=cleanup", "/trial-users?filter=non_buyers", "/tools/health", "/tools/maintenance", "/settings?tab=backup"]
+OWNER_TOOLS = ["/service-cleanup", "/finance?tab=orders&amp;settings=cleanup", "/tools/retrial", "/tools/health", "/tools/maintenance", "/settings?tab=backup"]
 
 
 class ToolsAreaHarness(RoutesHarness):

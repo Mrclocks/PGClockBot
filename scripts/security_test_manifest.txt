@@ -612,6 +612,7 @@ tests/test_stuck_work.py
 tests/test_maintenance_tools.py
 tests/test_restart_and_resync.py
 tests/test_trial_retrial.py
+tests/test_trial_reset.py
 tests/test_install_repair.py
 tests/test_lite_mode.py
 tests/test_service_cancellation_settings.py

@@ -28,7 +28,8 @@
 {# A status list (DESIGN_SYSTEM.md §6-2, «فهرست وضعیت»): the list rows of settings_hub with a status badge at the end.
    ``groups`` hold ``items`` with label, icon, summary, tone (ok, warn, err, neutral), tone_label, badge_class and an optional href;
    a row with a page to fix it links there, a row with an ``action`` is a button that posts it after the confirm
-   dialog, and any other row is plain text. #}
+   dialog (its own ``confirm``, ``confirm_title`` and ``confirm_label``, and hidden ``fields`` posted with it), and any
+   other row is plain text. #}
 {% macro status_hub(groups, tone='brand') -%}
 <div class="settings-hub settings-hub--{{ tone }} status-hub">
   {%- for group in groups %}
@@ -40,9 +41,12 @@
       {%- if item.action %}
       <form method="post" action="{{ item.action }}" class="hub-row-form"
             data-confirm="{{ item.confirm or ('«' ~ item.label ~ '» همین حالا دوباره اجرا شود؟ کار همان است که خودکار هم انجام می‌شود.') }}"
-            data-confirm-title="{{ item.confirm_title or 'اجرای دوباره' }}" data-confirm-label="اجرا شود"
+            data-confirm-title="{{ item.confirm_title or 'اجرای دوباره' }}" data-confirm-label="{{ item.confirm_label or 'اجرا شود' }}"
             {%- if item.confirm_phrase %} data-confirm-warn="1" data-confirm-phrase="{{ item.confirm_phrase }}" data-confirm-phrase-label="برای تأیید بنویسید: {{ item.confirm_phrase }}"{% endif %}>
         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
+        {%- for name, value in (item.fields or {}).items() %}
+        <input type="hidden" name="{{ name }}" value="{{ value }}" />
+        {%- endfor %}
       {%- endif %}
       <{{ tag }} class="hub-row"{% if item.href %} href="{{ item.href }}"{% endif %}{% if item.action %} type="submit"{% endif %} data-health="{{ item.key }}" data-tone="{{ item.tone }}">
         <span class="hub-ico" aria-hidden="true">{{ icon(item.icon) }}</span>
