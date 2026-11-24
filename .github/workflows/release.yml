@@ -1,0 +1,92 @@
+name: Release
+
+# Pushing a tag such as v0.7.7 publishes a GitHub release. Running the workflow
+# by hand with a tag and a branch (dev or main) creates the tag on that branch's
+# head first, then publishes, so no tag push is needed. A tag whose commit is
+# already part of main is a stable release; any other tag (cut from dev) is a
+# pre-release. The tag must match the VERSION file of the tagged commit.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish, for example v0.7.7. Created on the branch head when it does not exist yet"
+        required: true
+      branch:
+        description: "Branch to tag when the tag does not exist yet"
+        required: true
+        default: dev
+        type: choice
+        options: [dev, main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || format('refs/tags/{0}', github.ref_name) }}
+          fetch-depth: 0
+
+      - name: Create the tag when it does not exist
+        run: |
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            git checkout -q "refs/tags/${TAG}"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "${TAG}" -m "PGClockBot ${TAG#v}"
+          fi
+
+      - name: Check the tag matches VERSION
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "v${version}" != "${TAG}" ]; then
+            echo "Tag ${TAG} does not match VERSION ${version}" >&2
+            exit 1
+          fi
+
+      - name: Push the new tag
+        run: git push origin "refs/tags/${TAG}"
+
+      - name: Choose release channel
+        id: channel
+        run: |
+          git fetch origin main
+          if git merge-base --is-ancestor HEAD origin/main; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build notes
+        run: python3 scripts/release_notes_for_tag.py "${TAG}" > "${RUNNER_TEMP}/notes.md"
+
+      - name: Publish release
+        env:
+          PRERELEASE: ${{ steps.channel.outputs.prerelease }}
+        run: |
+          flags=(--title "${TAG}" --notes-file "${RUNNER_TEMP}/notes.md" --verify-tag)
+          if [ "${PRERELEASE}" = "true" ]; then
+            flags+=(--prerelease)
+          else
+            flags+=(--latest)
+          fi
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            edit=(--title "${TAG}" --notes-file "${RUNNER_TEMP}/notes.md" --prerelease="${PRERELEASE}")
+            gh release edit "${TAG}" "${edit[@]}"
+          else
+            gh release create "${TAG}" "${flags[@]}"
+          fi
