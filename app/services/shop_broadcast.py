@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import secrets
 import string
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -19,7 +20,8 @@ from app.services.broadcast_audience import (
     is_broad,
     make_spec,
 )
-from app.services.broadcast_queue import STATUS_QUEUED
+from app.services.broadcast_queue import STATUS_QUEUED, scheduled_spec
+from app.services.broadcast_schedule import checked_send_after
 from app.services.campaigns import RECIPIENT_LIMIT, claim_shop_message_slot
 from app.services.rich_text import utf16_len
 
@@ -88,6 +90,7 @@ async def queue_shop_broadcast(
     request_key: object = None,
     buttons: str | None = None,
     audience: AudienceSpec | None = None,
+    send_after: datetime | None = None,
 ) -> BroadcastLog:
     """Enqueue one shop broadcast; the daily broad cap and request_key make repeats safe.
 
@@ -103,7 +106,9 @@ async def queue_shop_broadcast(
         return existing
     if not await shop_can_send_broadcast(session, shop_id=shop_id):
         raise ValueError(SHOP_NO_BOT_MESSAGE)
-    spec = await checked_spec(session, audience or make_spec("all", shop_id=shop_id), shop_id=shop_id)
+    send_after = checked_send_after(send_after)
+    spec = make_spec("all", shop_id=shop_id) if audience is None else audience
+    spec = await checked_spec(session, scheduled_spec(spec, send_after), shop_id=shop_id)
     total = await count_shop_broadcast_targets(session, shop_id=shop_id, spec=spec)
     if not total:
         raise ValueError("مخاطبی برای این گروه وجود ندارد")
@@ -125,6 +130,7 @@ async def queue_shop_broadcast(
                 shop_id=int(shop_id),
                 request_key=key,
                 buttons=buttons,
+                send_after=send_after,
             )
             session.add(log)
             await session.flush()

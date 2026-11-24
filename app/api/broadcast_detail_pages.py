@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.broadcast_pages import BroadcastPage, history_labels, redirect, staff_actor
+from app.api.broadcast_pages import BroadcastPage, history_labels, redirect, schedule_labels, staff_actor
 from app.services.broadcast_failures import FAILURE_KINDS, KIND_UNKNOWN, broadcast_report
 from app.services.broadcast_queue import STATUS_LABELS
 from app.services.broadcast_retry import queue_retry, retry_offer
@@ -47,6 +47,7 @@ def register_broadcast_detail_routes(
                 "status_labels": STATUS_LABELS,
                 "unknown_kind": FAILURE_KINDS[KIND_UNKNOWN],
                 "retry": await retry_offer(session, report.log),
+                "scheduled_for": schedule_labels([report.log]).get(int(report.log.id), ""),
             },
         )
 
