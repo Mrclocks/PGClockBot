@@ -23,7 +23,7 @@ from app.services.quick_links import (
     start_link,
 )
 from app.services.settings_hub import TAB_DESCRIPTIONS
-from app.services.settings_tab_groups import _GROUP_LAYOUT
+from app.services.settings_tab_groups import _CUSTOMER_GROUP_LAYOUT
 from tests.postgres_support import scoped_async_engine
 
 OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "active"}
@@ -68,8 +68,8 @@ class PageAccessTests(unittest.TestCase):
     def test_settings_list_describes_the_links_and_shows_them_first(self) -> None:
         self.assertIn("تمدید", TAB_DESCRIPTIONS["links"])
         self.assertNotIn("کانال", TAB_DESCRIPTIONS["links"])
-        look = next(tabs for key, _label, tabs in _GROUP_LAYOUT if key == "look")
-        self.assertEqual(look[0], "links")
+        customer = next(tabs for key, _label, tabs in _CUSTOMER_GROUP_LAYOUT if key == "customer")
+        self.assertEqual(customer[0], "links")
 
 
 class ServiceRenewLinksTests(unittest.IsolatedAsyncioTestCase):

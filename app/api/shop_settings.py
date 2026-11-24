@@ -41,7 +41,13 @@ from app.services.miniapp_shop import (
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
 from app.services.panel_brand import load_own_values
-from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
+from app.services.settings_tab_groups import (
+    area_page_tab,
+    group_settings_tabs,
+    resolve_merged_tab,
+    settings_area,
+    tabs_with_message_variables,
+)
 from app.services.rich_text import merge_rich_settings_on_save, prepare_settings_values_for_web
 from app.services.screen_titles import SCREEN_TEXT_TAB, platform_only_screen_text_keys, validate_screen_text_settings
 from app.services.alert_thresholds import normalize_threshold_form
@@ -211,6 +217,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             return _deny_scope()
 
         tab = resolve_merged_tab((request.query_params.get("tab") or "welcome").strip())
+        tab, area_key, is_area_list = area_page_tab(tab)
         if tab == "security":
             return RedirectResponse("/security", status_code=303)
         if tab in SHOP_SETTINGS_DOMAIN_REDIRECTS:
@@ -279,8 +286,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             "groups": groups,
             "tab_groups": list(groups.keys()),
             "tabs": RESELLER_SETTINGS_TABS,
-            "tab_nav": group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, staff), tab),
+            "tab_nav": group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, staff), tab, area=area_key),
             "tab": tab,
+            "settings_area": settings_area(area_key, base="/shop-settings", bot_title="تنظیمات فروشگاه"),
+            "is_area_list": is_area_list,
             "saved": request.query_params.get("saved") == "1",
             "saved_msg": request.query_params.get("msg") or "",
             "shop_mode": True,
