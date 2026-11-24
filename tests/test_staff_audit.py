@@ -260,6 +260,26 @@ class StaffAuditPageTests(AuditDbHarness):
         self.assertNotIn("<b>ali</b>", response.text)
         self.assertIn("&lt;b&gt;ali&lt;/b&gt;", response.text)
 
+    async def test_a_shop_with_no_records_sees_the_table_empty_state(self):
+        async with self.Session() as session:
+            other = StaffActor(shop_id=SHOP_B, kind="shop_owner", user_id=SHOP_B, label="OTHERSHOP")
+            add_staff_action(session, other, action="gift_code_edit", target_type="gift_code", target_id=4)
+            await session.commit()
+        response = await self.client.get("/staff-actions")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("OTHERSHOP", response.text)
+        self.assertIn('class="table-empty"', response.text)
+        self.assertIn('colspan="6"', response.text)
+        self.assertIn("هنوز کاری ثبت نشده است.", response.text)
+        self.assertNotIn("تازه‌ترین کارها", response.text)
+
+    async def test_an_empty_older_page_links_back_to_the_newest_records(self):
+        response = await self.client.get("/staff-actions?before=5")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="table-empty"', response.text)
+        self.assertIn("کار قدیمی‌تری ثبت نشده است.", response.text)
+        self.assertIn('href="/staff-actions"', response.text)
+
     async def test_staff_without_a_shop_are_sent_home(self):
         self.staff = {"role": "pg_staff", "permissions": ["orders"]}
         response = await self.client.get("/staff-actions")

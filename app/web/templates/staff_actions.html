@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_header %}
+{% from "macros.html" import page_header, empty_state %}
 {% block title %}گزارش کارکنان{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
@@ -7,9 +7,6 @@
 <p class="muted page-intro">کارهای مهم کارکنان همین فروشگاه، تازه‌ترین در بالا. این فهرست قابل ویرایش یا حذف نیست.</p>
 
 <div class="card card-flush">
-  {% if not actions %}
-  <p class="muted empty-state">هنوز کاری ثبت نشده است.</p>
-  {% else %}
   <div class="table-wrap">
     <table class="table-compact table-list-sm">
       <thead>
@@ -32,11 +29,16 @@
           <td>{% if a.amount is not none %}<span class="mono" dir="ltr">{{ a.amount | money }}</span>{% else %}—{% endif %}</td>
           <td class="col-hide-sm"><span dir="auto">{{ a.reason or '—' }}</span></td>
         </tr>
+      {% else %}
+        {% if is_older_page %}
+        {{ empty_state('کار قدیمی‌تری ثبت نشده است.', 'activity', colspan=6, action_label='تازه‌ترین کارها', action_href='/staff-actions') }}
+        {% else %}
+        {{ empty_state('هنوز کاری ثبت نشده است.', 'activity', colspan=6) }}
+        {% endif %}
       {% endfor %}
       </tbody>
     </table>
   </div>
-  {% endif %}
 </div>
 {% if next_before %}
 <div class="actions">

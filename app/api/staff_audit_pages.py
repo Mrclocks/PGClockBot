@@ -35,12 +35,16 @@ def register_staff_audit_pages(
             shop_id = staff_audit_scope(staff)
         except PermissionError:
             return RedirectResponse("/home", status_code=303)
-        rows = await list_staff_actions(
-            session, shop_id=shop_id, before_id=_before_id(request.query_params.get("before"))
-        )
+        before_id = _before_id(request.query_params.get("before"))
+        rows = await list_staff_actions(session, shop_id=shop_id, before_id=before_id)
         next_before = rows[-1].id if len(rows) == PAGE_SIZE else None
         return render(
             request,
             "staff_actions.html",
-            {"staff": staff, "actions": staff_action_views(rows), "next_before": next_before},
+            {
+                "staff": staff,
+                "actions": staff_action_views(rows),
+                "next_before": next_before,
+                "is_older_page": before_id is not None,
+            },
         )
