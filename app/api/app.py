@@ -145,6 +145,7 @@ from app.api.support_settings_pages import register_support_settings_pages
 from app.api.shop_customer_block_pages import register_shop_customer_block_pages
 from app.api.mobile_bar_settings import register_mobile_bar_settings
 from app.api.panel_brand_pages import register_panel_brand_pages
+from app.api.trial_reset_pages import register_trial_reset_pages
 from app.api.trial_users_pages import register_trial_users_pages
 from app.api.gift_code_pages import register_gift_code_pages
 from app.api.plan_pages import register_plan_pages
@@ -1690,6 +1691,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_shop_points_pages(app, require_staff=require_staff, get_db=get_db)
     register_shop_customer_block_pages(app, require_staff=require_staff, get_db=get_db)
     register_trial_users_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_trial_reset_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_panel_brand_pages(app, require_staff=require_staff, get_db=get_db)
     register_mobile_bar_settings(app, require_admin=require_admin, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)

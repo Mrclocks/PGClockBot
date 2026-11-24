@@ -29,6 +29,7 @@ BACKUP = "backup"
 HEALTH = "health"
 HEALTH_HREF = TOOLS_LIST_HREF + "/health"
 RETRIAL = "retrial"
+RETRIAL_HREF = TOOLS_LIST_HREF + "/retrial"
 MAINTENANCE = "maintenance"
 MAINTENANCE_HREF = TOOLS_LIST_HREF + "/maintenance"
 
@@ -59,10 +60,9 @@ _MAINTENANCE = ToolSection(
     MAINTENANCE, "نگهداری سرور", MAINTENANCE_HREF,
     "ربات‌ها، کش، همگام‌سازی، راه‌اندازی مجدد و تعمیر نصب", "sliders",
 )
-# The trial users page filtered to the customers who never bought: the round runs from its bulk bar.
 _RETRIAL = ToolSection(
-    RETRIAL, "دور جدید تست", "/trial-users?filter=non_buyers",
-    "اجازهٔ تست دوباره به کاربرانی که تست گرفتند و نخریدند", "trial",
+    RETRIAL, "ریست کاربران تست", RETRIAL_HREF,
+    "تست دوباره برای همه، خریدارها یا کاربران بدون خرید", "trial",
 )
 _BACKUP = ToolSection(
     BACKUP, "بکاپ", "/settings?tab=backup",

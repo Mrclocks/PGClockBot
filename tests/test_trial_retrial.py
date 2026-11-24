@@ -142,7 +142,7 @@ class RetrialPageTests(RetrialCase):
 class RetrialToolRowTests(RetrialCase):
     def test_the_tools_list_offers_the_round_only_with_the_right(self) -> None:
         hrefs = lambda staff: [s.href for s in tool_sections(staff)]  # noqa: E731 - tiny local reader
-        self.assertIn("/trial-users?filter=non_buyers", hrefs(shop_staff(self.shop_a.id, ["trial_users", "trial_reset"])))
-        self.assertNotIn("/trial-users?filter=non_buyers", hrefs(shop_staff(self.shop_a.id, ["trial_users"])))
-        self.assertNotIn("/trial-users?filter=non_buyers", hrefs(shop_staff(self.shop_a.id, ["trial_reset"])))
-        self.assertIn("/trial-users?filter=non_buyers", hrefs(OWNER))
+        self.assertIn("/tools/retrial", hrefs(shop_staff(self.shop_a.id, ["trial_users", "trial_reset"])))
+        self.assertNotIn("/tools/retrial", hrefs(shop_staff(self.shop_a.id, ["trial_users"])))
+        self.assertNotIn("/tools/retrial", hrefs(shop_staff(self.shop_a.id, ["trial_reset"])))
+        self.assertIn("/tools/retrial", hrefs(OWNER))
