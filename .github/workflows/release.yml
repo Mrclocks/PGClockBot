@@ -1,0 +1,71 @@
+name: Release
+
+# Pushing a tag such as v0.7.7 publishes a GitHub release. A tag whose commit is
+# already part of main is a stable release; any other tag (cut from dev) is a
+# pre-release. The tag must match the VERSION file of the tagged commit.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)publish, for example v0.7.7"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Check the tag matches VERSION
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "v${version}" != "${TAG}" ]; then
+            echo "Tag ${TAG} does not match VERSION ${version}" >&2
+            exit 1
+          fi
+
+      - name: Choose release channel
+        id: channel
+        run: |
+          git fetch origin main
+          if git merge-base --is-ancestor HEAD origin/main; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build notes
+        run: python3 scripts/release_notes_for_tag.py "${TAG}" > "${RUNNER_TEMP}/notes.md"
+
+      - name: Publish release
+        env:
+          PRERELEASE: ${{ steps.channel.outputs.prerelease }}
+        run: |
+          flags=(--title "${TAG}" --notes-file "${RUNNER_TEMP}/notes.md" --verify-tag)
+          if [ "${PRERELEASE}" = "true" ]; then
+            flags+=(--prerelease)
+          else
+            flags+=(--latest)
+          fi
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            edit=(--title "${TAG}" --notes-file "${RUNNER_TEMP}/notes.md" --prerelease="${PRERELEASE}")
+            gh release edit "${TAG}" "${edit[@]}"
+          else
+            gh release create "${TAG}" "${flags[@]}"
+          fi
