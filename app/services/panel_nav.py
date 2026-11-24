@@ -12,6 +12,14 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from app.services.settings_tab_groups import (
+    BOT_AREA,
+    CUSTOMER_AREA,
+    CUSTOMER_AREA_ICON,
+    CUSTOMER_AREA_TITLE,
+    CUSTOMER_LIST_TAB,
+    settings_area_of,
+)
 from app.services.users import PANEL_SETTINGS_KEYS
 
 SYSTEM = "system"
@@ -59,6 +67,7 @@ DOCK_ALIASES: dict[str, tuple[str, ...]] = {
     "tickets": ("tickets", "pg_tickets"),
     "resellers": ("resellers", "my_resellers"),
     "bot_settings": ("bot_settings", "shop_settings"),
+    "customer_settings": ("customer_settings", "shop_customer_settings"),
 }
 # Labels in the settings list, which is one flat list in the panel's dropdown: each must say which page it is.
 _DOCK_CHOICE_LABELS: dict[str, str] = {
@@ -203,10 +212,22 @@ def _owner(v: NavViewer) -> bool:
     return v.is_owner
 
 
-def _bot_settings_active(loc: NavLocation) -> bool:
+def _is_bot_settings_page(loc: NavLocation) -> bool:
     if loc.path.startswith(("/shop-settings", "/message-variables")):
         return True
     return loc.path.startswith("/settings") and not loc.is_panel_settings()
+
+
+def _bot_settings_active(loc: NavLocation) -> bool:
+    return _is_bot_settings_page(loc) and settings_area_of(loc.tab) == BOT_AREA
+
+
+def _customer_settings_active(loc: NavLocation) -> bool:
+    return _is_bot_settings_page(loc) and settings_area_of(loc.tab) == CUSTOMER_AREA
+
+
+def _shop_settings_rule(v: NavViewer) -> bool:
+    return not v.is_owner and "shop_settings" in v.perms
 
 
 _DASHBOARD = _ItemSpec("home", "داشبورد", "/home", "home", lambda v: True, _exact("/home"))
@@ -250,9 +271,12 @@ _SHOP_ITEMS: tuple[_ItemSpec, ...] = (
     _ItemSpec(TOOLS_KEY, "ابزار و پاکسازی", TOOLS_LIST_HREF, "tools", lambda v: False, lambda loc: False, short="ابزار"),
     _ItemSpec("staff_actions", "گزارش کارکنان", "/staff-actions", "receipt",
               lambda v: v.is_owner or v.role in ("reseller", "principal"), _starts("/staff-actions")),
+    _ItemSpec("customer_settings", CUSTOMER_AREA_TITLE, f"/settings?tab={CUSTOMER_LIST_TAB}", CUSTOMER_AREA_ICON,
+              _owner, _customer_settings_active),
+    _ItemSpec("shop_customer_settings", CUSTOMER_AREA_TITLE, f"/shop-settings?tab={CUSTOMER_LIST_TAB}",
+              CUSTOMER_AREA_ICON, _shop_settings_rule, _customer_settings_active),
     _ItemSpec("bot_settings", "تنظیمات ربات", "/settings", "bot", _owner, _bot_settings_active),
-    _ItemSpec("shop_settings", "تنظیمات فروشگاه", "/shop-settings", "bot",
-              lambda v: not v.is_owner and "shop_settings" in v.perms, _bot_settings_active),
+    _ItemSpec("shop_settings", "تنظیمات فروشگاه", "/shop-settings", "bot", _shop_settings_rule, _bot_settings_active),
 )
 
 _PG_ITEMS: tuple[_ItemSpec, ...] = (

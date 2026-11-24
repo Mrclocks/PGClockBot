@@ -87,7 +87,14 @@ from app.services.panel_brand import (
 )
 from app.services.notifications import SYSTEM_NOTIFY_KEYS
 from app.services.resource_cost import CONNECTION_MONITOR_COST, HEAVY_LABEL, HEAVY_SETTINGS
-from app.services.settings_tab_groups import group_settings_tabs, resolve_merged_tab, tabs_with_message_variables
+from app.services.settings_tab_groups import (
+    area_page_tab,
+    group_settings_tabs,
+    resolve_merged_tab,
+    settings_area,
+    settings_area_of,
+    tabs_with_message_variables,
+)
 from app.services.settings_hub import (
     SYSTEM_LIST_TAB,
     first_settings_href,
@@ -203,6 +210,10 @@ templates.env.globals["is_bot_admin"] = is_bot_admin
 templates.env.globals["bot_admin_settings_href"] = BOT_ADMIN_SETTINGS_HREF
 # Settings areas open on a list and show their place on detail pages (DESIGN_SYSTEM.md §6-2).
 templates.env.globals["hub_sections"] = hub_sections
+# The area of a settings page rendered without one in its context (its tab decides it).
+templates.env.globals["settings_area_for"] = lambda tab, base, title: settings_area(
+    settings_area_of(tab), base=base, bot_title=title
+)
 templates.env.globals["settings_place"] = settings_place
 templates.env.globals["settings_nav"] = settings_nav
 templates.env.globals["system_settings_nav"] = system_settings_nav
@@ -2435,6 +2446,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.updates import clear_update_cache, local_version
 
         tab = resolve_merged_tab((request.query_params.get("tab") or "welcome").strip())
+        tab, area_key, is_area_list = area_page_tab(tab)
         if tab == SYSTEM_LIST_TAB:
             # The system settings list renders over the first system page's context (settings.html).
             tab = PANEL_SETTINGS_TABS[0][0]
@@ -2492,8 +2504,12 @@ def create_api_app(lifespan=None) -> FastAPI:
             "groups": groups,
             "tab_groups": tab_groups,
             "tabs": page_tabs,
-            "tab_nav": group_settings_tabs(tabs_with_message_variables(page_tabs, staff) if page_tabs else [], tab),
+            "tab_nav": group_settings_tabs(
+                tabs_with_message_variables(page_tabs, staff) if page_tabs else [], tab, area=area_key
+            ),
             "tab": tab,
+            "settings_area": settings_area(area_key, base="/settings", bot_title="تنظیمات ربات"),
+            "is_area_list": is_area_list,
             "is_panel_settings": tab in PANEL_SETTINGS_KEYS,
             "panel_tab_label": dict(PANEL_SETTINGS_TABS).get(tab),
             "reset_tabs": RESETTABLE_SETTINGS_TABS,

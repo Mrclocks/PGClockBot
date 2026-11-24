@@ -2,18 +2,19 @@
 {% from "_icons.html" import icon %}
 {% from "_settings_hub.html" import settings_hub, settings_area_header, settings_menu, settings_open_first %}
 {% from "_shop_settings_tabs.html" import shop_settings_tabs %}
-{% block title %}تنظیمات فروشگاه{% endblock %}
+{% block title %}{{ settings_area.title if settings_area is defined else 'تنظیمات فروشگاه' }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-{% set is_hub = not request.query_params.get('tab') %}
-{{ settings_area_header(tab_nav|default(()), tab, '/shop-settings', 'تنظیمات فروشگاه', 'bot-settings', help='settings-bot', is_hub=is_hub) }}
+{% set is_hub = is_area_list|default(false) or not request.query_params.get('tab') %}
+{% set area = settings_area if settings_area is defined else settings_area_for(tab|default(''), '/shop-settings', 'تنظیمات فروشگاه') %}
+{{ settings_area_header(tab_nav|default(()), tab, area.list_href, area.title, area.icon, help=area.help, is_hub=is_hub) }}
 {% if is_hub %}
-{% set hub_rows = hub_sections(tab_nav, '/shop-settings', area_icon='bot') %}
+{% set hub_rows = hub_sections(tab_nav, '/shop-settings', area_icon=area.icon) %}
 {{ settings_open_first(hub_rows, nonce=csp_nonce) }}
 {{ settings_hub(hub_rows) }}
 {% else %}
-{% if tab_nav is defined and tab_nav %}{{ settings_menu(settings_nav(tab_nav, '/shop-settings', tab, area_icon='bot')) }}{% endif %}
+{% if tab_nav is defined and tab_nav %}{{ settings_menu(settings_nav(tab_nav, '/shop-settings', tab, area_icon=area.icon)) }}{% endif %}
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path, tab_nav|default(none)) }}
 
 <div class="settings-layout">

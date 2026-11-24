@@ -105,11 +105,14 @@ class TabPageTests(TabHarness):
             head = response.text.split("settings-layout", 1)[0]
             # A section of the merged «سرویس‌های مشتری» tab, next to the customer's freeze settings.
             self.assertIn("<h1>سرویس\u200cهای مشتری</h1>", head)
-            self.assertIn(f'<a class="page-back" href="{base}"', head)
+            # It lives in the «مشتری و سرویس» area, so the way back is that area's list.
+            self.assertIn(f'<a class="page-back" href="{base}?tab=customer"', head)
             self.assertIn(f'href="{base}?tab=service_actions"', response.text)
         for base, session in (("/settings", OWNER_SESSION), ("/shop-settings", SHOP_SESSION)):
-            listing = await self.call(session, "GET", base)
+            listing = await self.call(session, "GET", f"{base}?tab=customer")
             self.assertIn(f'href="{base}?tab=customer_services"', listing.text)
+            bot_listing = await self.call(session, "GET", base)
+            self.assertNotIn(f'class="hub-row" href="{base}?tab=customer_services"', bot_listing.text)
             merged = await self.call(session, "GET", f"{base}?tab=customer_services")
             self.assertIn("<h1>سرویس\u200cهای مشتری</h1>", merged.text)
 

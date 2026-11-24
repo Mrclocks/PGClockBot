@@ -52,7 +52,7 @@ class SidebarPerRoleTests(unittest.TestCase):
         nav = labels(OWNER)
         self.assertEqual(nav["system"], ["داشبورد", "مرکز اقدام", "تنظیمات سیستم"])
         self.assertEqual(nav["shop"], ["نمای کلی فروشگاه", "کاربران ربات", "نمایندگان", "مالی", "پلن‌ها", "پشتیبانی",
-                                       "پیام گروهی", "بازاریابی", "ابزار و پاکسازی", "گزارش کارکنان", "تنظیمات ربات"])
+                                       "پیام گروهی", "بازاریابی", "ابزار و پاکسازی", "گزارش کارکنان", "مشتری و سرویس", "تنظیمات ربات"])
         self.assertEqual(nav["pg"][0], "نمای کلی پاسارگارد")
         self.assertEqual(nav["pg"][-1], "تست اتصال سرویس")
 
@@ -96,6 +96,22 @@ class ActiveItemTests(unittest.TestCase):
         self.assertEqual(active(OWNER, "/settings", "backup"), ["تنظیمات سیستم"])
         self.assertEqual(active(OWNER, "/security"), ["تنظیمات سیستم"])
         self.assertEqual(active(OWNER, "/message-variables"), ["تنظیمات ربات"])
+
+    def test_customer_and_service_pages_light_their_own_entry_not_bot_settings(self) -> None:
+        for tab in ("customer", "links", "limits", "delivery", "naming", "qr", "guides", "customer_services", "service_cancel"):
+            with self.subTest(tab=tab):
+                self.assertEqual(active(OWNER, "/settings", tab), ["مشتری و سرویس"])
+                self.assertEqual(active(RESELLER, "/shop-settings", tab), ["مشتری و سرویس"])
+        self.assertEqual(active(RESELLER, "/shop-settings", "messages"), ["تنظیمات فروشگاه"])
+        self.assertEqual(active(RESELLER, "/shop-settings"), ["تنظیمات فروشگاه"])
+
+    def test_the_customer_entry_opens_its_list_for_each_role(self) -> None:
+        def entry(v):
+            return next(i for s in build_sidebar(v, path="/home") for i in s.items if i.label == "مشتری و سرویس")
+
+        self.assertEqual(entry(OWNER).href, "/settings?tab=customer")
+        self.assertEqual(entry(RESELLER).href, "/shop-settings?tab=customer")
+        self.assertNotIn("مشتری و سرویس", labels(viewer("reseller", perms=("dashboard",)))["shop"])
 
     def test_marketing_pages_light_the_marketing_entry(self) -> None:
         self.assertEqual(active(OWNER, "/loyalty"), ["بازاریابی"])

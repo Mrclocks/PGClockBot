@@ -212,6 +212,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         draw = env.from_string('{% from "macros.html" import page_ico %}{{ page_ico(name) }}').render
         self.assertNotEqual(draw(name="panel-settings"), draw(name="bot-settings"))
         from app.services.panel_nav import build_sidebar, viewer_from_context
+        from app.services.settings_tab_groups import BOT_AREA_ICON
 
         # Panel settings: sliders; bot settings: robot face (not identical gear).
         owner = build_sidebar(viewer_from_context({"role": "admin"}, {}, is_owner=True), path="/home")
@@ -219,7 +220,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertEqual((icons["system_settings"], icons["bot_settings"]), ("gear", "bot"))
         settings = Path("app/web/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("panel-settings", settings)
-        self.assertIn("bot-settings", settings)
+        self.assertEqual(draw(name=BOT_AREA_ICON), draw(name="bot-settings"))
         self.assertNotIn("brand_primary_color", Path("app/web/templates/base.html").read_text(encoding="utf-8"))
         self.assertNotIn("brand_primary_color", Path("app/api/app.py").read_text(encoding="utf-8"))
 

@@ -1,17 +1,18 @@
 {% extends "base.html" %}
 {% from "_settings_tabs.html" import settings_tabs %}
 {% from "_settings_hub.html" import settings_hub, settings_area_header, settings_menu, settings_open_first %}
-{% block title %}{% if is_panel_settings %}تنظیمات سیستم{% else %}تنظیمات ربات{% endif %}{% endblock %}
+{% block title %}{% if is_panel_settings %}تنظیمات سیستم{% else %}{{ settings_area.title if settings_area is defined else 'تنظیمات ربات' }}{% endif %}{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
 {% block content %}
 <div class="ds ds-settings">
-{% set is_hub = (is_panel_settings and request.query_params.get('tab') == 'system') or (not is_panel_settings and tabs and not request.query_params.get('tab')) %}
+{% set is_hub = (is_panel_settings and request.query_params.get('tab') == 'system') or (not is_panel_settings and tabs and (is_area_list|default(false) or not request.query_params.get('tab'))) %}
+{% set area = settings_area if settings_area is defined else settings_area_for(tab|default(''), '/settings', 'تنظیمات ربات') %}
 {% if is_panel_settings %}
 {{ settings_area_header(system_settings_groups(tab), tab, '/settings?tab=system', 'تنظیمات سیستم', 'panel-settings', 'neutral', help='settings-panel', is_hub=is_hub) }}
 {% if not is_hub %}{{ settings_menu(system_settings_nav(tab), tone='neutral') }}{% endif %}
 {% else %}
-{{ settings_area_header(tab_nav|default(()), tab, '/settings', 'تنظیمات ربات', 'bot-settings', help='settings-bot', is_hub=is_hub) }}
-{% if not is_hub and tab_nav is defined and tab_nav %}{{ settings_menu(settings_nav(tab_nav, '/settings', tab, area_icon='bot')) }}{% endif %}
+{{ settings_area_header(tab_nav|default(()), tab, area.list_href, area.title, area.icon, help=area.help, is_hub=is_hub) }}
+{% if not is_hub and tab_nav is defined and tab_nav %}{{ settings_menu(settings_nav(tab_nav, '/settings', tab, area_icon=area.icon)) }}{% endif %}
 {% if not is_hub and tabs %}{{ settings_tabs(tab, tabs, tab_nav|default(none)) }}{% endif %}
 {% endif %}
 
@@ -20,7 +21,7 @@
 {{ settings_open_first(hub_rows, nonce=csp_nonce) }}
 {{ settings_hub(hub_rows, tone='neutral') }}
 {% elif is_hub %}
-{% set hub_rows = hub_sections(tab_nav, '/settings', area_icon='bot') %}
+{% set hub_rows = hub_sections(tab_nav, '/settings', area_icon=area.icon) %}
 {{ settings_open_first(hub_rows, nonce=csp_nonce) }}
 {{ settings_hub(hub_rows) }}
 {% else %}
