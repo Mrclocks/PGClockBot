@@ -1,6 +1,8 @@
 name: Release
 
-# Pushing a tag such as v0.7.7 publishes a GitHub release. A tag whose commit is
+# Pushing a tag such as v0.7.7 publishes a GitHub release. Running the workflow
+# by hand with a tag and a branch (dev or main) creates the tag on that branch's
+# head first, then publishes, so no tag push is needed. A tag whose commit is
 # already part of main is a stable release; any other tag (cut from dev) is a
 # pre-release. The tag must match the VERSION file of the tagged commit.
 
@@ -10,8 +12,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to (re)publish, for example v0.7.7"
+        description: "Tag to publish, for example v0.7.7. Created on the branch head when it does not exist yet"
         required: true
+      branch:
+        description: "Branch to tag when the tag does not exist yet"
+        required: true
+        default: dev
+        type: choice
+        options: [dev, main]
 
 permissions:
   contents: write
@@ -29,8 +37,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
+          ref: ${{ github.event.inputs.branch || format('refs/tags/{0}', github.ref_name) }}
           fetch-depth: 0
+
+      - name: Create the tag when it does not exist
+        run: |
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            git checkout -q "refs/tags/${TAG}"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "${TAG}" -m "PGClockBot ${TAG#v}"
+          fi
 
       - name: Check the tag matches VERSION
         run: |
@@ -39,6 +57,9 @@ jobs:
             echo "Tag ${TAG} does not match VERSION ${version}" >&2
             exit 1
           fi
+
+      - name: Push the new tag
+        run: git push origin "refs/tags/${TAG}"
 
       - name: Choose release channel
         id: channel
