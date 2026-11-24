@@ -47,7 +47,7 @@ class FinanceSupportsFailClosedTests(unittest.TestCase):
             src,
         )
         # Scoped path requires rid before get_all_settings
-        chunk = src[src.find("if can_finance_settings:") : src.find("fetch_limit = ")]
+        chunk = src[src.find("if can_finance_settings:") : src.find("page = parse_list_page(")]
         self.assertIn("rid = shop_owner_id(staff)", chunk)
         self.assertIn("if rid:", chunk)
         self.assertIn("get_all_settings(session, reseller_id=rid)", chunk)
