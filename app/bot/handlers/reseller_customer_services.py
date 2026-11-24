@@ -389,7 +389,7 @@ async def res_user_service_link(
     except ValueError as exc:
         await _fail_known(callback, session, exc)
         return
-    except PANEL_UNCERTAIN as exc:
+    except PANEL_UNCERTAIN:
         await _fail_uncertain(callback, session, sid=target.service_id, op="link")
         return
     url = snap.subscription_url

@@ -151,7 +151,6 @@ def _color_picker_kb(pack: ResellerPlanExtraPack, ui: dict[str, str]) -> InlineK
     rows = []
     for code, value in _STYLE_CODES.items():
         label = _style_label(value)
-        style = None if value is None else (value or None)
         # White is stored as ""; Telegram omits style.
         btn_style = value if value else None
         rows.append(

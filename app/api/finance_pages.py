@@ -263,8 +263,6 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             if open_settings == "cleanup" and not ctx["can_pending_orders"]:
                 ctx["open_finance_settings"] = "payment" if can_finance_settings else ""
 
-        # Marker for scope tests: fetch_limit replaced by SQL pagination.
-        fetch_limit = 0  # unused; kept as anchor for shop-settings scope tests
         page = parse_list_page(request.query_params.get("page"))
         page_size = DEFAULT_LIST_PAGE_SIZE
 
