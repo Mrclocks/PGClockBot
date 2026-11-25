@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Progressive widget fill — shell already passed server authz.
    Body URL re-runs the same Depends authz; shell permission does not grant body.
    redirect:manual avoids injecting login HTML into #home-dash / #pg-dash.
@@ -9,7 +10,7 @@
       <strong>جاوااسکریپت خاموش است</strong>
       <span class="muted">برای آمار کامل، نسخهٔ یک‌مرحله‌ای را باز کنید.</span>
     </div>
-    <a class="btn btn-sm btn-ghost" href="?full=1">نمایش کامل</a>
+    <a class="btn btn-sm btn-ghost" href="?full=1">{{ btn_icon('eye', 'btn-ico') }}نمایش کامل</a>
   </div>
 </noscript>
 <div class="flash home-update-banner" id="panel-widget-status" role="status" aria-live="polite">

@@ -1523,9 +1523,10 @@ def pay_methods(
     rows.append(
         [
             back_button(ui, f"pay:back:{order_id}"),
+            # Cancels the order when nothing was paid (handlers/checkout_cancel), then opens the home menu.
             _ikb(
                 _t(ui, "btn_cancel"),
-                callback_data="menu:home",
+                callback_data=f"pay:x:{order_id}",
                 style_id="cancel", style_fallback="danger",
                 ui=ui,
                 label_key="btn_cancel",

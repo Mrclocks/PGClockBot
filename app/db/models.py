@@ -1056,6 +1056,10 @@ class BroadcastLog(Base):
     # Scheduled send time (UTC); the worker leaves the broadcast queued until then and recounts its audience
     # when sending starts. NULL = send as soon as possible.
     send_after: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Optional photo or video (broadcast_media): the sending bot's file id once known, else a stored web upload.
+    media_kind: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    media_file_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    media_file: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
 class BroadcastFailure(Base):

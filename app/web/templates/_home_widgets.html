@@ -67,7 +67,7 @@
     <span>{% for t in failing %}{{ t.name }}: {{ t.detail }}{% if not loop.last %} · {% endif %}{% endfor %}</span>
   </div>
   {%- if failing[0].href %}
-  <a class="btn btn-sm btn-ghost" href="{{ failing[0].href }}">بررسی</a>
+  <a class="btn btn-sm btn-ghost" href="{{ failing[0].href }}">{{ icon('eye', 'btn-ico') }}بررسی</a>
   {%- endif %}
 </div>
 {%- endif %}
@@ -97,8 +97,8 @@
   </div>
   {% if me.user_id %}
   <div class="home-account-actions">
-    <a class="btn btn-sm" href="/users/{{ me.user_id | int }}/edit#user-wallet">شارژ</a>
-    <a class="btn btn-sm btn-ghost" href="/users/{{ me.user_id | int }}/edit#user-services">سرویس‌های من</a>
+    <a class="btn btn-sm" href="/users/{{ me.user_id | int }}/edit#user-wallet">{{ icon('wallet', 'btn-ico') }}شارژ</a>
+    <a class="btn btn-sm btn-ghost" href="/users/{{ me.user_id | int }}/edit#user-services">{{ icon('server', 'btn-ico') }}سرویس‌های من</a>
   </div>
   {% endif %}
 </section>

@@ -19,6 +19,16 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.auth import require_bot_owner_handler
+from app.bot.broadcast_media_input import (
+    MEDIA_DATA_KEY,
+    ONLY_TEXT_OR_MEDIA,
+    answer_preview,
+    has_content,
+    media_data,
+    media_from_data,
+    media_from_message,
+    source_html,
+)
 from app.bot.message_button_picker import ask_for_buttons, register_flow
 from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import finish_text_step
@@ -26,10 +36,15 @@ from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
 from app.services.broadcast_audience import describe, make_spec
-from app.services.broadcast_queue import BroadcastRequest, count_platform_targets, new_request_token, queue_broadcast
-from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard
+from app.services.broadcast_queue import (
+    BroadcastRequest,
+    clean_platform_text,
+    count_platform_targets,
+    new_request_token,
+    queue_broadcast,
+)
+from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard, sender_screen_labels
 from app.services.redact import user_safe_error
-from app.services.telegram_html import normalize_telegram_html
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -40,20 +55,12 @@ CB_DROP = "adm:bc:no"
 FLOW = "platform_broadcast"
 HUB_CALLBACK = "nv:adm:broadcast"
 REJECTED_BY_TELEGRAM = "⚠️ تلگرام این متن را نپذیرفت (احتمالاً لینک یا برچسب نادرست). متن را اصلاح و دوباره بفرستید."
-ONLY_TEXT = "⚠️ فقط پیام متنی قابل ارسال گروهی است."
 DROPPED = "ارسال لغو شد؛ پیامی فرستاده نشد."
 STALE_CONFIRM = "این تأیید دیگر معتبر نیست (قبلاً ارسال یا لغو شده)."
 
 
 class BroadcastConfirmStates(StatesGroup):
     confirm = State()
-
-
-def broadcast_source_html(message: Message) -> str:
-    """The owner's message as HTML: Telegram formatting when used, else the typed text (simple tags allowed)."""
-    if message.entities:
-        return message.html_text or ""
-    return message.text or ""
 
 
 def confirm_markup(total: int) -> InlineKeyboardMarkup:
@@ -68,20 +75,21 @@ async def _back(session: AsyncSession) -> InlineKeyboardMarkup:
 
 
 async def preview_broadcast(message: Message, state: FSMContext, session: AsyncSession, *, audience: str) -> None:
-    """Check the text, then ask for buttons; the preview and «ارسال» come after (``_preview``)."""
+    """Check the text (or the photo or video and its caption), then ask for buttons; the preview comes after."""
     back = await _back(session)
-    if not message.text:
-        await finish_text_step(message, state, text=ONLY_TEXT, inline=back)
+    if not has_content(message):
+        await finish_text_step(message, state, text=ONLY_TEXT_OR_MEDIA, inline=back)
         await state.clear()
         return
+    media = media_from_message(message)
     try:
-        body = normalize_telegram_html(broadcast_source_html(message).strip())
+        body = clean_platform_text(source_html(message), with_media=media is not None)
         await count_platform_targets(session, audience)
     except ValueError as exc:
         await finish_text_step(message, state, text=f"⚠️ {html.escape(user_safe_error(exc))}", inline=back)
         await state.clear()
         return
-    await state.update_data(bc_text=body, bc_audience=audience)
+    await state.update_data(bc_text=body, bc_audience=audience, **{MEDIA_DATA_KEY: media_data(media)})
     await ask_for_buttons(message, state, flow=FLOW, shop_id=None)
 
 
@@ -102,9 +110,11 @@ async def _preview(
         await state.clear()
         await message.answer(f"⚠️ {html.escape(user_safe_error(exc))}", reply_markup=back)
         return
-    rows = preview_keyboard(stored)
+    rows = preview_keyboard(stored, await sender_screen_labels(session, None))
     try:
-        await message.answer(body, parse_mode="HTML", **({"reply_markup": InlineKeyboardMarkup(inline_keyboard=rows)} if rows else {}))
+        await answer_preview(
+            message, body, media_from_data(data), markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+        )
     except TelegramBadRequest:
         logger.info("broadcast preview rejected by Telegram", exc_info=True)
         await state.clear()
@@ -130,7 +140,7 @@ async def send_confirmed(callback: CallbackQuery, session: AsyncSession, db_user
             text=str(data.get("bc_text") or ""),
             audience=str(data.get("bc_audience") or ""),
             created_by=str(db_user.telegram_id),
-            request=BroadcastRequest(data.get("bc_token"), data.get("bc_buttons")),
+            request=BroadcastRequest(data.get("bc_token"), data.get("bc_buttons"), media=media_from_data(data)),
         )
     except ValueError as exc:
         await callback.answer(user_safe_error(exc), show_alert=True)

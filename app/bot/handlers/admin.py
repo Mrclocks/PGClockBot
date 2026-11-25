@@ -3447,7 +3447,7 @@ async def adm_broadcast_audience(callback: CallbackQuery, db_user: BotUser, stat
     await state.update_data(broadcast_audience=audience)
     if callback.message:
         await callback.message.edit_text(
-            f"📢 مخاطب: <b>{audience_fa}</b>\nمتن پیام را بفرستید؛ بولد، لینک و قالب‌بندی تلگرام حفظ می‌شود.\n"
+            f"📢 مخاطب: <b>{audience_fa}</b>\nمتن پیام، یا یک عکس یا ویدیو با زیرنویس اختیاری را بفرستید؛ بولد، لینک و قالب‌بندی تلگرام حفظ می‌شود.\n"
             "بعد از متن می‌پرسیم دکمه زیر پیام باشد یا نه، و پیش از ارسال پیش‌نمایش را می‌بینید.\nبرای لغو: انصراف"
         )
         from app.bot.nav_input import ask_text

@@ -1,5 +1,5 @@
 {# Shared Persian labels — works even if Python filters are not registered yet #}
-{% from "_icons.html" import icon %}
+{% from "_icons.html" import icon, label_icon %}
 
 {# Capsule numeric stepper: [ − ] [ input ] [ + ] (dir=ltr). Negatives allowed unless min set. #}
 {% macro num_stepper(name, value=0, step=1, min=None, max=None, inputmode='numeric', aria_label='', class_name='') -%}
@@ -122,7 +122,7 @@
         class="btn btn-sm btn-ghost inbox-dismiss-btn"
         data-inbox-dismiss="{{ alert_key }}"
         {% if entity_id %}data-inbox-entity="{{ entity_id }}"{% endif %}
-        aria-label="حذف اعلان">حذف</button>
+        aria-label="حذف اعلان">{{ icon('trash', 'btn-ico') }}حذف</button>
 {%- endmacro %}
 
 {# A row of page counters (DESIGN_SYSTEM.md §6): one compact cell per figure, three across on phones. Each cell is a
@@ -150,9 +150,9 @@
   <span class="empty-state-ico" aria-hidden="true">{{ icon(icon_name) }}</span>
   <p class="empty-state-text">{{ text }}</p>
   {%- if action_label and action_modal %}
-  <button type="button" class="btn" data-modal-open="{{ action_modal }}">{{ action_label }}</button>
+  <button type="button" class="btn" data-modal-open="{{ action_modal }}">{{ label_icon(action_label, fallback='plus') }}{{ action_label }}</button>
   {%- elif action_label and action_href %}
-  <a class="btn" href="{{ action_href }}">{{ action_label }}</a>
+  <a class="btn" href="{{ action_href }}">{{ label_icon(action_label, fallback='plus') }}{{ action_label }}</a>
   {%- endif %}
 </div>
 {%- endset -%}
@@ -195,7 +195,7 @@
             {% if action.reason_label %}data-bulk-confirm-reason-label="{{ action.reason_label }}"{% endif %}
             {% if action.phrase %}data-bulk-confirm-phrase="{{ action.phrase }}"{% endif %}
             {% if action.phrase_label %}data-bulk-confirm-phrase-label="{{ action.phrase_label }}"{% endif %}>
-      <span class="table-bulk-op-label">{{ action.label }}</span>
+      {{ label_icon(action.label) }}<span class="table-bulk-op-label">{{ action.label }}</span>
       <span class="table-bulk-op-count" data-bulk-op-count aria-hidden="true">۰</span>
     </button>
     {% endfor %}
@@ -237,7 +237,7 @@
    content of the capsule header (title next to search, «⋯» and the primary action at the far end).
    Actions come from a call block so permission checks, forms and CSRF stay in the page:
      {% call(slot) page_header('plans', 'پلن‌ها', help='plans') %}
-       {% if slot == 'primary' %}<button type="button" class="btn" data-modal-open="m">افزودن پلن</button>{% endif %}
+       {% if slot == 'primary' %}<button type="button" class="btn" data-modal-open="m">{{ icon('plus', 'btn-ico') }}افزودن پلن</button>{% endif %}
        {% if slot == 'more' %}<button type="button" class="btn btn-ghost" data-modal-open="c">{{ icon('tag', 'more-ico') }}برچسب دسته</button>{% endif %}
      {% endcall %}
    «primary» holds at most one action; everything in «more» sits beside it on desktop and in the «⋯» menu on phones.

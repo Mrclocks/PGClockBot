@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "_icons.html" import icon %}
 {% from "macros.html" import switch, switch_chip, page_header, act_label, modal_title, row_actions, table_select_head, table_select_cell, table_bulk_bar, empty_state %}
 {% block title %}پلن‌ها{% endblock %}
@@ -68,7 +69,7 @@
         <td colspan="8"><div class="plan-cat-cell">
           <div class="plan-cat-intro-row">
             <p><strong>دسته‌بندی پلن‌ها</strong><span>با دسته، مشتری در ربات اول دسته را انتخاب می‌کند (مثلاً «ویژه» یا «اقتصادی») و بعد پلن را.</span></p>
-            <button type="button" class="btn btn-sm" data-modal-open="modal-plan-categories" data-category-new data-category-back="list">ساخت دسته</button>
+            <button type="button" class="btn btn-sm" data-modal-open="modal-plan-categories" data-category-new data-category-back="list">{{ btn_icon('plus', 'btn-ico') }}ساخت دسته</button>
           </div>
         </div></td>
       </tr>
@@ -110,7 +111,7 @@
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-plan-unified"
                     data-plan-audience="users"
-                    data-plan-kind="trial">تنظیم</button>
+                    data-plan-kind="trial">{{ btn_icon('edit', 'btn-ico') }}تنظیم</button>
           {% endcall %}
         </td>
       </tr>
@@ -140,7 +141,7 @@
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-plan-unified"
                     data-plan-audience="users"
-                    data-plan-kind="custom">تنظیم</button>
+                    data-plan-kind="custom">{{ btn_icon('edit', 'btn-ico') }}تنظیم</button>
           {% endcall %}
         </td>
       </tr>
@@ -157,7 +158,7 @@
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-plan-unified"
                     data-plan-audience="users"
-                    data-plan-kind="wholesale">تنظیم</button>
+                    data-plan-kind="wholesale">{{ btn_icon('edit', 'btn-ico') }}تنظیم</button>
           {% endcall %}
         </td>
       </tr>
@@ -209,16 +210,16 @@
                     data-sort="{{ a.sort_order }}"
                     data-category="{{ a.category_id or '' }}"
                     data-description="{{ a.description or '' }}"
-                    data-style="{{ a.button_style or 'inherit' }}">ویرایش</button>
+                    data-style="{{ a.button_style or 'inherit' }}">{{ btn_icon('edit', 'btn-ico') }}ویرایش</button>
             <form method="post" action="/plans/addons/{{ a.id }}/toggle">
-              <button class="btn btn-ghost btn-sm" type="submit">{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('power', 'btn-ico') }}{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
             <form method="post" action="/plans/addons/{{ a.id }}/delete"
                   data-confirm="این بسته حذف شود؟"
                   data-confirm-title="حذف بسته افزونه"
                   data-confirm-danger="1"
                   data-confirm-label="حذف">
-              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+              <button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
             </form>
           {% endcall %}
         </td>
@@ -273,17 +274,17 @@
         <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
-            <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
+            <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">{{ btn_icon('edit', 'btn-ico') }}ویرایش</a>
             {% if not p.is_system %}
             <form method="post" action="/resellers/plans/{{ p.id }}/toggle">
-              <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('power', 'btn-ico') }}{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
             <form method="post" action="/resellers/plans/{{ p.id }}/delete"
                   data-confirm="این پلن نمایندگی حذف شود؟"
                   data-confirm-title="تأیید حذف"
                   data-confirm-danger="1"
                   data-confirm-label="حذف">
-              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+              <button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
             </form>
             {% endif %}
           {% endcall %}
@@ -327,16 +328,16 @@
         <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
-            <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
+            <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">{{ btn_icon('edit', 'btn-ico') }}ویرایش</a>
             <form method="post" action="/resellers/plans/{{ p.id }}/toggle">
-              <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('power', 'btn-ico') }}{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
             <form method="post" action="/resellers/plans/{{ p.id }}/delete"
                   data-confirm="این پلن نمایندگی حذف شود؟"
                   data-confirm-title="تأیید حذف"
                   data-confirm-danger="1"
                   data-confirm-label="حذف">
-              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+              <button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
             </form>
           {% endcall %}
         </td>
@@ -384,16 +385,16 @@
         <td class="li-badge">{% if p.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
-            <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
+            <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">{{ btn_icon('edit', 'btn-ico') }}ویرایش</a>
             <form method="post" action="/resellers/plans/{{ p.id }}/toggle">
-              <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('power', 'btn-ico') }}{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
             <form method="post" action="/resellers/plans/{{ p.id }}/delete"
                   data-confirm="این بسته حذف شود؟"
                   data-confirm-title="تأیید حذف"
                   data-confirm-danger="1"
                   data-confirm-label="حذف">
-              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+              <button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
             </form>
           {% endcall %}
         </td>
@@ -555,8 +556,8 @@
       </div>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit" id="plan-category-submit">افزودن برچسب</button>
-        <button type="button" class="btn btn-ghost" id="plan-category-cancel-edit" hidden>انصراف از ویرایش</button>
+        <button class="btn" type="submit" id="plan-category-submit">{{ btn_icon('plus', 'btn-ico') }}افزودن برچسب</button>
+        <button type="button" class="btn btn-ghost" id="plan-category-cancel-edit" hidden>{{ btn_icon('close', 'btn-ico') }}انصراف از ویرایش</button>
 
       </div></div>
     </form>
@@ -617,20 +618,20 @@
                           data-name="{{ c.name }}"
                           data-audience="{{ c.audience or 'users' }}"
                           data-description="{{ c.description or '' }}"
-                          data-button-style="{% if c.button_style is none %}inherit{% else %}{{ c.button_style }}{% endif %}">ویرایش</button>
+                          data-button-style="{% if c.button_style is none %}inherit{% else %}{{ c.button_style }}{% endif %}">{{ btn_icon('edit', 'btn-ico') }}ویرایش</button>
                   <form method="post" action="/plans/categories/{{ c.id }}/toggle">
-                    <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
+                    <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('power', 'btn-ico') }}{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
                   </form>
                   {% if linked_packs %}
                   <button class="btn btn-danger btn-sm" type="button" disabled
-                          title="ابتدا بسته‌های این برچسب را به «عمومی» منتقل یا حذف کنید">حذف</button>
+                          title="ابتدا بسته‌های این برچسب را به «عمومی» منتقل یا حذف کنید">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
                   {% else %}
                   <form method="post" action="/plans/categories/{{ c.id }}/delete"
                         data-confirm="این برچسب حذف شود؟ پلن‌هایش بدون برچسب می‌مانند."
                         data-confirm-title="حذف برچسب دسته"
                         data-confirm-danger="1"
                         data-confirm-label="حذف">
-                    <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+                    <button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
                   </form>
                   {% endif %}
                 {% endcall %}
@@ -735,8 +736,8 @@
       </div>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit" id="service-addon-submit">افزودن بسته</button>
-        <button type="button" class="btn btn-ghost" id="service-addon-cancel-edit" hidden>انصراف از ویرایش</button>
+        <button class="btn" type="submit" id="service-addon-submit">{{ btn_icon('plus', 'btn-ico') }}افزودن بسته</button>
+        <button type="button" class="btn btn-ghost" id="service-addon-cancel-edit" hidden>{{ btn_icon('close', 'btn-ico') }}انصراف از ویرایش</button>
 
       </div></div>
     </form>
@@ -778,16 +779,16 @@
                         data-sort="{{ a.sort_order }}"
                         data-category="{{ a.category_id or '' }}"
                         data-description="{{ a.description or '' }}"
-                    data-style="{{ a.button_style or 'inherit' }}">ویرایش</button>
+                    data-style="{{ a.button_style or 'inherit' }}">{{ btn_icon('edit', 'btn-ico') }}ویرایش</button>
                 <form method="post" action="/plans/addons/{{ a.id }}/toggle">
-                  <button class="btn btn-ghost btn-sm" type="submit">{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
+                  <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('power', 'btn-ico') }}{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
                 </form>
                 <form method="post" action="/plans/addons/{{ a.id }}/delete"
                       data-confirm="این بسته حذف شود؟"
                       data-confirm-title="حذف بسته افزونه"
                       data-confirm-danger="1"
                       data-confirm-label="حذف">
-                  <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+                  <button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
                 </form>
               {% endcall %}
             </td>
@@ -1261,7 +1262,7 @@
         '<label class="form-field">درصد تخفیف' +
         '<input type="number" min="0" max="100" data-tier-pct value="'+(tier.percent||0)+'" /></label>' +
         '<div class="form-field" style="align-self:end">' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-tier-remove>حذف</button></div>';
+        '<button type="button" class="btn btn-ghost btn-sm" data-tier-remove>{{ btn_icon('trash', 'btn-ico') }}حذف</button></div>';
       row.querySelector('[data-tier-remove]').addEventListener('click', () => {
         row.remove();
         syncHidden();
@@ -1442,22 +1443,22 @@
         </td>
         <td class="col-actions">
           {% call row_actions() %}
-            <a class="btn btn-sm" href="/plans/{{ p.id }}/edit">ویرایش</a>
+            <a class="btn btn-sm" href="/plans/{{ p.id }}/edit">{{ btn_icon('edit', 'btn-ico') }}ویرایش</a>
             <form method="post" action="/plans/{{ p.id }}/clone"
                   data-confirm="یک کپی خاموش از این پلن ساخته شود؟"
                   data-confirm-title="کپی پلن"
                   data-confirm-label="کپی">
-              <button class="btn btn-ghost btn-sm" type="submit">کپی</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('copy', 'btn-ico') }}کپی</button>
             </form>
             <form method="post" action="/plans/{{ p.id }}/toggle">
-              <button class="btn btn-ghost btn-sm" type="submit">{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('power', 'btn-ico') }}{% if p.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
             <form method="post" action="/plans/{{ p.id }}/delete"
                   data-confirm="حذف پلن از فروشگاه؟"
                   data-confirm-title="تأیید حذف پلن"
                   data-confirm-danger="1"
                   data-confirm-label="حذف پلن">
-              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+              <button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
             </form>
           {% endcall %}
         </td>
@@ -1478,7 +1479,7 @@
       <span class="plan-cat-actions">
       {% call row_actions() %}
         {% if c.is_active %}
-        <button type="button" class="btn btn-sm" data-modal-open="modal-plan-unified" data-plan-audience="users" data-plan-kind="fixed" data-plan-category="{{ c.id }}">پلن در این دسته</button>
+        <button type="button" class="btn btn-sm" data-modal-open="modal-plan-unified" data-plan-audience="users" data-plan-kind="fixed" data-plan-category="{{ c.id }}">{{ btn_icon('plans', 'btn-ico') }}پلن در این دسته</button>
         {% endif %}
         <button type="button" class="btn btn-ghost btn-sm"
                 data-modal-open="modal-plan-categories"
@@ -1488,19 +1489,19 @@
                 data-name="{{ c.name }}"
                 data-audience="{{ c.audience or 'users' }}"
                 data-description="{{ c.description or '' }}"
-                data-button-style="{% if c.button_style is none %}inherit{% else %}{{ c.button_style }}{% endif %}">ویرایش نام و رنگ</button>
+                data-button-style="{% if c.button_style is none %}inherit{% else %}{{ c.button_style }}{% endif %}">{{ btn_icon('edit', 'btn-ico') }}ویرایش نام و رنگ</button>
         {% if not is_first %}
-        <form method="post" action="/plans/categories/{{ c.id }}/move"><input type="hidden" name="direction" value="up" /><button class="btn btn-ghost btn-sm" type="submit">بالاتر در ربات</button></form>
+        <form method="post" action="/plans/categories/{{ c.id }}/move"><input type="hidden" name="direction" value="up" /><button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('chev-up', 'btn-ico') }}بالاتر در ربات</button></form>
         {% endif %}
         {% if not is_last %}
-        <form method="post" action="/plans/categories/{{ c.id }}/move"><input type="hidden" name="direction" value="down" /><button class="btn btn-ghost btn-sm" type="submit">پایین‌تر در ربات</button></form>
+        <form method="post" action="/plans/categories/{{ c.id }}/move"><input type="hidden" name="direction" value="down" /><button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('chev-down', 'btn-ico') }}پایین‌تر در ربات</button></form>
         {% endif %}
-        <form method="post" action="/plans/categories/{{ c.id }}/toggle"><input type="hidden" name="back" value="list" /><button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش کردن{% else %}روشن کردن{% endif %}</button></form>
+        <form method="post" action="/plans/categories/{{ c.id }}/toggle"><input type="hidden" name="back" value="list" /><button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('power', 'btn-ico') }}{% if c.is_active %}خاموش کردن{% else %}روشن کردن{% endif %}</button></form>
         <form method="post" action="/plans/categories/{{ c.id }}/delete"
               data-confirm="دستهٔ «{{ c.name }}» حذف شود؟ پلن‌هایش بدون دسته می‌مانند و در ربات زیر «سایر» می‌آیند."
               data-confirm-title="حذف دسته"
               data-confirm-danger="1"
-              data-confirm-label="حذف دسته"><input type="hidden" name="back" value="list" /><button class="btn btn-danger btn-sm" type="submit">حذف دسته</button></form>
+              data-confirm-label="حذف دسته"><input type="hidden" name="back" value="list" /><button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف دسته</button></form>
       {% endcall %}
       </span>
     </div>

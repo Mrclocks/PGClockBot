@@ -9,6 +9,13 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+/* A button label set from script: the button's leading icon (``.btn-ico``) stays in front of the new text. */
+function setButtonText(button, text) {
+  const icon = button.querySelector(':scope > .btn-ico');
+  button.textContent = text;
+  if (icon) button.prepend(icon);
+}
+
   (function(){
     function csrfToken() {
       var meta = document.querySelector('meta[name="csrf-token"]');
@@ -2566,7 +2573,7 @@ function escapeHtml(value) {
           if (titleEl) titleEl.textContent = opts.title || 'تأیید';
           if (msgEl) msgEl.textContent = opts.message || 'ادامه می‌دهید؟';
           if (submitBtn) {
-            submitBtn.textContent = opts.confirmLabel || 'تأیید';
+            setButtonText(submitBtn, opts.confirmLabel || 'تأیید');
             submitBtn.className = 'btn' + (opts.danger ? ' btn-danger' : (opts.warn ? ' btn-warn' : ''));
             submitBtn.disabled = false;
           }
@@ -4035,15 +4042,15 @@ const root = document.getElementById('upd-root');
       startBtn.hidden = false;
       if (busy) {
         startBtn.disabled = true;
-        startBtn.textContent = label || 'در حال اجرا…';
+        setButtonText(startBtn, label || 'در حال اجرا…');
       } else if (migrationBlocked) {
         startBtn.disabled = true;
-        startBtn.textContent = 'آپدیت بلاک شد';
+        setButtonText(startBtn, 'آپدیت بلاک شد');
       } else {
         const retry = label === 'تلاش دوباره';
         startBtn.disabled = !canStart && !retry;
         startBtn.hidden = !canStart && !retry;
-        startBtn.textContent = retry ? 'تلاش دوباره' : ('نصب v' + targetRemote);
+        setButtonText(startBtn, retry ? 'تلاش دوباره' : ('نصب v' + targetRemote));
       }
     }
     if (channelSelect) channelSelect.disabled = !!busy || channelBusy;
@@ -4398,7 +4405,7 @@ const root = document.getElementById('upd-root');
       syncChannelSeg();
       if (startBtn) {
         startBtn.disabled = true;
-        startBtn.textContent = 'در حال بررسی…';
+        setButtonText(startBtn, 'در حال بررسی…');
       }
       if (versionFlash) versionFlash.hidden = true;
       if (stateEl) stateEl.textContent = 'در حال بررسی آپدیت کانال ' + nextLabel + '…';

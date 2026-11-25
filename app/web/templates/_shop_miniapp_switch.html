@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# The shop's own Mini App switch; expects: miniapp_available, miniapp_blocker, miniapp_on, miniapp_url, csrf_token #}
 <form method="post" action="/shop-settings/miniapp" class="settings-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -20,7 +21,7 @@
       </label>
     </div>
     <div class="actions">
-      <button class="btn" type="submit">ذخیره</button>
+      <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره</button>
     </div>
     {% else %}
     <p class="muted">{{ miniapp_blocker|default("مینی‌اپ برای فروشگاه شما فعال نشده است. برای فعال شدن با مدیریت هماهنگ کنید.", true) }}</p>

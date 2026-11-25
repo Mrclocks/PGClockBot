@@ -59,6 +59,8 @@ FREE_TEXT_INPUT_STATES: frozenset[str] = frozenset(
         "AdminStates:user_wallet_reason",
         "AdminStates:ticket_reply",
         "AdminStates:broadcast_text",
+        "PickerStates:link_label",
+        "PickerStates:link_url",
         "AdminStates:revoke_reseller_reason",
         "AdminStates:block_user_reason",
         "AdminStates:delete_user_reason",

@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Admin Telegram prefs + user low-usage alerts #}
 <form method="post" action="/notifications" class="settings-form notify-form">
   <div class="card settings-card">
@@ -19,7 +20,7 @@
     </div>
   </div>
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره هشدارهای ادمین</button>
+    <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره هشدارهای ادمین</button>
   </div>
 </form>
 
@@ -51,6 +52,6 @@
   </div>
   {% endfor %}
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره هشدار کمبود</button>
+    <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره هشدار کمبود</button>
   </div>
 </form>

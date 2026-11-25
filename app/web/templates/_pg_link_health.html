@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Owner only: how the link to PasarGuard behaved in the last hour (this process).
    A summary row with the four figures an owner checks first, then the detail boxes side by side. #}
 {% from "macros.html" import card_title %}
@@ -29,7 +30,7 @@
           type="submit"
           class="btn btn-sm"
           aria-label="ارتباط مجدد با پاسارگارد"
-        >ارتباط مجدد</button>
+        >{{ btn_icon('refresh', 'btn-ico') }}ارتباط مجدد</button>
       </form>
       {% endif %}
     </div>

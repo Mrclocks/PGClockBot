@@ -206,7 +206,7 @@ class UserCardTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_card_opened_from_another_table_links_to_the_users_edit(self) -> None:
         for page in ("finance", "tickets", "trials", "cleanup", "applications", "loyalty"):
             response = await self.client.get(f"/users/11/card?from={page}")
-            self.assertIn('<a class="btn" href="/users?uid=11&amp;edit=11">ویرایش</a>', response.text, page)
+            self.assertRegex(response.text, r'<a class="btn" href="/users\?uid=11&amp;edit=11">(?:\{\{[^}]*\}\}|<svg[^>]*>.*?</svg>)?ویرایش</a>', page)
             self.assertNotIn('data-modal-open="modal-user-edit"', response.text, page)
 
     async def test_an_unknown_card_page_behaves_like_the_users_list(self) -> None:

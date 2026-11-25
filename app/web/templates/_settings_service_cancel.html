@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# «لغو سرویس»: the customer's cancellation of their own service, one card like «توقف و انتقال» (DESIGN_SYSTEM.md §6).
    The header is the title, one line and the switch (ds_toggle_sec); the body, with its save button, opens only while
    the switch is on. Fields that matter only for one choice follow that choice (data-ds-show-when).
@@ -32,6 +33,6 @@
       </div>
     </div>
     <div class="ds-note" data-tone="danger" role="note" data-ds-show-when="#sc-approval:auto"{% if values.get('service_cancel_approval') != 'auto' %} hidden{% endif %}>{{ ico('shield-alert') }}<span>در حالت خودکار لغو بدون بررسی ادمین انجام می‌شود و برگشت‌پذیر نیست. با سقف بازگشت خودکار و مهلت لغو، خطر را محدود کنید.</span></div>
-    <div class="actions"><button class="btn" type="submit">ذخیرهٔ لغو سرویس</button></div>
+    <div class="actions"><button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیرهٔ لغو سرویس</button></div>
   {% endcall %}
 </form>

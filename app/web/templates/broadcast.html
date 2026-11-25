@@ -16,8 +16,10 @@
 {% endcall %}
 
 <form method="post" action="{{ page_path }}" class="bc-compose ds-page-form" id="bc-form" data-bc-form
+      enctype="multipart/form-data"
       data-audience-url="{{ page_path }}/audience"
       data-test-url="{{ page_path }}/test"
+      data-caption-max="{{ caption_max|default(1024) }}"
       data-confirm="پیام برای گروه انتخاب‌شده در صف ارسال قرار بگیرد؟ پیامِ فرستاده‌شده پس گرفته نمی‌شود."
       data-confirm-title="ارسال پیام گروهی"
       data-confirm-label="ارسال">
@@ -91,9 +93,23 @@
 
     {% call ds_sec('متن پیام') %}
       <label class="form-field">
-        <textarea name="text" id="bc-text" rows="7" required maxlength="4000" dir="auto" placeholder="متن پیام…" aria-label="متن پیام"></textarea>
+        <textarea name="text" id="bc-text" rows="7" required maxlength="4000" dir="auto" placeholder="متن پیام…" aria-label="متن پیام" data-bc-text></textarea>
         <small class="muted">{% if is_platform %}برچسب‌های ساده تلگرام مثل <code dir="ltr">&lt;b&gt;</code> و <code dir="ltr">&lt;a href="…"&gt;</code> مجازند؛ علامت «&lt;» تنها هم بی‌خطر است.{% else %}متن همان‌طور که نوشته‌اید فرستاده می‌شود.{% endif %} ارسال به‌تدریج انجام می‌شود.</small>
       </label>
+    {% endcall %}
+
+    {% set media_side %}<span class="ds-meta">اختیاری</span>{% endset %}
+    {% call ds_sec('عکس یا ویدیو', side=media_side) %}
+      <label class="file-label upload-box">
+        <input name="media" id="bc-media" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,.jpg,.jpeg,.png,.webp,.mp4" data-bc-media />
+        <span class="upload-box-plus" aria-hidden="true">+</span>
+        <span class="upload-box-title">انتخاب عکس یا ویدیو</span>
+        <span class="upload-box-hint muted">JPG، PNG، WebP تا ۱۰ مگابایت · MP4 تا ۵۰ مگابایت</span>
+        <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
+        <span class="upload-box-progress" hidden aria-hidden="true"><i class="upload-box-progress-bar"></i></span>
+      </label>
+      <button type="button" class="btn btn-ghost btn-sm" data-bc-media-clear hidden>{{ icon('trash', 'btn-ico') }}حذف فایل</button>
+      <small class="muted">با فایل، متن پیام زیرنویس آن می‌شود: اختیاری و حداکثر {{ caption_max|default(1024) | fa }} نویسه.</small>
     {% endcall %}
 
     {% set buttons_side %}<span class="ds-meta">اختیاری · تا {{ button_max | fa }} دکمه</span>{% endset %}
@@ -121,11 +137,15 @@
 
   <aside class="bc-side ds-page-stack">
     {% call ds_sec('پیش‌نمایش در تلگرام') %}
+      <div class="bc-media-preview" data-bc-media-preview hidden>
+        <img alt="پیش‌نمایش عکس" data-bc-media-img hidden />
+        <video muted playsinline controls preload="metadata" aria-label="پیش‌نمایش ویدیو" data-bc-media-video hidden></video>
+      </div>
       {{ message_preview('#bc-text', id='bc-preview') }}
     {% endcall %}
     <div class="bc-send">
-      <button class="btn bc-send-btn" type="submit" data-bc-send>ارسال پیام</button>
-      <button class="btn btn-ghost" type="button" data-bc-test>ارسال آزمایشی به {{ 'ادمین‌های ربات' if is_platform else 'حساب صاحب فروشگاه' }}</button>
+      <button class="btn bc-send-btn" type="submit" data-bc-send>{{ icon('send', 'btn-ico') }}ارسال پیام</button>
+      <button class="btn btn-ghost" type="button" data-bc-test>{{ icon('send', 'btn-ico') }}ارسال آزمایشی به {{ 'ادمین‌های ربات' if is_platform else 'حساب صاحب فروشگاه' }}</button>
       <p class="bc-test-status" data-bc-test-status role="status" aria-live="polite"></p>
     </div>
   </aside>
@@ -140,7 +160,7 @@
           data-confirm-title="پاک کردن تاریخچه"
           data-confirm-danger="1"
           data-confirm-label="پاک کردن">
-      <button class="btn btn-danger btn-sm" type="submit">حذف تاریخچه</button>
+      <button class="btn btn-danger btn-sm" type="submit">{{ icon('trash', 'btn-ico') }}حذف تاریخچه</button>
     </form>
     {% endif %}
   </div>
@@ -168,19 +188,19 @@
           {% if row.retry_of_id %}<span>ارسال دوباره به ناموفق‌های {{ row.retry_of_id | fa }} ·</span> {% endif %}<span dir="auto">{{ (history_labels or {}).get(row.id, row.audience) }}</span>
           <span class="li-only">· <bdi dir="ltr">{{ (row.created_at|string)[:16] }}</bdi>{% if row.created_by %} · <bdi dir="auto">{{ row.created_by }}</bdi>{% endif %}</span>
         </td>
-        <td class="broadcast-snippet li-title"><span dir="auto">{{ row.text[:120] }}{% if row.text|length > 120 %}…{% endif %}</span></td>
+        <td class="broadcast-snippet li-title">{% set media_tag = (media_labels|default({})).get(row.id) %}{% if media_tag %}<span class="badge">{{ media_tag }}</span> {% endif %}<span dir="auto">{{ row.text[:120] }}{% if row.text|length > 120 %}…{% endif %}</span></td>
         <td class="mono cell-tight li-value"><bdi dir="ltr">{{ row.ok_count | fa }}/{{ row.total | fa }}</bdi><span class="li-hide">{% if row.fail_count %} · ناموفق {{ row.fail_count | num }}{% endif %}{% if row.review_count %} · نامشخص {{ row.review_count | num }}{% endif %}</span>{% if scheduled_for %}<small class="muted text-block">زمان‌بندی‌شده برای {{ scheduled_for }}</small>{% elif row.status in ['queued', 'running', 'cancelled', 'failed'] %}<small class="muted text-block">{{ status_labels.get(row.status, row.status) }}</small>{% endif %}</td>
         <td class="muted col-hide-sm"><bdi dir="auto">{{ row.created_by or '—' }}</bdi></td>
         <td class="col-actions">
           {% call row_actions() %}
-          <a class="btn btn-ghost btn-sm" href="{{ page_path }}/history/{{ row.id }}">جزئیات و علت ناموفق‌ها</a>
+          <a class="btn btn-ghost btn-sm" href="{{ page_path }}/history/{{ row.id }}">{{ icon('eye', 'btn-ico') }}جزئیات و علت ناموفق‌ها</a>
           {% if row.status in ['queued', 'running'] %}
           <form method="post" action="{{ page_path }}/history/{{ row.id }}/cancel"
                 data-confirm="ارسال متوقف شود؟ پیام‌های فرستاده‌شده برنمی‌گردند."
                 data-confirm-title="توقف ارسال"
                 data-confirm-danger="1"
                 data-confirm-label="توقف">
-            <button class="btn btn-danger btn-sm" type="submit">توقف</button>
+            <button class="btn btn-danger btn-sm" type="submit">{{ icon('pause', 'btn-ico') }}توقف</button>
           </form>
           {% else %}
           <form method="post" action="{{ page_path }}/history/{{ row.id }}/delete"
@@ -188,7 +208,7 @@
                 data-confirm-title="تأیید حذف"
                 data-confirm-danger="1"
                 data-confirm-label="حذف">
-            <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+            <button class="btn btn-danger btn-sm" type="submit">{{ icon('trash', 'btn-ico') }}حذف</button>
           </form>
           {% endif %}
           {% endcall %}

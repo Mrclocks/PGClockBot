@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {% if automation_flash_err %}
 <div class="flash warn">{{ automation_flash_err }}</div>
 {% endif %}
@@ -32,15 +33,15 @@
     <label class="form-field">
       <span><input type="checkbox" name="disable_automation" value="1"> خرید خودکار این سرویس خاموش شود</span>
     </label>
-    <button class="btn" type="submit">آزادسازی</button>
+    <button class="btn" type="submit">{{ btn_icon('unlock', 'btn-ico') }}آزادسازی</button>
   </form>
   {% elif item.state == 'wait_order' and item.order_id %}
-  <a class="btn btn-ghost" href="/finance?tab=delivery">رفتن به تحویل ناموفق</a>
+  <a class="btn btn-ghost" href="/finance?tab=delivery">{{ btn_icon('external', 'btn-ico') }}رفتن به تحویل ناموفق</a>
   {% endif %}
 </div>
 {% endfor %}
 {% if automation_next %}
-<a class="btn" href="/finance?tab=automation&amp;after={{ automation_next }}">موارد بعدی</a>
+<a class="btn" href="/finance?tab=automation&amp;after={{ automation_next }}">{{ btn_icon('chev', 'btn-ico') }}موارد بعدی</a>
 {% endif %}
 {% else %}
 <div class="card settings-card">

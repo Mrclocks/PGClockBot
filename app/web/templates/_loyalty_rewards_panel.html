@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Rewards editor — used inside loyalty settings modal #}
 {% from "macros.html" import switch %}
 <div class="loyalty-stack">
@@ -27,7 +28,7 @@
         <label class="form-field">سقف تخفیف (تومان)<input name="max_discount_toman" type="number" data-money min="0" placeholder="اختیاری" dir="ltr" /></label>
         <label class="form-field">انقضا (روز)<input name="expires_days" type="number" min="1" placeholder="اختیاری" dir="ltr" /></label>
       </div>
-      <div class="actions"><button class="btn" type="submit">ایجاد جایزه</button></div>
+      <div class="actions"><button class="btn" type="submit">{{ btn_icon('plus', 'btn-ico') }}ایجاد جایزه</button></div>
     </form>
   </div>
 
@@ -67,13 +68,13 @@
         {{ switch('enabled', 'فعال', checked=reward.enabled) }}
       </div>
       <div class="actions">
-        <button class="btn" type="submit">ذخیره</button>
+        <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره</button>
       </div>
     </form>
     <form method="post" action="/loyalty/rewards/{{ reward.id }}/archive" class="loyalty-editor-danger"
           data-confirm="این جایزه حذف شود؟ از لیست فعال‌ها خارج می‌شود." data-confirm-title="حذف جایزه" data-confirm-danger="1" data-confirm-label="حذف">
       <div class="actions">
-        <button class="btn btn-danger" type="submit">حذف</button>
+        <button class="btn btn-danger" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
       </div>
     </form>
   </div>

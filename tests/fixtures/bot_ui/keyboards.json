@@ -2421,7 +2421,7 @@
           "text": "⬅️ بازگشت"
         },
         {
-          "callback_data": "menu:home",
+          "callback_data": "pay:x:42",
           "style": "danger",
           "text": "❌ انصراف"
         }

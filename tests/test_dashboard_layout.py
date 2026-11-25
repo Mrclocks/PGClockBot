@@ -36,7 +36,7 @@ class ConnectionBannerTests(unittest.TestCase):
 
     def test_check_leads_to_the_first_failing_link(self) -> None:
         html = render("{{ connection_banner(tiles) }}", tiles=[PG_UP, PG_DOWN, BOT_DOWN])
-        self.assertIn('href="/pg">بررسی</a>', html)
+        self.assertRegex(html, r'href="/pg">(?:\{\{[^}]*\}\}|<svg[^>]*>.*?</svg>)?بررسی</a>')
 
     def test_reasons_are_escaped(self) -> None:
         html = render("{{ connection_banner(tiles) }}", tiles=[{**BOT_DOWN, "detail": "<script>x</script>"}])

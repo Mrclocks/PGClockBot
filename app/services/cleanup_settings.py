@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.authz import authz_from_staff, can_shop
 from app.services.order_purge import PURGE_PERMISSION, TAGS, PurgeRules, parse_days, purge_scope, save_rules
+from app.services.pending_order_expiry import rules_from_form as expiry_rules_from_form, save_expiry_rules
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.stale_order_cleanup import (
     KEY_ENABLED,
@@ -46,12 +47,17 @@ def purge_rules_from_form(form: Mapping[str, object]) -> PurgeRules:
 
 
 async def save_cleanup_tab(session: AsyncSession, *, staff: dict, form: Mapping[str, object]) -> None:
-    """Save the tag rules for the staff member's shop.
+    """Save the tag rules and the unpaid-order expiry for the staff member's shop.
 
-    Raises ``PermissionError`` without ``orders_purge`` and ``ValueError`` for an invalid day count.
+    Raises ``PermissionError`` without ``orders_purge`` and ``ValueError`` for an invalid day or hour count
+    (checked before anything is written).
     """
     shop_id = purge_scope(staff)
-    await save_rules(session, shop_id=shop_id, rules=purge_rules_from_form(form))
+    rules = purge_rules_from_form(form)
+    expiry = expiry_rules_from_form(form)
+    await save_rules(session, shop_id=shop_id, rules=rules)
+    if expiry is not None:
+        await save_expiry_rules(session, shop_id=shop_id, rules=expiry)
     await set_settings_bulk(
         session, {KEY_ENABLED: "0", KEY_RETIRED_NOTICE: "0"}, reseller_id=shop_id
     )

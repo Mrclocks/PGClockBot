@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, empty_state %}
 {% from "_gift_code_fields.html" import gift_code_fields %}
 {% block title %}کد هدیه{% endblock %}
@@ -14,7 +15,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {{ gift_code_fields(plans=gift_code_plans or [], max_expiry_days=gift_code_max_days) }}
     <div class="actions">
-      <button class="btn" type="submit">ساخت کد</button>
+      <button class="btn" type="submit">{{ btn_icon('plus', 'btn-ico') }}ساخت کد</button>
     </div>
   </form>
 </div>
@@ -57,12 +58,12 @@
           <td class="li-badge"><span class="badge {{ 'active' if d.get('state', 'فعال') == 'فعال' else 'warn' }}">{{ d.get('state', 'فعال' if c.is_active else 'خاموش') }}</span></td>
           <td class="col-actions">
             {% call row_actions() %}
-            <button class="btn btn-ghost btn-sm" type="button" data-gift-edit="gift-edit-{{ c.id }}" aria-expanded="false" aria-controls="gift-edit-{{ c.id }}">ویرایش</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-gift-edit="gift-edit-{{ c.id }}" aria-expanded="false" aria-controls="gift-edit-{{ c.id }}">{{ btn_icon('edit', 'btn-ico') }}ویرایش</button>
             {% set code_link = (gift_code_links or {}).get(c.id) %}
-            {% if code_link %}<button class="btn btn-ghost btn-sm" type="button" data-copy="{{ code_link }}" aria-label="کپی لینک ثبت کد {{ c.code }} در ربات">کپی لینک کد</button>{% endif %}
+            {% if code_link %}<button class="btn btn-ghost btn-sm" type="button" data-copy="{{ code_link }}" aria-label="کپی لینک ثبت کد {{ c.code }} در ربات">{{ btn_icon('copy', 'btn-ico') }}کپی لینک کد</button>{% endif %}
             <form method="post" action="/plans/gift-codes/{{ c.id }}/toggle">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-              <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('power', 'btn-ico') }}{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
             </form>
             {% endcall %}
           </td>
@@ -82,8 +83,8 @@
     <h2>ویرایش کد <span class="mono" dir="ltr">{{ c.code }}</span></h2>
     {{ gift_code_fields(c, (gift_code_details or {}).get(c.id, {}), plans=gift_code_plans or [], max_expiry_days=gift_code_max_days) }}
     <div class="actions">
-      <button class="btn" type="submit">ذخیره تنظیمات</button>
-      <button class="btn btn-ghost" type="button" data-gift-edit="gift-edit-{{ c.id }}">بستن</button>
+      <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره تنظیمات</button>
+      <button class="btn btn-ghost" type="button" data-gift-edit="gift-edit-{{ c.id }}">{{ btn_icon('close', 'btn-ico') }}بستن</button>
     </div>
   </form>
 </div>

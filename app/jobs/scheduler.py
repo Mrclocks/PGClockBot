@@ -430,6 +430,19 @@ async def run_auto_order_purge() -> None:
             logger.exception("automatic order purge failed")
 
 
+async def run_pending_order_expiry() -> None:
+    """Every 30 minutes: cancel unpaid orders past the expiry each shop switched on (off by default)."""
+    async with SessionLocal() as session:
+        try:
+            from app.services.pending_order_expiry import expire_all_shops
+
+            total = await expire_all_shops(session)
+            if total:
+                logger.info("pending order expiry cancelled=%s", total)
+        except Exception:
+            logger.exception("pending order expiry failed")
+
+
 async def run_scheduled_receipt_approvals() -> None:
     """Every minute: approve card receipts nobody reviewed within their shop's chosen time."""
     async with SessionLocal() as session:
@@ -660,6 +673,8 @@ def start_background_scheduler() -> None:
         ("coupon_win_back", run_coupon_winback_job, {"hours": 6}, 3600),
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("order_purge", run_auto_order_purge, {"hours": 1}, 3600),
+        # Off by default; one query per shop that switched it on.
+        ("pending_order_expiry", run_pending_order_expiry, {"minutes": 30}, 1800),
         ("scheduled_receipt_approval", run_scheduled_receipt_approvals, {"seconds": 60}, 90),
         ("crypto_rate_refresh", run_crypto_rate_refresh, {"seconds": 60}, 90),
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),

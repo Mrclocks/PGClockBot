@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import num_stepper %}
 {% from "_ds.html" import ds_switch %}
 {% from "_user_identity.html" import user_identity, role_tag, role_label, shows_bot_admin, bot_admin_role_lock %}
@@ -43,7 +44,7 @@
         <option value="1" {% if user.is_demo %}selected{% endif %}>دمو — حذف از محاسبات گزارش‌ها</option>
       </select>
     </label>
-    <div class="actions"><button class="btn" type="submit">ذخیره وضعیت دمو</button></div>
+    <div class="actions"><button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره وضعیت دمو</button></div>
   </form>
 </section>
 {% endif %}
@@ -57,7 +58,7 @@
     {% set selected_color = marks.tag if marks is defined else 'green' %}
     {% include "_color_tag_picker.html" %}
     <div class="actions">
-      <button class="btn" type="submit">ذخیره تگ ریسک</button>
+      <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره تگ ریسک</button>
     </div>
   </form>
 </section>
@@ -74,7 +75,7 @@
       <textarea name="note" rows="3" placeholder="مثلاً دیر کرد، کارت فلان…">{{ marks.note if marks is defined else '' }}</textarea>
     </label>
     <div class="actions">
-      <button class="btn" type="submit">ذخیره یادداشت</button>
+      <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره یادداشت</button>
     </div>
   </form>
 </section>
@@ -112,7 +113,7 @@
     </label>
     {% endif %}
     <div class="actions">
-      <button class="btn" type="submit">اعمال نقش</button>
+      <button class="btn" type="submit">{{ btn_icon('check', 'btn-ico') }}اعمال نقش</button>
     </div>
   </form>
   {% endif %}
@@ -143,11 +144,11 @@
         <input name="points" type="number" min="1" required dir="ltr" inputmode="numeric" placeholder="مثلاً ۱۰۰" />
       </label>
       <div class="wallet-adjust-modes" role="group" aria-label="نوع تنظیم امتیاز">
-        <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
+        <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">{{ btn_icon('minus', 'btn-ico') }}
           <span class="wallet-mode-swatch" aria-hidden="true"></span>
           <span class="wallet-mode-label">کاهش</span>
         </button>
-        <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
+        <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">{{ btn_icon('plus', 'btn-ico') }}
           <span class="wallet-mode-swatch" aria-hidden="true"></span>
           <span class="wallet-mode-label">افزایش</span>
         </button>
@@ -171,14 +172,14 @@
   <form method="post" action="/users/{{ user.id }}/shop-block" class="form-stack"
         data-confirm="مسدودی این مشتری در فروشگاه شما برداشته شود؟" data-confirm-title="رفع مسدودی" data-confirm-label="رفع مسدودی">
     <input type="hidden" name="action" value="unblock" />
-    <div class="actions"><button class="btn" type="submit">رفع مسدودی</button></div>
+    <div class="actions"><button class="btn" type="submit">{{ btn_icon('unlock', 'btn-ico') }}رفع مسدودی</button></div>
   </form>
   {% else %}
   <form method="post" action="/users/{{ user.id }}/shop-block" class="form-stack"
         data-confirm="این مشتری در ربات و مینی‌اپ فروشگاه شما مسدود شود؟ سرویس‌های فعلی‌اش قطع نمی‌شوند." data-confirm-title="مسدود کردن مشتری" data-confirm-label="مسدود کن" data-confirm-danger="1">
     <input type="hidden" name="action" value="block" />
     <label class="form-field">علت<input name="reason" type="text" required minlength="3" maxlength="200" placeholder="الزامی" /></label>
-    <div class="actions"><button class="btn btn-danger" type="submit">مسدود کردن در این فروشگاه</button></div>
+    <div class="actions"><button class="btn btn-danger" type="submit">{{ btn_icon('ban', 'btn-ico') }}مسدود کردن در این فروشگاه</button></div>
   </form>
   {% endif %}
 </section>
@@ -197,7 +198,7 @@
         data-confirm="حساب دوباره فعال شود؟ سرویس‌هایی که با این غیرفعال‌سازی خاموش شده‌اند روشن می‌شوند؛ سرویس‌های متوقف یا منقضی خاموش می‌مانند."
         data-confirm-title="فعال‌سازی دوبارهٔ حساب" data-confirm-label="فعال کن">
     <input type="hidden" name="action" value="enable" />
-    <div class="actions"><button class="btn" type="submit">فعال‌سازی دوبارهٔ حساب</button></div>
+    <div class="actions"><button class="btn" type="submit">{{ btn_icon('refresh', 'btn-ico') }}فعال‌سازی دوبارهٔ حساب</button></div>
   </form>
   {% endif %}
   {% else %}
@@ -206,7 +207,7 @@
         data-confirm-title="غیرفعال‌سازی حساب" data-confirm-label="غیرفعال کن" data-confirm-danger="1">
     <input type="hidden" name="action" value="disable" />
     <label class="form-field">علت<input name="reason" type="text" required minlength="3" maxlength="200" placeholder="الزامی" /></label>
-    <div class="actions"><button class="btn btn-danger" type="submit">غیرفعال‌سازی حساب و سرویس‌ها</button></div>
+    <div class="actions"><button class="btn btn-danger" type="submit">{{ btn_icon('power', 'btn-ico') }}غیرفعال‌سازی حساب و سرویس‌ها</button></div>
   </form>
   {% endif %}
 </section>
@@ -238,11 +239,11 @@
         <input name="points" type="number" min="1" max="{{ shop_points_max }}" required dir="ltr" inputmode="numeric" />
       </label>
       <div class="wallet-adjust-modes" role="group" aria-label="نوع تنظیم امتیاز فروشگاه">
-        <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
+        <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">{{ btn_icon('minus', 'btn-ico') }}
           <span class="wallet-mode-swatch" aria-hidden="true"></span>
           <span class="wallet-mode-label">کاهش</span>
         </button>
-        <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
+        <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">{{ btn_icon('plus', 'btn-ico') }}
           <span class="wallet-mode-swatch" aria-hidden="true"></span>
           <span class="wallet-mode-label">افزایش</span>
         </button>
@@ -277,7 +278,7 @@
           {% endfor %}
         </select>
       </label>
-      <button class="btn" type="submit">اختصاص پلن</button>
+      <button class="btn" type="submit">{{ btn_icon('plans', 'btn-ico') }}اختصاص پلن</button>
     </div>
   </form>
   {% else %}
@@ -314,11 +315,11 @@
         <input type="text" name="value" required maxlength="2048" dir="ltr" autocomplete="off" spellcheck="false"
                data-si-assign-input />
       </label>
-      <button class="btn btn-ghost" type="button" data-si-assign-check>بررسی</button>
+      <button class="btn btn-ghost" type="button" data-si-assign-check>{{ btn_icon('eye', 'btn-ico') }}بررسی</button>
     </div>
     <div data-si-assign-result role="status" aria-live="polite" hidden></div>
     <div class="ds-rows">{{ ds_switch('notify', 'پیام به مشتری', 'بعد از افزودن، ربات با ذکر علت به مشتری خبر می‌دهد', checked=true) }}</div>
-    <div class="actions"><button class="btn" type="submit" data-si-assign-submit disabled>افزودن سرویس</button></div>
+    <div class="actions"><button class="btn" type="submit" data-si-assign-submit disabled>{{ btn_icon('plus', 'btn-ico') }}افزودن سرویس</button></div>
   </form>
 </section>
 {% endif %}
@@ -357,11 +358,11 @@
         {% if s.subscription_url or renew_link %}
         <div class="svc-item-links">
           {% if s.subscription_url %}
-          <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ s.subscription_url }}">کپی لینک</button>
-          <a class="btn btn-sm btn-ghost" href="{{ s.subscription_url }}" target="_blank" rel="noopener">باز کردن</a>
+          <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ s.subscription_url }}">{{ btn_icon('copy', 'btn-ico') }}کپی لینک</button>
+          <a class="btn btn-sm btn-ghost" href="{{ s.subscription_url }}" target="_blank" rel="noopener">{{ btn_icon('external', 'btn-ico') }}باز کردن</a>
           {% endif %}
           {% if renew_link %}
-          <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ renew_link }}" aria-label="کپی لینک تمدید همین سرویس در ربات برای فرستادن به مشتری">کپی لینک تمدید</button>
+          <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ renew_link }}" aria-label="کپی لینک تمدید همین سرویس در ربات برای فرستادن به مشتری">{{ btn_icon('copy', 'btn-ico') }}کپی لینک تمدید</button>
           {% endif %}
         </div>
         {% endif %}
@@ -386,7 +387,7 @@
                 {% endfor %}
               </select>
             </label>
-            <button class="btn" type="submit">تمدید</button>
+            <button class="btn" type="submit">{{ btn_icon('refresh', 'btn-ico') }}تمدید</button>
           </div>
         </form>
 {% endif %}
@@ -409,11 +410,11 @@
           </div>
           {#- Same «کاهش» / «افزایش» pair as the wallet, points and reseller capacity forms. -#}
           <div class="wallet-adjust-modes" role="group" aria-label="نوع تغییر مانده">
-            <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
+            <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">{{ btn_icon('minus', 'btn-ico') }}
               <span class="wallet-mode-swatch" aria-hidden="true"></span>
               <span class="wallet-mode-label">کاهش</span>
             </button>
-            <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
+            <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">{{ btn_icon('plus', 'btn-ico') }}
               <span class="wallet-mode-swatch" aria-hidden="true"></span>
               <span class="wallet-mode-label">افزایش</span>
             </button>
@@ -463,10 +464,10 @@
         {% if can_pg_delete %}
         <div class="svc-item-actions">
           {% if s.service.remark in ['linked', 'imported'] %}
-          <button class="btn btn-ghost" type="submit" form="svc-{{ s.service.id }}-detach">جدا کردن از مشتری</button>
-          <button class="btn btn-danger" type="submit" form="svc-{{ s.service.id }}-delete-pg">حذف همراه حساب پاسارگارد</button>
+          <button class="btn btn-ghost" type="submit" form="svc-{{ s.service.id }}-detach">{{ btn_icon('close', 'btn-ico') }}جدا کردن از مشتری</button>
+          <button class="btn btn-danger" type="submit" form="svc-{{ s.service.id }}-delete-pg">{{ btn_icon('trash', 'btn-ico') }}حذف همراه حساب پاسارگارد</button>
           {% else %}
-          <button class="btn btn-danger" type="submit" form="svc-{{ s.service.id }}-delete">حذف سرویس</button>
+          <button class="btn btn-danger" type="submit" form="svc-{{ s.service.id }}-delete">{{ btn_icon('trash', 'btn-ico') }}حذف سرویس</button>
           {% endif %}
         </div>
         {% endif %}
@@ -527,7 +528,7 @@
         data-confirm-reason-name="reason"
         data-confirm-label="حذف کاربر">
     <input type="hidden" name="reason" value="" />
-    <button class="btn btn-danger" type="submit">حذف کاربر</button>
+    <button class="btn btn-danger" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف کاربر</button>
   </form>
 </section>
 {% endif %}

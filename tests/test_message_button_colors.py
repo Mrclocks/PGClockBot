@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
@@ -37,7 +37,8 @@ class ColorChoiceTests(unittest.TestCase):
         self.assertEqual(picker.next_style("bogus"), "primary")
 
     def test_each_button_is_drawn_in_its_colour_with_send_and_back(self) -> None:
-        markup = picker.colors_markup(["shop", "support"], {"shop": "success"}, renew=False)
+        labels = picker.option_labels(renew=False, labels=None, links={})
+        markup = picker.colors_markup(["shop", "support"], {"shop": "success"}, labels=labels)
         rows = markup.inline_keyboard
         self.assertEqual([(b.callback_data, b.style) for b in (rows[0][0], rows[1][0])],
                          [("mbp:c:shop", "success"), ("mbp:c:support", None)])
@@ -55,28 +56,33 @@ class ColorFlowTests(unittest.IsolatedAsyncioTestCase):
         await self.state.update_data(mbp_selected=["shop", "support"])
         self.finished = AsyncMock()
         picker.register_flow("colors", self.finished)
+        # The colour step reads the sender's menu labels; these tests have no database.
+        labels = patch.object(picker, "sender_screen_labels", AsyncMock(return_value={}))
+        labels.start()
+        self.addCleanup(labels.stop)
+        self.session = MagicMock()
 
     async def test_continue_opens_the_colour_step_instead_of_sending(self) -> None:
         callback = _callback(picker.CB_DONE)
-        await picker.on_done(callback, self.state)
+        await picker.on_done(callback, self.state, self.session)
         self.finished.assert_not_awaited()
         self.assertEqual(callback.message.edit_text.await_args.args[0], picker.COLORS)
 
     async def test_chosen_colours_are_sent_with_the_buttons(self) -> None:
-        await picker.on_color(_callback("mbp:c:shop"), self.state)
-        await picker.on_color(_callback("mbp:c:shop"), self.state)
+        await picker.on_color(_callback("mbp:c:shop"), self.state, self.session)
+        await picker.on_color(_callback("mbp:c:shop"), self.state, self.session)
         await picker.on_send(_callback(picker.CB_SEND), self.state, MagicMock(), MagicMock())
         buttons = self.finished.await_args.args[4]
         self.assertEqual([(b.target, b.style) for b in buttons], [("shop", "success"), ("support", "")])
 
     async def test_a_button_that_was_not_chosen_cannot_be_coloured(self) -> None:
         callback = _callback("mbp:c:wallet")
-        await picker.on_color(callback, self.state)
+        await picker.on_color(callback, self.state, self.session)
         callback.answer.assert_awaited_with(picker.EXPIRED, show_alert=True)
         self.assertEqual((await self.state.get_data())["mbp_styles"], {})
 
     async def test_a_button_removed_on_the_checklist_drops_its_colour(self) -> None:
-        await picker.on_color(_callback("mbp:c:support"), self.state)
+        await picker.on_color(_callback("mbp:c:support"), self.state, self.session)
         await self.state.update_data(mbp_selected=["shop"])
         await picker.on_send(_callback(picker.CB_SEND), self.state, MagicMock(), MagicMock())
         self.assertEqual([(b.target, b.style) for b in self.finished.await_args.args[4]], [("shop", "")])

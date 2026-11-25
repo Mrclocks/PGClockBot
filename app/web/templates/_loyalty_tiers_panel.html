@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Tiers editor — used inside loyalty settings modal #}
 {% from "macros.html" import switch %}
 <div class="loyalty-stack">
@@ -32,7 +33,7 @@
       <div class="ui-switch-list">
         {{ switch('enabled', 'فعال', checked=tier.enabled) }}
       </div>
-      <div class="actions"><button class="btn" type="submit">ذخیره سطح</button></div>
+      <div class="actions"><button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره سطح</button></div>
     </form>
   </div>
   {% else %}

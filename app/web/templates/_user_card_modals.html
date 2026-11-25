@@ -30,7 +30,7 @@
 <button type="button" class="btn btn-ghost btn-sm"
         data-modal-open="modal-user-card"
         data-modal-load="/users/{{ user_id | int }}/card?from={{ page }}"
-        data-modal-load-target="user-card-body">{{ label }}</button>
+        data-modal-load-target="user-card-body">{{ icon('user', 'btn-ico') }}{{ label }}</button>
 {%- endif -%}
 {%- endmacro %}
 

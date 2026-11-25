@@ -1,4 +1,4 @@
-{% from "_icons.html" import icon %}
+{% from "_icons.html" import icon, label_icon %}
 <!DOCTYPE html>
 <html lang="fa" dir="rtl" data-theme="dark">
 <head>
@@ -94,13 +94,13 @@
         {% set _single_action = (primary_href and not secondary_href and not show_close_button) or (show_close_button and not primary_href and not secondary_href) %}
         <div class="panel-status-actions{% if _single_action %} panel-status-actions--single{% endif %}">
           {% if primary_href %}
-          <a class="btn" id="panel-status-bot-return" href="{{ primary_href }}"{% if primary_fallback_href|default('') %} data-https="{{ primary_fallback_href }}"{% endif %}>{{ primary_label }}</a>
+          <a class="btn" id="panel-status-bot-return" href="{{ primary_href }}"{% if primary_fallback_href|default('') %} data-https="{{ primary_fallback_href }}"{% endif %}>{{ label_icon(primary_label, fallback='chev') }}{{ primary_label }}</a>
           {% endif %}
           {% if secondary_href %}
-          <a class="btn btn-ghost" href="{{ secondary_href }}">{{ secondary_label }}</a>
+          <a class="btn btn-ghost" href="{{ secondary_href }}">{{ label_icon(secondary_label, fallback='home') }}{{ secondary_label }}</a>
           {% endif %}
           {% if show_close_button %}
-          <button type="button" class="btn panel-status-close-btn" id="panel-status-close">
+          <button type="button" class="btn panel-status-close-btn" id="panel-status-close">{{ icon('close', 'btn-ico') }}
             {{ close_button_label|default('بستن') }}
           </button>
           {% endif %}

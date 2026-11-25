@@ -6,7 +6,9 @@ colour) on the web; a saved set (preset) is made on the web and can be picked in
 validated when chosen and again when read, so a stored set can never produce a button Telegram
 refuses or one that opens a screen outside the list.
 
-Screen buttons open under the message (``notice_links``), so the message stays readable. Links are
+Screen buttons open under the message (``notice_links``), so the message stays readable. A screen button whose
+label staff left empty shows the label the sender's bot uses for that screen in its menus (``SCREEN_LABEL_KEYS``):
+the same text, emoji and premium emoji, read when the message is sent. Links are
 opened by the customer's Telegram app; a shop may add them only with the ``broadcast_links``
 permission, so a shop's customers are not sent to arbitrary sites without the owner allowing it.
 """
@@ -28,6 +30,8 @@ from app.db.models import MessageButtonPreset, Plan, ResellerProfile
 from app.services.button_styles import STYLE_OPTIONS, normalize_style
 from app.services.notice_links import notice_open_data
 from app.services.resellers import has_bot_perm
+from app.services.rich_text import button_display_text, button_icon_custom_emoji_id
+from app.services.users import get_all_settings
 
 KIND_SCREEN = "screen"
 KIND_URL = "url"
@@ -68,6 +72,21 @@ SCREENS: dict[str, tuple[str, str, str]] = {
     "guide": ("help:guide", "📘 راهنما", GROUP_HELP),
     "faq": ("help:faq", "❓ سؤالات متداول", GROUP_HELP),
 }
+# Screen key -> the bot setting holding that screen's menu label. «custom» has no menu label of its own.
+SCREEN_LABEL_KEYS: dict[str, str] = {
+    "shop": "btn_shop",
+    "trial": "btn_trial",
+    "services": "btn_services",
+    "wallet": "btn_wallet",
+    "topup": "btn_wallet_topup",
+    "support": "btn_support",
+    "club": "btn_loyalty",
+    "invite": "btn_referral",
+    "wheel": "btn_loy_wheel",
+    "guide": "btn_guide",
+    "faq": "btn_faq",
+}
+TELEGRAM_BUTTON_TEXT_MAX = 64
 PLAN_CALLBACK_PREFIX = "shop:plan:"
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
@@ -89,6 +108,37 @@ class ButtonSpec:
     label: str
     target: str
     style: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ScreenLabel:
+    """A screen's menu label as the bot shows it: text (with its emoji) and its premium emoji, if any."""
+
+    text: str
+    icon: str | None = None
+
+
+ScreenLabels = Mapping[str, ScreenLabel]
+
+
+def screen_labels(ui: Mapping[str, str] | None) -> dict[str, ScreenLabel]:
+    """Each screen's label from the bot settings ``ui``; a screen without a usable setting keeps its default."""
+    out: dict[str, ScreenLabel] = {}
+    for key, (_callback, default, _group) in SCREENS.items():
+        raw = (ui or {}).get(SCREEN_LABEL_KEYS.get(key, "")) or ""
+        text = _CONTROL_RE.sub("", button_display_text(raw)).strip()[:TELEGRAM_BUTTON_TEXT_MAX]
+        out[key] = ScreenLabel(text, button_icon_custom_emoji_id(raw)) if text else ScreenLabel(default)
+    return out
+
+
+async def sender_screen_labels(session: AsyncSession, shop_id: int | None) -> dict[str, ScreenLabel]:
+    """The screen labels of the bot that sends for ``shop_id`` (the platform bot when None)."""
+    return screen_labels(await get_all_settings(session, reseller_id=shop_id))
+
+
+def uses_menu_label(spec: "ButtonSpec") -> bool:
+    """A screen button whose label was left as the default (empty, or the fixed label stored before)."""
+    return spec.kind == KIND_SCREEN and spec.label in ("", SCREENS[spec.target][1])
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +176,9 @@ def make_button(item: ButtonInput, rules: ButtonRules) -> ButtonSpec:
     target = (item.target or "").strip().lower()
     style = normalize_style(item.style)
     if target in SCREENS:
-        return ButtonSpec(KIND_SCREEN, _clean_label(item.label, SCREENS[target][1]), target, style)
+        # An empty label is stored empty: the button then shows the sender's menu label when sent.
+        label = _CONTROL_RE.sub("", item.label or "").strip()
+        return ButtonSpec(KIND_SCREEN, _clean_label(label, "") if label else "", target, style)
     if target == TARGET_PLAN:
         plan_id = int(item.plan) if str(item.plan or "").isdigit() else 0
         if plan_id not in rules.plan_ids:
@@ -217,13 +269,23 @@ def _screen_data(spec: ButtonSpec) -> str:
     return f"svc:renew:{int(spec.target)}"
 
 
-def build_keyboard(buttons: list[ButtonSpec]) -> list[list[InlineKeyboardButton]]:
-    """Telegram buttons, two to a row."""
+def _menu_label(spec: ButtonSpec, labels: ScreenLabels | None) -> ScreenLabel:
+    """The label a button shows: the typed one, else the screen's menu label (``labels``), else the fixed default."""
+    if not uses_menu_label(spec):
+        return ScreenLabel(spec.label)
+    return (labels or {}).get(spec.target) or ScreenLabel(SCREENS[spec.target][1])
+
+
+def build_keyboard(buttons: list[ButtonSpec], labels: ScreenLabels | None = None) -> list[list[InlineKeyboardButton]]:
+    """Telegram buttons, two to a row; a screen button left without a label takes its menu label from ``labels``."""
     def button(spec: ButtonSpec) -> InlineKeyboardButton:
-        extra = {"style": spec.style} if spec.style else {}
+        extra: dict[str, str] = {"style": spec.style} if spec.style else {}
         if spec.kind == KIND_URL:
             return InlineKeyboardButton(text=spec.label, url=spec.target, **extra)
-        return InlineKeyboardButton(text=spec.label, callback_data=_callback_data(spec), **extra)
+        label = _menu_label(spec, labels) if spec.kind == KIND_SCREEN else ScreenLabel(spec.label)
+        if label.icon:
+            extra["icon_custom_emoji_id"] = label.icon
+        return InlineKeyboardButton(text=label.text, callback_data=_callback_data(spec), **extra)
 
     keyboard = [button(spec) for spec in buttons]
     return [keyboard[i:i + PER_ROW] for i in range(0, len(keyboard), PER_ROW)]
@@ -256,13 +318,15 @@ async def stored_keyboard(session: AsyncSession, stored: str | None, *, shop_id:
     that is no longer sold is dropped)."""
     if not stored:
         return []
-    return build_keyboard(load_buttons(stored, await sender_rules(session, shop_id)))
+    buttons = load_buttons(stored, await sender_rules(session, shop_id))
+    return build_keyboard(buttons, await sender_screen_labels(session, shop_id))
 
 
-def preview_keyboard(stored: str | None) -> list[list[InlineKeyboardButton]]:
-    """Buttons this request has just validated, for a preview."""
+def preview_keyboard(stored: str | None, labels: ScreenLabels | None = None) -> list[list[InlineKeyboardButton]]:
+    """Buttons this request has just validated, for a preview (``labels``: the sender's menu labels)."""
     items = json.loads(stored) if stored else []
-    return build_keyboard([ButtonSpec(str(i["k"]), str(i["l"]), str(i["t"]), str(i.get("s") or "")) for i in items])
+    specs = [ButtonSpec(str(i["k"]), str(i["l"]), str(i["t"]), str(i.get("s") or "")) for i in items]
+    return build_keyboard(specs, labels)
 
 
 async def broadcast_buttons(session: AsyncSession, items: list[ButtonInput], *, shop_id: int | None) -> str | None:
@@ -284,9 +348,14 @@ def form_inputs(form: Mapping) -> list[ButtonInput]:
     ]
 
 
-def target_options(*, renew: bool, links: bool) -> list[tuple[str, str]]:
+def _screen_label_text(key: str, default: str, labels: ScreenLabels | None) -> str:
+    label = (labels or {}).get(key)
+    return label.text if label is not None else default
+
+
+def target_options(*, renew: bool, links: bool, labels: ScreenLabels | None = None) -> list[tuple[str, str]]:
     """(value, label) of the targets the bot checklist offers (no plan: it needs a second choice)."""
-    options = [(key, label) for key, (_cb, label, _group) in SCREENS.items()]
+    options = [(key, _screen_label_text(key, label, labels)) for key, (_cb, label, _group) in SCREENS.items()]
     if renew:
         options.append((TARGET_RENEW, RENEW_LABEL))
     if links:
@@ -294,11 +363,13 @@ def target_options(*, renew: bool, links: bool) -> list[tuple[str, str]]:
     return options
 
 
-def target_groups(*, links: bool, plans: bool, renew: bool = False) -> list[tuple[str, list[tuple[str, str]]]]:
-    """The web editor's targets in groups: (group label, [(value, label)])."""
+def target_groups(
+    *, links: bool, plans: bool, renew: bool = False, labels: ScreenLabels | None = None
+) -> list[tuple[str, list[tuple[str, str]]]]:
+    """The web editor's targets in groups: (group label, [(value, label)]); screens show ``labels`` when given."""
     groups: dict[str, list[tuple[str, str]]] = {}
     for key, (_cb, label, group) in SCREENS.items():
-        groups.setdefault(group, []).append((key, label))
+        groups.setdefault(group, []).append((key, _screen_label_text(key, label, labels)))
     if plans:
         groups[GROUP_BUY].insert(1, (TARGET_PLAN, PLAN_LABEL))
     if renew:
@@ -389,7 +460,9 @@ async def buttons_form_context(session: AsyncSession, shop_id: int | None) -> di
     rules = await sender_rules(session, shop_id)
     presets = await list_presets(session, shop_id)
     return {
-        "button_target_groups": target_groups(links=rules.allow_links, plans=bool(rules.plan_ids)),
+        "button_target_groups": target_groups(
+            links=rules.allow_links, plans=bool(rules.plan_ids), labels=await sender_screen_labels(session, shop_id)
+        ),
         "button_plans": await _plan_options(session, rules.plan_ids),
         "button_styles": STYLE_OPTIONS,
         "button_max": BUTTONS_MAX,

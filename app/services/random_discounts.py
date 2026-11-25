@@ -6,7 +6,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, exists, func, or_, select, union, update
+from sqlalchemy import and_, exists, or_, select, union, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -17,6 +17,13 @@ from app.db.models import (
 )
 from app.services.authz import authz_from_staff, can_shop
 from app.services.order_discounts import SOURCE_RANDOM, record_order_discount
+from app.services.random_discount_abandoned import (
+    OPEN_DRAW_STATUSES,
+    abandoned_clause,
+    nothing_paid_clause,
+    open_draws_message,
+    release_abandoned_orders,
+)
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.users import current_shop_reseller_id
 
@@ -24,12 +31,9 @@ MAX_AMOUNT = 2_000_000_000
 MAX_WINDOW_MINUTES = 10080
 MAX_CANDIDATES = 10000
 # One customer can hold this many unpaid orders with a reserved amount; more would let a few
-# accounts keep every free amount of a small range occupied.
+# accounts keep every free amount of a small range occupied. A rejected receipt does not count:
+# that order waits for the customer, not for money in flight.
 MAX_OPEN_DRAWS_PER_USER = 3
-_UNPAID_STATUSES = (
-    OrderStatus.PENDING.value, OrderStatus.REJECTED.value,
-    OrderStatus.AWAITING_RECEIPT.value, OrderStatus.AWAITING_APPROVAL.value,
-)
 RANDOM_DISCOUNTS_PERMISSION = "random_discounts"
 _CODE_PATTERN = re.compile(r"[A-Z0-9_-]{1,64}\Z")
 _OPEN_STATUSES = (
@@ -245,19 +249,35 @@ def _amount_range(policy: RandomDiscount, base_amount: int) -> _AmountRange:
     return _AmountRange(base_amount - minimum, (maximum - minimum) // policy.step + 1, policy.step)
 
 
-async def _assert_open_draw_room(session: AsyncSession, order: Order, now: datetime) -> None:
-    open_draws = await session.scalar(select(func.count()).select_from(RandomDiscountDraw).join(
-        Order, Order.id == RandomDiscountDraw.order_id,
-    ).where(
+def _customer_draws(order: Order, now: datetime) -> tuple[ColumnElement[bool], ...]:
+    """This customer's other protected draws in this shop (joined with their orders)."""
+    return (
         RandomDiscountDraw.shop_key == (order.reseller_id or 0),
         RandomDiscountDraw.user_id == order.user_id,
         RandomDiscountDraw.protected_until > now,
         RandomDiscountDraw.order_id != order.id,
         Order.reseller_id == order.reseller_id,
-        Order.status.in_(_UNPAID_STATUSES),
-    ))
-    if int(open_draws or 0) >= MAX_OPEN_DRAWS_PER_USER:
-        raise ValueError("چند خرید نیمه‌تمام با تخفیف دارید؛ ابتدا آن‌ها را پرداخت یا لغو کنید")
+    )
+
+
+async def _assert_open_draw_room(session: AsyncSession, order: Order, now: datetime) -> None:
+    """Refuse a new draw past the limit, after cancelling the customer's abandoned purchases (oldest first)."""
+    rows = (await session.execute(
+        select(RandomDiscountDraw.order_id, RandomDiscountDraw.protected_until, abandoned_clause())
+        .join(Order, Order.id == RandomDiscountDraw.order_id)
+        .where(*_customer_draws(order, now), Order.status.in_(OPEN_DRAW_STATUSES))
+        .order_by(RandomDiscountDraw.order_id)
+        .limit(MAX_OPEN_DRAWS_PER_USER * 4)
+    )).all()
+    excess = len(rows) - MAX_OPEN_DRAWS_PER_USER + 1
+    if excess <= 0:
+        return
+    abandoned = [int(order_id) for order_id, _until, is_abandoned in rows if is_abandoned]
+    released = set(await release_abandoned_orders(session, abandoned[:excess], user_id=int(order.user_id)))
+    if len(released) >= excess:
+        return
+    remaining = [until for order_id, until, _abandoned in rows if int(order_id) not in released]
+    raise ValueError(open_draws_message(min(remaining) if remaining else None, now))
 
 
 async def _assert_not_rerolled(
@@ -344,10 +364,60 @@ async def _claim_order(session: AsyncSession, order: Order) -> None:
     await session.refresh(order)
 
 
+async def _reuse_unfinished_draw(session: AsyncSession, order: Order, policy: RandomDiscount, now: datetime) -> bool:
+    """Give the new order the draw of the same customer's unfinished order for the same price, if there is one.
+
+    The previous order must have nothing paid; a still-pending one is cancelled first (atomically, re-checked).
+    The customer keeps the amount they were shown instead of being refused or drawing again.
+    """
+    draw = await session.scalar(
+        select(RandomDiscountDraw).join(Order, Order.id == RandomDiscountDraw.order_id).where(
+            *_customer_draws(order, now),
+            RandomDiscountDraw.reseller_id == order.reseller_id,
+            RandomDiscountDraw.policy_id == policy.id,
+            RandomDiscountDraw.base_amount == order.amount,
+            Order.status.in_((OrderStatus.PENDING.value, OrderStatus.CANCELLED.value)),
+            nothing_paid_clause(),
+        ).order_by(RandomDiscountDraw.order_id.desc()).limit(1).with_for_update()
+    )
+    if draw is None:
+        return False
+    previous_id = int(draw.order_id)
+    previous_status = await session.scalar(select(Order.status).where(Order.id == previous_id))
+    if previous_status == OrderStatus.PENDING.value:
+        if not await release_abandoned_orders(session, [previous_id], user_id=int(order.user_id)):
+            return False
+    await session.execute(update(RandomDiscountReservation).where(
+        RandomDiscountReservation.shop_key == draw.shop_key,
+        RandomDiscountReservation.order_id == previous_id,
+        RandomDiscountReservation.final_amount == draw.final_amount,
+    ).values(order_id=order.id).execution_options(synchronize_session=False))
+    draw.order_id = order.id
+    await session.flush()
+    await _apply_draw(session, order, policy, draw)
+    return True
+
+
+async def _apply_draw(session: AsyncSession, order: Order, policy: RandomDiscount, draw: RandomDiscountDraw) -> None:
+    """Set the order's amount and discount fields from ``draw`` and record it in the discount ledger."""
+    order.amount = draw.final_amount
+    order.discount_amount = int(order.discount_amount or 0) + int(draw.discount_amount)
+    order.random_discount_amount = draw.discount_amount
+    order.random_discount_id = policy.id
+    if policy.mode == "code":
+        order.discount_code = policy.code
+    await session.flush()
+    await record_order_discount(
+        session, order, source=SOURCE_RANDOM, amount=int(draw.discount_amount), source_ref=str(policy.id)
+    )
+
+
 async def _allocate_draw(session: AsyncSession, order: Order, policy: RandomDiscount) -> None:
     await _claim_order(session, order)
     _integer(order.amount, 1, MAX_AMOUNT, "مبلغ سفارش نامعتبر است")
     now = datetime.now(timezone.utc)
+    if await _reuse_unfinished_draw(session, order, policy, now):
+        return
     await _assert_not_rerolled(session, order, policy, now)
     await _assert_open_draw_room(session, order, now)
     amounts = _amount_range(policy, order.amount)
@@ -361,14 +431,7 @@ async def _allocate_draw(session: AsyncSession, order: Order, policy: RandomDisc
     )
     await _reserve_amount(session, draw, now)
     session.add(draw)
-    order.amount = amount
-    order.discount_amount = int(order.discount_amount or 0) + reduction
-    order.random_discount_amount = reduction
-    order.random_discount_id = policy.id
-    if policy.mode == "code":
-        order.discount_code = policy.code
-    await session.flush()
-    await record_order_discount(session, order, source=SOURCE_RANDOM, amount=reduction, source_ref=str(policy.id))
+    await _apply_draw(session, order, policy, draw)
 
 
 def _has_ordinary_discount(order: Order) -> bool:

@@ -173,7 +173,8 @@ class AnnounceTests(DbCase):
     async def announce(self, signal, *, delivered=1, side_effect=None):
         dispatch = AsyncMock(return_value=delivered, side_effect=side_effect)
         async with self.Session() as session:
-            with patch.object(job, "_dispatch_dual_notify", dispatch), patch.object(job, "SEND_PAUSE_SECONDS", 0):
+            with patch.object(job, "_dispatch_dual_notify", dispatch), patch.object(job, "SEND_PAUSE_SECONDS", 0), \
+                    patch.object(job, "public_panel_base_url", return_value=""):
                 await job.announce(MagicMock(), session, signal)
         return dispatch
 
@@ -199,6 +200,36 @@ class AnnounceTests(DbCase):
         await self.announce(sig(2), side_effect=TelegramAPIError(MagicMock(), "down"))
         retry = await self.announce(sig(2))
         retry.assert_awaited_once()
+
+
+class UpdateAlertButtonTests(unittest.IsolatedAsyncioTestCase):
+    def update_signal(self) -> svc.Signal:
+        return svc.update_signal({"update_available": True, "remote_version": "0.8.0", "version": "0.7.8"})
+
+    async def markup(self, *, public_base_url: str, panel_base: str):
+        settings = SimpleNamespace(public_base_url=public_base_url)
+        with patch.object(job, "get_settings", return_value=settings), \
+                patch.object(job, "public_panel_base_url", return_value=panel_base):
+            return await job._markup(self.update_signal())
+
+    async def test_update_alert_button_opens_the_update_page(self):
+        markup = await self.markup(public_base_url="https://panel.example.com/", panel_base="")
+        button = markup.inline_keyboard[0][0]
+        self.assertEqual(button.url, "https://panel.example.com/update")
+        self.assertEqual(button.text, svc.UPDATE_BUTTON_LABEL)
+
+    async def test_update_button_uses_the_panel_address_without_public_base_url(self):
+        markup = await self.markup(public_base_url="", panel_base="http://203.0.113.7:9000")
+        self.assertEqual(markup.inline_keyboard[0][0].url, "http://203.0.113.7:9000/update")
+
+    async def test_no_button_when_only_a_loopback_address_is_known(self):
+        self.assertIsNone(await self.markup(public_base_url="http://x", panel_base="http://127.0.0.1:9000"))
+
+    async def test_other_alerts_keep_the_generic_label(self):
+        settings = SimpleNamespace(public_base_url="https://panel.example.com")
+        with patch.object(job, "get_settings", return_value=settings):
+            markup = await job._markup(sig(1))
+        self.assertEqual(markup.inline_keyboard[0][0].text, job.BUTTON_LABEL)
 
 
 class CapacityJobTests(DbCase):

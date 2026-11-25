@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Rules editor — used inside loyalty settings modal #}
 {% from "macros.html" import switch %}
 <div class="loyalty-stack">
@@ -17,7 +18,7 @@
         {% endif %}
       </div>
       <form method="post" action="/loyalty/rules/{{ rule.id }}/toggle">
-        <button class="btn btn-sm btn-ghost" type="submit">{% if rule.enabled %}غیرفعال کردن{% else %}فعال کردن{% endif %}</button>
+        <button class="btn btn-sm btn-ghost" type="submit">{{ btn_icon('power', 'btn-ico') }}{% if rule.enabled %}غیرفعال کردن{% else %}فعال کردن{% endif %}</button>
       </form>
     </div>
     <form method="post" action="/loyalty/rules/{{ rule.id }}/save" class="form-stack">
@@ -53,7 +54,7 @@
         {{ switch('enabled', 'فعال', checked=rule.enabled) }}
         {{ switch('first_time_only', 'فقط بار اول', checked=rule.first_time_only) }}
       </div>
-      <div class="actions"><button class="btn" type="submit">ذخیره قانون</button></div>
+      <div class="actions"><button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره قانون</button></div>
     </form>
   </div>
   {% else %}

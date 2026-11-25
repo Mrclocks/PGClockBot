@@ -36,7 +36,9 @@ OWNER = {"role": "admin", "org_principal_id": 1, "org_depth": 0, "org_status": "
 SHOP = {"role": "reseller", "bot_user_id": 2, "permissions": ["random_discounts"]}
 
 
-class RandomDiscountTests(unittest.IsolatedAsyncioTestCase):
+class RandomDiscountCase(unittest.IsolatedAsyncioTestCase):
+    """Database, customers, plans and a policy factory shared by the random-discount tests."""
+
     async def asyncSetUp(self) -> None:
         test_url = os.environ.get("PGCLOCKBOT_RANDOM_TEST_URL")
         self.admin_engine = None
@@ -95,6 +97,13 @@ class RandomDiscountTests(unittest.IsolatedAsyncioTestCase):
     async def policy(self, **kwargs: object) -> RandomDiscount:
         return await create_random_discount(self.session, OWNER, self.data(**kwargs))
 
+    async def _plans_with_distinct_prices(self, count: int) -> list[int]:
+        self.session.add_all([Plan(id=20 + n, name=f"قیمت {n}", price=2000 + n * 100) for n in range(count)])
+        await self.session.commit()
+        return [20 + n for n in range(count)]
+
+
+class RandomDiscountTests(RandomDiscountCase):
     async def test_disabled_policy_preserves_existing_price(self) -> None:
         order = await create_order(self.session, user_id=1, plan_id=1)
         self.assertEqual((order.amount, order.discount_amount, order.random_discount_amount), (1000, 0, 0))
@@ -211,9 +220,21 @@ class RandomDiscountTests(unittest.IsolatedAsyncioTestCase):
         await self.session.commit()
         self.assertEqual((order.amount, order.discount_amount), (amount, discount))
 
-    async def test_cancel_and_recreate_cannot_reroll_same_price(self) -> None:
+    async def test_cancel_and_recreate_keeps_the_same_amount_instead_of_drawing_again(self) -> None:
         await self.policy()
         order = await create_order(self.session, user_id=1, plan_id=1)
+        await cancel_order(self.session, order)
+        again = await create_order(self.session, user_id=1, plan_id=1)
+        self.assertEqual((again.amount, again.random_discount_amount), (order.amount, order.random_discount_amount))
+        self.assertEqual(await self.session.scalar(select(func.count()).select_from(RandomDiscountDraw)), 1)
+        draw = await self.session.scalar(select(RandomDiscountDraw))
+        self.assertEqual(draw.order_id, again.id)
+
+    async def test_a_cancelled_order_with_a_receipt_still_cannot_be_redrawn(self) -> None:
+        await self.policy()
+        order = await create_order(self.session, user_id=1, plan_id=1)
+        self.session.add(Payment(order_id=order.id, user_id=1, amount=order.amount, receipt_file_id="photo"))
+        await self.session.commit()
         await cancel_order(self.session, order)
         with self.assertRaises(ValueError):
             await create_order(self.session, user_id=1, plan_id=1)
@@ -237,20 +258,20 @@ class RandomDiscountTests(unittest.IsolatedAsyncioTestCase):
             await apply_discount_to_order(self.session, order, "SURPRISE")
         await self.session.rollback()
 
-    async def _plans_with_distinct_prices(self, count: int) -> list[int]:
-        self.session.add_all([Plan(id=20 + n, name=f"قیمت {n}", price=2000 + n * 100) for n in range(count)])
-        await self.session.commit()
-        return [20 + n for n in range(count)]
-
     async def test_a_customer_cannot_hold_more_than_the_open_draw_limit(self) -> None:
         from app.services.random_discounts import MAX_OPEN_DRAWS_PER_USER
 
         await self.policy(minimum=10, maximum=500)
         plan_ids = await self._plans_with_distinct_prices(MAX_OPEN_DRAWS_PER_USER + 1)
         for plan_id in plan_ids[:MAX_OPEN_DRAWS_PER_USER]:
-            await create_order(self.session, user_id=1, plan_id=plan_id)
-        with self.assertRaises(ValueError):
+            order = await create_order(self.session, user_id=1, plan_id=plan_id)
+            # The customer chose card payment: money may be on its way, so the order is not abandoned.
+            self.session.add(Payment(order_id=order.id, user_id=1, amount=order.amount))
+        await self.session.commit()
+        with self.assertRaises(ValueError) as refused:
             await create_order(self.session, user_id=1, plan_id=plan_ids[-1])
+        self.assertIn("دقیقه دیگر", str(refused.exception))
+        self.assertIn("سفارش‌های من", str(refused.exception))
         await self.session.rollback()
         self.assertEqual(
             await self.session.scalar(select(func.count()).select_from(RandomDiscountDraw)), MAX_OPEN_DRAWS_PER_USER,

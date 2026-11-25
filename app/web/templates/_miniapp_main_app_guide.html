@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# «Open» beside the bot in Telegram search and on its profile (BotFather's «Main Mini App»).
    Telegram offers no API for it, so this card only guides: the steps, the address to paste and
    the status Telegram reports. Expects: main_app (MainAppGuide) or nothing. #}
@@ -23,7 +24,7 @@
       <input class="magic-link-input" type="text" readonly value="{{ main_app.url }}" id="main-app-url"
              title="{{ main_app.url }}" aria-labelledby="main-app-url-label" />
       <button type="button" class="magic-link-copy" data-copy="{{ main_app.url }}" data-copy-from="#main-app-url"
-              data-copy-idle="کپی" aria-label="کپی آدرس مینی‌اپ">کپی</button>
+              data-copy-idle="کپی" aria-label="کپی آدرس مینی‌اپ">{{ btn_icon('copy', 'btn-ico') }}کپی</button>
     </div>
   </div>
   <ol class="update-steps">

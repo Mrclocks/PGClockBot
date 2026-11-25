@@ -12,7 +12,14 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan, UserService
-from app.services.message_buttons import ButtonInput, ButtonRules, build_keyboard, make_buttons, shop_may_link
+from app.services.message_buttons import (
+    ButtonInput,
+    ButtonRules,
+    build_keyboard,
+    make_buttons,
+    sender_screen_labels,
+    shop_may_link,
+)
 from app.services.service_scope import list_customer_services
 from app.services.users_ops import (
     UserOpsRow,
@@ -116,7 +123,7 @@ async def _dm_button_rows(
         allow_links=await shop_may_link(session, shop_id),
         renew_service_id=int(service.id) if service is not None else None,
     )
-    return build_keyboard(make_buttons(buttons, rules))
+    return build_keyboard(make_buttons(buttons, rules), await sender_screen_labels(session, shop_id))
 
 
 def pick_critical_service(services: list[UserService]) -> UserService | None:

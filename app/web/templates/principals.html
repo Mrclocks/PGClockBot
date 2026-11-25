@@ -61,7 +61,7 @@
         <td class="mono col-hide-sm" data-sort-value="{{ row.created_at or '' }}"><bdi dir="ltr">{{ row.created_at or '—' }}</bdi></td>
         <td class="col-actions">
           {% call row_actions() %}
-            <a class="btn btn-ghost btn-sm" href="/principals?detail={{ row.principal_id }}">جزئیات</a>
+            <a class="btn btn-ghost btn-sm" href="/principals?detail={{ row.principal_id }}">{{ icon('eye', 'btn-ico') }}جزئیات</a>
           {% endcall %}
         </td>
       </tr>
@@ -93,7 +93,7 @@
         <td class="mono col-hide-sm" data-sort-value="{{ child.created_at or '' }}"><bdi dir="ltr">{{ child.created_at or '—' }}</bdi></td>
         <td class="col-actions">
           {% call row_actions() %}
-            <a class="btn btn-ghost btn-sm" href="/principals?detail={{ child.principal_id }}">جزئیات</a>
+            <a class="btn btn-ghost btn-sm" href="/principals?detail={{ child.principal_id }}">{{ icon('eye', 'btn-ico') }}جزئیات</a>
           {% endcall %}
         </td>
       </tr>
@@ -130,7 +130,7 @@
         <td class="mono col-hide-sm" data-sort-value="{{ child.created_at or '' }}"><bdi dir="ltr">{{ child.created_at or '—' }}</bdi></td>
         <td class="col-actions">
           {% call row_actions() %}
-            <a class="btn btn-ghost btn-sm" href="/principals?detail={{ child.principal_id }}">جزئیات</a>
+            <a class="btn btn-ghost btn-sm" href="/principals?detail={{ child.principal_id }}">{{ icon('eye', 'btn-ico') }}جزئیات</a>
           {% endcall %}
         </td>
       </tr>
@@ -176,7 +176,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit" {% if not pg_roles %}disabled{% endif %}>ساخت</button>
+        <button class="btn" type="submit" {% if not pg_roles %}disabled{% endif %}>{{ icon('plus', 'btn-ico') }}ساخت</button>
 
       </div></div>
     </form>
@@ -217,7 +217,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit" {% if not l2_pg_roles %}disabled{% endif %}>ساخت</button>
+        <button class="btn" type="submit" {% if not l2_pg_roles %}disabled{% endif %}>{{ icon('plus', 'btn-ico') }}ساخت</button>
 
       </div></div>
     </form>
@@ -276,23 +276,23 @@
         {% if detail.can_manage %}
           {% if detail.status == 'active' %}
           <form method="post" action="/principals/{{ detail.principal_id }}/disable">
-            <button class="btn btn-danger" type="submit">غیرفعال کردن</button>
+            <button class="btn btn-danger" type="submit">{{ icon('power', 'btn-ico') }}غیرفعال کردن</button>
           </form>
           {% else %}
           <form method="post" action="/principals/{{ detail.principal_id }}/enable">
-            <button class="btn" type="submit">فعال کردن</button>
+            <button class="btn" type="submit">{{ icon('power', 'btn-ico') }}فعال کردن</button>
           </form>
           {% endif %}
         {% endif %}
         {% if can_attach_web %}
-        <button type="button" class="btn" data-modal-open="modal-principal-web-identity">فعال‌سازی ورود وب</button>
+        <button type="button" class="btn" data-modal-open="modal-principal-web-identity">{{ icon('login', 'btn-ico') }}فعال‌سازی ورود وب</button>
         {% endif %}
         {% if can_attach_l2_telegram %}
-        <button type="button" class="btn" data-modal-open="modal-principal-telegram-bind">اتصال تلگرام</button>
+        <button type="button" class="btn" data-modal-open="modal-principal-telegram-bind">{{ icon('connection', 'btn-ico') }}اتصال تلگرام</button>
         {% endif %}
         {% if can_detach_l2_telegram %}
         <form method="post" action="/principals/{{ detail.principal_id }}/telegram-unbind">
-          <button class="btn btn-danger" type="submit">قطع اتصال</button>
+          <button class="btn btn-danger" type="submit">{{ icon('close', 'btn-ico') }}قطع اتصال</button>
         </form>
         {% endif %}
 
@@ -325,7 +325,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit">فعال‌سازی</button>
+        <button class="btn" type="submit">{{ icon('power', 'btn-ico') }}فعال‌سازی</button>
 
       </div></div>
     </form>
@@ -351,7 +351,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit">اتصال</button>
+        <button class="btn" type="submit">{{ icon('connection', 'btn-ico') }}اتصال</button>
 
       </div></div>
     </form>

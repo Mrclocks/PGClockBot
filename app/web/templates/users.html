@@ -202,7 +202,7 @@
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-user-message"
                     data-msg-uid="{{ u.id }}"
-                    data-msg-name="{{ u.full_name or u.username or u.telegram_id }}">پیام</button>
+                    data-msg-name="{{ u.full_name or u.username or u.telegram_id }}">{{ icon('message', 'btn-ico') }}پیام</button>
             {% endif %}
             {% if ops and pg_update and row.service_count > 0 %}
             <form method="post" action="/users/{{ u.id }}/quick-renew"
@@ -215,7 +215,7 @@
           <input type="hidden" name="reason" value="" />
               <input type="hidden" name="return_filter" value="{{ flt }}" />
               {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
-              <button class="btn btn-sm" type="submit">تمدید</button>
+              <button class="btn btn-sm" type="submit">{{ icon('refresh', 'btn-ico') }}تمدید</button>
             </form>
             {% endif %}
             {% if can_open_edit %}
@@ -224,7 +224,7 @@
                     data-modal-load="/users/{{ u.id }}/edit?fragment=1"
                     data-modal-load-target="user-edit-body"
                     data-edit-url="/users/{{ u.id }}/edit?fragment=1"
-                    data-edit-title="ویرایش کاربر #{{ u.id }}">ویرایش</button>
+                    data-edit-title="ویرایش کاربر #{{ u.id }}">{{ icon('edit', 'btn-ico') }}ویرایش</button>
             {% endif %}
             {% if can_hold_customers and u.role != 'admin' %}
             {{ customer_hold_actions(u.id, customer_holds.get(u.id), platform=can_manage_users) }}
@@ -235,7 +235,7 @@
                   data-confirm-title="{% if u.is_blocked %}رفع مسدودی{% else %}تأیید مسدودسازی{% endif %}"
                   {% if not u.is_blocked %}data-confirm-warn="1"{% endif %}
                   data-confirm-label="{% if u.is_blocked %}رفع مسدودی{% else %}مسدود کردن{% endif %}">
-              <button class="btn btn-sm {% if not u.is_blocked %}btn-warn{% endif %}" type="submit">
+              <button class="btn btn-sm {% if not u.is_blocked %}btn-warn{% endif %}" type="submit">{{ icon('unlock', 'btn-ico') }}
                 {% if u.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}
               </button>
             </form>
@@ -250,7 +250,7 @@
                   data-confirm-reason-name="reason"
                   data-confirm-label="حذف کاربر">
               <input type="hidden" name="reason" value="" />
-              <button class="btn btn-sm btn-danger" type="submit">حذف</button>
+              <button class="btn btn-sm btn-danger" type="submit">{{ icon('trash', 'btn-ico') }}حذف</button>
             </form>
             {% endif %}
             {% endif %}

@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Shared bot appearance form.
    Expects: appearance (dict), settings_action (post URL), appearance_sync_ok, appearance_sync_err
 
@@ -56,7 +57,7 @@
           <div class="ap-photo-row">
             <img id="ap-photo-current" src="/media/{{ ap.bot_tg_photo }}" alt="عکس فعلی" class="ap-photo-thumb" />
             <button type="submit" name="bot_tg_photo_clear" value="1" class="btn btn-danger btn-sm"
-                    data-confirm="عکس پروفایل ربات از تلگرام حذف شود؟" data-confirm-title="تأیید" data-confirm-danger="1" data-confirm-label="تأیید">
+                    data-confirm="عکس پروفایل ربات از تلگرام حذف شود؟" data-confirm-title="تأیید" data-confirm-danger="1" data-confirm-label="تأیید">{{ btn_icon('trash', 'btn-ico') }}
               حذف فایل آپلودشده
             </button>
           </div>
@@ -67,6 +68,6 @@
   </div>
 
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره و اعمال در تلگرام</button>
+    <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره و اعمال در تلگرام</button>
   </div>
 </form>

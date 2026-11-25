@@ -25,6 +25,8 @@ OPERATIONS = {
     "pg_admin_subscription",
     # Deletes the order and payment rows each shop chose for automatic deletion; needs no running bot.
     "order_purge",
+    # Cancels unpaid orders past the expiry a shop switched on (off by default); needs no running bot.
+    "pending_order_expiry",
     "scheduled_backup",
     "connection_status",
     # Cheap authenticated probe that heals/rebuilds the PasarGuard link; needs no bot.

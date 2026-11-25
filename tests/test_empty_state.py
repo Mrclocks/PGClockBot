@@ -34,8 +34,8 @@ class EmptyStateMacroTests(unittest.TestCase):
     def test_the_action_needs_a_label_and_a_target(self) -> None:
         self.assertNotIn("<button", render("{{ empty_state('x', action_modal='m') }}"))
         self.assertNotIn("<button", render("{{ empty_state('x', action_label=None, action_modal='m') }}"))
-        self.assertIn('data-modal-open="m">ساخت</button>', render("{{ empty_state('x', action_label='ساخت', action_modal='m') }}"))
-        self.assertIn('<a class="btn" href="/new">ساخت</a>', render("{{ empty_state('x', action_label='ساخت', action_href='/new') }}"))
+        self.assertRegex(render("{{ empty_state('x', action_label='ساخت', action_modal='m') }}"), r'data-modal-open="m">(?:\{\{[^}]*\}\}|<svg[^>]*>.*?</svg>)?ساخت</button>')
+        self.assertRegex(render("{{ empty_state('x', action_label='ساخت', action_href='/new') }}"), r'<a class="btn" href="/new">(?:<svg[^>]*>.*?</svg>)?ساخت</a>')
 
     def test_text_and_labels_are_escaped(self) -> None:
         html = render("{{ empty_state('<b>x</b>', action_label='<i>y</i>', action_modal='m') }}")

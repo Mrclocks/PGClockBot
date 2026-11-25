@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {% set supports_save = supports_save or '/supports/save' %}
 {# Plain JSON string (not |tojson Markup) so Jinja HTML-escapes attribute quotes. #}
 {% set _supports_json = support_contacts_json if support_contacts_json is defined else '[]' %}
@@ -16,6 +17,6 @@
     </div>
   </div>
   <div class="actions sticky-actions ui-modal-sticky-save">
-    <button class="btn" type="submit">ذخیره پشتیبان‌ها</button>
+    <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره پشتیبان‌ها</button>
   </div>
 </form>

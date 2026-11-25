@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 <section class="edit-section">
@@ -9,7 +10,7 @@
     {% set selected_color = (user.color_tag or 'green') %}
     {% include "_color_tag_picker.html" %}
     <div class="actions">
-      <button class="btn" type="submit">ذخیره تگ ریسک</button>
+      <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره تگ ریسک</button>
     </div>
   </form>
 </section>
