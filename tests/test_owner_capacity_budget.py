@@ -87,11 +87,16 @@ class OwnerBudgetTests(unittest.IsolatedAsyncioTestCase):
             sub = await session.scalar(select(PgAdminSubscription).where(PgAdminSubscription.pg_username == "shop79"))
             return int(sub.base_gb) + int(sub.extra_gb_purchased)
 
-    async def test_deleted_shop_subscription_does_not_block_a_raise(self) -> None:
-        await self._add_leftover_subscription("deleted-shop", 900)
+    async def test_raise_within_budget_writes_the_exact_panel_limit(self) -> None:
         await self._adjust(1000)
         self.assertEqual(await self._shop79_total(), 3000)
         self.assertEqual(self.panel.writes, [("shop79", {"data_limit": 3000 * GB})])
+
+    async def test_plain_panel_admin_subscription_still_counts(self) -> None:
+        await self._add_leftover_subscription("plain-admin", 900)
+        with self.assertRaisesRegex(ValueError, "سقف حجم ادمین اصلی"):
+            await self._adjust(200)
+        self.assertEqual(await self._shop79_total(), 2000)
 
     async def test_sub_shop_volume_is_not_counted_twice(self) -> None:
         parent_profile_id = await self._add_shop(80, "parent80", base_gb=500)

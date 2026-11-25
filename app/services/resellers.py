@@ -24,6 +24,7 @@ from app.db.models import (
     Role,
     UserService,
 )
+from app.services.admin_subscription_cleanup import delete_unheld_subscription
 from app.services.db_safe import rollback_quiet
 from app.services.chat_records import keeps_sent
 from app.services import pasarguard
@@ -2549,6 +2550,14 @@ async def revoke_reseller(
         raise
 
 
+async def _drop_removed_admin_subscription(session: AsyncSession, run: _RevokeRun, pg_username: str | None) -> None:
+    """The panel admin is gone (removed now or already 404), so its clock and capacity go too."""
+    if not (run.delete_pg_admin and pg_username):
+        return
+    await session.flush()
+    await delete_unheld_subscription(session, pg_username)
+
+
 async def _revoke_reseller_tree(
     session: AsyncSession,
     user_id: int,
@@ -2625,6 +2634,7 @@ async def _revoke_reseller_tree(
     )
 
     await session.delete(profile)
+    await _drop_removed_admin_subscription(session, run, pg_username)
     if user.role == Role.RESELLER.value:
         user.role = Role.USER.value
 

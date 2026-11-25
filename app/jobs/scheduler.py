@@ -19,6 +19,7 @@ from sqlalchemy import or_, select
 
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
+from app.jobs.admin_subscription_cleanup import run_admin_subscription_cleanup
 from app.jobs.bot_profile_photo import run_bot_profile_photo_sync
 from app.jobs.cancellation_notifications import run_cancellation_notifications
 from app.jobs.chat_message_purge import run_chat_message_purge
@@ -670,6 +671,8 @@ def start_background_scheduler() -> None:
         # Ticks often; each shop is recounted on the period set in volume_external_sync_minutes.
         ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
         ("chat_message_purge", run_chat_message_purge, {"hours": 1}, 3600),
+        # Subscriptions left by removed panel admins; deletes only after the panel answers 404.
+        ("admin_subscription_cleanup", run_admin_subscription_cleanup, {"hours": 24}, 3600),
         ("service_cleanup", run_service_cleanup, {"minutes": 30}, 1800),
         # Resumes frozen services at their deadline and retries unfinished panel steps; needs no bot.
         ("service_freezes", run_service_freezes, {"minutes": 1}, 120),

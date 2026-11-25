@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import and_, case, func, or_, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -446,23 +446,6 @@ async def assert_new_admin_fits_owner_budget(session: AsyncSession, plan: Resell
     )
 
 
-def _sold_subscriptions_filter(*, owner_username: str, target: str) -> Any:
-    """Active subscriptions of other panel admins that a shop or a staff login still holds.
-
-    A deleted shop leaves its subscription row behind; it sells nothing any more, so it must not
-    use up the installer's budget and block later raises.
-    """
-    held_by_shop = select(ResellerProfile.id).where(
-        ResellerProfile.pg_admin_username == PgAdminSubscription.pg_username
-    )
-    held_by_staff = select(PgStaffAccess.id).where(PgStaffAccess.pg_username == PgAdminSubscription.pg_username)
-    return and_(
-        PgAdminSubscription.access_status == STATUS_ACTIVE,
-        PgAdminSubscription.pg_username.not_in([owner_username, target]),
-        or_(held_by_shop.exists(), held_by_staff.exists()),
-    )
-
-
 def _sub_shop_principal(pg_username: Any) -> Any:
     """Level-2 shop principal for a panel admin name (a value or a column); its volume is inside the parent's."""
     return (
@@ -490,7 +473,8 @@ async def _sold_capacity_of_others(session: AsyncSession, *, owner_username: str
     row = (
         await session.execute(
             select(sold_gb, sold_users).where(
-                _sold_subscriptions_filter(owner_username=owner_username, target=target)
+                PgAdminSubscription.access_status == STATUS_ACTIVE,
+                PgAdminSubscription.pg_username.not_in([owner_username, target]),
             )
         )
     ).one()
