@@ -46,6 +46,30 @@
   </div>
 
   <form method="post" action="{{ cleanup_settings_action }}" class="settings-form">
+    {% if purge.expiry %}
+    <div class="card settings-card">
+      <h2>لغو خودکار خرید نیمه‌تمام</h2>
+      <p class="muted update-card-caption">
+        سفارشی که تا این مهلت پرداخت نشود لغو می‌شود و به مشتری خبر داده می‌شود. فقط سفارش‌هایی که هیچ پولی برایشان
+        در جریان نیست لغو می‌شوند: بدون رسید، بدون پرداخت آنلاین باز و بدون پرداخت تأییدشده. ردیف سفارش حذف نمی‌شود.
+      </p>
+      <div class="order-purge-options">
+        <label class="ui-switch-row">
+          <span class="ui-switch-copy"><strong>لغو خودکار</strong><small>هر ۳۰ دقیقه بررسی می‌شود</small></span>
+          <span class="ui-switch">
+            <input type="checkbox" name="expiry" value="1" {% if purge.expiry.on %}checked{% endif %} />
+            <span class="ui-switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="form-field">مهلت پرداخت (ساعت)
+          <input name="expiry_hours" type="number" min="{{ purge.expiry.min_hours }}" max="{{ purge.expiry.max_hours }}"
+                 value="{{ purge.expiry.hours }}" required dir="ltr" inputmode="numeric"
+                 aria-label="مهلت پرداخت سفارش به ساعت" />
+        </label>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="card settings-card">
       <h2>تگ‌های حذف</h2>
       <p class="muted update-card-caption">

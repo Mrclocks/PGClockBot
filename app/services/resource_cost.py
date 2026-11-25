@@ -50,6 +50,7 @@ JOB_LABELS: dict[str, str] = {
     "coupon_win_back": "کوپن بازگشت مشتری",
     "pg_admin_subscription": "اشتراک ادمین‌های پنل",
     "order_purge": "پاکسازی سفارش‌های قدیمی",
+    "pending_order_expiry": "لغو خودکار خرید نیمه‌تمام",
     "scheduled_receipt_approval": "تأیید زمان‌دار رسید",
     "crypto_rate_refresh": "نرخ رمزارز",
     "scheduled_backup": "بکاپ زمان‌بندی‌شده",

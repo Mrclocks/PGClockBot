@@ -634,3 +634,5 @@ tests/test_button_premium_icons.py
 tests/test_account_holds.py
 # A customer cancels only their own unpaid order; abandoned discounted orders are released atomically.
 tests/test_checkout_abandon.py
+# Unpaid-order expiry: opt-in per shop, never cancels an order with money moving.
+tests/test_pending_order_expiry.py

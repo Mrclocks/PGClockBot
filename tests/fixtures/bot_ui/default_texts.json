@@ -569,6 +569,8 @@
   "pending_order_cleanup_enabled": "0",
   "pending_order_cleanup_last_count": "0",
   "pending_order_cleanup_last_run": "",
+  "pending_order_expiry_enabled": "0",
+  "pending_order_expiry_hours": "48",
   "pending_order_ttl_hours": "48",
   "pg_link_alerts_enabled": "1",
   "pg_link_watchdog_enabled": "1",

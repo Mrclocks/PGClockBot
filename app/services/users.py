@@ -886,6 +886,9 @@ DEFAULT_SETTINGS = {
     "payment_ok_title": "✅ پرداخت تأیید شد",
     "payment_reject_text": "پرداخت شما تأیید نشد. اگر فکر می‌کنید اشتباهی رخ داده، لطفاً با پشتیبانی تماس بگیرید.",
     "pending_order_cleanup_enabled": "0",
+    # Optional expiry of unpaid orders (pending_order_expiry); off until a shop switches it on.
+    "pending_order_expiry_enabled": "0",
+    "pending_order_expiry_hours": "48",
     "pending_order_ttl_hours": "48",
     "pending_order_cleanup_awaiting_approval": "0",
     "pending_order_approval_ttl_hours": "72",
