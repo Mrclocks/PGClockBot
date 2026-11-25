@@ -12,11 +12,12 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
     BotUser,
+    OrgPrincipal,
     PgAdminSubscription,
     PgStaffAccess,
     ResellerPlan,
@@ -26,6 +27,7 @@ from app.services.billing import GB, is_payg
 from app.services.db_safe import rollback_quiet
 from app.services.service_freeze_guard import frozen_pg_user_ids
 from app.services.formatting import format_toman
+from app.services.org_principals import DEPTH_TWO
 from app.services.volume_allocation import is_hard_panel_rejection
 from app.services.volume_allocation_cascade import assert_child_growth_fits, assert_parent_has_room
 
@@ -34,6 +36,8 @@ logger = logging.getLogger(__name__)
 STATUS_ACTIVE = "active"
 STATUS_EXPIRED = "expired"
 STATUS_REVOKED = "revoked"
+
+OWNER_BUDGET_UNREADABLE = "سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید"
 
 PLAN_KIND_SUBSCRIPTION = "subscription"
 PLAN_KIND_CURRENT_CAPACITY = "current_capacity"
@@ -442,6 +446,63 @@ async def assert_new_admin_fits_owner_budget(session: AsyncSession, plan: Resell
     )
 
 
+def _sold_subscriptions_filter(*, owner_username: str, target: str) -> Any:
+    """Active subscriptions of other panel admins that a shop or a staff login still holds.
+
+    A deleted shop leaves its subscription row behind; it sells nothing any more, so it must not
+    use up the installer's budget and block later raises.
+    """
+    held_by_shop = select(ResellerProfile.id).where(
+        ResellerProfile.pg_admin_username == PgAdminSubscription.pg_username
+    )
+    held_by_staff = select(PgStaffAccess.id).where(PgStaffAccess.pg_username == PgAdminSubscription.pg_username)
+    return and_(
+        PgAdminSubscription.access_status == STATUS_ACTIVE,
+        PgAdminSubscription.pg_username.not_in([owner_username, target]),
+        or_(held_by_shop.exists(), held_by_staff.exists()),
+    )
+
+
+def _sub_shop_principal(pg_username: Any) -> Any:
+    """Level-2 shop principal for a panel admin name (a value or a column); its volume is inside the parent's."""
+    return (
+        select(OrgPrincipal.id)
+        .join(ResellerProfile, ResellerProfile.id == OrgPrincipal.reseller_profile_id)
+        .where(OrgPrincipal.depth == DEPTH_TWO, ResellerProfile.pg_admin_username == pg_username)
+    )
+
+
+async def _sold_capacity_of_others(session: AsyncSession, *, owner_username: str, target: str) -> tuple[int, int]:
+    """GB and user slots sold to every other panel admin, summed in SQL.
+
+    Sub-shop volume is left out of the GB sum because the parent's own total already covers it.
+    """
+    total_gb = func.coalesce(PgAdminSubscription.base_gb, 0) + func.coalesce(
+        PgAdminSubscription.extra_gb_purchased, 0
+    )
+    total_users = func.coalesce(PgAdminSubscription.base_users, 0) + func.coalesce(
+        PgAdminSubscription.extra_users_purchased, 0
+    )
+    sold_gb = func.coalesce(
+        func.sum(case((_sub_shop_principal(PgAdminSubscription.pg_username).exists(), 0), else_=func.greatest(total_gb, 0))), 0
+    )
+    sold_users = func.coalesce(func.sum(func.greatest(total_users, 0)), 0)
+    row = (
+        await session.execute(
+            select(sold_gb, sold_users).where(
+                _sold_subscriptions_filter(owner_username=owner_username, target=target)
+            )
+        )
+    ).one()
+    return int(row[0] or 0), int(row[1] or 0)
+
+
+async def _is_sub_shop_admin(session: AsyncSession, pg_username: str) -> bool:
+    if not pg_username:
+        return False
+    return await session.scalar(_sub_shop_principal(pg_username).limit(1)) is not None
+
+
 async def _assert_owner_capacity_budget(
     session: AsyncSession,
     *,
@@ -457,8 +518,8 @@ async def _assert_owner_capacity_budget(
     detection must not re-read the row after ``record_unit_extra`` has already written the
     new extras — that would treat growth as "same capacity" and skip the fail-closed path.
 
-    If the owner admin cannot be read: refuse only when this call **grows** capacity.
-    Same-or-smaller totals (typical renew) still proceed.
+    Only growth is checked, per axis: same-or-smaller totals (a typical renew, an admin cut)
+    always proceed, even when the panel is unreadable or the budget is already overdrawn.
     """
     from app.config import get_settings
     from app.services.pg_quota import _as_int, merge_role_limits
@@ -469,26 +530,20 @@ async def _assert_owner_capacity_budget(
 
     from app.services.pasarguard import get_pg
 
-    growing = int(next_total_gb) > int(previous_total_gb) or int(next_total_users) > int(
-        previous_total_users
-    )
+    gb_grows = int(next_total_gb) > int(previous_total_gb)
+    users_grow = int(next_total_users) > int(previous_total_users)
+    if not (gb_grows or users_grow):
+        return
 
-    pg = get_pg()
     try:
-        admin = await pg.get_admin(owner_username)
+        admin = await get_pg().get_admin(owner_username)
     except Exception as exc:
         logger.warning(
             "owner capacity budget: install admin unreadable (%s)", owner_username, exc_info=True,
         )
-        if growing:
-            raise ValueError(
-                "سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید"
-            ) from exc
-        return
+        raise ValueError(OWNER_BUDGET_UNREADABLE) from exc
     if not isinstance(admin, dict) or not admin:
-        if growing:
-            raise ValueError("سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید")
-        return
+        raise ValueError(OWNER_BUDGET_UNREADABLE)
     role = admin.get("role") if isinstance(admin.get("role"), dict) else None
     limits = merge_role_limits(admin, role)
     owner_gb_limit_bytes = max(
@@ -499,44 +554,18 @@ async def _assert_owner_capacity_budget(
         0, _as_int(limits.get("max_users")) or _as_int(admin.get("max_users")) or 0
     )
 
-    rows = list(
-        (
-            await session.execute(
-                select(PgAdminSubscription).where(
-                    PgAdminSubscription.access_status == STATUS_ACTIVE
-                )
-            )
-        ).scalars().all()
-    )
     target = normalize_pg_username(target_pg_username)
-    sold_gb = 0
-    sold_users = 0
-    if target not in {normalize_pg_username(getattr(row, "pg_username", None)) for row in rows}:
-        # An admin about to be created has no subscription row yet; it still sells its capacity.
+    sold_gb, sold_users = await _sold_capacity_of_others(session, owner_username=owner_username, target=target)
+    sold_users += max(0, int(next_total_users))
+    # A sub-shop's volume is carved out of its parent's total, which is already counted.
+    if not await _is_sub_shop_admin(session, target):
         sold_gb += max(0, int(next_total_gb))
-        sold_users += max(0, int(next_total_users))
-    for row in rows:
-        uname = normalize_pg_username(getattr(row, "pg_username", None))
-        if not uname or uname == owner_username:
-            continue
-        total_gb = int(getattr(row, "base_gb", 0) or 0) + int(
-            getattr(row, "extra_gb_purchased", 0) or 0
-        )
-        total_users = int(getattr(row, "base_users", 0) or 0) + int(
-            getattr(row, "extra_users_purchased", 0) or 0
-        )
-        if uname == target:
-            sold_gb += max(0, int(next_total_gb))
-            sold_users += max(0, int(next_total_users))
-        else:
-            sold_gb += max(0, total_gb)
-            sold_users += max(0, total_users)
 
-    if owner_gb_limit > 0 and sold_gb > owner_gb_limit:
+    if gb_grows and owner_gb_limit > 0 and sold_gb > owner_gb_limit:
         raise ValueError(
             f"ظرفیت فروخته‌شده نمایندگی از سقف حجم ادمین اصلی بیشتر می‌شود ({sold_gb} از {owner_gb_limit} گیگ)"
         )
-    if owner_user_limit > 0 and sold_users > owner_user_limit:
+    if users_grow and owner_user_limit > 0 and sold_users > owner_user_limit:
         raise ValueError(
             f"ظرفیت فروخته‌شده نمایندگی از سقف کاربر ادمین اصلی بیشتر می‌شود ({sold_users} از {owner_user_limit})"
         )
