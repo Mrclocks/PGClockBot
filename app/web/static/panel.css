@@ -3959,6 +3959,11 @@ code.env-fname {
 .site-footer a.footer-link:hover { color: var(--brand-fg); opacity: 0.8; }
 .site-footer a.footer-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: var(--control-radius); }
 .footer-link svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.footer-meta > span { white-space: nowrap; }
+/* The narrowest phones keep the brand line and the three links on one row. */
+@media (max-width: 360px) {
+  .footer-links { gap: var(--space-2); }
+}
 .btn.is-copied {
   color: var(--ok-fg) !important;
   border-color: rgba(34, 197, 94, 0.42);
