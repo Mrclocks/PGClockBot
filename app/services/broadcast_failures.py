@@ -158,3 +158,13 @@ async def broadcast_report(session: AsyncSession, log_id: int, *, shop_id: int |
     reasons = [ReasonCount(FAILURE_KINDS.get(kind, FAILURE_KINDS[KIND_BAD_MESSAGE]), int(count)) for kind, count in rows]
     missed = int(log.fail_count or 0) + int(log.review_count or 0)
     return BroadcastReport(log=log, reasons=reasons, unrecorded=max(0, missed - sum(r.count for r in reasons)))
+
+
+def retry_clause(broadcast_id: int, *, include_unknown: bool) -> ColumnElement[bool]:
+    """``BotUser`` rows ``broadcast_id`` did not reach; unknown outcomes only when ``include_unknown``."""
+    recorded = select(BroadcastFailure.id).where(
+        BroadcastFailure.broadcast_id == int(broadcast_id), BroadcastFailure.bot_user_id == BotUser.id
+    )
+    if not include_unknown:
+        recorded = recorded.where(BroadcastFailure.kind != KIND_UNKNOWN)
+    return exists(recorded)

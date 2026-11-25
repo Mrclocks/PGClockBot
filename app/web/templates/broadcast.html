@@ -145,7 +145,7 @@
         <td class="mono muted cell-tight"><bdi dir="ltr">{{ (row.created_at|string)[:16] }}</bdi></td>
         <td class="col-hide-sm li-sub">
           {#- On phones line two: audience · time · sender. -#}
-          <span dir="auto">{{ (history_labels or {}).get(row.id, row.audience) }}</span>
+          {% if row.retry_of_id %}<span>ارسال دوباره به ناموفق‌های {{ row.retry_of_id | fa }} ·</span> {% endif %}<span dir="auto">{{ (history_labels or {}).get(row.id, row.audience) }}</span>
           <span class="li-only">· <bdi dir="ltr">{{ (row.created_at|string)[:16] }}</bdi>{% if row.created_by %} · <bdi dir="auto">{{ row.created_by }}</bdi>{% endif %}</span>
         </td>
         <td class="broadcast-snippet li-title"><span dir="auto">{{ row.text[:120] }}{% if row.text|length > 120 %}…{% endif %}</span></td>

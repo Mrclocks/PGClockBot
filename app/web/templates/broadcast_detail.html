@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_header, empty_state %}
-{% from "_ds.html" import ds_sec, ico %}
+{% from "_ds.html" import ds_sec, ds_switch, ico %}
 {% set log = report.log %}
 {% block title %}پیام گروهی {{ log.id }}{% endblock %}
 {% block content %}
@@ -10,7 +10,7 @@
 
   {% call ds_sec('نتیجه') %}
     <ul class="bc-lines">
-      <li><span class="bc-line-copy"><strong>مخاطبان</strong><small dir="auto">{{ audience_label }}</small></span><span class="bc-line-value">{{ log.total | num }}</span></li>
+      <li><span class="bc-line-copy"><strong>مخاطبان</strong><small>{% if log.retry_of_id %}ارسال دوباره به ناموفق‌های {{ log.retry_of_id | fa }} · {% endif %}<span dir="auto">{{ audience_label }}</span></small></span><span class="bc-line-value">{{ log.total | num }}</span></li>
       <li><span class="bc-line-copy"><strong>رسید</strong></span><span class="bc-line-value">{{ log.ok_count | num }}</span></li>
       <li><span class="bc-line-copy"><strong>ناموفق</strong></span><span class="bc-line-value">{{ log.fail_count | num }}</span></li>
       {% if log.review_count %}
@@ -34,6 +34,26 @@
     <div class="ds-note">{{ ico('info') }}<span>برای {{ report.unrecorded | num }} نفر علتی ثبت نشده؛ این پیام پیش از ثبت علت‌ها فرستاده شده است.</span></div>
     {% endif %}
   {% endcall %}
+
+  {% if retry and (retry.existing_id or retry.with_unknown) %}
+  {% call ds_sec('ارسال دوباره به ناموفق‌ها') %}
+    {% if retry.existing_id %}
+    <div class="ds-note">{{ ico('info') }}<span>این پیام یک بار دوباره فرستاده شده است: <a href="{{ page_path }}/history/{{ retry.existing_id }}">پیام گروهی {{ retry.existing_id | fa }}</a></span></div>
+    {% else %}
+    <form method="post" action="{{ page_path }}/history/{{ log.id }}/retry" class="form-stack"
+          data-confirm="پیام دوباره برای کسانی که دریافتش نکرده‌اند در صف ارسال قرار بگیرد؟"
+          data-confirm-title="ارسال دوباره"
+          data-confirm-label="ارسال دوباره">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <p class="muted">به {{ retry.failed | num }} نفری فرستاده می‌شود که پیام به آن‌ها نرسید. کسانی که هنوز ربات را بلاک کرده‌اند یا استارت نکرده‌اند کنار می‌مانند. هر پیام فقط یک بار دوباره فرستاده می‌شود.</p>
+      {% if retry.with_unknown > retry.failed %}
+      <div class="ds-rows">{{ ds_switch('include_unknown', 'نامشخص‌ها هم (' ~ ((retry.with_unknown - retry.failed) | num) ~ ' نفر)', 'ممکن است پیام قبلاً به آن‌ها رسیده باشد و دوباره بگیرند.') }}</div>
+      {% endif %}
+      <button class="btn" type="submit">ارسال دوباره</button>
+    </form>
+    {% endif %}
+  {% endcall %}
+  {% endif %}
 
   {% call ds_sec('متن پیام') %}
     <p class="bc-detail-text" dir="auto">{{ log.text }}</p>

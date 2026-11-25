@@ -1013,6 +1013,12 @@ class BroadcastLog(Base):
             unique=True,
             postgresql_where=text("request_key IS NOT NULL"),
         ),
+        Index(
+            "uq_broadcast_logs_retry_of_id",
+            "retry_of_id",
+            unique=True,
+            postgresql_where=text("retry_of_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -1041,6 +1047,12 @@ class BroadcastLog(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Client nonce scoped by the service (``shop-<id>-<nonce>``); unique when set.
     request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # A resend to the recipients this broadcast did not reach: it only goes to people with a broadcast_failures row
+    # of that broadcast (none once it is deleted). A plain id, so deleting the original never widens the resend;
+    # unique, so one broadcast is resent at most once.
+    retry_of_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # The resend also goes to recipients whose outcome was unknown (they may get the message twice).
+    retry_unknown: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class BroadcastFailure(Base):

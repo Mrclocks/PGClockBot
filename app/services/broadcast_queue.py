@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.types import InlineKeyboardMarkup
-from sqlalchemy import or_, select, update
+from sqlalchemy import ColumnElement, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,7 +34,13 @@ from app.services.broadcast_audience import (
     load_spec,
     make_spec,
 )
-from app.services.broadcast_failures import KIND_UNKNOWN, failure_kind, mark_unreachable, record_failure
+from app.services.broadcast_failures import (
+    KIND_UNKNOWN,
+    failure_kind,
+    mark_unreachable,
+    record_failure,
+    retry_clause,
+)
 from app.services.message_buttons import stored_keyboard
 from app.services.telegram_html import normalize_telegram_html
 
@@ -81,6 +87,22 @@ class SendResult:
 
 
 SENT = SendResult(OUTCOME_OK)
+
+
+@dataclass(frozen=True, slots=True)
+class RetrySource:
+    """The broadcast a resend belongs to (None for an ordinary broadcast) and whether unknown outcomes are resent."""
+
+    broadcast_id: int | None = None
+    include_unknown: bool = False
+
+
+def recipient_clauses(spec: AudienceSpec, *, shop_id: int | None, retry: RetrySource) -> list[ColumnElement[bool]]:
+    """Who a broadcast sends to: its audience now, narrowed for a resend to the people the original did not reach."""
+    clauses = list(audience_clause(spec, shop_id=shop_id))
+    if retry.broadcast_id is not None:
+        clauses.append(retry_clause(retry.broadcast_id, include_unknown=bool(retry.include_unknown)))
+    return clauses
 
 
 def new_request_token() -> str:
@@ -361,10 +383,12 @@ async def process_broadcast_batch(
                     BroadcastLog.fail_count,
                     BroadcastLog.review_count,
                     BroadcastLog.buttons,
+                    BroadcastLog.retry_of_id,
+                    BroadcastLog.retry_unknown,
                 ).where(BroadcastLog.id == log_id)
             )
         ).one()
-        audience, stored_spec, text, cursor, shop_id, total, ok_count, fail_count, review_count, buttons = row
+        audience, stored_spec, text, cursor, shop_id, total, ok_count, fail_count, review_count, buttons = row[:10]
         tenant = int(shop_id) if shop_id is not None else None
         try:
             spec = load_spec(stored_spec, audience, shop_id=tenant)
@@ -382,7 +406,7 @@ async def process_broadcast_batch(
             await session.execute(
                 select(BotUser.id, BotUser.telegram_id)
                 .where(
-                    *audience_clause(spec, shop_id=tenant),
+                    *recipient_clauses(spec, shop_id=tenant, retry=RetrySource(row.retry_of_id, row.retry_unknown)),
                     BotUser.id > int(cursor),
                 )
                 .order_by(BotUser.id)
