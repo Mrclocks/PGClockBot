@@ -497,6 +497,33 @@ class AccountHoldRouteTests(HoldHarness):
         self.assertEqual(await self._holds(), [])
 
 
+class HoldRowActionTests(unittest.TestCase):
+    """The row «⋯» forms that the user card copies: disable, enable, or nothing to lift."""
+
+    def _render(self, hold: object) -> str:
+        from app.api.app import templates
+        from app.services.account_hold_actions import ShopHoldRow
+
+        row = None if hold is None else ShopHoldRow(*hold)
+        macro = templates.env.get_template("_account_hold_actions.html").module.customer_hold_actions
+        return str(macro(7, row, platform=False))
+
+    def test_no_hold_offers_disable_with_a_reason(self) -> None:
+        html = self._render(None)
+        self.assertIn('action="/users/7/account-hold"', html)
+        self.assertIn('value="disable"', html)
+        self.assertIn('data-confirm-reason="1"', html)
+
+    def test_own_hold_offers_enable(self) -> None:
+        html = self._render(("held", True))
+        self.assertIn('value="enable"', html)
+        self.assertNotIn('value="disable"', html)
+
+    def test_someone_elses_or_finishing_hold_offers_nothing(self) -> None:
+        self.assertNotIn("<form", self._render(("held", False)))
+        self.assertNotIn("<form", self._render(("releasing", True)))
+
+
 class AccountHoldMigrationTests(unittest.TestCase):
     def test_upgrade_twice_and_downgrade_keep_existing_rows(self) -> None:
         import importlib.util

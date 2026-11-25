@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_account_hold_actions.html" import shop_hold_actions %}
 {% from "macros.html" import switch, oversell_create_switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, empty_state, search_submit %}
 {% from "_ds.html" import ds_perm_groups %}
 {% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
@@ -251,29 +252,7 @@
             </form>
           {% endif %}
           {% if can_hold_shops %}
-            {% set shop_hold = shop_holds.get(u.id) %}
-            {% if not shop_hold %}
-            <form method="post" action="/resellers/{{ u.id }}/account-hold"
-                  data-confirm="نماینده، زیرنماینده‌هایش، ادمین پاسارگارد و همهٔ کاربرانش خاموش شوند؟ تا فعال‌سازی دوباره، ربات و پنل این نماینده هم بسته است."
-                  data-confirm-title="غیرفعال‌سازی کامل نماینده"
-                  data-confirm-danger="1"
-                  data-confirm-reason="1"
-                  data-confirm-reason-label="علت غیرفعال‌سازی"
-                  data-confirm-reason-name="reason"
-                  data-confirm-label="غیرفعال کن">
-              <input type="hidden" name="action" value="disable" />
-              <input type="hidden" name="reason" value="" />
-              <button class="btn btn-sm btn-danger" type="submit">غیرفعال‌سازی کامل</button>
-            </form>
-            {% elif shop_hold.releasable and shop_hold.status in ('applying', 'held') %}
-            <form method="post" action="/resellers/{{ u.id }}/account-hold"
-                  data-confirm="نماینده دوباره فعال شود؟ فقط چیزهایی روشن می‌شوند که با غیرفعال‌سازی کامل خاموش شده‌اند."
-                  data-confirm-title="فعال‌سازی دوبارهٔ نماینده"
-                  data-confirm-label="فعال کن">
-              <input type="hidden" name="action" value="enable" />
-              <button class="btn btn-sm" type="submit">فعال‌سازی دوباره</button>
-            </form>
-            {% endif %}
+            {{ shop_hold_actions(u.id, shop_holds.get(u.id)) }}
           {% endif %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-reseller-color"

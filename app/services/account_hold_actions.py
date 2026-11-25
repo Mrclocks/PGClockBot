@@ -24,7 +24,9 @@ from app.services.account_hold_access import (
 )
 from app.services.account_hold_guard import OPEN_STATUSES
 from app.services.account_holds import (
+    KIND_CUSTOMER,
     KIND_SHOP,
+    PLATFORM_SCOPE,
     NOT_HELD,
     HoldRequest,
     clean_reason,
@@ -170,20 +172,45 @@ def may_hold_shops(staff: dict[str, Any]) -> bool:
     return is_explicit_owner_staff(staff) or can_shop(authz_from_staff(staff), ACCOUNTS_DISABLE_PERMISSION)
 
 
-async def shop_hold_rows(session: AsyncSession, staff: dict[str, Any], shop_ids: list[int]) -> dict[int, ShopHoldRow]:
-    """Open shop holds of the listed shops, in one query."""
-    if not shop_ids:
+async def _hold_rows(session: AsyncSession, staff: dict[str, Any], *, kind: str, target_ids: list[int],
+                     scope_shop_id: int | None) -> dict[int, ShopHoldRow]:
+    """Open holds of the listed targets, in one query; ``scope_shop_id`` None matches every scope."""
+    if not target_ids:
         return {}
-    rows = (await session.execute(
-        select(AccountHold.target_user_id, AccountHold.status, AccountHold.placed_by_shop_id).where(
-            AccountHold.kind == KIND_SHOP,
-            AccountHold.target_user_id.in_([int(i) for i in shop_ids]),
-            AccountHold.status.in_(OPEN_STATUSES),
-        )
-    )).all()
+    query = select(AccountHold.target_user_id, AccountHold.status, AccountHold.placed_by_shop_id).where(
+        AccountHold.kind == kind,
+        AccountHold.target_user_id.in_([int(i) for i in target_ids]),
+        AccountHold.status.in_(OPEN_STATUSES),
+    )
+    if scope_shop_id is not None:
+        query = query.where(AccountHold.scope_shop_id == int(scope_shop_id))
     owner = is_explicit_owner_staff(staff)
     mine = int(shop_owner_id(staff) or 0)
     return {
         int(uid): ShopHoldRow(str(status), owner or (mine > 0 and int(placed_by) == mine))
-        for uid, status, placed_by in rows
+        for uid, status, placed_by in (await session.execute(query)).all()
     }
+
+
+async def shop_hold_rows(session: AsyncSession, staff: dict[str, Any], shop_ids: list[int]) -> dict[int, ShopHoldRow]:
+    """Open shop holds of the listed shops, for the reseller list rows and their cards."""
+    return await _hold_rows(session, staff, kind=KIND_SHOP, target_ids=shop_ids, scope_shop_id=None)
+
+
+def customer_hold_scope(staff: dict[str, Any]) -> int | None:
+    """The scope this staff disables customers in (0: account-wide), or None when it may not."""
+    if is_explicit_owner_staff(staff):
+        return PLATFORM_SCOPE
+    if not can_shop(authz_from_staff(staff), ACCOUNTS_DISABLE_PERMISSION):
+        return None
+    shop_id = shop_owner_id(staff)
+    return int(shop_id) if shop_id else None
+
+
+async def customer_hold_rows(session: AsyncSession, staff: dict[str, Any],
+                             user_ids: list[int]) -> dict[int, ShopHoldRow]:
+    """Open customer holds in this staff's scope, for the users list rows and their cards."""
+    scope = customer_hold_scope(staff)
+    if scope is None:
+        return {}
+    return await _hold_rows(session, staff, kind=KIND_CUSTOMER, target_ids=user_ids, scope_shop_id=scope)
