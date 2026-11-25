@@ -1,6 +1,7 @@
 /* Group-message composer: keeps the segment tab on the chosen segment's group, shows each segment's default day
    window, and asks the server how many people the audience reaches (debounced; the latest answer wins). The send
-   button and the confirm dialog say the count. The server validates and counts again on send. */
+   button and the confirm dialog say the count. The server validates and counts again on send. «ارسال آزمایشی»
+   posts the form to the test URL and shows the answer under the button, so the composed message stays. */
 (function (root) {
   "use strict";
 
@@ -42,7 +43,44 @@
     return days ? "خالی بماند: " + faInt(days) + " روز" : "";
   }
 
+  /** The status line after a test send: the server's message, or a safe fallback. */
+  function testStatus(ok, data) {
+    const text = (data && (ok ? data.message : data.error)) || "";
+    if (text) return { ok, text };
+    return { ok: false, text: "ارسال آزمایشی انجام نشد؛ اتصال را بررسی کنید." };
+  }
+
+  function bindTest(form) {
+    const button = form.querySelector("[data-bc-test]");
+    const status = form.querySelector("[data-bc-test-status]");
+    const url = form.getAttribute("data-test-url");
+    if (!button || !status || !url) return;
+
+    function show(result) {
+      status.classList.toggle("is-ok", result.ok);
+      status.classList.toggle("is-error", !result.ok);
+      status.textContent = result.text;
+    }
+
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      status.classList.remove("is-ok", "is-error");
+      status.textContent = "در حال ارسال آزمایشی…";
+      try {
+        const response = await fetch(url, { method: "POST", body: new FormData(form) });
+        let data = null;
+        try { data = await response.json(); } catch (_err) { data = null; }
+        show(testStatus(response.ok, data));
+      } catch (_err) {
+        show(testStatus(false, null));
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
   function bind(form) {
+    bindTest(form);
     const segment = form.querySelector("#bc-segment");
     const group = form.querySelector("[data-bc-group]");
     const days = form.querySelector("[data-bc-days]");
@@ -116,7 +154,7 @@
     refresh();
   }
 
-  const api = { audienceQuery, sendLabel, confirmText, daysHint, bind };
+  const api = { audienceQuery, sendLabel, confirmText, daysHint, testStatus, bind };
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   } else {

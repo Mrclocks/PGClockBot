@@ -334,6 +334,7 @@ tests/test_shop_broadcast.py
 tests/test_broadcast_failures.py
 tests/test_broadcast_retry.py
 tests/test_broadcast_schedule.py
+tests/test_broadcast_test_send.py
 # Buttons under staff messages: link permission per shop, presets per shop, renewal of own services only.
 tests/test_message_buttons.py
 tests/test_message_button_colors.py
