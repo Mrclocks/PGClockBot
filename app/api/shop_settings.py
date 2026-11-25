@@ -708,7 +708,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
     ):
         if _is_owner_settings_actor(staff):
             return RedirectResponse("/tickets?supports=1&stab=contacts", status_code=303)
-        from app.services.support_contacts import contacts_from_form_json, save_support_contacts
+        from app.services.support_contacts import contacts_from_form_json, save_submitted_support_contacts
 
         rid = _rid(staff)
         if not rid:
@@ -722,7 +722,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                     f"/tickets?supports=1&stab=contacts&err={quote(err)}",
                     status_code=303,
                 )
-            await save_support_contacts(session, contacts or [], reseller_id=rid)
+            await save_submitted_support_contacts(session, contacts or [], reseller_id=rid)
             return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
         from app.services.button_styles import parse_item_button_style_form

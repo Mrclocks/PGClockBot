@@ -41,6 +41,7 @@ from app.bot.nav_input import (
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
+from app.services.button_icons import ICON_KEY, PREMIUM_ICON_HINT, icon_kwargs, split_label_and_icon
 from app.services.connection_guides import (
     add_guide_link,
     add_guide_media,
@@ -86,7 +87,9 @@ BTN_NEW = "➕ آموزش تازه"
 BTN_DONE = "✅ تمام"
 TITLE_LIST = "📘 <b>آموزش‌های اتصال</b>\nیک آموزش را برای ویرایش انتخاب کنید."
 EMPTY_LIST = "📘 <b>آموزش‌های اتصال</b>\nهنوز آموزشی ندارید."
-ASK_TITLE = "تیتر آموزش را بفرستید (همان متنی که روی دکمه می‌آید، حداکثر ۶۴ نویسه)."
+ASK_TITLE = (
+    "تیتر آموزش را بفرستید (همان متنی که روی دکمه می‌آید، حداکثر ۶۴ نویسه).\n" + PREMIUM_ICON_HINT
+)
 ASK_BODY = "متن آموزش را بفرستید. بولد، لینک و ایموجی پرمیوم حفظ می‌شود."
 ASK_MEDIA = (
     "عکس یا ویدیو بفرستید؛ چند فایل را می‌توانید یکجا (آلبوم) یا پشت سر هم بفرستید.\n"
@@ -94,7 +97,9 @@ ASK_MEDIA = (
 )
 MEDIA_PROGRESS = "✅ {count} فایل در این آموزش هست. باز هم بفرستید یا «{done}» را بزنید."
 ASK_LINK_URL = "لینک ویدیو را بفرستید (https از youtube.com، youtu.be یا t.me)."
-ASK_LINK_LABEL = "متن دکمهٔ این لینک را بفرستید، یا برای «▶️ دیدن ویدیو» علامت - بفرستید."
+ASK_LINK_LABEL = (
+    "متن دکمهٔ این لینک را بفرستید، یا برای «▶️ دیدن ویدیو» علامت - بفرستید.\n" + PREMIUM_ICON_HINT
+)
 NOT_MEDIA = "فقط عکس یا ویدیو بفرستید، یا «{done}» را بزنید."
 TEXT_REQUIRED = "متن را خالی نگذارید."
 BODY_TOO_LONG = "متن آموزش حداکثر ۴۰۰۰ نویسه است."
@@ -148,13 +153,19 @@ def _plain_preview(body: str) -> str:
     return html.escape(text) or "—"
 
 
-def _button(text: str, data: str) -> InlineKeyboardButton:
-    return InlineKeyboardButton(text=text, callback_data=data)
+def _button(text: str, data: str, *, icon_item: dict[str, Any] | None = None) -> InlineKeyboardButton:
+    return InlineKeyboardButton(text=text, callback_data=data, **icon_kwargs(icon_item))
 
 
 def list_view(actor: Actor, guides: list[dict[str, Any]]) -> tuple[str, InlineKeyboardMarkup]:
     rows = [
-        [_button(f"{'' if g.get('enabled', True) else '⏸ '}{g.get('title') or 'آموزش'}"[:64], actor.data("g", g["id"]))]
+        [
+            _button(
+                f"{'' if g.get('enabled', True) else '⏸ '}{g.get('title') or 'آموزش'}"[:64],
+                actor.data("g", g["id"]),
+                icon_item=g,
+            )
+        ]
         for g in guides[: kb.LIST_BUTTON_CAP]
     ]
     rows.append([_button(BTN_NEW, actor.data("n"))])
@@ -413,28 +424,41 @@ async def _finish(message: Message, state: FSMContext, view: tuple[str, InlineKe
 
 async def _save_text_input(message: Message, session: AsyncSession, state: FSMContext, actor: Actor, step: str) -> None:
     target = await _target(state)
-    gid = target.get("guide_id")
     if step in {"title", "new_title"}:
-        value = (message.text or "").strip()
-    else:
-        value = (message.html_text or "").strip() if message.text else ""
+        await _save_title_input(message, session, state, actor, step, target)
+        return
+    value = (message.html_text or "").strip() if message.text else ""
     if not value:
         await message.answer(TEXT_REQUIRED)
         return
-    if step in {"body", "new_body"} and len(value) > BODY_MAX:
+    if len(value) > BODY_MAX:
         await message.answer(BODY_TOO_LONG)
         return
-    states = _input_states(actor)
-    if step == "new_title":
-        await state.update_data(**{_STATE_KEY: {**target, "title": value}})
-        await _next_prompt(message, state, actor, prompt=ASK_BODY, fsm_state=states.new_body)
-        return
     if step == "new_body":
-        guide = await create_guide(session, title=target.get("title") or "", body=value, reseller_id=actor.reseller_id)
-        await _finish(message, state, card_view(actor, guide))
+        guide = await create_guide(
+            session, title=target.get("title") or "", body=value,
+            icon_custom_emoji_id=target.get(ICON_KEY), reseller_id=actor.reseller_id,
+        )
+    else:
+        guide = await update_guide(session, target.get("guide_id"), reseller_id=actor.reseller_id, body=value)
+    await _finish(message, state, card_view(actor, guide))
+
+
+async def _save_title_input(
+    message: Message, session: AsyncSession, state: FSMContext, actor: Actor, step: str, target: dict[str, Any]
+) -> None:
+    """A premium emoji in the title becomes the guide button's icon; a title without one clears it."""
+    title, icon = split_label_and_icon(message.text, message.entities)
+    if not title:
+        await message.answer(TEXT_REQUIRED)
         return
-    field = "title" if step == "title" else "body"
-    guide = await update_guide(session, gid, reseller_id=actor.reseller_id, **{field: value})
+    if step == "new_title":
+        await state.update_data(**{_STATE_KEY: {**target, "title": title, ICON_KEY: icon}})
+        await _next_prompt(message, state, actor, prompt=ASK_BODY, fsm_state=_input_states(actor).new_body)
+        return
+    guide = await update_guide(
+        session, target.get("guide_id"), reseller_id=actor.reseller_id, title=title, **{ICON_KEY: icon}
+    )
     await _finish(message, state, card_view(actor, guide))
 
 
@@ -466,9 +490,9 @@ async def _save_link_input(message: Message, session: AsyncSession, state: FSMCo
         await state.update_data(**{_STATE_KEY: {**target, "url": text}})
         await _next_prompt(message, state, actor, prompt=ASK_LINK_LABEL, fsm_state=_input_states(actor).link_label)
         return
-    label = "" if text == "-" else text
+    label, icon = ("", None) if text == "-" else split_label_and_icon(message.text, message.entities)
     guide = await add_guide_link(session, target.get("guide_id") or "", label=label, url=target.get("url") or "",
-                                 reseller_id=actor.reseller_id)
+                                 icon_custom_emoji_id=icon, reseller_id=actor.reseller_id)
     await _finish(message, state, links_view(actor, guide))
 
 

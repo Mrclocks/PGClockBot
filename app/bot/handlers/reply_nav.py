@@ -26,6 +26,7 @@ from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.reply_keyboards import _reply_admin_marketing_entries
 from app.bot.verbatim_input import is_verbatim_text_input
 from app.db.models import BotUser, Order, ResellerProfile, Role
+from app.services.button_icons import icon_kwargs
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_message
 from app.services.home_overview import admin_customer_counts
@@ -605,8 +606,10 @@ async def open_support_home(
         url = support_chat_url(c.get("telegram") or "")
         title = c.get("title") or "پشتیبان"
         if url:
+            icon = icon_kwargs(c)
+            label = f"گفتگو با {title}" if icon else f"💬 گفتگو با {title}"
             contact_rows.append(
-                [InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)]
+                [InlineKeyboardButton(text=label[:64], url=url, **icon)]
             )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SUPPORT, push=push)

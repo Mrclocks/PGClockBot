@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.button_icons import ICON_KEY, keep_stored_icons, set_icon
 from app.services.button_styles import parse_item_button_style_raw
 from app.services.guide_media import (
     MAX_LINKS_PER_GUIDE,
@@ -106,6 +107,7 @@ def parse_connection_guides(raw: str | None) -> list[dict[str, Any]]:
         links = parse_links(item.get("links"))
         if links:
             entry["links"] = links
+        set_icon(entry, item.get(ICON_KEY))
         if title or body or media:
             out.append(entry)
     out.sort(key=lambda x: (int(x.get("sort") or 0), str(x.get("title") or "")))
@@ -200,7 +202,20 @@ async def serialize_submitted_guides(session: AsyncSession, raw: str, *, reselle
         submitted = []
     stored = parse_connection_guides(await get_setting(session, SETTING_KEY, "", reseller_id=reseller_id))
     submitted = [item for item in submitted if isinstance(item, dict)]
-    return serialize_connection_guides(keep_stored_media(submitted, stored))
+    return serialize_connection_guides(_keep_stored_icons(keep_stored_media(submitted, stored), stored))
+
+
+def _keep_stored_icons(submitted: list[dict[str, Any]], stored: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Premium icons are set in the bot only; a form save keeps them on the same guide and link."""
+    stored_links = {str(g.get("id")): g.get("links") or [] for g in stored}
+    out = []
+    for guide in keep_stored_icons(submitted, stored):
+        links = guide.get("links")
+        if isinstance(links, list):
+            known = stored_links.get(str(guide.get("id")), [])
+            guide = {**guide, "links": keep_stored_icons([x for x in links if isinstance(x, dict)], known, key="url")}
+        out.append(guide)
+    return out
 
 
 def guides_for_audience(
@@ -303,7 +318,7 @@ async def prune_guide_media(session: AsyncSession, *, reseller_id: int | None) -
 
 
 MAX_GUIDES = 30
-_EDITABLE_FIELDS = frozenset({"title", "body", "audience", "enabled", "deep_link"})
+_EDITABLE_FIELDS = frozenset({"title", "body", "audience", "enabled", "deep_link", ICON_KEY})
 
 
 async def _load_items(session: AsyncSession, *, reseller_id: int | None) -> list[dict[str, Any]]:
@@ -323,7 +338,13 @@ async def find_guide(session: AsyncSession, guide_id: str, *, reseller_id: int |
 
 
 async def create_guide(
-    session: AsyncSession, *, title: str, body: str, audience: str = "user", reseller_id: int | None
+    session: AsyncSession,
+    *,
+    title: str,
+    body: str,
+    audience: str = "user",
+    icon_custom_emoji_id: str | None = None,
+    reseller_id: int | None,
 ) -> dict[str, Any]:
     items = await _load_items(session, reseller_id=reseller_id)
     if len(items) >= MAX_GUIDES:
@@ -339,6 +360,7 @@ async def create_guide(
         "sort": max((int(g.get("sort") or 0) for g in items), default=-1) + 1,
         "deep_link": True,
     }
+    set_icon(guide, icon_custom_emoji_id)
     saved = await save_connection_guides(session, [*items, guide], reseller_id=reseller_id)
     return _find(saved, guide["id"])
 
@@ -346,7 +368,7 @@ async def create_guide(
 async def update_guide(
     session: AsyncSession, guide_id: str, *, reseller_id: int | None, **changes: Any
 ) -> dict[str, Any]:
-    """Change title, body, audience, enabled or deep_link of one guide."""
+    """Change title, premium icon, body, audience, enabled or deep_link of one guide."""
     unknown = set(changes) - _EDITABLE_FIELDS
     if unknown:
         raise ValueError(f"not editable: {sorted(unknown)}")
@@ -354,7 +376,11 @@ async def update_guide(
     guide = _find(items, guide_id)
     if "title" in changes and not _sanitize_title(str(changes["title"])):
         raise GuideMediaError("تیتر آموزش نمی‌تواند خالی باشد.")
+    icon_changed = ICON_KEY in changes
+    icon = changes.pop(ICON_KEY, None)
     guide.update(changes)
+    if icon_changed:
+        set_icon(guide, icon)
     saved = await save_connection_guides(session, items, reseller_id=reseller_id)
     return _find(saved, guide_id)
 
@@ -378,14 +404,20 @@ async def delete_guide(session: AsyncSession, guide_id: str, *, reseller_id: int
 
 
 async def add_guide_link(
-    session: AsyncSession, guide_id: str, *, label: str, url: str, reseller_id: int | None
+    session: AsyncSession,
+    guide_id: str,
+    *,
+    label: str,
+    url: str,
+    icon_custom_emoji_id: str | None = None,
+    reseller_id: int | None,
 ) -> dict[str, Any]:
     items = await _load_items(session, reseller_id=reseller_id)
     guide = _find(items, guide_id)
     links = list(guide.get("links") or [])
     if len(links) >= MAX_LINKS_PER_GUIDE:
         raise GuideMediaError(f"هر آموزش حداکثر {MAX_LINKS_PER_GUIDE} لینک دارد.")
-    guide["links"] = [*links, normalize_link(label, url)]
+    guide["links"] = [*links, normalize_link(label, url, icon=icon_custom_emoji_id)]
     saved = await save_connection_guides(session, items, reseller_id=reseller_id)
     return _find(saved, guide_id)
 

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import MessageEntity
 from connection_monitor_support import MonitorDatabaseCase
 from sqlalchemy import select
 
@@ -35,8 +36,11 @@ def _callback(data: str) -> MagicMock:
     return callback
 
 
-def _message(text: str | None = None, *, photo: str | None = None, video: str | None = None) -> MagicMock:
-    message = MagicMock(text=text, html_text=text, chat=MagicMock(id=CHAT), message_id=20)
+def _message(
+    text: str | None = None, *, photo: str | None = None, video: str | None = None,
+    entities: list[MessageEntity] | None = None,
+) -> MagicMock:
+    message = MagicMock(text=text, html_text=text, entities=entities, chat=MagicMock(id=CHAT), message_id=20)
     message.photo = [MagicMock(file_id=photo)] if photo else None
     message.video = MagicMock(file_id=video) if video else None
     message.bot = AsyncMock()
@@ -94,6 +98,17 @@ class GuideEditorTests(MonitorDatabaseCase):
         self.assertEqual(guide["body"], "<b>مرحله ۱</b>")
         self.assertTrue(guide["enabled"])
         self.assertIsNone(await self.state.get_state())
+
+    async def test_a_premium_emoji_in_the_title_becomes_the_button_icon(self) -> None:
+        premium = [MessageEntity(type="custom_emoji", offset=0, length=1, custom_emoji_id="5368324170671202286")]
+        await self.tap(OWNER, "gde:a:n")
+        await self.send(OWNER, _message("⭐ هیدیفای", entities=premium))
+        await self.send(OWNER, _message("متن"))
+        guide = next(g for g in await self.stored() if g["title"] == "هیدیفای")
+        self.assertEqual(guide["icon_custom_emoji_id"], "5368324170671202286")
+        await self.tap(OWNER, f"gde:a:t:{guide['id']}")
+        await self.send(OWNER, _message("هیدیفای"))
+        self.assertNotIn("icon_custom_emoji_id", next(g for g in await self.stored() if g["id"] == guide["id"]))
 
     async def test_cancel_in_the_middle_saves_nothing(self) -> None:
         await self.tap(OWNER, "gde:a:n")

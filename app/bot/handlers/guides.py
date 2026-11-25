@@ -17,6 +17,7 @@ from app.bot import keyboards as kb
 from app.bot.nav_input import delete_user_message
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, UserService
+from app.services.button_icons import icon_kwargs
 from app.services.connection_guides import (
     get_connection_guides,
     guide_import_url,
@@ -106,6 +107,7 @@ def guides_list_keyboard(
         kwargs: dict = {
             "text": title,
             "callback_data": _open_callback(prefix, gid, audience=audience),
+            **icon_kwargs(g),
         }
         st = _item_style(ui, g.get("style") or g.get("button_style"))
         if st:
@@ -133,7 +135,10 @@ def guide_detail_keyboard(
         if url:
             label = kb._label_or(ui, "btn_guide_open_link", "🔗 باز کردن لینک اشتراک").strip()[:64]
             rows.append([kb._ikb(label, url=url, ui=ui, label_key="btn_guide_open_link")])
-    rows.extend([InlineKeyboardButton(text=link["label"][:64], url=link["url"])] for link in guide.get("links") or [])
+    rows.extend(
+        [InlineKeyboardButton(text=link["label"][:64], url=link["url"], **icon_kwargs(link))]
+        for link in guide.get("links") or []
+    )
     rows.append([kb.back_button(ui, _list_callback(svc_id, audience))])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
