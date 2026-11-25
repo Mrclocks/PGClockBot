@@ -24,6 +24,7 @@ from app.db.models import (
 )
 from app.services.billing import GB, is_payg
 from app.services.db_safe import rollback_quiet
+from app.services.account_hold_guard import defer_reenable_to_holds, defer_shop_reenable_to_hold
 from app.services.service_freeze_guard import frozen_pg_user_ids
 from app.services.formatting import format_toman
 from app.services.volume_allocation import is_hard_panel_rejection
@@ -833,11 +834,14 @@ async def restore_subscription_access(
 
     uname = normalize_pg_username(sub.pg_username)
     pg = get_pg()
-    try:
-        await _set_admin_enabled(pg, uname, enabled=True)
-    except Exception:
-        logger.exception("restore: enable admin failed %s", uname)
-        stats["errors"] += 1
+    # An owner's hold keeps the shop off; its release turns the admin and the shop back on.
+    shop_held = await defer_shop_reenable_to_hold(session, uname, include_shop=True)
+    if not shop_held:
+        try:
+            await _set_admin_enabled(pg, uname, enabled=True)
+        except Exception:
+            logger.exception("restore: enable admin failed %s", uname)
+            stats["errors"] += 1
 
     restore_ids = set(_parse_id_list(sub.expiry_disabled_user_ids))
     for uid in also_enable_user_ids or []:
@@ -847,6 +851,7 @@ async def restore_subscription_access(
             continue
     # A service the customer froze stays off; its own resume brings it back with its days.
     frozen = await frozen_pg_user_ids(session, restore_ids)
+    frozen |= await defer_reenable_to_holds(session, restore_ids)
     for uid in sorted(restore_ids - frozen):
         try:
             await pg.set_disabled_by_id(uid, False)
@@ -858,7 +863,8 @@ async def restore_subscription_access(
     sub.access_status = STATUS_ACTIVE
     sub.expired_at = None
     sub.expiry_disabled_user_ids = None
-    await _set_web_active_for_pg_admin(session, uname, active=True)
+    if not shop_held:
+        await _set_web_active_for_pg_admin(session, uname, active=True)
     await session.flush()
     if commit:
         await session.commit()

@@ -230,6 +230,11 @@ async def _assert_managed_level2(
     return row, parent
 
 
+async def assert_level2_managed_by(session: AsyncSession, actor: OrgPrincipal, principal_id: int) -> None:
+    """Raise ``PrincipalLifecycleError`` unless ``actor`` manages this level-2 principal."""
+    await _assert_managed_level2(session, actor, principal_id)
+
+
 def _assert_parent_active_for_mutation(parent: OrgPrincipal) -> None:
     if str(parent.status) != STATUS_ACTIVE:
         raise PrincipalLifecycleError(

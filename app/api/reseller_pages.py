@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
+from app.services.account_hold_actions import may_hold_shops, shop_hold_rows
+from app.services.account_hold_guard import shop_hold_open
 from app.services.miniapp_shop import (
     PERMISSION as MINIAPP_PERMISSION,
     STATE_NO_PERMISSION,
@@ -436,6 +438,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "color_filter": color_filter,
                 "color_tags": color_tags_for_ui(),
                 "color_tag_meta": color_tag_meta,
+                "can_hold_shops": may_hold_shops(staff),
+                "shop_holds": await shop_hold_rows(session, staff, [int(u.id) for u, _p in rows]),
             },
         )
 
@@ -732,6 +736,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "wallet_txs": wallet_txs,
             "pg_limits": pg_limits,
             "pg_subscription": pg_subscription,
+            "shop_held": await shop_hold_open(session, int(user_id)),
             "min_unsuspend": min_unsuspend,
             "format_toman": format_toman,
             "topup_nonce": secrets.token_hex(8),
@@ -869,7 +874,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         profile.web_permissions = perms
         profile.bot_permissions = perms  # must stay identical
         profile.can_approve_receipts = "payments" in parse_perms(perms)
-        profile.is_active = bool(form.get("is_active"))
+        # An owner's hold keeps the shop off until it is released from its own action.
+        profile.is_active = bool(form.get("is_active")) and not await shop_hold_open(session, int(profile.user_id))
         pg_access_target = access_target_from_form(form, profile)
         apply_access_before_save(
             profile,

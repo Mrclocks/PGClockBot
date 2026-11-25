@@ -138,7 +138,7 @@
     {{ list_input('bot_admin_ids', 'آیدی ادمین‌های ربات اختصاصی', profile.bot_admin_ids or '', kind='telegram', placeholder='123456789', help='آیدی هر ادمین را جداگانه اضافه کنید. فقط روی ربات این نماینده پنل نماینده می‌بینند؛ در ربات اصلی منوی کاربر عادی می‌ماند.') }}
 
     <div class="ui-switch-list">
-      {{ switch('is_active', 'نماینده فعال', checked=profile.is_active) }}
+      {{ switch('is_active', 'نماینده فعال', checked=profile.is_active, help=('با «غیرفعال‌سازی کامل» خاموش است و تا «فعال‌سازی دوباره» از فهرست نمایندگان روشن نمی‌شود' if shop_held else none)) }}
       <input type="hidden" name="pg_access_shown" value="1" />
       {{ switch('allow_pg_panel_access', 'دسترسی به پاسارگارد', checked=profile.allow_pg_panel_access, help='خاموش: منو و صفحه‌های پاسارگارد پنهان می‌شود و رمز ادمین پاسارگارد با یک رمز تازهٔ ارسال‌نشدنی عوض می‌شود') }}
       {{ switch('share_pg_panel_url', 'ارسال لینک پنل پاسارگارد', checked=profile.share_pg_panel_url, help='فقط وقتی دسترسی به پاسارگارد روشن است ارسال می‌شود') }}

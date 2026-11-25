@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Role
+from app.services.account_hold_guard import UNBLOCK_REFUSAL, customer_hold_open
 from app.services.bot_admins import assert_role_change_allowed, BotAdminRoleLocked, WEB_ASSIGNABLE_ROLES
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.resellers import DEFAULT_FEATURE_PERMS
@@ -317,6 +318,8 @@ def register_user_list_pages(  # noqa: C901 - counts the nested routes; each is 
         if is_protected_admin(user):
             return redirect_msg("/users", err="مسدود کردن ادمین مجاز نیست")
         will_block = not user.is_blocked
+        if not will_block and await customer_hold_open(session, int(user.id), None):
+            return redirect_msg("/users", err=UNBLOCK_REFUSAL)
         user.is_blocked = will_block
         await session.commit()
         await notify_account_edit(

@@ -11,6 +11,7 @@ from fastapi import Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.account_hold_guard import HELD_REFUSAL, held_pg_user_ids
 from app.services.service_freeze_guard import close_freezes_of_pg_user
 from app.services.action_reasons import ReasonRequired, log_reasoned_action, reason_from_form
 from app.services.credential_policy import validate_pg_username
@@ -1135,6 +1136,8 @@ def register_pg_pages(
             denied = await _guard_owned_mutation(staff, user_id, session=session)
             if denied is not None:
                 return denied
+            if await held_pg_user_ids(session, [user_id]):
+                return RedirectResponse(f"/pg/users?err={_q(HELD_REFUSAL)}", status_code=303)
             pg, _ = await _staff_pg(session, staff)
             await pg.set_disabled_by_id(user_id, False)
         except Exception as e:

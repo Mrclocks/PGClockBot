@@ -183,6 +183,34 @@
   {% endif %}
 </section>
 {% endif %}
+{% if account_hold_panel %}
+{% set hold = account_hold_panel.hold %}
+<section class="edit-section" id="user-account-hold">
+  <header class="edit-section-head">
+    <h3>غیرفعال‌سازی حساب</h3>
+    <p class="muted">{% if account_hold_platform %}دسترسی این کاربر به همهٔ ربات‌ها بسته و همهٔ سرویس‌هایش در پاسارگارد خاموش می‌شود.{% else %}دسترسی این مشتری به فروشگاه شما بسته و سرویس‌هایش در فروشگاه شما در پاسارگارد خاموش می‌شود.{% endif %} با فعال‌سازی دوباره فقط سرویس‌هایی روشن می‌شوند که همین‌جا خاموش شده‌اند.</p>
+  </header>
+  {% if hold %}
+  {% include "_account_hold_state.html" %}
+  {% if hold.releasable and hold.status in ('applying', 'held') %}
+  <form method="post" action="/users/{{ user.id }}/account-hold" class="form-stack"
+        data-confirm="حساب دوباره فعال شود؟ سرویس‌هایی که با این غیرفعال‌سازی خاموش شده‌اند روشن می‌شوند؛ سرویس‌های متوقف یا منقضی خاموش می‌مانند."
+        data-confirm-title="فعال‌سازی دوبارهٔ حساب" data-confirm-label="فعال کن">
+    <input type="hidden" name="action" value="enable" />
+    <div class="actions"><button class="btn" type="submit">فعال‌سازی دوبارهٔ حساب</button></div>
+  </form>
+  {% endif %}
+  {% else %}
+  <form method="post" action="/users/{{ user.id }}/account-hold" class="form-stack"
+        data-confirm="حساب غیرفعال و همهٔ سرویس‌های آن در پاسارگارد خاموش شوند؟ تا فعال‌سازی دوباره، مشتری به ربات دسترسی ندارد."
+        data-confirm-title="غیرفعال‌سازی حساب" data-confirm-label="غیرفعال کن" data-confirm-danger="1">
+    <input type="hidden" name="action" value="disable" />
+    <label class="form-field">علت<input name="reason" type="text" required minlength="3" maxlength="200" placeholder="الزامی" /></label>
+    <div class="actions"><button class="btn btn-danger" type="submit">غیرفعال‌سازی حساب و سرویس‌ها</button></div>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
 {% if can_adjust_shop_wallet|default(false) %}
 <section class="edit-section" id="user-shop-wallet">
   <header class="edit-section-head">

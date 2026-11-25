@@ -22,6 +22,7 @@ from app.services.bot_user_admin import (
     may_manage_customer_services,
 )
 from app.services.customer_marks import marks_for_staff, may_edit_private_marks
+from app.services.account_hold_actions import customer_hold_form_context
 from app.services.shop_customer_block import shop_block_form_context
 from app.services.shop_points_adjust import shop_points_form_context
 from app.services.shop_wallet_adjust import shop_wallet_form_context
@@ -335,6 +336,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             **shop_wallet_form_context(staff),
             **shop_points_form_context(staff),
             **(await shop_block_form_context(session, staff, user)),
+            **(await customer_hold_form_context(session, staff, user)),
             "plans": plans,
             "reseller_plans": (
                 await list_active_reseller_plans(session) if is_explicit_owner_staff(staff) else []

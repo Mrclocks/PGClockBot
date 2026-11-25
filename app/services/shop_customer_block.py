@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models import BotUser, BotUserShop
+from app.services.account_hold_guard import UNBLOCK_REFUSAL, customer_hold_open
 from app.services.db_safe import rollback_quiet
 from app.services.shop_manual_adjust import (
     ManualAdjustError,
@@ -92,6 +93,8 @@ async def set_shop_block(
     shop_id = block_shop(staff)
     clean_reason = parse_reason(reason) if blocked else (" ".join(str(reason or "").split())[:REASON_MAX] or None)
     customer = await adjustable_customer(session, shop_id, customer_id)
+    if not blocked and await customer_hold_open(session, int(customer.id), shop_id):
+        raise ManualAdjustError(UNBLOCK_REFUSAL)
     actor = actor_from_staff(staff, shop_id=shop_id)
     try:
         await ensure_member(session, int(customer.id), shop_id)

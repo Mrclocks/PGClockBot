@@ -195,7 +195,9 @@
           <span class="li-only">· کاربران <bdi dir="ltr">{{ usage.get('users_text') or '—' }}</bdi></span>
         </td>
         <td class="li-badge" data-sort-value="{% if p.billing_suspended_at %}2{% elif p.is_active %}1{% else %}0{% endif %}">
-          {% if p.billing_suspended_at %}
+          {% if shop_holds.get(u.id) %}
+          <span class="badge blocked">غیرفعال کامل</span>
+          {% elif p.billing_suspended_at %}
           <span class="badge rejected">مسدود</span>
           {% elif p.is_active %}
           <span class="badge approved">فعال</span>
@@ -247,6 +249,31 @@
               <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف کاربر</button>
             </form>
+          {% endif %}
+          {% if can_hold_shops %}
+            {% set shop_hold = shop_holds.get(u.id) %}
+            {% if not shop_hold %}
+            <form method="post" action="/resellers/{{ u.id }}/account-hold"
+                  data-confirm="نماینده، زیرنماینده‌هایش، ادمین پاسارگارد و همهٔ کاربرانش خاموش شوند؟ تا فعال‌سازی دوباره، ربات و پنل این نماینده هم بسته است."
+                  data-confirm-title="غیرفعال‌سازی کامل نماینده"
+                  data-confirm-danger="1"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت غیرفعال‌سازی"
+                  data-confirm-reason-name="reason"
+                  data-confirm-label="غیرفعال کن">
+              <input type="hidden" name="action" value="disable" />
+              <input type="hidden" name="reason" value="" />
+              <button class="btn btn-sm btn-danger" type="submit">غیرفعال‌سازی کامل</button>
+            </form>
+            {% elif shop_hold.releasable and shop_hold.status in ('applying', 'held') %}
+            <form method="post" action="/resellers/{{ u.id }}/account-hold"
+                  data-confirm="نماینده دوباره فعال شود؟ فقط چیزهایی روشن می‌شوند که با غیرفعال‌سازی کامل خاموش شده‌اند."
+                  data-confirm-title="فعال‌سازی دوبارهٔ نماینده"
+                  data-confirm-label="فعال کن">
+              <input type="hidden" name="action" value="enable" />
+              <button class="btn btn-sm" type="submit">فعال‌سازی دوباره</button>
+            </form>
+            {% endif %}
           {% endif %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-reseller-color"

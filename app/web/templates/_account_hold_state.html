@@ -1,0 +1,15 @@
+{#- An open account hold: its state and what happened to its services. Expects ``hold`` (HoldView). -#}
+{% set done = (hold.progress.get('disabled', 0) + hold.progress.get('left', 0)) %}
+{% set waiting = (hold.progress.get('pending', 0) + hold.progress.get('sending', 0) + hold.progress.get('enabling', 0)) %}
+<p>
+  {% if hold.status == 'applying' %}<span class="badge pending">در حال خاموش کردن سرویس‌ها</span>
+  {% elif hold.status == 'releasing' %}<span class="badge pending">در حال فعال‌سازی دوباره</span>
+  {% else %}<span class="badge blocked">غیرفعال</span>{% endif %}
+  {% if hold.reason %}<span class="muted" dir="auto">{{ hold.reason }}</span>{% endif %}
+</p>
+<ul class="payg-meta">
+  <li><span class="payg-meta-label">خاموش‌شده با این کار</span><span class="payg-meta-value">{{ done | fa }}</span></li>
+  <li><span class="payg-meta-label">از قبل خاموش (روشن نمی‌شود)</span><span class="payg-meta-value">{{ hold.progress.get('skipped', 0) | fa }}</span></li>
+  {% if waiting %}<li><span class="payg-meta-label">در صف پاسارگارد</span><span class="payg-meta-value">{{ waiting | fa }}</span></li>{% endif %}
+  {% if hold.actor %}<li><span class="payg-meta-label">انجام‌دهنده</span><span class="payg-meta-value" dir="auto">{{ hold.actor }}</span></li>{% endif %}
+</ul>
