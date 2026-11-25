@@ -164,7 +164,8 @@ class JobTests(NoticeCase):
     async def announce(self, signal: svc.Signal, bot: MagicMock) -> AsyncMock:
         dispatch = AsyncMock(return_value=1)
         async with self.Session() as session:
-            with patch.object(job, "_dispatch_dual_notify", dispatch), patch.object(job, "SEND_PAUSE_SECONDS", 0):
+            with patch.object(job, "_dispatch_dual_notify", dispatch), patch.object(job, "SEND_PAUSE_SECONDS", 0), \
+                    patch.object(job, "public_panel_base_url", return_value=""):
                 await job.announce(bot, session, signal)
         return dispatch
 
