@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_account_hold_actions.html" import shop_hold_actions %}
 {% from "macros.html" import switch, oversell_create_switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, empty_state, search_submit %}
 {% from "_ds.html" import ds_perm_groups %}
 {% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
@@ -195,7 +196,9 @@
           <span class="li-only">· کاربران <bdi dir="ltr">{{ usage.get('users_text') or '—' }}</bdi></span>
         </td>
         <td class="li-badge" data-sort-value="{% if p.billing_suspended_at %}2{% elif p.is_active %}1{% else %}0{% endif %}">
-          {% if p.billing_suspended_at %}
+          {% if shop_holds.get(u.id) %}
+          <span class="badge blocked">غیرفعال کامل</span>
+          {% elif p.billing_suspended_at %}
           <span class="badge rejected">مسدود</span>
           {% elif p.is_active %}
           <span class="badge approved">فعال</span>
@@ -247,6 +250,9 @@
               <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف کاربر</button>
             </form>
+          {% endif %}
+          {% if can_hold_shops %}
+            {{ shop_hold_actions(u.id, shop_holds.get(u.id)) }}
           {% endif %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-reseller-color"

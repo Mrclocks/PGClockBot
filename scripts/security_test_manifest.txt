@@ -627,3 +627,6 @@ tests/test_plan_panel_groups.py
 
 # Premium icons on staff-named buttons stay in their own shop.
 tests/test_button_premium_icons.py
+
+# Account holds: who may turn a customer or shop off, shop isolation, and exact restore.
+tests/test_account_holds.py

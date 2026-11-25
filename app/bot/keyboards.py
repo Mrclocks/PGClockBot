@@ -2026,6 +2026,22 @@ def admin_resellers_list_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
 
+# Callback prefix of the account hold screens (``app/bot/handlers/account_hold_bot.py``).
+ACCOUNT_HOLD_PREFIX = "ahb"
+
+
+def customer_hold_button(user_id: int) -> InlineKeyboardButton:
+    """Opens the customer's disable / enable screen; the handler re-checks who may act."""
+    return InlineKeyboardButton(text="⛔ غیرفعال‌سازی / فعال‌سازی حساب",
+                                callback_data=f"{ACCOUNT_HOLD_PREFIX}:c:{int(user_id)}")
+
+
+def shop_hold_button(shop_id: int) -> InlineKeyboardButton:
+    """Opens the shop's full disable / enable screen; the handler re-checks who may act."""
+    return InlineKeyboardButton(text="⛔ غیرفعال‌سازی کامل / فعال‌سازی",
+                                callback_data=f"{ACCOUNT_HOLD_PREFIX}:s:{int(shop_id)}")
+
+
 def admin_reseller_actions(
     user_id: int,
     *,
@@ -2093,6 +2109,7 @@ def admin_reseller_actions(
                 )
             ]
         )
+    rows.append([shop_hold_button(user_id)])
     rows.append(
         [
             InlineKeyboardButton(
@@ -2284,6 +2301,8 @@ def admin_user_actions(
             InlineKeyboardButton(text=block_label, callback_data=f"adm:users:block:{user_id}"),
         ],
     ]
+    if role != "admin":
+        rows.append([customer_hold_button(user_id)])
     if has_services:
         # After wallet + points rows so امتیاز stays next to کیف پول.
         rows.insert(

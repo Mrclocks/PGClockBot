@@ -1763,6 +1763,10 @@ _EVENT_TITLES_FA: dict[str, str] = {
     "role": "🔄 نقش شما تغییر کرد",
     "reseller_revoke": "❌ نمایندگی شما حذف شد",
     "user_delete": "🗑 حساب کاربری حذف شد",
+    "account_hold": "⛔ حساب شما غیرفعال شد",
+    "account_release": "✅ حساب شما دوباره فعال شد",
+    "shop_hold": "⛔ نمایندگی شما غیرفعال شد",
+    "shop_release": "✅ نمایندگی شما دوباره فعال شد",
 }
 
 _EVENT_ADMIN_TITLES_FA: dict[str, str] = {
@@ -1771,6 +1775,18 @@ _EVENT_ADMIN_TITLES_FA: dict[str, str] = {
     "role": "🔄 تغییر نقش کاربر",
     "reseller_revoke": "❌ لغو نمایندگی",
     "user_delete": "🗑 حذف کاربر",
+    "account_hold": "⛔ غیرفعال‌سازی حساب با سرویس‌ها",
+    "account_release": "✅ فعال‌سازی دوبارهٔ حساب",
+    "shop_hold": "⛔ غیرفعال‌سازی کامل نماینده",
+    "shop_release": "✅ فعال‌سازی دوبارهٔ نماینده",
+}
+
+# What the person reads for each account-hold event; the reason is added below it.
+_HOLD_SUBJECT_LINES_FA: dict[str, str] = {
+    "account_hold": "دسترسی شما به ربات و همهٔ سرویس‌هایتان تا اطلاع بعدی خاموش است.",
+    "account_release": "حساب شما دوباره فعال شد و سرویس‌هایی که خاموش شده بودند روشن شدند.",
+    "shop_hold": "ربات فروشگاه، پنل و همهٔ کاربران نمایندگی شما تا اطلاع بعدی خاموش است.",
+    "shop_release": "نمایندگی شما دوباره فعال شد؛ ربات، پنل و کاربرانی که خاموش شده بودند روشن شدند.",
 }
 
 
@@ -1816,12 +1832,14 @@ def format_account_edit_subject(
         lines.append("نقش شما به «کاربر» برگشت.")
     elif event == "user_delete":
         lines.append("حساب و داده‌های مرتبط شما از ربات حذف شد.")
+    elif event in _HOLD_SUBJECT_LINES_FA:
+        lines.append(_HOLD_SUBJECT_LINES_FA[event])
     else:
         lines.append("وضعیت حساب شما به‌روز شد.")
 
     if reason:
         lines.append("")
-        lines.append(kv_line("📝", "علت", reason))
+        lines.append(kv_line("📝", "علت", html.escape(reason)))
     lines.append("")
     lines.append("در صورت نیاز با پشتیبانی در ارتباط باشید.")
     return format_message(title, "\n".join(lines))
@@ -1839,7 +1857,7 @@ def format_account_edit_admin(
     """HTML mirror for platform admins."""
     reason = (reason or "").strip()
     title = _EVENT_ADMIN_TITLES_FA.get(event, "ℹ️ ویرایش حساب")
-    name = user.full_name or user.username or "—"
+    name = html.escape(user.full_name or user.username or "—")
     lines = [
         kv_line("👤", "کاربر", f"{name} (<code>{user.telegram_id}</code>)"),
         kv_line("🏷", "نقش فعلی", role_label_fa(user.role)),
@@ -1855,10 +1873,12 @@ def format_account_edit_admin(
         lines.append(kv_line("📌", "عملیات", "لغو نمایندگی"))
     elif event == "user_delete":
         lines.append(kv_line("📌", "عملیات", "حذف کامل حساب"))
+    elif event in _EVENT_ADMIN_TITLES_FA and event in _HOLD_SUBJECT_LINES_FA:
+        lines.append(kv_line("📌", "عملیات", _EVENT_ADMIN_TITLES_FA[event].split(" ", 1)[-1]))
     if reason:
-        lines.append(kv_line("📝", "علت", reason))
+        lines.append(kv_line("📝", "علت", html.escape(reason)))
     if actor:
-        lines.append(kv_line("🛠", "توسط", actor))
+        lines.append(kv_line("🛠", "توسط", html.escape(actor)))
     return format_message(title, info_block(lines))
 
 
@@ -1957,8 +1977,8 @@ async def _send_to_user_chat(
 
 
 def _account_edit_markup(event: str) -> InlineKeyboardMarkup | None:
-    """Support under a revoked agency; a block, deletion or role change has nothing to follow up in the bot."""
-    return support_markup() if event == "reseller_revoke" else None
+    """Support under a revoked agency or a disabled account; other edits have nothing to follow up in the bot."""
+    return support_markup() if event in {"reseller_revoke", "account_hold", "shop_hold"} else None
 
 
 async def notify_account_edit(

@@ -23,6 +23,7 @@ from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.handlers.action_reason import ask_reason, take_reason
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import safe_edit_text
+from app.services.account_hold_guard import HELD_REFUSAL, held_pg_user_ids
 from app.services.service_freeze_guard import close_freezes_of_pg_user
 from app.services.credential_policy import validate_pg_username
 from app.db.models import BotUser
@@ -953,6 +954,9 @@ async def pg_en(
     if not gate.allowed:
         return
     uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
+    if session is not None and await held_pg_user_ids(session, [uid]):
+        await callback.answer(HELD_REFUSAL, show_alert=True)
+        return
     reason = await take_reason(state, callback)
     if reason is None:
         await ask_reason(callback, state, label="علت فعال‌سازی")

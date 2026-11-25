@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_account_hold_actions.html" import customer_hold_actions %}
 {% from "macros.html" import row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state, search_submit %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
 {% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
@@ -113,7 +114,7 @@
         <th class="col-exp" data-sort-type="num" data-list-sort-label="زودترین انقضا" data-list-sort-dir="ascending" data-list-sort-order="2">انقضا</th>
         <th class="col-wallet" data-sort-type="num" data-list-sort-label="بیشترین موجودی" data-list-sort-dir="descending" data-list-sort-order="3">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
-        {% if ops or manage or provision or edit_svc %}<th class="col-actions"></th>{% endif %}
+        {% if ops or manage or provision or edit_svc or can_hold_customers %}<th class="col-actions"></th>{% endif %}
         <th class="li-head" scope="col">
           <span class="li-count">{{ rows | length | num }} کاربر</span>
           <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
@@ -194,7 +195,7 @@
           <span class="badge active">فعال</span>
           {% endif %}
         </td>
-        {% if ops or manage or provision or edit_svc %}
+        {% if ops or manage or provision or edit_svc or can_hold_customers %}
         <td class="col-actions">
           {% call row_actions() %}
             {% if ops and not u.is_blocked %}
@@ -224,6 +225,9 @@
                     data-modal-load-target="user-edit-body"
                     data-edit-url="/users/{{ u.id }}/edit?fragment=1"
                     data-edit-title="ویرایش کاربر #{{ u.id }}">ویرایش</button>
+            {% endif %}
+            {% if can_hold_customers and u.role != 'admin' %}
+            {{ customer_hold_actions(u.id, customer_holds.get(u.id), platform=can_manage_users) }}
             {% endif %}
             {% if manage %}
             <form method="post" action="/users/{{ u.id }}/block"
@@ -270,7 +274,7 @@
         {% endif %}
       </tr>
     {% else %}
-      {{ empty_state('کاربری نیست', 'users', colspan=(10 if manage or ops or provision or edit_svc else 8)) }}
+      {{ empty_state('کاربری نیست', 'users', colspan=(10 if manage or ops or provision or edit_svc or can_hold_customers else 8)) }}
     {% endfor %}
     </tbody>
   </table>

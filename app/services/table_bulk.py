@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Ticket
+from app.services.account_hold_guard import customer_hold_open
 from app.services.shop_scope import platform_may_review_payment
 from app.services.staff_audit import actor_from_staff
 from app.services.ticket_scope import staff_ticket_in_scope
@@ -146,7 +147,7 @@ async def bulk_toggle_block(
         if block and user.is_blocked:
             fail += 1
             continue
-        if not block and not user.is_blocked:
+        if not block and (not user.is_blocked or await customer_hold_open(session, int(user.id), None)):
             fail += 1
             continue
         user.is_blocked = block
