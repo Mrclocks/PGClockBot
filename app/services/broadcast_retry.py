@@ -98,6 +98,9 @@ async def queue_retry(
         shop_id=log.shop_id,
         retry_of_id=log.id,
         retry_unknown=include_unknown,
+        media_kind=log.media_kind,
+        media_file_id=log.media_file_id,
+        media_file=log.media_file,
     )
     session.add(resend)
     try:

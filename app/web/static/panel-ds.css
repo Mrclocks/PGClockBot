@@ -1059,6 +1059,12 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 /* The send button, then the test send (a ghost button) and its one status line, empty until a test is sent. */
 .ds .bc-send { display: flex; flex-direction: column; gap: var(--g2); margin: 0; }
 .ds .bc-send > * { margin: 0; }
+/* The chosen photo or video, shown above the Telegram preview bubble. */
+.ds .bc-media-preview { overflow: hidden; border-radius: var(--inner-radius); border: 1px solid var(--line); background: var(--card); }
+.ds .bc-media-preview[hidden] { display: none; }
+.ds .bc-media-preview img,
+.ds .bc-media-preview video { display: block; width: 100%; max-height: 320px; object-fit: contain; }
+.ds .bc-media-preview [hidden] { display: none; }
 .ds .bc-send-btn { flex: 1 1 auto; }
 .ds .bc-test-status { margin: 0; font-size: var(--fs-2); line-height: 1.6; color: var(--muted-fg); }
 .ds .bc-test-status:empty { display: none; }

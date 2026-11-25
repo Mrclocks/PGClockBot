@@ -330,6 +330,8 @@ tests/test_payment_void_bot.py
 # Durable broadcast queue: platform audience only, no double send, cancel, admin-only.
 tests/test_broadcast_queue.py
 tests/test_shop_broadcast.py
+# Group-message media: per-tenant upload storage, content-checked files, one upload per broadcast.
+tests/test_broadcast_media.py
 # Broadcast failure reasons and unreachable marks: per-tenant bot, detail page scoped to its shop.
 tests/test_broadcast_failures.py
 tests/test_broadcast_retry.py

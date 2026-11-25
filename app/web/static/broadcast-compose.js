@@ -7,6 +7,28 @@
 
   const DEBOUNCE_MS = 300;
   const AUDIENCE_FIELDS = ["segment", "days", "plan_id", "min_wallet"];
+  const TEXT_MAX = 4000;
+  const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  const VIDEO_TYPES = ["video/mp4"];
+
+  /** "photo", "video" or null for a chosen file (by its type, then its extension). */
+  function mediaKind(file) {
+    if (!file) return null;
+    const type = String(file.type || "").toLowerCase();
+    if (PHOTO_TYPES.indexOf(type) >= 0) return "photo";
+    if (VIDEO_TYPES.indexOf(type) >= 0) return "video";
+    const name = String(file.name || "").toLowerCase();
+    if (/\.(jpe?g|png|webp)$/.test(name)) return "photo";
+    if (/\.mp4$/.test(name)) return "video";
+    return null;
+  }
+
+  /** The text field's rules: optional caption with media, required message without. */
+  function textRules(hasMedia, captionMax) {
+    return hasMedia
+      ? { required: false, maxLength: Number(captionMax) || 1024 }
+      : { required: true, maxLength: TEXT_MAX };
+  }
 
   function faInt(value) {
     const numbers = root.PanelNumbers;
@@ -152,9 +174,47 @@
     form.addEventListener("change", (event) => { if (event.target.matches("[data-bc-filter], #bc-notice")) schedule(); });
     syncSegment();
     refresh();
+    bindMedia(form);
   }
 
-  const api = { audienceQuery, sendLabel, confirmText, daysHint, testStatus, bind };
+  /** Preview the chosen photo or video above the message and relax the text rules for a caption. */
+  function bindMedia(form) {
+    const input = form.querySelector("[data-bc-media]");
+    const text = form.querySelector("[data-bc-text]");
+    const box = form.querySelector("[data-bc-media-preview]");
+    const clear = form.querySelector("[data-bc-media-clear]");
+    if (!input || !box) return;
+    const img = box.querySelector("[data-bc-media-img]");
+    const video = box.querySelector("[data-bc-media-video]");
+    let objectUrl = "";
+
+    function sync() {
+      const file = input.files && input.files[0];
+      const kind = mediaKind(file);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = kind ? URL.createObjectURL(file) : "";
+      if (img) { img.hidden = kind !== "photo"; if (kind === "photo") img.src = objectUrl; else img.removeAttribute("src"); }
+      if (video) { video.hidden = kind !== "video"; if (kind === "video") video.src = objectUrl; else video.removeAttribute("src"); }
+      box.hidden = !kind;
+      if (clear) clear.hidden = !file;
+      if (text) {
+        const rules = textRules(Boolean(kind), form.getAttribute("data-caption-max"));
+        text.required = rules.required;
+        text.maxLength = rules.maxLength;
+      }
+    }
+
+    input.addEventListener("change", sync);
+    if (clear) {
+      clear.addEventListener("click", () => {
+        input.value = "";
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
+    sync();
+  }
+
+  const api = { audienceQuery, sendLabel, confirmText, daysHint, testStatus, mediaKind, textRules, bind };
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   } else {

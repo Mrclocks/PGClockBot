@@ -15,16 +15,26 @@ import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import FSInputFile, InlineKeyboardMarkup, Message
 from sqlalchemy import ColumnElement, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, BroadcastLog
 from app.services.broadcast import shop_scope_filter
+from app.services.broadcast_media import (
+    CAPTION_TOO_LONG,
+    KIND_PHOTO,
+    BroadcastMedia,
+    media_from_row,
+    prune_uploads,
+    stored_path,
+    text_limit,
+)
 from app.services.broadcast_audience import (
     AudienceSpec,
     StoredAudienceError,
@@ -74,11 +84,29 @@ _REQUEST_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
 
 @dataclass(frozen=True, slots=True)
 class BroadcastRequest:
-    """What a submit adds to a broadcast: its request token (repeat-safe), validated button rows and send time."""
+    """What a submit adds to a broadcast: its request token (repeat-safe), validated button rows, send time and media."""
 
     token: object = None
     buttons: str | None = None
     send_after: datetime | None = None
+    media: BroadcastMedia | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OutgoingMessage:
+    """What the worker sends each recipient of one broadcast."""
+
+    body: str
+    markup: InlineKeyboardMarkup | None = None
+    media: BroadcastMedia | None = None
+    upload: Path | None = None  # the stored web upload, while the bot has no file id for it
+
+
+def media_columns(media: BroadcastMedia | None) -> dict[str, str | None]:
+    """The broadcast row values that store ``media``."""
+    if media is None:
+        return {"media_kind": None, "media_file_id": None, "media_file": None}
+    return {"media_kind": media.kind, "media_file_id": media.file_id, "media_file": media.file_name}
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,13 +152,16 @@ def _spec(audience: AudienceSpec | str) -> AudienceSpec:
     return audience if isinstance(audience, AudienceSpec) else make_spec(str(audience or ""), shop_id=None)
 
 
-def clean_platform_text(text: str) -> str:
-    """A platform message body as Telegram HTML it accepts; ``ValueError`` when empty or too long."""
+def clean_platform_text(text: str | None, *, with_media: bool = False) -> str:
+    """A platform message body as Telegram HTML it accepts; ``ValueError`` when empty or too long.
+
+    With media the body is the caption: it may be empty and is limited to Telegram's caption length.
+    """
     body = normalize_telegram_html((text or "").strip())
-    if not body:
+    if not body and not with_media:
         raise ValueError("متن پیام خالی است")
-    if len(body) > MAX_TEXT_LENGTH:
-        raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
+    if len(body) > text_limit(with_media=with_media, default=MAX_TEXT_LENGTH):
+        raise ValueError(CAPTION_TOO_LONG if with_media else f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
     return body
 
 
@@ -159,7 +190,7 @@ async def queue_broadcast(
     request's buttons are rows already validated by ``message_buttons`` (``dump_buttons``).
     """
     request = request or BroadcastRequest()
-    body = clean_platform_text(text)
+    body = clean_platform_text(text, with_media=request.media is not None)
     spec = _spec(audience)
     key = platform_request_key(request.token)
     if key is not None:
@@ -182,6 +213,7 @@ async def queue_broadcast(
         request_key=key,
         buttons=request.buttons,
         send_after=send_after,
+        **media_columns(request.media),
     )
     session.add(log)
     try:
@@ -344,16 +376,58 @@ async def _record(
     await session.commit()
 
 
-async def _send(
-    bot: Bot, telegram_id: int, text: str, *, escape_html: bool = False, markup: InlineKeyboardMarkup | None = None
-) -> SendResult:
-    body = html.escape(text, quote=False) if escape_html else text
+async def _send(bot: Bot, telegram_id: int, message: OutgoingMessage) -> tuple[SendResult, str | None]:
+    """How the send ended and, after the first upload of a stored file, the file id Telegram gave it."""
+    extra = {"reply_markup": message.markup} if message.markup is not None else {}
     try:
-        extra = {"reply_markup": markup} if markup is not None else {}
-        await bot.send_message(telegram_id, body, parse_mode="HTML", **extra)
+        if message.media is None:
+            await bot.send_message(telegram_id, message.body, parse_mode="HTML", **extra)
+            return SENT, None
+        sent = await _send_media(bot, telegram_id, message, extra)
     except (TelegramForbiddenError, TelegramBadRequest) as exc:
-        return SendResult(OUTCOME_FAILED, failure_kind(exc))
-    return SENT
+        return SendResult(OUTCOME_FAILED, failure_kind(exc)), None
+    return SENT, (None if message.media.file_id else learned_file_id(sent))
+
+
+async def _send_media(bot: Bot, telegram_id: int, message: OutgoingMessage, extra: dict) -> Message:
+    media = message.media
+    source = media.file_id or FSInputFile(message.upload)
+    caption = {"caption": message.body, "parse_mode": "HTML"} if message.body else {}
+    if media.kind == KIND_PHOTO:
+        return await bot.send_photo(telegram_id, source, **caption, **extra)
+    return await bot.send_video(telegram_id, source, supports_streaming=True, **caption, **extra)
+
+
+def learned_file_id(sent: object) -> str | None:
+    """The file id of the photo or video in a sent message, for reuse by the same bot."""
+    photos = getattr(sent, "photo", None)
+    if photos:
+        return str(photos[-1].file_id)
+    video = getattr(sent, "video", None)
+    return str(video.file_id) if video is not None else None
+
+
+async def _remember_file_id(session: AsyncSession, log_id: int, token: str, file_id: str) -> None:
+    """Keep the bot's file id so later recipients reuse it instead of uploading the file again."""
+    await session.execute(
+        update(BroadcastLog).where(*_owned(log_id, token)).values(media_file_id=file_id[:256])
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+
+
+async def prune_broadcast_uploads(session: AsyncSession) -> int:
+    """Remove stored uploads that no queued or running broadcast still has to upload."""
+    rows = (
+        await session.execute(
+            select(BroadcastLog.shop_id, BroadcastLog.media_file)
+            .where(BroadcastLog.status.in_(ACTIVE_STATUSES), BroadcastLog.media_file.is_not(None),
+                   BroadcastLog.media_file_id.is_(None))
+            .limit(500)
+        )
+    ).all()
+    in_use = {(int(shop_id) if shop_id is not None else None, str(name)) for shop_id, name in rows}
+    return await asyncio.to_thread(prune_uploads, in_use)
 
 
 async def _back_off(session: AsyncSession, log_id: int, token: str, seconds: int) -> None:
@@ -395,6 +469,7 @@ class _Job:
     total: int
     progress: int
     retry: RetrySource
+    media: BroadcastMedia | None = None
 
     def clauses(self) -> list[ColumnElement[bool]]:
         return recipient_clauses(self.spec, shop_id=self.tenant, retry=self.retry)
@@ -420,7 +495,7 @@ async def _load_job(session: AsyncSession, log_id: int, token: str) -> _Job | No
                 BroadcastLog.audience, BroadcastLog.audience_spec, BroadcastLog.text, BroadcastLog.cursor_id,
                 BroadcastLog.shop_id, BroadcastLog.total, BroadcastLog.ok_count, BroadcastLog.fail_count,
                 BroadcastLog.review_count, BroadcastLog.buttons, BroadcastLog.retry_of_id, BroadcastLog.retry_unknown,
-                BroadcastLog.send_after,
+                BroadcastLog.send_after, BroadcastLog.media_kind, BroadcastLog.media_file_id, BroadcastLog.media_file,
             ).where(BroadcastLog.id == log_id)
         )
     ).one()
@@ -436,6 +511,7 @@ async def _load_job(session: AsyncSession, log_id: int, token: str) -> _Job | No
         spec=spec, tenant=tenant, text=row.text, buttons=row.buttons, cursor=int(row.cursor_id), total=int(row.total),
         progress=int(row.ok_count) + int(row.fail_count) + int(row.review_count),
         retry=RetrySource(row.retry_of_id, bool(row.retry_unknown)),
+        media=media_from_row(row.media_kind, row.media_file_id, row.media_file),
     )
     if row.send_after is not None and job.progress == 0 and job.cursor == 0:
         job.total = await _recount(session, log_id, token, job)
@@ -468,22 +544,27 @@ async def process_broadcast_batch(
             )
         ).all()
         tenant = job.tenant
-        text, escape_html = job.text, tenant is not None
-        keyboard = await stored_keyboard(session, job.buttons, shop_id=tenant)
-        markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
+        message = await _outgoing(session, job)
+        if message is None:
+            logger.warning("broadcast %s: its uploaded media file is gone; marking failed", log_id)
+            await mark_broadcast_failed(session, log_id, shop_id=tenant)
+            return False
         for user_id, telegram_id in recipients:
             if not await _mark_inflight(session, log_id, token, int(user_id)):
                 return False
             try:
-                result = await _send(bot, telegram_id, text, escape_html=escape_html, markup=markup)
+                result, file_id = await _send(bot, telegram_id, message)
             except TelegramRetryAfter as exc:
                 await _back_off(session, log_id, token, exc.retry_after)
                 return True
             except Exception:
                 # The message may or may not have been delivered; never send it again blindly.
                 logger.warning("broadcast %s: unknown outcome for user %s", log_id, user_id, exc_info=True)
-                result = SendResult(OUTCOME_UNKNOWN, KIND_UNKNOWN)
+                result, file_id = SendResult(OUTCOME_UNKNOWN, KIND_UNKNOWN), None
             await _record(session, log_id, token, int(user_id), result, shop_id=tenant)
+            if file_id:
+                await _remember_file_id(session, log_id, token, file_id)
+                message = replace(message, media=BroadcastMedia(kind=message.media.kind, file_id=file_id), upload=None)
             if delay:
                 await asyncio.sleep(delay)
         if len(recipients) < take:
@@ -494,10 +575,28 @@ async def process_broadcast_batch(
         await _release(session, log_id, token)
 
 
+async def _outgoing(session: AsyncSession, job: _Job) -> OutgoingMessage | None:
+    """The message of one broadcast; ``None`` when its media can be neither reused nor uploaded."""
+    # Shop messages are sent as typed, so their text is escaped here; platform text is already Telegram HTML.
+    body = html.escape(job.text, quote=False) if job.tenant is not None else job.text
+    keyboard = await stored_keyboard(session, job.buttons, shop_id=job.tenant)
+    markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
+    upload = None
+    if job.media is not None and not job.media.file_id:
+        upload = await asyncio.to_thread(stored_path, job.media.file_name, shop_id=job.tenant)
+        if upload is None:
+            return None
+    return OutgoingMessage(body=body, markup=markup, media=job.media, upload=upload)
+
+
 async def run_broadcast_worker(session_factory, bot: Bot, *, budget_seconds: float = TICK_BUDGET_SECONDS) -> None:
     """One scheduler tick: advance each active broadcast until the time budget is used."""
     async with session_factory() as session:
         jobs = await active_broadcast_jobs(session)
+        try:
+            await prune_broadcast_uploads(session)
+        except OSError:
+            logger.warning("broadcast media prune failed", exc_info=True)
     deadline = time.monotonic() + budget_seconds
     for log_id, shop_id in jobs:
         send_bot, should_close = bot, False

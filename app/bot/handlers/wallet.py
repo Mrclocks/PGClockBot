@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -861,7 +861,8 @@ async def wallet_receipt_cancel(
         return
     await message.answer("عکس رسید را بفرستید یا انصراف بزنید.")
 
-@router.message(F.photo)
+# Only outside any input step: a photo sent while a flow waits for one (a group message, for example) is that flow's.
+@router.message(F.photo, StateFilter(None))
 async def generic_receipt(
     message: Message,
     session: AsyncSession,
@@ -873,9 +874,6 @@ async def generic_receipt(
     """Attach photo to latest awaiting payment for this user."""
     from app.bot.menu_nav import restore_main_reply
 
-    current = await state.get_state()
-    if current:
-        return
     result = await session.execute(
         select(Payment)
         .outerjoin(Order, Order.id == Payment.order_id)
