@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
-from sqlalchemy import select, update
+from sqlalchemy import ColumnElement, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -2305,8 +2305,12 @@ _MANUAL_CANCEL_STATUSES = frozenset(
 )
 
 
-async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -> Order:
+async def cancel_order(
+    session: AsyncSession, order: Order, *, note: str = "", only_if: ColumnElement[bool] | None = None
+) -> Order:
     """Manually cancel an unpaid order; reject sibling pending payments.
+
+    ``only_if`` adds a condition to the atomic status claim (a customer's own cancel adds «nothing paid»).
 
     Paid / delivering / delivered orders cannot be cancelled from the panel
     (would orphan provisioned services / skip refunds). Also blocked when a
@@ -2336,6 +2340,8 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
     ]
     if not is_mutation:
         cond.append(Order.service_id.is_(None))
+    if only_if is not None:
+        cond.append(only_if)
     with session.no_autoflush:
         claim = await session.execute(
             update(Order)

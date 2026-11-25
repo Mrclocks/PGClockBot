@@ -632,3 +632,5 @@ tests/test_button_premium_icons.py
 
 # Account holds: who may turn a customer or shop off, shop isolation, and exact restore.
 tests/test_account_holds.py
+# A customer cancels only their own unpaid order; abandoned discounted orders are released atomically.
+tests/test_checkout_abandon.py

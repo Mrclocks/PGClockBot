@@ -22,8 +22,8 @@ class PayMethodsBackKeyboardTests(unittest.TestCase):
         )
         data = [b.callback_data for row in markup.inline_keyboard for b in row]
         self.assertIn("pay:back:38", data)
-        self.assertIn("menu:home", data)
-        self.assertLess(data.index("pay:back:38"), data.index("menu:home"))
+        self.assertIn("pay:x:38", data)
+        self.assertLess(data.index("pay:back:38"), data.index("pay:x:38"))
 
 
 class NavigateOrderPayBackTests(unittest.IsolatedAsyncioTestCase):
