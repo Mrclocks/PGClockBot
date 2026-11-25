@@ -1043,6 +1043,34 @@ class BroadcastLog(Base):
     request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
+class BroadcastFailure(Base):
+    """A recipient a broadcast did not reach, or reached with an unknown outcome, and the kind of reason."""
+
+    __tablename__ = "broadcast_failures"
+    __table_args__ = (UniqueConstraint("broadcast_id", "bot_user_id", name="uq_broadcast_failures_recipient"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    broadcast_id: Mapped[int] = mapped_column(ForeignKey("broadcast_logs.id", ondelete="CASCADE"))
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), index=True)
+    # broadcast_failures.FAILURE_KINDS key; Telegram's own error text is never stored or shown.
+    kind: Mapped[str] = mapped_column(String(24))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BroadcastUnreachable(Base):
+    """A person one tenant's bot cannot message (blocked it, deleted the account or never started it).
+
+    Group messages skip them; their next /start in that bot removes the row.
+    """
+
+    __tablename__ = "broadcast_unreachable"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), primary_key=True)
+    shop_key: Mapped[int] = mapped_column(Integer, primary_key=True)  # 0 = platform
+    reason: Mapped[str] = mapped_column(String(24))
+    marked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ResellerProfile(Base):
     __tablename__ = "reseller_profiles"
 

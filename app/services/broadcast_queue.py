@@ -34,6 +34,7 @@ from app.services.broadcast_audience import (
     load_spec,
     make_spec,
 )
+from app.services.broadcast_failures import KIND_UNKNOWN, failure_kind, mark_unreachable, record_failure
 from app.services.message_buttons import stored_keyboard
 from app.services.telegram_html import normalize_telegram_html
 
@@ -69,6 +70,17 @@ class BroadcastRequest:
 
     token: object = None
     buttons: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SendResult:
+    """How one recipient's send ended, and the failure reason kind when it was not delivered."""
+
+    outcome: str
+    kind: str | None = None
+
+
+SENT = SendResult(OUTCOME_OK)
 
 
 def new_request_token() -> str:
@@ -246,12 +258,16 @@ def _owned(log_id: int, token: str):
 
 async def _settle_crashed_send(session: AsyncSession, log_id: int, token: str) -> None:
     """A user left in flight by a dead worker has an unknown outcome: count it and move past it."""
-    await session.execute(
+    settled = await session.execute(
         update(BroadcastLog)
         .where(*_owned(log_id, token), BroadcastLog.inflight_id.is_not(None))
         .values(cursor_id=BroadcastLog.inflight_id, inflight_id=None, review_count=BroadcastLog.review_count + 1)
+        .returning(BroadcastLog.cursor_id)
         .execution_options(synchronize_session=False)
     )
+    user_id = settled.scalar_one_or_none()
+    if user_id is not None:
+        await record_failure(session, broadcast_id=log_id, user_id=int(user_id), kind=KIND_UNKNOWN)
     await session.commit()
 
 
@@ -264,29 +280,35 @@ async def _mark_inflight(session: AsyncSession, log_id: int, token: str, user_id
     return marked.rowcount == 1
 
 
-async def _record(session: AsyncSession, log_id: int, token: str, user_id: int, outcome: str) -> None:
+async def _record(
+    session: AsyncSession, log_id: int, token: str, user_id: int, result: SendResult, *, shop_id: int | None
+) -> None:
+    """Count the outcome and, for a recipient not reached, its reason, in one transaction under the lease."""
     counts = {
         OUTCOME_OK: {"ok_count": BroadcastLog.ok_count + 1},
         OUTCOME_FAILED: {"fail_count": BroadcastLog.fail_count + 1},
         OUTCOME_UNKNOWN: {"review_count": BroadcastLog.review_count + 1},
-    }[outcome]
-    await session.execute(
+    }[result.outcome]
+    counted = await session.execute(
         update(BroadcastLog).where(*_owned(log_id, token)).values(cursor_id=user_id, inflight_id=None, **counts)
         .execution_options(synchronize_session=False)
     )
+    if counted.rowcount == 1 and result.kind is not None:
+        await record_failure(session, broadcast_id=log_id, user_id=user_id, kind=result.kind)
+        await mark_unreachable(session, user_id=user_id, shop_id=shop_id, kind=result.kind)
     await session.commit()
 
 
 async def _send(
     bot: Bot, telegram_id: int, text: str, *, escape_html: bool = False, markup: InlineKeyboardMarkup | None = None
-) -> str:
+) -> SendResult:
     body = html.escape(text, quote=False) if escape_html else text
     try:
         extra = {"reply_markup": markup} if markup is not None else {}
         await bot.send_message(telegram_id, body, parse_mode="HTML", **extra)
-    except (TelegramForbiddenError, TelegramBadRequest):
-        return OUTCOME_FAILED
-    return OUTCOME_OK
+    except (TelegramForbiddenError, TelegramBadRequest) as exc:
+        return SendResult(OUTCOME_FAILED, failure_kind(exc))
+    return SENT
 
 
 async def _back_off(session: AsyncSession, log_id: int, token: str, seconds: int) -> None:
@@ -374,15 +396,15 @@ async def process_broadcast_batch(
             if not await _mark_inflight(session, log_id, token, int(user_id)):
                 return False
             try:
-                outcome = await _send(bot, telegram_id, text, escape_html=escape_html, markup=markup)
+                result = await _send(bot, telegram_id, text, escape_html=escape_html, markup=markup)
             except TelegramRetryAfter as exc:
                 await _back_off(session, log_id, token, exc.retry_after)
                 return True
             except Exception:
                 # The message may or may not have been delivered; never send it again blindly.
                 logger.warning("broadcast %s: unknown outcome for user %s", log_id, user_id, exc_info=True)
-                outcome = OUTCOME_UNKNOWN
-            await _record(session, log_id, token, int(user_id), outcome)
+                result = SendResult(OUTCOME_UNKNOWN, KIND_UNKNOWN)
+            await _record(session, log_id, token, int(user_id), result, shop_id=tenant)
             if delay:
                 await asyncio.sleep(delay)
         if len(recipients) < take:
