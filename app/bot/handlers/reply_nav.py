@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
+from app.bot import web_panel_card
 from app.bot.handlers.shop_marketing_bot import SHOP_LEAF_OPENERS
 from app.bot.menu_nav import restore_main_reply
 from app.bot.reseller_hub_groups import back_callback_for
@@ -1015,14 +1016,7 @@ async def dispatch_admin_inline_reply_action(
     ):
         return
     if action == kb.REPLY_ACTION_ADM_ST_PANEL or action == "adm_st_panel":
-        from app.bot.handlers.admin_settings import _panel_settings_url
-
-        url = await _panel_settings_url(session, for_shop=False)
-        await message.answer(
-            "🌐 <b>تنظیمات کامل وب‌پنل</b>\n"
-            "ظاهر ربات، رنگ دکمه‌ها، گزارش روزانه، لینک‌ها و متن‌های بلند:\n"
-            f"<code>{url}</code>"
-        )
+        await _present_admin_web_panel(message, session)
         return
     if action == kb.REPLY_ACTION_ADM_PLANS_ADD or action == "adm_plans_add":
         data = await state.get_data()
@@ -2297,6 +2291,34 @@ _RESELLER_CAPACITY_ACTIONS = frozenset(
     {"res_renew", "res_buy_gb", "res_buy_users", "res_addon_packs"}
 )
 
+async def _present_admin_web_panel(message: Message, session: AsyncSession) -> None:
+    """The owner's «وب‌پنل» card, with «بازگشت» to the screen it was opened from."""
+    from app.bot.handlers.admin_settings import _panel_settings_url
+
+    await web_panel_card.present_web_panel_card(
+        message,
+        title=web_panel_card.ADMIN_SETTINGS_TITLE,
+        body=web_panel_card.ADMIN_SETTINGS_BODY,
+        url=await _panel_settings_url(session, for_shop=False),
+        ui=await get_all_settings(session),
+        back_callback=web_panel_card.ADMIN_SETTINGS_HUB,
+    )
+
+
+async def _present_shop_web_panel(message: Message, session: AsyncSession) -> None:
+    """A shop's «وب‌پنل» card, with «بازگشت» to the screen it was opened from."""
+    from app.bot.handlers.admin_settings import _panel_settings_url
+
+    await web_panel_card.present_web_panel_card(
+        message,
+        title=web_panel_card.SHOP_SETTINGS_TITLE,
+        body=web_panel_card.SHOP_SETTINGS_BODY,
+        url=await _panel_settings_url(session, for_shop=True),
+        ui=await get_all_settings(session),
+        back_callback=web_panel_card.SHOP_SETTINGS_HUB,
+    )
+
+
 async def _soft_reseller(
     message: Message,
     session: AsyncSession,
@@ -2498,17 +2520,12 @@ async def _soft_reseller(
     if action.startswith("res_st_"):
         sec = action.replace("res_st_", "", 1)
         if sec == "panel":
-            from app.services.resellers import get_reseller_panel_base_url, has_bot_perm
+            from app.services.resellers import has_bot_perm
 
             if not has_bot_perm(profile, "shop_settings"):
                 await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)
                 return
-            base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
-            url = f"{base}/shop-settings" if base else "/shop-settings"
-            await message.answer(
-                "🌐 <b>تنظیمات کامل فروشگاه در وب‌پنل</b>\n"
-                f"<code>{url}</code>"
-            )
+            await _present_shop_web_panel(message, session)
             return
         bubble = await _live_bubble(message)
         cb = _SoftCallback(bubble, f"res:st:sec:{sec}", back_callback=back_callback_for("res_settings"))
@@ -3374,17 +3391,10 @@ async def reply_main_nav(
             message, session, db_user, is_reseller_bot=is_reseller_bot
         ):
             return
-        from app.bot.handlers.admin_settings import _panel_settings_url
-
-        url = await _panel_settings_url(session, for_shop=False)
-        await message.answer(
-            "🌐 <b>تنظیمات کامل وب‌پنل</b>\n"
-            "ظاهر ربات، رنگ دکمه‌ها، گزارش روزانه، لینک‌ها و متن‌های بلند:\n"
-            f"<code>{url}</code>"
-        )
+        await _present_admin_web_panel(message, session)
     elif action == kb.REPLY_ACTION_RES_ST_PANEL:
         from app.services.reseller_access import load_reseller_actor
-        from app.services.resellers import get_reseller_panel_base_url, has_bot_perm
+        from app.services.resellers import has_bot_perm
 
         if not is_reseller_bot:
             await open_reseller_creds(
@@ -3404,17 +3414,7 @@ async def reply_main_nav(
         if not owner_id or not profile or not has_bot_perm(profile, "shop_settings"):
             await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)
             return
-        try:
-            base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
-        except Exception:
-            base = ""
-        url = f"{base}/shop-settings" if base else "/shop-settings"
-        await message.answer(
-            "🌐 <b>تنظیمات کامل فروشگاه در وب‌پنل</b>\n"
-            "ظاهر، رنگ، گزارش روزانه و متن‌های بلند:\n"
-            f"<code>{url}</code>\n"
-            "فقط همین فروشگاه — بدون دسترسی به تنظیمات پلتفرم."
-        )
+        await _present_shop_web_panel(message, session)
     elif action.startswith("adm_st_"):
         sec = action.replace("adm_st_", "", 1)
         # Legacy reply keyboards used «سرویس و دسترسی»; ops fields moved to access.

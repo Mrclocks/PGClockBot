@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot import web_panel_card
 from app.bot.list_pages import page_number
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
@@ -27,7 +28,8 @@ from app.services.plans_catalog import (
     plan_template_denial,
     role_requires_template,
 )
-from app.services.resellers import has_bot_perm
+from app.services.resellers import get_reseller_panel_base_url, has_bot_perm
+from app.services.users import get_all_settings
 from app.services import bot_feedback_texts as feedback
 import logging
 
@@ -102,7 +104,6 @@ async def _plans_kb(
     """The shop's plan rows, with «بازگشت» to the plans screen (add / catalog actions)."""
     from app.bot.keyboards import reseller_plans_list_keyboard
     from app.bot.nav_inline import with_inline_back
-    from app.services.users import get_all_settings
 
     ui = await get_all_settings(session, reseller_id=reseller_id)
     return with_inline_back(reseller_plans_list_keyboard(plans, ui), ui, PLANS_SCREEN)
@@ -245,9 +246,14 @@ async def res_plan_webhint(
         return
     await callback.answer()
     if callback.message:
-        await callback.message.answer(
-            "در وب‌پنل از منوی «پلن‌ها» می‌توانید پلن تست، پلن دلخواه و اتصال دقیق "
-            "به گروه‌ها/تمپلیت‌های مجاز پاسارگارد را مدیریت کنید."
+        base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
+        await web_panel_card.present_web_panel_card(
+            callback.message,
+            title=web_panel_card.SHOP_PLANS_TITLE,
+            body=web_panel_card.SHOP_PLANS_BODY,
+            url=f"{base}/plans" if base else None,
+            ui=await get_all_settings(session, reseller_id=owner_id),
+            back_callback=PLANS_SCREEN,
         )
 
 
