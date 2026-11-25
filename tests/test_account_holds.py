@@ -557,6 +557,118 @@ class HoldNoticeTextTests(unittest.TestCase):
         self.assertNotIn("<a>", admin)
 
 
+class HoldBotTests(HoldHarness):
+    """The bot buttons call the same service, with the acting scope taken from the bot."""
+
+    def _callback(self, data: str):
+        from unittest.mock import AsyncMock, MagicMock
+
+        message = MagicMock(edit_text=AsyncMock(), answer=AsyncMock())
+        return MagicMock(data=data, answer=AsyncMock(), message=message)
+
+    def _message(self, text: str):
+        from unittest.mock import AsyncMock, MagicMock
+
+        return MagicMock(text=text, answer=AsyncMock())
+
+    async def asyncSetUp(self) -> None:
+        await super().asyncSetUp()
+        from aiogram.fsm.context import FSMContext
+        from aiogram.fsm.storage.base import StorageKey
+        from aiogram.fsm.storage.memory import MemoryStorage
+
+        async with self.Session() as session:
+            for shop in (SHOP_A, SHOP_B):
+                profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == shop))
+                profile.web_permissions = profile.bot_permissions = "dashboard,accounts_disable"
+            await session.commit()
+        self.state = FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=1, user_id=1))
+        self.shop_ctx = {"is_reseller_bot": True, "reseller_owner_id": SHOP_A}
+
+    async def _shop_actor(self, session):
+        return await session.get(BotUser, SHOP_A)
+
+    async def test_shop_bot_disables_its_customer_after_a_reason_and_enables_again(self) -> None:
+        from app.bot.handlers import account_hold_bot as bot
+
+        async with self.Session() as session:
+            actor = await self._shop_actor(session)
+            await bot.ahb_ask_reason(self._callback(f"ahb:cd:{CUSTOMER}"), self.state, session, actor, **self.shop_ctx)
+            reply = self._message("تخلف از قوانین")
+            await bot.ahb_disable(reply, self.state, session, actor, **self.shop_ctx)
+        self.assertIn("غیرفعال شد", reply.answer.await_args.args[0])
+        await self._run_all()
+        self.assertEqual(self.panel.status(501), "disabled")
+        self.assertEqual(self.panel.status(503), "active")  # another shop's service
+
+        async with self.Session() as session:
+            show = self._callback(f"ahb:c:{CUSTOMER}")
+            await bot.ahb_show(show, session, await self._shop_actor(session), **self.shop_ctx)
+            markup = show.message.edit_text.await_args.kwargs["reply_markup"]
+            self.assertIn(f"ahb:ce:{CUSTOMER}", [b.callback_data for row in markup.inline_keyboard for b in row])
+            enable = self._callback(f"ahb:ce:{CUSTOMER}")
+            await bot.ahb_enable(enable, session, await self._shop_actor(session), **self.shop_ctx)
+        await self._run_all()
+        self.assertEqual(self.panel.status(501), "active")
+
+    async def test_another_shops_customer_and_forged_callbacks_are_refused(self) -> None:
+        from app.bot.handlers import account_hold_bot as bot
+
+        async with self.Session() as session:
+            actor = await self._shop_actor(session)
+            for data in (f"ahb:c:{OTHER}", "ahb:c:abc", "ahb:x:101", f"ahb:s:{SHOP_B}"):
+                callback = self._callback(data)
+                await bot.ahb_show(callback, session, actor, **self.shop_ctx)
+                self.assertTrue(callback.answer.await_args.kwargs.get("show_alert"), data)
+            refused = self._callback(f"ahb:cd:{OTHER}")
+            await bot.ahb_ask_reason(refused, self.state, session, actor, **self.shop_ctx)
+            self.assertTrue(refused.answer.await_args.kwargs.get("show_alert"))
+        self.assertEqual(await self._holds(), [])
+
+    async def test_main_bot_needs_the_owner_principal(self) -> None:
+        from app.bot.handlers import account_hold_bot as bot
+
+        async with self.Session() as session:
+            stranger = await session.get(BotUser, OTHER)
+            callback = self._callback(f"ahb:c:{CUSTOMER}")
+            with patch.object(bot, "is_bot_owner_principal", return_value=False):
+                await bot.ahb_show(callback, session, stranger, is_reseller_bot=False)
+        self.assertTrue(callback.answer.await_args.kwargs.get("show_alert"))
+
+    async def test_owner_on_the_main_bot_disables_a_shop(self) -> None:
+        from app.bot.handlers import account_hold_bot as bot
+
+        async with self.Session() as session:
+            session.add(OrgPrincipal(id=1, parent_id=None, depth=DEPTH_OWNER, status=STATUS_ACTIVE, pg_username="root"))
+            await session.commit()
+            owner = await session.get(BotUser, OTHER)
+            with patch.object(bot, "is_bot_owner_principal", return_value=True):
+                await bot.ahb_ask_reason(self._callback(f"ahb:sd:{SHOP_B}"), self.state, session, owner,
+                                         is_reseller_bot=False)
+                await bot.ahb_disable(self._message("بدهی پرداخت نشده"), self.state, session, owner,
+                                      is_reseller_bot=False)
+        await self._run_all()
+        self.assertEqual(self.panel.admins[f"admin{SHOP_B}"]["status"], "disabled")
+        self.assertEqual(self.panel.status(503), "disabled")
+
+    async def test_card_buttons_fit_telegram_and_show_only_with_the_key(self) -> None:
+        from app.bot import keyboards as kb
+        from app.bot.handlers import reseller_customer_tools as tools
+
+        async with self.Session() as session:
+            actor = await self._shop_actor(session)
+            profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == SHOP_A))
+            datas = [b.callback_data for row in tools.customer_tool_rows(profile, actor, CUSTOMER) for b in row]
+            self.assertIn(f"ahb:c:{CUSTOMER}", datas)
+            profile.web_permissions = "dashboard"
+            self.assertEqual(tools.customer_tool_rows(profile, actor, CUSTOMER), [])
+        owner_rows = kb.admin_user_actions(CUSTOMER, is_blocked=False, role="user").inline_keyboard
+        shop_rows = kb.admin_reseller_actions(SHOP_A).inline_keyboard
+        for data in (f"ahb:c:{CUSTOMER}", f"ahb:s:{SHOP_A}"):
+            self.assertIn(data, [b.callback_data for rows in (owner_rows, shop_rows) for row in rows for b in row])
+        self.assertTrue(all(len(f"ahb:se:{10**12 - 1}".encode()) <= 64 for _ in (0,)))
+
+
 class HoldRowActionTests(unittest.TestCase):
     """The row «⋯» forms that the user card copies: disable, enable, or nothing to lift."""
 

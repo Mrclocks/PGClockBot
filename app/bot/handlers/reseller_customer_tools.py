@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.db.models import BotUser, ResellerProfile
 from app.services import bot_feedback_texts as feedback
+from app.services.account_hold_actions import customer_hold_scope
 from app.services.authz import resolve_shop_permissions_from_profile
 from app.services.color_tags import COLOR_TAGS, bot_tag_button_label
 from app.services.customer_marks import has_customer_notes_permission, may_edit_private_marks, save_marks
@@ -90,6 +91,8 @@ def customer_tool_rows(profile: ResellerProfile, db_user: BotUser, user_id: int)
             ])
     if _allowed(block_shop, staff):
         rows.append([InlineKeyboardButton(text="🚫 مسدودسازی در فروشگاه", callback_data=f"{PREFIX}:block:{uid}")])
+    if customer_hold_scope(staff) is not None:
+        rows.append([kb.customer_hold_button(uid)])
     return rows
 
 
