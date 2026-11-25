@@ -45,6 +45,8 @@ VIEW_SCREENS: frozenset[str] = frozenset({
     "autorv:list", "payvoid:list",
     "res:dash", "res:orders", "res:tickets", "res:cancellations",
     "qlk:v",
+    # The «وب‌پنل» cards only show a link, so «بازگشت» leads to the screen they were opened from.
+    "nv:adm:ra:adm_st_panel", "nv:res:ra:res_st_panel", "res:plan:webhint",
     # The scenario list and the «panel is down» scenario's confirmation: nothing changes before a tap.
     # The command center itself (cmd:h) is an input prompt, not a view: recording it made the panel
     # home's «بازگشت» lead back into it.

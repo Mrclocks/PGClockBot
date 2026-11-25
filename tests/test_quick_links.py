@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.bot.handlers.quick_links_view import NO_BOT, quick_links_text
+from app.bot.handlers.quick_links_view import LINK_DETAILS, LINK_SEPARATOR, NO_BOT, quick_links_text
 from app.bot.hub_entries import QUICK_LINKS_CALLBACK
 from app.bot.nav_inline import admin_groups_hub_keyboard, reseller_manage_hub_keyboard
 from app.db import Base
@@ -108,6 +108,16 @@ class BotScreenTests(unittest.TestCase):
         text = quick_links_text("shop_bot", [QuickLink("x", "<b>label</b>", "https://t.me/shop_bot?start=x&y")])
         self.assertIn("<code>https://t.me/shop_bot?start=x&amp;y</code>", text)
         self.assertIn("&lt;b&gt;label&lt;/b&gt;", text)
+
+    def test_each_link_is_its_own_block_with_icon_and_purpose(self) -> None:
+        links = [QuickLink("renew", "تمدید", "https://t.me/b?start=renew"),
+                 QuickLink("gift", "کد هدیه", "https://t.me/b?start=gift")]
+        text = quick_links_text("b", links)
+        self.assertIn("🔄 <b>تمدید</b>", text)
+        self.assertIn(f"<i>{LINK_DETAILS['renew'][1]}</i>", text)
+        self.assertEqual(text.count(LINK_SEPARATOR), 1)
+        self.assertLess(text.index("renew"), text.index(LINK_SEPARATOR))
+        self.assertLess(text.index(LINK_SEPARATOR), text.index("start=gift"))
 
     def test_missing_bot_username_explains_why(self) -> None:
         self.assertIn(NO_BOT, quick_links_text(None, []))

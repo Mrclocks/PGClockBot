@@ -11,6 +11,7 @@ from app.bot.button_sources import is_recording, note_button_source
 from app.bot.edit_mode import editable_screen
 from app.bot.list_pages import page_of, pager_row
 from app.bot.panel_back import BACK_LABEL_KEY, back_callback
+from app.services.button_icons import icon_kwargs
 from app.services.catalog_pricing import sale_price
 from app.services.plan_panel_groups import plan_has_pg_link
 from app.config import get_settings
@@ -1587,10 +1588,13 @@ def support_contacts_keyboard(contacts: list[dict], ui: dict | None = None) -> I
     buttons: list[InlineKeyboardButton] = []
     for c in contacts:
         url = support_chat_url(c.get("telegram") or "")
-        title = str(c.get("title") or "پشتیبان")[:64]
+        title = str(c.get("title") or "پشتیبان")
         if url:
             style = resolve_support_contact_style(ui, c)
-            kwargs: dict = {"text": f"💬 {title}", "url": url}
+            icon = icon_kwargs(c)
+            # A premium icon replaces the default 💬 prefix.
+            text = title if icon else f"💬 {title}"
+            kwargs: dict = {"text": text[:64], "url": url, **icon}
             if style:
                 kwargs["style"] = style
             buttons.append(InlineKeyboardButton(**kwargs))
