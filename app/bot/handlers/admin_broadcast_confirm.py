@@ -43,7 +43,7 @@ from app.services.broadcast_queue import (
     new_request_token,
     queue_broadcast,
 )
-from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard
+from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard, sender_screen_labels
 from app.services.redact import user_safe_error
 from app.services.users import get_all_settings
 
@@ -110,7 +110,7 @@ async def _preview(
         await state.clear()
         await message.answer(f"⚠️ {html.escape(user_safe_error(exc))}", reply_markup=back)
         return
-    rows = preview_keyboard(stored)
+    rows = preview_keyboard(stored, await sender_screen_labels(session, None))
     try:
         await answer_preview(
             message, body, media_from_data(data), markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None

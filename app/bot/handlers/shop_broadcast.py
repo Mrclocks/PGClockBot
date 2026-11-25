@@ -30,7 +30,7 @@ from app.services.broadcast import clear_broadcast_history, delete_broadcast_log
 from app.services.broadcast_audience import describe, make_spec
 from app.services.broadcast_queue import STATUS_LABELS, cancel_broadcast
 from app.bot.message_button_picker import ask_for_buttons, register_flow
-from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard
+from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard, sender_screen_labels
 from app.services.redact import user_safe_error
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.services.shop_broadcast import (
@@ -394,7 +394,7 @@ async def _confirm_with_buttons(
     await state.set_state(ShopBroadcastStates.confirm)
     ui = await get_all_settings(session)
     preview = shop_broadcast_html_snippet(body, limit=500) + ("…" if len(body) > 500 else "")
-    rows = preview_keyboard(stored)
+    rows = preview_keyboard(stored, await sender_screen_labels(session, shop_id))
     media = media_from_data(data)
     if rows or media is not None:
         # The message, its media and buttons exactly as customers will get them.
