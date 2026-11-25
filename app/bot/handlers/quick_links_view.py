@@ -27,16 +27,37 @@ ADMIN_HOME_CALLBACK = "nv:adm:home"
 TITLE = "🔗 لینک‌های سریع"
 HINT = "روی هر لینک بزنید تا کپی شود، سپس برای مشتری بفرستید؛ مشتری با آن مستقیم وارد همان بخش ربات می‌شود."
 NO_BOT = "یوزرنیم ربات مشخص نیست؛ اتصال ربات را در وب‌پنل بررسی کنید."
-MORE = "لینک تمدید هر سرویس در کارت مشتری و لینک هر کد هدیه در صفحهٔ کدهای هدیهٔ وب‌پنل است."
+MORE = "💡 لینک تمدید هر سرویس در کارت مشتری و لینک هر کد هدیه در صفحهٔ کدهای هدیهٔ وب‌پنل است."
+LINK_SEPARATOR = "┄┄┄┄┄┄┄┄┄┄┄┄"
+DEFAULT_LINK_ICON = "🔗"
+
+# Payload -> (icon, what the customer sees after tapping the link).
+LINK_DETAILS: dict[str, tuple[str, str]] = {
+    "renew": ("🔄", "مشتری مستقیم به تمدید سرویسش می‌رود."),
+    "wallet": ("💰", "کیف پول و شارژ حساب مشتری باز می‌شود."),
+    "support": ("🎧", "بخش پشتیبانی و تیکت‌ها باز می‌شود."),
+    "config": ("📥", "کانفیگ و لینک اشتراک دوباره برای مشتری می‌آید."),
+    "gift": ("🎁", "از مشتری کد هدیه پرسیده می‌شود."),
+}
+
+
+def _link_block(link: QuickLink) -> str:
+    """One link: icon and bold name, what it opens, then the copyable address."""
+    icon, about = LINK_DETAILS.get(link.key, (DEFAULT_LINK_ICON, ""))
+    lines = [f"{icon} <b>{html.escape(link.label)}</b>"]
+    if about:
+        lines.append(f"<i>{html.escape(about)}</i>")
+    lines.append(f"<code>{html.escape(link.url or '')}</code>")
+    return "\n".join(lines)
 
 
 def quick_links_text(bot_username: str | None, links: list[QuickLink]) -> str:
-    """Telegram HTML body: one copyable link per line, or why there are none."""
+    """Telegram HTML body: one separated, copyable block per link, or why there are none."""
     if not bot_username:
         return format_message(TITLE, NO_BOT)
-    rows = [f"• {html.escape(link.label)}:\n<code>{html.escape(link.url)}</code>" for link in links if link.url]
-    lines = [HINT, "", *rows, "", MORE]
-    return format_message(TITLE, "\n".join(lines))
+    blocks = [_link_block(link) for link in links if link.url]
+    body = f"\n{LINK_SEPARATOR}\n".join(blocks)
+    return format_message(TITLE, "\n\n".join(part for part in (HINT, body, MORE) if part))
 
 
 @router.callback_query(F.data == QUICK_LINKS_CALLBACK)
