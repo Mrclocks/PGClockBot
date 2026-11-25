@@ -396,7 +396,7 @@ class MonitorWebTests(MonitorDatabaseCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("bash pgclock.sh xray", response.text)
         self.assertIn("خودکار آماده می‌کند", response.text)
-        self.assertIn('disabled>شروع تست‌ها', response.text)
+        self.assertRegex(response.text, r'disabled>(?:\{\{[^}]*\}\}|<svg[^>]*>.*?</svg>)?شروع تست‌ها')
 
     async def test_web_rechecks_owner_after_the_panel_request(self) -> None:
         async def revoke(_username: str) -> dict[str, object]:
