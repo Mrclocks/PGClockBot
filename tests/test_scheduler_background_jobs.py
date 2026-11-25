@@ -35,6 +35,8 @@ OPERATIONS = {
     "paid_order_recovery",
     "volume_external_sync",
     "chat_message_purge",
+    # Turns held customers and shops off on the panel, and back on at release; needs no running bot.
+    "account_holds",
     # Queues the warnings before an expired service is deleted; needs no running bot.
     "service_cleanup",
     # Puts timed quick switches back when their time comes; needs no running bot.

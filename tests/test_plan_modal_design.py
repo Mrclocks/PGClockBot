@@ -23,7 +23,8 @@ RESELLER_FORM_FIELDS = {
     "keep_extra_gb_on_renew", "keep_extra_users_on_renew", "allow_buy_extra", "extra_gb_price", "extra_user_price", "extra_gb_amount",
     "extra_gb_style", "extra_user_amount", "extra_user_style", "pg_role_id", "is_active", "button_style",
 }
-RISKY = {"payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "service_cleanup", "free_checkout"}
+RISKY = {"payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "service_cleanup", "free_checkout",
+         "accounts_disable"}
 
 
 def render_reseller_form() -> str:
