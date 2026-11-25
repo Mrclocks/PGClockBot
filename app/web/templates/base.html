@@ -263,18 +263,7 @@
         {% include "_pg_connection_notice.html" %}
         {% block content %}{% endblock %}
       </div>
-      <footer class="site-footer">
-        <div class="footer-meta">
-          <span>© ۲۰۲۶ MrClockBot</span>
-        </div>
-        <div class="footer-actions">
-          <a class="btn btn-star" href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">
-            {{ icon('loyalty') }}
-            ستاره
-            {{ icon('github', 'btn-star-gh') }}
-          </a>
-        </div>
-      </footer>
+      {% include "_site_footer.html" %}
     </main>
   </div>
   {# Navigation clock — fixed, no layout reflow; independent of deleted veil system #}

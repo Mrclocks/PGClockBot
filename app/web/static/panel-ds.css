@@ -41,7 +41,7 @@
 
 /* ===================================================================== 2. Buttons */
 .ds .btn, .ds a.btn { height: var(--ctl-h); min-height: var(--ctl-h); padding: 0 var(--g4); gap: var(--g2); font-size: var(--fs-3); }
-.ds .btn-sm, .ds a.btn-sm, .ds .btn-star { height: var(--cmp-h); min-height: var(--cmp-h); padding: 0 var(--g3); font-size: var(--fs-2); }
+.ds .btn-sm, .ds a.btn-sm { height: var(--cmp-h); min-height: var(--cmp-h); padding: 0 var(--g3); font-size: var(--fs-2); }
 .ds .icon-btn { width: var(--ctl-h); height: var(--ctl-h); min-height: var(--ctl-h); padding: 0; flex: 0 0 auto; }
 .ds .icon-btn .ico { width: 18px; height: 18px; }
 /* Warnings act like main actions: the brand colour, so a colour change in the panel settings reaches them. */

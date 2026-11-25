@@ -1112,7 +1112,7 @@ tr.principal-row-l2 td:first-child {
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  /* Same compact tier as .btn-star so side-foot & site-footer share one baseline */
+  /* Same compact control height as the footer row so side-foot & site-footer share one baseline */
   height: var(--ctl-sm-h);
   min-height: var(--ctl-sm-h);
   padding: 0 var(--space-1);
@@ -3937,34 +3937,20 @@ code.env-fname {
   align-items: center;
   gap: var(--space-1);
 }
-.footer-actions { display: flex; align-items: center; gap: var(--space-1); }
-/* The GitHub star is a quiet footer link, not a call to action: neutral outline, muted text. */
-.btn-star,
-a.btn.btn-star {
+.footer-links { display: flex; align-items: center; gap: var(--space-3); }
+/* Footer links are plain text in the brand colour: no box, no fill, so they never compete with page actions. */
+.site-footer a.footer-link {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  color: var(--muted-fg) !important;
-  border: 1px solid var(--border);
-  background: transparent;
-  border-radius: var(--control-radius);
-  padding: 0 var(--space-1);
-  height: var(--ctl-sm-h);
-  min-height: var(--ctl-sm-h);
+  color: var(--primary);
   font-size: var(--fs-2);
   font-weight: var(--btn-fw);
-  text-decoration: none !important;
-  box-sizing: border-box;
+  text-decoration: none;
 }
-.btn-star:hover,
-a.btn.btn-star:hover {
-  background: color-mix(in srgb, var(--foreground) 6%, transparent);
-  color: var(--foreground) !important;
-  opacity: 1;
-  filter: none;
-}
-.btn-star svg { width: 14px; height: 14px; flex: 0 0 auto; }
-.btn-star-gh { opacity: 0.9; }
+.site-footer a.footer-link:hover { color: var(--primary); opacity: 0.8; }
+.site-footer a.footer-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--control-radius); }
+.footer-link svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .btn.is-copied {
   color: var(--ok-fg) !important;
   border-color: rgba(34, 197, 94, 0.42);
@@ -5523,7 +5509,7 @@ form.settings-form > .actions.sticky-actions,
     overflow: hidden;
   }
   .footer-meta { justify-content: center; }
-  .footer-actions { justify-content: center; }
+  .footer-links { justify-content: center; }
   .page-head { margin-bottom: var(--page-title-gap); gap: var(--space-2); align-items: center; }
   /* Title actions stay on the same row, opposite the title (inline-start / left in RTL) */
   .page-head:has(> .actions),
@@ -11971,7 +11957,7 @@ html[data-theme="light"] .ov-spark-up, html[data-theme="light"] .ov-chart-legend
    --btn-h    fields, selects, buttons, icon buttons and tabs
    --ctl-sm-h compact buttons, filters, segment switches and multi-select tags
    --tag-h    status tags and counters */
-.btn-sm, a.btn-sm, .btn-star { height: var(--ctl-sm-h); min-height: var(--ctl-sm-h); font-size: var(--fs-2); }
+.btn-sm, a.btn-sm { height: var(--ctl-sm-h); min-height: var(--ctl-sm-h); font-size: var(--fs-2); }
 .section-tabs a, .section-tabs .tab-btn { min-height: var(--btn-h); box-sizing: border-box; }
 .sales-seg button, .sales-seg a {
   min-height: calc(var(--ctl-sm-h) - 4px); display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;

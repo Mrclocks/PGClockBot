@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -44,16 +45,25 @@ class ForceJoinCacheTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(bot.get_chat_member.await_count, 1)
 
 
-class FooterRestoreTests(unittest.TestCase):
-    def test_footer_has_star_and_visible_on_mobile(self):
-        html = Path("app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("site-footer", html)
-        self.assertIn("btn-star", html)
-        self.assertIn("footer-meta", html)
-        self.assertNotIn("site-footer desk-only", html)
-        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".btn-star", css)
-        self.assertIn(".footer-meta", css)
+class SiteFooterTests(unittest.TestCase):
+    def test_footer_links_to_github_channel_and_group_as_text(self):
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+        env = Environment(loader=FileSystemLoader("app/web/templates"), autoescape=select_autoescape())
+        html = env.get_template("_site_footer.html").render()
+        hrefs = re.findall(r'class="footer-link" href="([^"]+)"', html)
+        self.assertEqual(
+            hrefs,
+            [
+                "https://github.com/Mrclocks/PGClockBot",
+                "https://t.me/MrClockHub",
+                "https://t.me/MrClock_Chat",
+            ],
+        )
+        self.assertIn("MrClock<", html)
+        self.assertNotIn("MrClockBot", html)
+        self.assertNotIn('class="btn', html)
+        self.assertEqual(html.count('rel="noopener noreferrer"'), 3)
 
 
 class PerfWiringTests(unittest.TestCase):
