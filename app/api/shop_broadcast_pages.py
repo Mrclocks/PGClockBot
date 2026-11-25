@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.broadcast_detail_pages import register_broadcast_detail_routes
 from app.api.broadcast_pages import SHOP_PATH, BroadcastPage, redirect, register_broadcast_routes
+from app.api.broadcast_test_pages import register_broadcast_test_routes
 from app.services.authz import authz_from_staff, can_shop
 from app.services.broadcast_queue import cancel_broadcast
 from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
@@ -47,6 +48,7 @@ def register_shop_broadcast_pages(
 ) -> None:
     register_broadcast_routes(app, path=SHOP_PATH, resolve=shop_page, guard=require_staff, render=render, get_db=get_db)
     register_broadcast_detail_routes(app, path=SHOP_PATH, resolve=shop_page, guard=require_staff, render=render, get_db=get_db)
+    register_broadcast_test_routes(app, path=SHOP_PATH, resolve=shop_page, guard=require_staff, get_db=get_db)
 
     @app.post(f"{SHOP_PATH}/history/{{log_id}}/cancel")
     async def shop_broadcast_history_cancel(

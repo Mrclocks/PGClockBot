@@ -2,7 +2,7 @@
 "use strict";
 
 const assert = require("assert");
-const { audienceQuery, sendLabel, confirmText, daysHint } = require("../app/web/static/broadcast-compose.js");
+const { audienceQuery, sendLabel, confirmText, daysHint, testStatus } = require("../app/web/static/broadcast-compose.js");
 
 assert.strictEqual(audienceQuery({ segment: "expiring", days: "5", plan_id: "", min_wallet: "" }), "segment=expiring&days=5");
 assert.strictEqual(audienceQuery({ segment: "all", notice: true }), "segment=all&notice=1");
@@ -19,5 +19,11 @@ assert.strictEqual(confirmText("", null), "پیام برای گروه انتخا
 
 assert.strictEqual(daysHint(7), "خالی بماند: 7 روز");
 assert.strictEqual(daysHint(0), "");
+
+// The test send shows the server's answer, and a safe line when there is none.
+assert.deepStrictEqual(testStatus(true, { message: "فرستاده شد" }), { ok: true, text: "فرستاده شد" });
+assert.deepStrictEqual(testStatus(false, { error: "رد شد" }), { ok: false, text: "رد شد" });
+assert.deepStrictEqual(testStatus(true, null), { ok: false, text: "ارسال آزمایشی انجام نشد؛ اتصال را بررسی کنید." });
+assert.deepStrictEqual(testStatus(false, { message: "not an error" }).ok, false);
 
 console.log("broadcast_compose tests passed");

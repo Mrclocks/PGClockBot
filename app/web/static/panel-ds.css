@@ -1056,8 +1056,14 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .bc-reach.is-error { background: color-mix(in srgb, var(--destructive) 9%, transparent); border-color: color-mix(in srgb, var(--destructive) 30%, var(--line)); }
 .ds .bc-reach.is-error .bc-reach-ico { background: color-mix(in srgb, var(--destructive) 14%, transparent); color: var(--danger-text); }
 .ds .bc-reach.is-error small { color: var(--danger-text); white-space: normal; }
-.ds .bc-send { display: flex; margin: 0; }
+/* The send button, then the test send (a ghost button) and its one status line, empty until a test is sent. */
+.ds .bc-send { display: flex; flex-direction: column; gap: var(--g2); margin: 0; }
+.ds .bc-send > * { margin: 0; }
 .ds .bc-send-btn { flex: 1 1 auto; }
+.ds .bc-test-status { margin: 0; font-size: var(--fs-2); line-height: 1.6; color: var(--muted-fg); }
+.ds .bc-test-status:empty { display: none; }
+.ds .bc-test-status.is-ok { color: var(--ok-text); }
+.ds .bc-test-status.is-error { color: var(--danger-text); }
 /* Detail of one sent message: divided lines of a label (with a one-line hint) and its count. */
 .ds .bc-lines { list-style: none; display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; }
 .ds .bc-lines > li { display: flex; align-items: center; justify-content: space-between; gap: var(--g3); min-height: var(--ctl-h); margin: 0; padding: var(--g3) 0; }
