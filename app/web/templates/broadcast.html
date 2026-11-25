@@ -100,6 +100,22 @@
       {{ preset_chips(button_presets) }}
       {{ button_list(button_target_groups, button_styles, button_plans, button_presets, button_max, preview='#bc-preview') }}
     {% endcall %}
+
+    {% call ds_sec('زمان ارسال') %}
+      <div class="ds-rows">
+        {{ ds_switch('schedule', 'ارسال در زمان دیگر', 'پیام در صف می‌ماند و در روز و ساعت انتخاب‌شده به وقت تهران فرستاده می‌شود؛ مخاطبان همان موقع دوباره شمرده می‌شوند.', id='bc-schedule') }}
+      </div>
+      <div class="ds-grid-2" data-ds-show-when="#bc-schedule:1">
+        <label class="form-field">روز
+          <select name="send_day">
+            {% for day in send_days or [] %}<option value="{{ day.offset }}"{% if day.offset == 1 %} selected{% endif %}>{{ day.label }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="form-field">ساعت
+          <input name="send_time" type="time" value="09:00" step="60" dir="ltr" />
+        </label>
+      </div>
+    {% endcall %}
   </div>
 
   <aside class="bc-side ds-page-stack">
@@ -139,6 +155,7 @@
     {% endif %}
     <tbody>
     {% for row in history %}
+      {% set scheduled_for = (schedule_labels or {}).get(row.id) %}
       <tr{% if is_platform %} data-bulk-ops="delete"{% endif %}>
         {% if is_platform %}{{ table_select_cell(row.id) }}{% endif %}
         <td class="mono cell-tight"><bdi dir="ltr">{{ row.id }}</bdi></td>
@@ -149,7 +166,7 @@
           <span class="li-only">· <bdi dir="ltr">{{ (row.created_at|string)[:16] }}</bdi>{% if row.created_by %} · <bdi dir="auto">{{ row.created_by }}</bdi>{% endif %}</span>
         </td>
         <td class="broadcast-snippet li-title"><span dir="auto">{{ row.text[:120] }}{% if row.text|length > 120 %}…{% endif %}</span></td>
-        <td class="mono cell-tight li-value"><bdi dir="ltr">{{ row.ok_count | fa }}/{{ row.total | fa }}</bdi><span class="li-hide">{% if row.fail_count %} · ناموفق {{ row.fail_count | num }}{% endif %}{% if row.review_count %} · نامشخص {{ row.review_count | num }}{% endif %}</span>{% if row.status in ['queued', 'running', 'cancelled', 'failed'] %}<small class="muted text-block">{{ status_labels.get(row.status, row.status) }}</small>{% endif %}</td>
+        <td class="mono cell-tight li-value"><bdi dir="ltr">{{ row.ok_count | fa }}/{{ row.total | fa }}</bdi><span class="li-hide">{% if row.fail_count %} · ناموفق {{ row.fail_count | num }}{% endif %}{% if row.review_count %} · نامشخص {{ row.review_count | num }}{% endif %}</span>{% if scheduled_for %}<small class="muted text-block">زمان‌بندی‌شده برای {{ scheduled_for }}</small>{% elif row.status in ['queued', 'running', 'cancelled', 'failed'] %}<small class="muted text-block">{{ status_labels.get(row.status, row.status) }}</small>{% endif %}</td>
         <td class="muted col-hide-sm"><bdi dir="auto">{{ row.created_by or '—' }}</bdi></td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -173,7 +190,7 @@
           {% endif %}
           {% endcall %}
         </td>
-        <td class="li-only-cell li-badge">{% if row.status in ['queued', 'running'] %}<span class="badge pending">{{ status_labels.get(row.status, row.status) }}</span>{% elif row.fail_count %}<span class="badge rejected">{{ row.fail_count | num }} ناموفق</span>{% else %}<span class="badge ok">موفق</span>{% endif %}</td>
+        <td class="li-only-cell li-badge">{% if scheduled_for %}<span class="badge pending">زمان‌بندی‌شده</span>{% elif row.status in ['queued', 'running'] %}<span class="badge pending">{{ status_labels.get(row.status, row.status) }}</span>{% elif row.fail_count %}<span class="badge rejected">{{ row.fail_count | num }} ناموفق</span>{% else %}<span class="badge ok">موفق</span>{% endif %}</td>
       </tr>
     {% else %}
       {{ empty_state('هنوز پیامی ارسال نشده', 'broadcast', colspan=9) }}

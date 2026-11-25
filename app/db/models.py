@@ -1053,6 +1053,9 @@ class BroadcastLog(Base):
     retry_of_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # The resend also goes to recipients whose outcome was unknown (they may get the message twice).
     retry_unknown: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Scheduled send time (UTC); the worker leaves the broadcast queued until then and recounts its audience
+    # when sending starts. NULL = send as soon as possible.
+    send_after: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class BroadcastFailure(Base):

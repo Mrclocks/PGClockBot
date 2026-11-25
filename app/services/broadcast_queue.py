@@ -8,7 +8,7 @@ the outcome as unknown and moves past the user, so nobody is messaged twice. Pla
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import html
 import logging
 import re
@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.types import InlineKeyboardMarkup
-from sqlalchemy import ColumnElement, or_, select, update
+from sqlalchemy import ColumnElement, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +41,8 @@ from app.services.broadcast_failures import (
     record_failure,
     retry_clause,
 )
+from app.services.broadcast_schedule import checked_send_after
+from app.services.campaigns import RECIPIENT_LIMIT
 from app.services.message_buttons import stored_keyboard
 from app.services.telegram_html import normalize_telegram_html
 
@@ -72,10 +74,11 @@ _REQUEST_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
 
 @dataclass(frozen=True, slots=True)
 class BroadcastRequest:
-    """What a submit adds to a broadcast: its request token (repeat-safe) and its validated button rows."""
+    """What a submit adds to a broadcast: its request token (repeat-safe), validated button rows and send time."""
 
     token: object = None
     buttons: str | None = None
+    send_after: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +124,11 @@ def _spec(audience: AudienceSpec | str) -> AudienceSpec:
     return audience if isinstance(audience, AudienceSpec) else make_spec(str(audience or ""), shop_id=None)
 
 
+def scheduled_spec(spec: AudienceSpec, send_after: datetime | None) -> AudienceSpec:
+    """A scheduled message's time windows («expires within 3 days») count from its send time, not from now."""
+    return replace(spec, as_of=send_after) if send_after is not None else spec
+
+
 async def count_platform_targets(session: AsyncSession, audience: AudienceSpec | str) -> int:
     """How many people a platform broadcast to ``audience`` reaches now."""
     return await count_audience(session, _spec(audience), shop_id=None)
@@ -152,7 +160,8 @@ async def queue_broadcast(
         existing = await session.scalar(select(BroadcastLog).where(BroadcastLog.request_key == key))
         if existing is not None:
             return existing
-    spec = await checked_spec(session, spec, shop_id=None)
+    send_after = checked_send_after(request.send_after)
+    spec = await checked_spec(session, scheduled_spec(spec, send_after), shop_id=None)
     total = await count_audience(session, spec, shop_id=None)
     if not total:
         raise ValueError("مخاطبی برای این گروه وجود ندارد")
@@ -166,6 +175,7 @@ async def queue_broadcast(
         shop_id=None,
         request_key=key,
         buttons=request.buttons,
+        send_after=send_after,
     )
     session.add(log)
     try:
@@ -228,6 +238,11 @@ async def mark_broadcast_failed(
     return changed.rowcount == 1
 
 
+def _is_due(now: datetime) -> ColumnElement[bool]:
+    """Not scheduled, or its send time has come."""
+    return or_(BroadcastLog.send_after.is_(None), BroadcastLog.send_after <= now)
+
+
 async def active_broadcast_ids(session: AsyncSession, *, limit: int = 5) -> list[int]:
     rows = await active_broadcast_jobs(session, limit=limit)
     return [log_id for log_id, _shop_id in rows]
@@ -243,6 +258,7 @@ async def active_broadcast_jobs(
             .where(
                 BroadcastLog.status.in_(ACTIVE_STATUSES),
                 or_(BroadcastLog.locked_until.is_(None), BroadcastLog.locked_until < now),
+                _is_due(now),
             )
             .order_by(BroadcastLog.id)
             .limit(max(1, min(int(limit), 20)))
@@ -260,6 +276,7 @@ async def _take_lease(session: AsyncSession, log_id: int) -> str | None:
             BroadcastLog.id == log_id,
             BroadcastLog.status.in_(ACTIVE_STATUSES),
             or_(BroadcastLog.locked_until.is_(None), BroadcastLog.locked_until < now),
+            _is_due(now),
         )
         .values(status=STATUS_RUNNING, lock_token=token, locked_until=now + timedelta(minutes=LEASE_MINUTES))
         .execution_options(synchronize_session=False)
@@ -360,6 +377,65 @@ async def _release(session: AsyncSession, log_id: int, token: str) -> None:
     await session.commit()
 
 
+@dataclass(slots=True)
+class _Job:
+    """What one batch of a leased broadcast needs from its row."""
+
+    spec: AudienceSpec
+    tenant: int | None
+    text: str
+    buttons: str | None
+    cursor: int
+    total: int
+    progress: int
+    retry: RetrySource
+
+    def clauses(self) -> list[ColumnElement[bool]]:
+        return recipient_clauses(self.spec, shop_id=self.tenant, retry=self.retry)
+
+
+async def _recount(session: AsyncSession, log_id: int, token: str, job: _Job) -> int:
+    """A scheduled broadcast's audience as it is when sending starts (a shop's still capped); saved as its total."""
+    total = int(await session.scalar(select(func.count()).select_from(BotUser).where(*job.clauses())) or 0)
+    if job.tenant is not None:
+        total = min(total, RECIPIENT_LIMIT)
+    await session.execute(
+        update(BroadcastLog).where(*_owned(log_id, token)).values(total=total).execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    return total
+
+
+async def _load_job(session: AsyncSession, log_id: int, token: str) -> _Job | None:
+    """The leased broadcast's state; None (and the broadcast marked failed) when its audience cannot be read."""
+    row = (
+        await session.execute(
+            select(
+                BroadcastLog.audience, BroadcastLog.audience_spec, BroadcastLog.text, BroadcastLog.cursor_id,
+                BroadcastLog.shop_id, BroadcastLog.total, BroadcastLog.ok_count, BroadcastLog.fail_count,
+                BroadcastLog.review_count, BroadcastLog.buttons, BroadcastLog.retry_of_id, BroadcastLog.retry_unknown,
+                BroadcastLog.send_after,
+            ).where(BroadcastLog.id == log_id)
+        )
+    ).one()
+    tenant = int(row.shop_id) if row.shop_id is not None else None
+    try:
+        spec = load_spec(row.audience_spec, row.audience, shop_id=tenant)
+    except StoredAudienceError:
+        # Sending to a guessed audience could reach people the sender never chose; stop the message instead.
+        logger.warning("broadcast %s: saved audience cannot be read; marking failed", log_id, exc_info=True)
+        await mark_broadcast_failed(session, log_id, shop_id=tenant)
+        return None
+    job = _Job(
+        spec=spec, tenant=tenant, text=row.text, buttons=row.buttons, cursor=int(row.cursor_id), total=int(row.total),
+        progress=int(row.ok_count) + int(row.fail_count) + int(row.review_count),
+        retry=RetrySource(row.retry_of_id, bool(row.retry_unknown)),
+    )
+    if row.send_after is not None and job.progress == 0 and job.cursor == 0:
+        job.total = await _recount(session, log_id, token, job)
+    return job
+
+
 async def process_broadcast_batch(
     session: AsyncSession, log_id: int, bot: Bot, *, batch_size: int = BATCH_SIZE, delay: float = SEND_DELAY_SECONDS
 ) -> bool:
@@ -370,51 +446,24 @@ async def process_broadcast_batch(
     keep_going = True
     try:
         await _settle_crashed_send(session, log_id, token)
-        row = (
-            await session.execute(
-                select(
-                    BroadcastLog.audience,
-                    BroadcastLog.audience_spec,
-                    BroadcastLog.text,
-                    BroadcastLog.cursor_id,
-                    BroadcastLog.shop_id,
-                    BroadcastLog.total,
-                    BroadcastLog.ok_count,
-                    BroadcastLog.fail_count,
-                    BroadcastLog.review_count,
-                    BroadcastLog.buttons,
-                    BroadcastLog.retry_of_id,
-                    BroadcastLog.retry_unknown,
-                ).where(BroadcastLog.id == log_id)
-            )
-        ).one()
-        audience, stored_spec, text, cursor, shop_id, total, ok_count, fail_count, review_count, buttons = row[:10]
-        tenant = int(shop_id) if shop_id is not None else None
-        try:
-            spec = load_spec(stored_spec, audience, shop_id=tenant)
-        except StoredAudienceError:
-            # Sending to a guessed audience could reach people the sender never chose; stop the message instead.
-            logger.warning("broadcast %s: saved audience cannot be read; marking failed", log_id, exc_info=True)
-            await mark_broadcast_failed(session, log_id, shop_id=tenant)
+        job = await _load_job(session, log_id, token)
+        if job is None:
             return False
-        progress = int(ok_count) + int(fail_count) + int(review_count)
-        if progress >= int(total):
+        if job.progress >= job.total:
             await _finish(session, log_id, token)
             return False
-        take = max(1, min(int(batch_size), 500, int(total) - progress))
+        take = max(1, min(int(batch_size), 500, job.total - job.progress))
         recipients = (
             await session.execute(
                 select(BotUser.id, BotUser.telegram_id)
-                .where(
-                    *recipient_clauses(spec, shop_id=tenant, retry=RetrySource(row.retry_of_id, row.retry_unknown)),
-                    BotUser.id > int(cursor),
-                )
+                .where(*job.clauses(), BotUser.id > job.cursor)
                 .order_by(BotUser.id)
                 .limit(take)
             )
         ).all()
-        escape_html = shop_id is not None
-        keyboard = await stored_keyboard(session, buttons, shop_id=int(shop_id) if shop_id is not None else None)
+        tenant = job.tenant
+        text, escape_html = job.text, tenant is not None
+        keyboard = await stored_keyboard(session, job.buttons, shop_id=tenant)
         markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
         for user_id, telegram_id in recipients:
             if not await _mark_inflight(session, log_id, token, int(user_id)):

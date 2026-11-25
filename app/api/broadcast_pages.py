@@ -30,7 +30,14 @@ from app.services.broadcast_audience import (
     stored_label,
     takes_filters,
 )
-from app.services.broadcast_queue import STATUS_LABELS, BroadcastRequest, new_request_token, queue_broadcast
+from app.services.broadcast_queue import (
+    STATUS_LABELS,
+    STATUS_QUEUED,
+    BroadcastRequest,
+    new_request_token,
+    queue_broadcast,
+)
+from app.services.broadcast_schedule import day_choices, schedule_label, send_time_from_form
 from app.services.campaigns import RECIPIENT_LIMIT
 from app.services.marketing_nav import can_open_campaigns
 from app.services.message_buttons import broadcast_buttons, buttons_form_context, form_inputs
@@ -94,6 +101,22 @@ def _segment_groups(page: BroadcastPage) -> list[dict[str, object]]:
     return groups
 
 
+def queued_message(log: BroadcastLog) -> str:
+    """The confirmation after a submit: when it goes out and how many people it reaches."""
+    if log.send_after is not None:
+        return f"زمان‌بندی شد برای {schedule_label(log.send_after)}: حدود {log.total} مخاطب. پیشرفت را در تاریخچه ببینید."
+    return f"در صف ارسال قرار گرفت: {log.total} مخاطب. پیشرفت را در تاریخچه ببینید."
+
+
+def schedule_labels(rows: list[BroadcastLog]) -> dict[int, str]:
+    """When each broadcast that has not started yet is scheduled to go out."""
+    return {
+        int(row.id): schedule_label(row.send_after)
+        for row in rows
+        if row.send_after is not None and row.status == STATUS_QUEUED
+    }
+
+
 def history_labels(rows: list[BroadcastLog]) -> dict[int, str]:
     """The audience summary of each history row."""
     return {int(row.id): stored_label(row.audience_spec, row.audience, shop_id=row.shop_id) for row in rows}
@@ -115,6 +138,8 @@ async def page_context(session: AsyncSession, page: BroadcastPage) -> dict[str, 
         "recipient_limit": None if page.is_platform else RECIPIENT_LIMIT,
         "history": history,
         "history_labels": history_labels(history),
+        "schedule_labels": schedule_labels(history),
+        "send_days": day_choices(),
         "status_labels": STATUS_LABELS,
         "request_token": new_request_token(),
     }
@@ -132,6 +157,7 @@ async def audience_count(session: AsyncSession, page: BroadcastPage, params: Map
 async def queue_from_form(session: AsyncSession, page: BroadcastPage, form: Mapping, *, actor: str) -> BroadcastLog:
     """Queue the composed message once (the request token makes a repeated submit return the same row)."""
     spec = spec_from_form(form, shop_id=page.shop_id)
+    send_after = send_time_from_form(form)
     buttons = await broadcast_buttons(session, form_inputs(form), shop_id=page.shop_id)
     if page.is_platform:
         return await queue_broadcast(
@@ -139,7 +165,7 @@ async def queue_from_form(session: AsyncSession, page: BroadcastPage, form: Mapp
             text=str(form.get("text") or ""),
             audience=spec,
             created_by=actor,
-            request=BroadcastRequest(form.get("request_token"), buttons),
+            request=BroadcastRequest(form.get("request_token"), buttons, send_after),
         )
     return await queue_shop_broadcast(
         session,
@@ -149,6 +175,7 @@ async def queue_from_form(session: AsyncSession, page: BroadcastPage, form: Mapp
         request_key=form.get("request_token"),
         buttons=buttons,
         audience=spec,
+        send_after=send_after,
     )
 
 
@@ -195,7 +222,7 @@ def register_broadcast_routes(
         except ValueError as exc:
             await session.rollback()
             return redirect(page, err=user_safe_error(exc))
-        return redirect(page, ok=f"در صف ارسال قرار گرفت: {log.total} مخاطب. پیشرفت را در تاریخچه ببینید.")
+        return redirect(page, ok=queued_message(log))
 
     @app.post(f"{path}/history/clear")
     async def broadcast_history_clear(staff: dict = Depends(guard), session: AsyncSession = Depends(get_db)) -> Response:

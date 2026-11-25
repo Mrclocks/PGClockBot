@@ -16,7 +16,7 @@
       {% if log.review_count %}
       <li><span class="bc-line-copy"><strong>{{ unknown_kind.label }}</strong><small>{{ unknown_kind.hint }}</small></span><span class="bc-line-value">{{ log.review_count | num }}</span></li>
       {% endif %}
-      <li><span class="bc-line-copy"><strong>وضعیت</strong><small><bdi dir="ltr">{{ (log.created_at | string)[:16] }}</bdi>{% if log.created_by %} · <bdi dir="auto">{{ log.created_by }}</bdi>{% endif %}</small></span><span class="bc-line-value">{{ status_labels.get(log.status, log.status) }}</span></li>
+      <li><span class="bc-line-copy"><strong>وضعیت</strong><small><bdi dir="ltr">{{ (log.created_at | string)[:16] }}</bdi>{% if log.created_by %} · <bdi dir="auto">{{ log.created_by }}</bdi>{% endif %}</small></span><span class="bc-line-value">{{ ('زمان‌بندی‌شده برای ' ~ scheduled_for) if scheduled_for else status_labels.get(log.status, log.status) }}</span></li>
     </ul>
   {% endcall %}
 
