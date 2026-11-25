@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {% if request is defined and request.state is defined and request.state.pg_read_budget is defined and request.state.pg_read_budget.failure %}
 {% set last_good = request.state.pg_last_good if request.state.pg_last_good is defined else none %}
 <div class="flash warn home-update-banner" role="status">
@@ -10,6 +11,6 @@
     <span class="muted">ارتباط با پاسارگارد کند یا قطع است. بقیهٔ بخش‌های پنل کار می‌کنند؛ کمی بعد دوباره تلاش کنید.</span>
     {% endif %}
   </div>
-  <a class="btn btn-sm btn-ghost" href="{{ request.url.path.removesuffix('/body') }}">تلاش دوباره</a>
+  <a class="btn btn-sm btn-ghost" href="{{ request.url.path.removesuffix('/body') }}">{{ btn_icon('refresh', 'btn-ico') }}تلاش دوباره</a>
 </div>
 {% endif %}

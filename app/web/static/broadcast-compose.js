@@ -133,7 +133,9 @@
       countEl.textContent = state === "ok" ? faInt(count) : "…";
       labelEl.textContent = label;
       if (send) {
+        const icon = send.querySelector(":scope > .btn-ico");
         send.textContent = sendLabel(state === "ok" ? count : null);
+        if (icon) send.prepend(icon);
         send.disabled = state === "ok" && count <= 0;
       }
       form.setAttribute("data-confirm", confirmText(state === "ok" ? label : "", state === "ok" ? count : null));

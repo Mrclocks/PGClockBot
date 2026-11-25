@@ -59,7 +59,7 @@
       <td class="col-hide-sm"><bdi dir="ltr">{{ r.month_cashback | money }}</bdi></td>
       <td class="cell-tight li-badge">{% if r.credit_status and r.credit_status != 'active' %}<span class="badge {{ credit_tones.get(r.credit_status, 'neutral') }}">{{ credit_labels.get(r.credit_status, r.credit_status) }}</span>{% else %}<span class="badge ok">عادی</span>{% endif %}</td>
       <td class="col-actions">
-        <a class="btn btn-sm btn-ghost li-hide" href="/resellers?edit={{ r.shop_id }}">کارت نماینده</a>
+        <a class="btn btn-sm btn-ghost li-hide" href="/resellers?edit={{ r.shop_id }}">{{ icon('user', 'btn-ico') }}کارت نماینده</a>
         <a class="li-only li-open" href="/resellers?edit={{ r.shop_id }}" aria-label="کارت نماینده {{ r.label }}">{{ icon('chev', 'ico') }}</a>
       </td>
     </tr>{% else %}{{ empty_state('نمایندهٔ PAYG وجود ندارد', 'payg', colspan=8) }}{% endfor %}</tbody>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import page_header, act_label %}
 {% block title %}نمای کلی پاسارگارد{% endblock %}
 {% block content %}
@@ -14,7 +15,7 @@
     <strong>{{ ticket_alert.title }}</strong>
     <span class="muted">{{ ticket_alert.detail }}</span>
   </div>
-  <a class="btn btn-sm" href="{{ ticket_alert.href }}">مشاهده</a>
+  <a class="btn btn-sm" href="{{ ticket_alert.href }}">{{ btn_icon('eye', 'btn-ico') }}مشاهده</a>
 </div>
 {% endif %}
 
@@ -35,7 +36,7 @@
     {% endif %}
   </div>
   {% if staff_remediation.can_self_serve %}
-  <a class="btn btn-sm" href="/security">تغییر رمز</a>
+  <a class="btn btn-sm" href="/security">{{ btn_icon('edit', 'btn-ico') }}تغییر رمز</a>
   {% endif %}
 </div>
 {% endif %}
@@ -46,7 +47,7 @@
     <strong>{{ admins_hint.title }}</strong>
     <span class="muted">{{ admins_hint.detail }}</span>
   </div>
-  <a class="btn btn-sm" href="{{ admins_hint.href }}">اتصال پاسارگارد</a>
+  <a class="btn btn-sm" href="{{ admins_hint.href }}">{{ btn_icon('connection', 'btn-ico') }}اتصال پاسارگارد</a>
 </div>
 {% endif %}
 

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import row_actions, page_header, empty_state %}
 {% block title %}تخفیف‌ها{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
@@ -63,7 +64,7 @@
       </span>
     </label>
     <div class="actions">
-      <button class="btn" type="submit">ثبت قیمت و صف اطلاع‌رسانی</button>
+      <button class="btn" type="submit">{{ btn_icon('check', 'btn-ico') }}ثبت قیمت و صف اطلاع‌رسانی</button>
     </div>
   </form>
 </div>
@@ -112,7 +113,7 @@
                   data-confirm-danger="1"
                   data-confirm-label="توقف">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-              <button class="btn btn-danger btn-sm" type="submit">توقف</button>
+              <button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('pause', 'btn-ico') }}توقف</button>
             </form>
             {% endcall %}
             {% endif %}
@@ -124,7 +125,7 @@
       </tbody>
     </table>
   </div>
-  {% if next_before %}<div class="actions"><a class="btn btn-ghost" href="/catalog-discounts?before={{ next_before }}">تاریخچهٔ قدیمی‌تر</a></div>{% endif %}
+  {% if next_before %}<div class="actions"><a class="btn btn-ghost" href="/catalog-discounts?before={{ next_before }}">{{ btn_icon('chev', 'btn-ico') }}تاریخچهٔ قدیمی‌تر</a></div>{% endif %}
 </div>
 </div>
 {% endblock %}

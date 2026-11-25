@@ -73,7 +73,7 @@
         </td>
         <td class="muted mono"><bdi dir="ltr">{{ t.updated_at }}</bdi></td>
         <td class="col-actions">
-          <a class="btn btn-sm btn-ghost li-hide" href="/tickets?view={{ t.id }}">مشاهده</a>
+          <a class="btn btn-sm btn-ghost li-hide" href="/tickets?view={{ t.id }}">{{ icon('eye', 'btn-ico') }}مشاهده</a>
           <a class="li-only li-open" href="/tickets?view={{ t.id }}" aria-label="مشاهده تیکت #{{ t.id }}">{{ icon('chev', 'ico') }}</a>
         </td>
       </tr>
@@ -119,7 +119,7 @@
           </td>
           <td class="muted mono"><bdi dir="ltr">{{ t.updated_at or t.created_at }}</bdi></td>
           <td class="col-actions">
-            <a class="btn btn-sm btn-ghost li-hide" href="/tickets?tg={{ t.id }}">مشاهده</a>
+            <a class="btn btn-sm btn-ghost li-hide" href="/tickets?tg={{ t.id }}">{{ icon('eye', 'btn-ico') }}مشاهده</a>
             <a class="li-only li-open" href="/tickets?tg={{ t.id }}" aria-label="مشاهده تیکت #{{ t.id }}">{{ icon('chev', 'ico') }}</a>
           </td>
         </tr>
@@ -169,7 +169,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button type="submit" class="btn">ثبت تیکت</button>
+        <button type="submit" class="btn">{{ icon('check', 'btn-ico') }}ثبت تیکت</button>
 
       </div></div>
     </form>
@@ -232,7 +232,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button type="submit" class="btn">ارسال پاسخ</button>
+        <button type="submit" class="btn">{{ icon('send', 'btn-ico') }}ارسال پاسخ</button>
       </div></div>
     </form>
     {% else %}
@@ -249,7 +249,7 @@
             {% endfor %}
           </select>
         </label>
-        <button type="submit" class="btn btn-sm">ذخیره وضعیت</button>
+        <button type="submit" class="btn btn-sm">{{ icon('save', 'btn-ico') }}ذخیره وضعیت</button>
       </form>
       {% elif t.status != 'closed' %}
       <form method="post" action="/tickets/panel/{{ t.id }}/status" class="ticket-close-form"
@@ -258,7 +258,7 @@
             data-confirm-warn="1"
             data-confirm-label="بستن تیکت">
         <input type="hidden" name="status" value="closed" />
-        <button type="submit" class="btn btn-sm btn-ghost">بستن تیکت</button>
+        <button type="submit" class="btn btn-sm btn-ghost">{{ icon('close', 'btn-ico') }}بستن تیکت</button>
       </form>
       {% endif %}
     </div>
@@ -309,7 +309,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button type="submit" class="btn">ارسال پاسخ</button>
+        <button type="submit" class="btn">{{ icon('send', 'btn-ico') }}ارسال پاسخ</button>
       </div></div>
     </form>
     <div class="ticket-status-actions">
@@ -318,7 +318,7 @@
             data-confirm-title="بستن تیکت"
             data-confirm-warn="1"
             data-confirm-label="بستن تیکت">
-        <button type="submit" class="btn btn-sm btn-ghost">بستن تیکت</button>
+        <button type="submit" class="btn btn-sm btn-ghost">{{ icon('close', 'btn-ico') }}بستن تیکت</button>
       </form>
     </div>
     {% else %}

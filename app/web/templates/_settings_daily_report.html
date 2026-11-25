@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Daily report customization — owner + shop (same IA). #}
 {% set actor = daily_report_actor or 'owner' %}
 {% set enabled_metrics = daily_report_enabled_metrics or [] %}
@@ -63,6 +64,6 @@
   </div>
 
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره گزارش روزانه</button>
+    <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره گزارش روزانه</button>
   </div>
 </form>

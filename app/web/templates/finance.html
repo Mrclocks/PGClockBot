@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon %}
+{% from "_icons.html" import icon, label_icon %}
 {% from "macros.html" import ord_status, pay_status, row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state, search_submit %}
 {% from "_stuck_order_actions.html" import stuck_close_actions %}
 {% from "_finance_tabs.html" import finance_tabs %}
@@ -114,17 +114,17 @@
           {% if has_receipt or can_act %}
           {% call row_actions() %}
             {% if has_receipt %}
-            <button type="button" class="btn btn-ghost btn-sm" data-receipt-open="/payments/{{ pay.id }}/receipt">مشاهده رسید</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-receipt-open="/payments/{{ pay.id }}/receipt">{{ icon('eye', 'btn-ico') }}مشاهده رسید</button>
             {% endif %}
             {% if pay and pay.status == 'pending' %}
               <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="این سفارش تأیید و محصول ارسال شود؟" data-confirm-title="تأیید سفارش" data-confirm-label="تأیید">
-                <button class="btn btn-ok btn-sm" type="submit">تأیید</button>
+                <button class="btn btn-ok btn-sm" type="submit">{{ icon('check', 'btn-ico') }}تأیید</button>
               </form>
               <form method="post" action="/orders/{{ o.id }}/reject" data-confirm="این سفارش رد شود؟" data-confirm-title="رد سفارش" data-confirm-danger="1" data-confirm-label="رد">
-                <button class="btn btn-danger btn-sm" type="submit">رد</button>
+                <button class="btn btn-danger btn-sm" type="submit">{{ icon('close', 'btn-ico') }}رد</button>
               </form>
               <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
-                <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
+                <button class="btn btn-ghost btn-sm" type="submit">{{ icon('close', 'btn-ico') }}لغو</button>
               </form>
             {% elif o.status in ['paid','awaiting_approval','delivering'] %}
               {% if o.id in (stuck_order_ids or []) %}
@@ -132,34 +132,34 @@
                     data-confirm="تحویل این سفارش گیرکرده ادامه یابد؟ (تأیید دوباره نیست)"
                     data-confirm-title="ادامه تحویل"
                     data-confirm-label="ادامه تحویل">
-                <button class="btn btn-ok btn-sm" type="submit">ادامه تحویل</button>
+                <button class="btn btn-ok btn-sm" type="submit">{{ icon('chev', 'btn-ico') }}ادامه تحویل</button>
               </form>
               {% else %}
               <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="سفارش تأیید و تحویل شود؟" data-confirm-title="تأیید و تحویل" data-confirm-label="تأیید و تحویل">
-                <button class="btn btn-ok btn-sm" type="submit">تأیید و تحویل</button>
+                <button class="btn btn-ok btn-sm" type="submit">{{ icon('check', 'btn-ico') }}تأیید و تحویل</button>
               </form>
               {% endif %}
               {% if o.status == 'awaiting_approval' %}
               <form method="post" action="/orders/{{ o.id }}/reject" data-confirm="این سفارش رد شود؟" data-confirm-title="رد سفارش" data-confirm-danger="1" data-confirm-label="رد">
-                <button class="btn btn-danger btn-sm" type="submit">رد</button>
+                <button class="btn btn-danger btn-sm" type="submit">{{ icon('close', 'btn-ico') }}رد</button>
               </form>
               <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
-                <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
+                <button class="btn btn-ghost btn-sm" type="submit">{{ icon('close', 'btn-ico') }}لغو</button>
               </form>
               {% endif %}
             {% elif o.status in ['pending','awaiting_receipt'] %}
               <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="بدون رسید تأیید و سرویس برای کاربر ارسال شود؟" data-confirm-title="تأیید سفارش" data-confirm-label="تأیید">
-                <button class="btn btn-ok btn-sm" type="submit">تأیید</button>
+                <button class="btn btn-ok btn-sm" type="submit">{{ icon('check', 'btn-ico') }}تأیید</button>
               </form>
               <form method="post" action="/orders/{{ o.id }}/reject" data-confirm="این سفارش رد شود؟" data-confirm-title="رد سفارش" data-confirm-danger="1" data-confirm-label="رد">
-                <button class="btn btn-danger btn-sm" type="submit">رد</button>
+                <button class="btn btn-danger btn-sm" type="submit">{{ icon('close', 'btn-ico') }}رد</button>
               </form>
               <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
-                <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
+                <button class="btn btn-ghost btn-sm" type="submit">{{ icon('close', 'btn-ico') }}لغو</button>
               </form>
             {% elif o.status == 'rejected' %}
               <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
-                <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
+                <button class="btn btn-ghost btn-sm" type="submit">{{ icon('close', 'btn-ico') }}لغو</button>
               </form>
             {% endif %}
           {% endcall %}
@@ -187,12 +187,12 @@
     </p>
     <div class="list-pager-actions">
       {% if pager.has_prev %}
-      <a class="btn btn-ghost btn-sm" href="/finance?tab=orders&amp;page={{ pager.prev_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">قبلی</a>
+      <a class="btn btn-ghost btn-sm" href="/finance?tab=orders&amp;page={{ pager.prev_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">{{ icon('back', 'btn-ico') }}قبلی</a>
       {% else %}
       <span class="btn btn-ghost btn-sm" aria-disabled="true">قبلی</span>
       {% endif %}
       {% if pager.has_next %}
-      <a class="btn btn-ghost btn-sm" href="/finance?tab=orders&amp;page={{ pager.next_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">بعدی</a>
+      <a class="btn btn-ghost btn-sm" href="/finance?tab=orders&amp;page={{ pager.next_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">{{ icon('chev', 'btn-ico') }}بعدی</a>
       {% else %}
       <span class="btn btn-ghost btn-sm" aria-disabled="true">بعدی</span>
       {% endif %}
@@ -268,23 +268,23 @@
           {% if p.status == 'pending' or can_void_row or can_retry_void or (p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:')) %}
           {% call row_actions() %}
             {% if p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:') %}
-            <button type="button" class="btn btn-ghost btn-sm" data-receipt-open="/payments/{{ p.id }}/receipt">مشاهده رسید</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-receipt-open="/payments/{{ p.id }}/receipt">{{ icon('eye', 'btn-ico') }}مشاهده رسید</button>
             {% endif %}
             {% if p.status == 'pending' %}
-            <form method="post" action="/payments/{{ p.id }}/approve" data-confirm="این پرداخت تأیید شود؟ در صورت خرید، محصول هم ارسال می‌شود." data-confirm-title="تأیید پرداخت" data-confirm-label="تأیید"><button class="btn btn-ok btn-sm" type="submit">تأیید</button></form>
-            <form method="post" action="/payments/{{ p.id }}/reject" data-confirm="این پرداخت رد شود؟" data-confirm-title="رد پرداخت" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-danger btn-sm" type="submit">رد</button></form>
+            <form method="post" action="/payments/{{ p.id }}/approve" data-confirm="این پرداخت تأیید شود؟ در صورت خرید، محصول هم ارسال می‌شود." data-confirm-title="تأیید پرداخت" data-confirm-label="تأیید"><button class="btn btn-ok btn-sm" type="submit">{{ icon('check', 'btn-ico') }}تأیید</button></form>
+            <form method="post" action="/payments/{{ p.id }}/reject" data-confirm="این پرداخت رد شود؟" data-confirm-title="رد پرداخت" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-danger btn-sm" type="submit">{{ icon('close', 'btn-ico') }}رد</button></form>
             {% endif %}
             {% if can_void_row %}
             <button type="button" class="btn btn-danger btn-sm" data-payment-void-open="{{ p.id }}"
                     data-void-topup="{{ '1' if p.is_wallet_topup else '' }}"
-                    data-void-amount="{{ p.amount | money }}">ابطال</button>
+                    data-void-amount="{{ p.amount | money }}">{{ icon('close', 'btn-ico') }}ابطال</button>
             {% endif %}
             {% if can_retry_void %}
             <form method="post" action="/payments/{{ p.id }}/void" data-confirm="بررسی پنل و ادامهٔ ابطال انجام شود؟" data-confirm-title="ادامهٔ ابطال" data-confirm-label="ادامه">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="reason" value="{{ pv.reason }}">
               {% if pv.refund_amount %}<input type="hidden" name="refund_to_wallet" value="1">{% endif %}
-              <button class="btn btn-sm" type="submit">ادامهٔ ابطال</button>
+              <button class="btn btn-sm" type="submit">{{ icon('chev', 'btn-ico') }}ادامهٔ ابطال</button>
             </form>
             {% endif %}
           {% endcall %}
@@ -315,12 +315,12 @@
     </p>
     <div class="list-pager-actions">
       {% if pager.has_prev %}
-      <a class="btn btn-ghost btn-sm" href="/finance?tab=payments&amp;page={{ pager.prev_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">قبلی</a>
+      <a class="btn btn-ghost btn-sm" href="/finance?tab=payments&amp;page={{ pager.prev_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">{{ icon('back', 'btn-ico') }}قبلی</a>
       {% else %}
       <span class="btn btn-ghost btn-sm" aria-disabled="true">قبلی</span>
       {% endif %}
       {% if pager.has_next %}
-      <a class="btn btn-ghost btn-sm" href="/finance?tab=payments&amp;page={{ pager.next_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">بعدی</a>
+      <a class="btn btn-ghost btn-sm" href="/finance?tab=payments&amp;page={{ pager.next_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">{{ icon('chev', 'btn-ico') }}بعدی</a>
       {% else %}
       <span class="btn btn-ghost btn-sm" aria-disabled="true">بعدی</span>
       {% endif %}
@@ -383,7 +383,7 @@
                   data-confirm="{% if act == 'resend' %}فقط پیام تحویل دوباره ارسال شود؟ (سرویس دوباره ساخته نمی‌شود){% else %}تحویل این سفارش گیرکرده ادامه یابد؟{% endif %}"
                   data-confirm-title="{{ act_label }}"
                   data-confirm-label="{{ act_label }}">
-              <button class="btn btn-ok btn-sm" type="submit">{{ act_label }}</button>
+              <button class="btn btn-ok btn-sm" type="submit">{{ label_icon(act_label) }}{{ act_label }}</button>
             </form>
             {{ stuck_close_actions(oid, (stuck_reasons or {}).get(oid)) }}
           {% endcall %}
@@ -423,13 +423,13 @@
                   data-confirm="{% if act == 'resend' %}فقط پیام تحویل دوباره ارسال شود؟ (سرویس دوباره ساخته نمی‌شود){% else %}تحویل این سفارش ادامه یابد؟{% endif %}"
                   data-confirm-title="{{ act_label }}"
                   data-confirm-label="{{ act_label }}">
-              <button class="btn btn-ok btn-sm" type="submit">{{ act_label }}</button>
+              <button class="btn btn-ok btn-sm" type="submit">{{ label_icon(act_label) }}{{ act_label }}</button>
             </form>
             <form method="post" action="/orders/{{ f.order_id }}/dismiss-delivery-failure"
                   data-confirm="این سفارش از لیست تحویل ناموفق حذف شود؟ چیزی ارسال نمی‌شود و خود سفارش تغییری نمی‌کند."
                   data-confirm-title="حذف از لیست"
                   data-confirm-label="حذف از لیست">
-              <button class="btn btn-ghost btn-sm" type="submit">حذف از لیست</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ icon('trash', 'btn-ico') }}حذف از لیست</button>
             </form>
             {% if f.order_id in (stuck_order_ids or []) %}
             {{ stuck_close_actions(f.order_id, (stuck_reasons or {}).get(f.order_id)) }}

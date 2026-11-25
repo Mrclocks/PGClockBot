@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import row_actions, page_header, act_label, empty_state %}
 {% from "_ds.html" import ds_switch, ds_sec, ds_toggle_sec, ds_modal_head, ds_foot %}
 {% set event_labels = {'new': 'تازه', 'renew': 'تمدید', 'addon': 'اضافه', 'topup': 'شارژ کیف پول'} %}
@@ -105,7 +106,7 @@
         <small class="muted">۰ یعنی بدون سقف · مصرف این ماه: <bdi dir="ltr">{{ budget_used | money }}</bdi></small>
       </label>
     </div>
-    <div class="actions"><button class="btn" type="submit">ذخیرهٔ تنظیمات</button></div>
+    <div class="actions"><button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیرهٔ تنظیمات</button></div>
   {% endcall %}
 </form>
 
@@ -128,15 +129,15 @@
         <td class="cell-tight li-badge"><span class="badge {{ 'ok' if r.enabled else 'neutral' }}">{{ 'روشن' if r.enabled else 'خاموش' }}</span></td>
         <td class="col-actions">
           {% call row_actions() %}
-          <button type="button" class="btn btn-sm" data-modal-open="modal-cb-rule-{{ r.id }}">ویرایش</button>
+          <button type="button" class="btn btn-sm" data-modal-open="modal-cb-rule-{{ r.id }}">{{ btn_icon('edit', 'btn-ico') }}ویرایش</button>
           <form method="post" action="/cashback/rules/{{ r.id }}/toggle">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             {% if not r.enabled %}<input type="hidden" name="enabled" value="1">{% endif %}
-            <button class="btn btn-ghost btn-sm" type="submit">{{ 'خاموش کردن' if r.enabled else 'روشن کردن' }}</button>
+            <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('power', 'btn-ico') }}{{ 'خاموش کردن' if r.enabled else 'روشن کردن' }}</button>
           </form>
           <form method="post" action="/cashback/rules/{{ r.id }}/delete" data-confirm="این قانون حذف شود؟ کش‌بک‌هایی که قبلاً داده شده عوض نمی‌شوند." data-confirm-title="حذف قانون" data-confirm-danger="1" data-confirm-label="حذف">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button class="btn btn-danger btn-sm" type="submit" aria-label="حذف قانون {{ r.name }}">حذف</button>
+            <button class="btn btn-danger btn-sm" type="submit" aria-label="حذف قانون {{ r.name }}">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
           </form>
           {% endcall %}
         </td>

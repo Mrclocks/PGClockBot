@@ -108,7 +108,7 @@
         <span class="upload-box-name muted" data-upload-name>فایلی انتخاب نشده</span>
         <span class="upload-box-progress" hidden aria-hidden="true"><i class="upload-box-progress-bar"></i></span>
       </label>
-      <button type="button" class="btn btn-ghost btn-sm" data-bc-media-clear hidden>{{ ico('trash') }}حذف فایل</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-bc-media-clear hidden>{{ icon('trash', 'btn-ico') }}حذف فایل</button>
       <small class="muted">با فایل، متن پیام زیرنویس آن می‌شود: اختیاری و حداکثر {{ caption_max|default(1024) | fa }} نویسه.</small>
     {% endcall %}
 
@@ -144,8 +144,8 @@
       {{ message_preview('#bc-text', id='bc-preview') }}
     {% endcall %}
     <div class="bc-send">
-      <button class="btn bc-send-btn" type="submit" data-bc-send>ارسال پیام</button>
-      <button class="btn btn-ghost" type="button" data-bc-test>ارسال آزمایشی به {{ 'ادمین‌های ربات' if is_platform else 'حساب صاحب فروشگاه' }}</button>
+      <button class="btn bc-send-btn" type="submit" data-bc-send>{{ icon('send', 'btn-ico') }}ارسال پیام</button>
+      <button class="btn btn-ghost" type="button" data-bc-test>{{ icon('send', 'btn-ico') }}ارسال آزمایشی به {{ 'ادمین‌های ربات' if is_platform else 'حساب صاحب فروشگاه' }}</button>
       <p class="bc-test-status" data-bc-test-status role="status" aria-live="polite"></p>
     </div>
   </aside>
@@ -160,7 +160,7 @@
           data-confirm-title="پاک کردن تاریخچه"
           data-confirm-danger="1"
           data-confirm-label="پاک کردن">
-      <button class="btn btn-danger btn-sm" type="submit">حذف تاریخچه</button>
+      <button class="btn btn-danger btn-sm" type="submit">{{ icon('trash', 'btn-ico') }}حذف تاریخچه</button>
     </form>
     {% endif %}
   </div>
@@ -193,14 +193,14 @@
         <td class="muted col-hide-sm"><bdi dir="auto">{{ row.created_by or '—' }}</bdi></td>
         <td class="col-actions">
           {% call row_actions() %}
-          <a class="btn btn-ghost btn-sm" href="{{ page_path }}/history/{{ row.id }}">جزئیات و علت ناموفق‌ها</a>
+          <a class="btn btn-ghost btn-sm" href="{{ page_path }}/history/{{ row.id }}">{{ icon('eye', 'btn-ico') }}جزئیات و علت ناموفق‌ها</a>
           {% if row.status in ['queued', 'running'] %}
           <form method="post" action="{{ page_path }}/history/{{ row.id }}/cancel"
                 data-confirm="ارسال متوقف شود؟ پیام‌های فرستاده‌شده برنمی‌گردند."
                 data-confirm-title="توقف ارسال"
                 data-confirm-danger="1"
                 data-confirm-label="توقف">
-            <button class="btn btn-danger btn-sm" type="submit">توقف</button>
+            <button class="btn btn-danger btn-sm" type="submit">{{ icon('pause', 'btn-ico') }}توقف</button>
           </form>
           {% else %}
           <form method="post" action="{{ page_path }}/history/{{ row.id }}/delete"
@@ -208,7 +208,7 @@
                 data-confirm-title="تأیید حذف"
                 data-confirm-danger="1"
                 data-confirm-label="حذف">
-            <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+            <button class="btn btn-danger btn-sm" type="submit">{{ icon('trash', 'btn-ico') }}حذف</button>
           </form>
           {% endif %}
           {% endcall %}

@@ -51,14 +51,14 @@
               data-address="{{ addr_text }}"
               data-port="{{ h.get('port') if h.get('port') is not none else '' }}"
               data-priority="{{ h.get('priority') if h.get('priority') is not none else 0 }}"
-              data-inbound="{{ h.get('inbound_tag') or '' }}">ویرایش</button>
+              data-inbound="{{ h.get('inbound_tag') or '' }}">{{ icon('edit', 'btn-ico') }}ویرایش</button>
             <form method="post" action="/pg/hosts/{{ h.get('id') }}/toggle">
-              <button class="btn btn-ghost btn-sm" type="submit">{% if h.get('is_disabled') %}فعال{% else %}خاموش{% endif %}</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ icon('power', 'btn-ico') }}{% if h.get('is_disabled') %}فعال{% else %}خاموش{% endif %}</button>
             </form>
             {% endif %}
             {% if can_delete %}
             <form method="post" action="/pg/hosts/{{ h.get('id') }}/delete" data-confirm="این هاست حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
-              <button class="btn btn-sm btn-danger" type="submit">حذف</button>
+              <button class="btn btn-sm btn-danger" type="submit">{{ icon('trash', 'btn-ico') }}حذف</button>
             </form>
             {% endif %}
           {% endcall %}
@@ -114,7 +114,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit">ساخت در پاسارگارد</button>
+        <button class="btn" type="submit">{{ icon('plus', 'btn-ico') }}ساخت در پاسارگارد</button>
 
       </div></div>
     </form>
@@ -164,7 +164,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit">ذخیره تغییرات</button>
+        <button class="btn" type="submit">{{ icon('save', 'btn-ico') }}ذخیره تغییرات</button>
 
       </div></div>
     </form>

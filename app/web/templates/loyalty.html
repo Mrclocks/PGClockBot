@@ -126,7 +126,7 @@
         <label class="form-field">تغییر امتیاز (+/-)<input name="delta" type="number" required dir="ltr" /></label>
       </div>
       <label class="form-field">علت<textarea name="reason" rows="2" required maxlength="255"></textarea></label>
-      <div class="actions"><button class="btn" type="submit">ثبت تعدیل</button></div>
+      <div class="actions"><button class="btn" type="submit">{{ icon('check', 'btn-ico') }}ثبت تعدیل</button></div>
     </form>
   </div>
   {% endif %}
@@ -144,8 +144,8 @@
       </div>
       <label class="form-field">علت<input name="reason" type="text" required minlength="3" maxlength="200" /></label>
       <div class="actions">
-        <button class="btn btn-ghost" type="submit" name="mode" value="debit">کسر امتیاز</button>
-        <button class="btn" type="submit" name="mode" value="credit">افزودن امتیاز</button>
+        <button class="btn btn-ghost" type="submit" name="mode" value="debit">{{ icon('minus', 'btn-ico') }}کسر امتیاز</button>
+        <button class="btn" type="submit" name="mode" value="credit">{{ icon('plus', 'btn-ico') }}افزودن امتیاز</button>
       </div>
     </form>
   </div>

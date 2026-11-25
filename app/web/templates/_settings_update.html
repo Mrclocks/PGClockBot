@@ -97,7 +97,7 @@
 
     <button type="button" class="btn upd-go" id="upd-start"
       {% if (not can_start and not has_error and not migration_blocked) and not (running or awaiting) %}hidden{% endif %}
-      {% if (not can_start and not has_error) or running or awaiting or migration_blocked %}disabled{% endif %}>
+      {% if (not can_start and not has_error) or running or awaiting or migration_blocked %}disabled{% endif %}>{{ icon('download', 'btn-ico') }}
       {% if running or awaiting %}در حال اجرا…
       {% elif migration_blocked %}آپدیت بلاک شد
       {% elif has_error %}تلاش دوباره
@@ -130,6 +130,6 @@
       {% endif %}
     </div>
     <button type="button" class="btn btn-ghost upd-go" id="upd-changelog-more" aria-expanded="false"
-      {% if not cl or (cl.get('total') or 0) <= note_limit %}hidden{% endif %}>نمایش همهٔ {{ (cl.get('total') or 0) | fa if cl else '' }} تغییر</button>
+      {% if not cl or (cl.get('total') or 0) <= note_limit %}hidden{% endif %}>{{ icon('eye', 'btn-ico') }}نمایش همهٔ {{ (cl.get('total') or 0) | fa if cl else '' }} تغییر</button>
   </section>
 </div>

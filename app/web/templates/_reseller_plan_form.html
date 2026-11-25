@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Reseller plan create form inside the unified plan modal (design language: panel-ds.css).
    Field names and element ids are the ones /resellers/plans and the plans.html script expect. #}
 {% from "macros.html" import switch %}
@@ -137,7 +138,7 @@
 
     <section class="ds-sec" id="reseller-perms-section">
       <div class="ds-sec-head"><h3 class="ds-sec-title">دسترسی‌های نماینده</h3>
-        <button type="button" class="ds-link-btn" data-ds-perms-reset="#reseller-perms-box">بازگشت به پیشنهادی</button></div>
+        <button type="button" class="ds-link-btn" data-ds-perms-reset="#reseller-perms-box">{{ btn_icon('refresh', 'btn-ico') }}بازگشت به پیشنهادی</button></div>
       <div class="ds-card ds-card-flush" id="reseller-perms-box" data-ds-perms>
         <div class="ds-acc-top"><span><b data-ds-total></b> از <span data-ds-of></span> دسترسی روشن</span><small>در پنل وب و ربات یکسان؛ هنگام تأیید درخواست اعمال می‌شود</small></div>
         {{ ds_perm_groups(feature_perm_groups(), open_first=true) }}
@@ -177,7 +178,7 @@
     {{ ds_foot_warn() }}
     <p class="ds-summary" id="reseller-plan-summary" aria-live="polite"></p>
     <div class="ds-foot-btns">
-      <button class="btn" type="submit">ذخیره پلن</button>
+      <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره پلن</button>
 
     </div>
   </div>

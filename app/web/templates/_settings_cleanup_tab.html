@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Finance cleanup: status tags + age; auto hourly or run now. Permanent DB delete.
    Expects purge + cleanup_settings_action. #}
 {% set purge_tone = {
@@ -39,7 +40,7 @@
       <form method="post" action="{{ purge.run_action }}"
             data-confirm="{{ purge.ready.orders | num }} سفارش و {{ purge.ready.payments | num }} پرداخت برای همیشه از پایگاه داده حذف شوند؟ این کار برگشت‌ناپذیر است."
             data-confirm-title="حذف از پایگاه داده" data-confirm-label="حذف کامل" data-confirm-danger="1">
-        <button class="btn btn-danger" type="submit"{% if not purge.ready.total %} disabled{% endif %}>حذف از پایگاه الان</button>
+        <button class="btn btn-danger" type="submit"{% if not purge.ready.total %} disabled{% endif %}>{{ btn_icon('trash', 'btn-ico') }}حذف از پایگاه الان</button>
       </form>
     </div>
   </div>
@@ -95,7 +96,7 @@
     </div>
 
     <div class="actions sticky-actions ui-modal-sticky-save">
-      <button class="btn" type="submit">ذخیره تنظیمات</button>
+      <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره تنظیمات</button>
     </div>
   </form>
   {% endif %}

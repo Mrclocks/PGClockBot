@@ -1,7 +1,7 @@
 {# Design-language building blocks (styles: panel-ds.css, behavior: panel-ds.js). #}
 {% from "macros.html" import modal_title %}
 {# Imported as icon_svg: ds_modal_head takes a parameter named icon, which would hide the macro. #}
-{% from "_icons.html" import icon as icon_svg %}
+{% from "_icons.html" import icon as icon_svg, label_icon %}
 
 {% macro ico(name) -%}
 {{ icon_svg('shield-alert' if name == 'shield' else name) }}
@@ -91,8 +91,8 @@
 {% macro ds_foot(label, primary_class='btn', primary_id=none, pinned=true, cancel=false) -%}
 <div class="{% if pinned %}ui-modal-sticky-save {% endif %}ds-foot">
   <div class="ds-foot-btns">
-    <button type="submit" class="{{ primary_class }}"{% if primary_id %} id="{{ primary_id }}"{% endif %}>{{ label }}</button>
-    {% if cancel %}<button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>{% endif %}
+    <button type="submit" class="{{ primary_class }}"{% if primary_id %} id="{{ primary_id }}"{% endif %}>{{ label_icon(label) }}{{ label }}</button>
+    {% if cancel %}<button type="button" class="btn btn-ghost" data-modal-close>{{ icon_svg('close', 'btn-ico') }}انصراف</button>{% endif %}
   </div>
 </div>
 {%- endmacro %}

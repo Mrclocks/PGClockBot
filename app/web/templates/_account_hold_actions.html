@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {#- «غیرفعال‌سازی» / «فعال‌سازی دوباره» for a list row's «⋯» menu; the user card copies them from there.
     ``hold`` is the row's open hold (status, releasable) or none. The route re-checks every permission. -#}
 {% macro account_hold_actions(action_url, hold, disable_label, disable_message, disable_title, enable_message, enable_title) -%}
@@ -12,7 +13,7 @@
       data-confirm-label="غیرفعال کن">
   <input type="hidden" name="action" value="disable" />
   <input type="hidden" name="reason" value="" />
-  <button class="btn btn-sm btn-danger" type="submit">{{ disable_label }}</button>
+  <button class="btn btn-sm btn-danger" type="submit">{{ btn_icon('power', 'btn-ico') }}{{ disable_label }}</button>
 </form>
 {% elif hold.releasable and hold.status in ('applying', 'held') %}
 <form method="post" action="{{ action_url }}"
@@ -20,7 +21,7 @@
       data-confirm-title="{{ enable_title }}"
       data-confirm-label="فعال کن">
   <input type="hidden" name="action" value="enable" />
-  <button class="btn btn-sm" type="submit">فعال‌سازی دوباره</button>
+  <button class="btn btn-sm" type="submit">{{ btn_icon('refresh', 'btn-ico') }}فعال‌سازی دوباره</button>
 </form>
 {% endif %}
 {%- endmacro %}

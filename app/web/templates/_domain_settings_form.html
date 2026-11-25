@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Shared settings groups inside a domain modal panel.
    Expects: settings_form_action, tab_groups, groups, values
 #}
@@ -53,7 +54,7 @@
   </div>
   {% endfor %}
   <div class="actions sticky-actions ui-modal-sticky-save">
-    <button class="btn" type="submit">ذخیره تنظیمات</button>
+    <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره تنظیمات</button>
   </div>
 </form>
 <script src="/static/settings-show-when.js?v={{ asset_v('settings-show-when.js') if asset_v is defined else app_version }}" defer></script>

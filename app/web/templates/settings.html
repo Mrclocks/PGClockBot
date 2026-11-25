@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "_settings_tabs.html" import settings_tabs %}
 {% from "_settings_hub.html" import settings_hub, settings_area_header, settings_menu, settings_open_first %}
 {% block title %}{% if is_panel_settings %}تنظیمات سیستم{% else %}{{ settings_area.title if settings_area is defined else 'تنظیمات ربات' }}{% endif %}{% endblock %}
@@ -68,7 +69,7 @@
       </div>
       {% endfor %}
       <div class="actions sticky-actions">
-        <button class="btn" type="submit">ذخیره محدودیت‌ها</button>
+        <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره محدودیت‌ها</button>
       </div>
     </form>
   {% elif tab == 'guides' %}
@@ -85,7 +86,7 @@
       </div>
       {% endfor %}
       <div class="actions sticky-actions">
-        <button class="btn" type="submit">ذخیره آموزش‌ها</button>
+        <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره آموزش‌ها</button>
       </div>
     </form>
   {% elif tab == 'terms' %}
@@ -103,7 +104,7 @@
       </div>
       {% endfor %}
       <div class="actions sticky-actions">
-        <button class="btn" type="submit">ذخیره تنظیمات</button>
+        <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره تنظیمات</button>
       </div>
     </form>
   {% elif tab == 'forcejoin' %}
@@ -121,7 +122,7 @@
       </div>
       {% endfor %}
       <div class="actions sticky-actions">
-        <button class="btn" type="submit">ذخیره تنظیمات</button>
+        <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره تنظیمات</button>
       </div>
     </form>
   {% elif tab == 'appearance' %}
@@ -151,7 +152,7 @@
       </div>
       {% endfor %}
       <div class="actions sticky-actions">
-        <button class="btn" type="submit">ذخیره نام‌گذاری</button>
+        <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره نام‌گذاری</button>
       </div>
     </form>
   {% elif tab == 'service_actions' %}
@@ -177,7 +178,7 @@
       </div>
       {% endfor %}
       <div class="actions sticky-actions">
-        <button class="btn" type="submit">ذخیره تنظیمات</button>
+        <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره تنظیمات</button>
       </div>
     </form>
     {% set reset_action = '/settings?tab=' ~ tab %}

@@ -2416,6 +2416,14 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
     opacity var(--motion-fast) var(--ease-standard),
     box-shadow var(--motion-fast) var(--ease-standard);
 }
+/* The icon a button's label names (DESIGN_SYSTEM.md §4): first, at the button-icon size, never shrinking the label. */
+.btn-ico {
+  width: var(--ico-sm);
+  height: var(--ico-sm);
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+:where(button, a):not(.btn) > .btn-ico { margin-inline-end: var(--space-1); }
 .btn:hover, a.btn:hover {
   background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent);
   opacity: 1;
@@ -3943,13 +3951,13 @@ code.env-fname {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  color: var(--primary);
+  color: var(--brand-fg);
   font-size: var(--fs-2);
   font-weight: var(--btn-fw);
   text-decoration: none;
 }
-.site-footer a.footer-link:hover { color: var(--primary); opacity: 0.8; }
-.site-footer a.footer-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--control-radius); }
+.site-footer a.footer-link:hover { color: var(--brand-fg); opacity: 0.8; }
+.site-footer a.footer-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: var(--control-radius); }
 .footer-link svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .btn.is-copied {
   color: var(--ok-fg) !important;

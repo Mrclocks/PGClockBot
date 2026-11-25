@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label, empty_state, stat_strip, search_submit %}
 {% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
 {% block title %}کاربران تست{% endblock %}
@@ -115,7 +116,7 @@
               <input type="hidden" name="ids" value="{{ row.user_id }}" />
               <input type="hidden" name="return_to" value="{{ return_to }}" />
               <input type="hidden" name="reason" value="" />
-              <button class="btn btn-ghost btn-sm" type="submit">پیام</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('message', 'btn-ico') }}پیام</button>
             </form>
             {% endif %}
             {% if 'retrial' in ops %}
@@ -127,7 +128,7 @@
               <input type="hidden" name="action" value="retrial" />
               <input type="hidden" name="ids" value="{{ row.user_id }}" />
               <input type="hidden" name="return_to" value="{{ return_to }}" />
-              <button class="btn btn-ghost btn-sm" type="submit">تست دوباره</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('refresh', 'btn-ico') }}تست دوباره</button>
             </form>
             {% endif %}
             {% if 'block' in ops or 'unblock' in ops %}
@@ -139,7 +140,7 @@
               <input type="hidden" name="action" value="{{ 'unblock' if row.is_blocked else 'block' }}" />
               <input type="hidden" name="ids" value="{{ row.user_id }}" />
               <input type="hidden" name="return_to" value="{{ return_to }}" />
-              <button class="btn btn-sm {% if not row.is_blocked %}btn-warn{% endif %}" type="submit">{% if row.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}</button>
+              <button class="btn btn-sm {% if not row.is_blocked %}btn-warn{% endif %}" type="submit">{{ btn_icon('unlock', 'btn-ico') }}{% if row.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}</button>
             </form>
             {% endif %}
           {% endcall %}
@@ -157,10 +158,10 @@
   <nav class="list-pager" aria-label="صفحه‌بندی کاربران تست">
     <div class="list-pager-actions">
       {% if request.query_params.get('before') %}
-      <a class="btn btn-ghost btn-sm" href="/trial-users{% if active_filter != 'all' or q %}?{% if active_filter != 'all' %}filter={{ active_filter }}{% endif %}{% if q %}{% if active_filter != 'all' %}&amp;{% endif %}q={{ q|urlencode }}{% endif %}{% endif %}">از ابتدا</a>
+      <a class="btn btn-ghost btn-sm" href="/trial-users{% if active_filter != 'all' or q %}?{% if active_filter != 'all' %}filter={{ active_filter }}{% endif %}{% if q %}{% if active_filter != 'all' %}&amp;{% endif %}q={{ q|urlencode }}{% endif %}{% endif %}">{{ btn_icon('refresh', 'btn-ico') }}از ابتدا</a>
       {% endif %}
       {% if next_before %}
-      <a class="btn btn-ghost btn-sm" href="/trial-users?before={{ next_before }}{% if active_filter != 'all' %}&amp;filter={{ active_filter }}{% endif %}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">بعدی</a>
+      <a class="btn btn-ghost btn-sm" href="/trial-users?before={{ next_before }}{% if active_filter != 'all' %}&amp;filter={{ active_filter }}{% endif %}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">{{ btn_icon('chev', 'btn-ico') }}بعدی</a>
       {% else %}
       <span class="btn btn-ghost btn-sm" aria-disabled="true">بعدی</span>
       {% endif %}

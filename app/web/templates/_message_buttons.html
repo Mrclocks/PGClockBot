@@ -78,7 +78,7 @@
 <div class="form-field">
   <span>از قالب‌های ذخیره‌شده</span>
   <div class="msg-btn-presets" data-msg-btn-presets>
-    {% for p in presets %}<button type="button" class="btn btn-ghost btn-sm" data-msg-btn-preset="{{ p.id }}"><span dir="auto">{{ p.name }}</span></button>{% endfor %}
+    {% for p in presets %}<button type="button" class="btn btn-ghost btn-sm" data-msg-btn-preset="{{ p.id }}">{{ icon_svg('template', 'btn-ico') }}<span dir="auto">{{ p.name }}</span></button>{% endfor %}
   </div>
 </div>
 {% endif %}

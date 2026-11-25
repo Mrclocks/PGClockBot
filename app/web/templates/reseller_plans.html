@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, act_label, empty_state %}
 {% from "_ds.html" import ds_modal_head, ds_foot %}
 {% block title %}پلن‌های نمایندگی{% endblock %}
@@ -34,13 +35,13 @@
         <td class="li-badge"><span class="li-hide">{{ "فعال" if p.is_active else "خاموش" }}</span><span class="li-only badge {{ 'active' if p.is_active else 'warn' }}">{{ "فعال" if p.is_active else "خاموش" }}</span></td>
         <td class="col-actions">
           {% call row_actions() %}
-          <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">ویرایش</a>
-          <form method="post" action="/resellers/plans/{{ p.id }}/toggle"><button class="btn btn-ghost btn-sm" type="submit">روشن/خاموش</button></form>
+          <a class="btn btn-ghost btn-sm" href="/resellers/plans/{{ p.id }}/edit">{{ btn_icon('edit', 'btn-ico') }}ویرایش</a>
+          <form method="post" action="/resellers/plans/{{ p.id }}/toggle"><button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('power', 'btn-ico') }}روشن/خاموش</button></form>
           <form method="post" action="/resellers/plans/{{ p.id }}/delete"
                 data-confirm="این پلن نمایندگی حذف شود؟"
                 data-confirm-title="تأیید حذف"
                 data-confirm-danger="1"
-                data-confirm-label="حذف"><button class="btn btn-danger btn-sm" type="submit">حذف</button></form>
+                data-confirm-label="حذف"><button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف</button></form>
           {% endcall %}
         </td>
         <td class="li-only-cell li-sub"><span dir="auto">{{ p.description or '—' }}</span></td>

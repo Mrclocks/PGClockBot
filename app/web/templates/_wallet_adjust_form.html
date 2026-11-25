@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# One wallet form for users and resellers: amount, «کاهش» / «افزایش», note. The nonce makes a
    repeated submit a no-op on the PAYG ledger. #}
 {% macro wallet_adjust_form(action, confirm, nonce=none, amount_value='', note_max=120, hint=none, note_label='یادداشت', note_required=false) -%}
@@ -12,11 +13,11 @@
       {% if hint %}<small class="muted">{{ hint }}</small>{% endif %}
     </label>
     <div class="wallet-adjust-modes" role="group" aria-label="نوع تنظیم کیف پول">
-      <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
+      <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">{{ btn_icon('minus', 'btn-ico') }}
         <span class="wallet-mode-swatch" aria-hidden="true"></span>
         <span class="wallet-mode-label">کاهش</span>
       </button>
-      <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
+      <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">{{ btn_icon('plus', 'btn-ico') }}
         <span class="wallet-mode-swatch" aria-hidden="true"></span>
         <span class="wallet-mode-label">افزایش</span>
       </button>

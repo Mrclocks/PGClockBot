@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import row_actions, page_header %}
 {% block title %}سرویس‌های در انتظار تعیین فروشگاه{% endblock %}
 {% block content %}
@@ -36,7 +37,7 @@
                 <option value="{{ shop_id }}">{{ label }} (#{{ shop_id }})</option>
                 {% endfor %}
               </select>
-              <button class="btn btn-sm" type="submit">تعیین</button>
+              <button class="btn btn-sm" type="submit">{{ btn_icon('check', 'btn-ico') }}تعیین</button>
             </form>
             {% endcall %}
           </td>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import page_header, empty_state %}
 {% from "_ds.html" import ds_sec, ds_switch, ico %}
 {% set log = report.log %}
@@ -49,7 +50,7 @@
       {% if retry.with_unknown > retry.failed %}
       <div class="ds-rows">{{ ds_switch('include_unknown', 'نامشخص‌ها هم (' ~ ((retry.with_unknown - retry.failed) | num) ~ ' نفر)', 'ممکن است پیام قبلاً به آن‌ها رسیده باشد و دوباره بگیرند.') }}</div>
       {% endif %}
-      <button class="btn" type="submit">ارسال دوباره</button>
+      <button class="btn" type="submit">{{ btn_icon('send', 'btn-ico') }}ارسال دوباره</button>
     </form>
     {% endif %}
   {% endcall %}

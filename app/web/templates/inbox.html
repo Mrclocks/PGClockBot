@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import action_center_icon, inbox_dismiss_btn, page_header %}
 {% block title %}مرکز اقدام{% endblock %}
 {% block content %}
@@ -24,7 +25,7 @@
   <form method="post" action="/inbox/dismiss/reset" class="inbox-reset-form" id="form-inbox-dismiss-reset">
     {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
     <input type="hidden" name="return_to" value="{{ request.url.path }}" />
-    <button type="submit" class="btn btn-sm">بازنشانی اعلان‌های مخفی</button>
+    <button type="submit" class="btn btn-sm">{{ btn_icon('refresh', 'btn-ico') }}بازنشانی اعلان‌های مخفی</button>
   </form>
 </div>
 
@@ -41,7 +42,7 @@
     <span class="muted">نسخه فعلی شما {{ update.version }} است.</span>
   </div>
   <div class="inbox-alert-actions">
-    <a class="btn btn-sm btn-ok" href="/settings?tab=update">آپدیت</a>
+    <a class="btn btn-sm btn-ok" href="/settings?tab=update">{{ btn_icon('refresh', 'btn-ico') }}آپدیت</a>
     {{ inbox_dismiss_btn('update') }}
   </div>
 </div>
@@ -54,7 +55,7 @@
     <span class="muted">{{ ticket_alert.detail }}</span>
   </div>
   <div class="inbox-alert-actions">
-    <a class="btn btn-sm" href="{{ ticket_alert.href }}">مشاهده</a>
+    <a class="btn btn-sm" href="{{ ticket_alert.href }}">{{ btn_icon('eye', 'btn-ico') }}مشاهده</a>
     {{ inbox_dismiss_btn('ticket_alert', ticket_alert.ticket_id or ticket_alert.id or '') }}
   </div>
 </div>
@@ -67,7 +68,7 @@
     <span class="muted">خرید جدید برای کاربران بسته است.</span>
   </div>
   <div class="inbox-alert-actions">
-    <a class="btn btn-sm btn-ghost" href="/finance?tab=orders&settings=payment">تنظیمات</a>
+    <a class="btn btn-sm btn-ghost" href="/finance?tab=orders&settings=payment">{{ btn_icon('gear', 'btn-ico') }}تنظیمات</a>
     {{ inbox_dismiss_btn('shop_maintenance') }}
   </div>
 </div>
@@ -80,7 +81,7 @@
     <span class="muted">قبل از قفل شدن سهمیه، ظرفیت را افزایش دهید.</span>
   </div>
   <div class="inbox-alert-actions">
-    <a class="btn btn-sm btn-ghost" href="/pg">نمای کلی</a>
+    <a class="btn btn-sm btn-ghost" href="/pg">{{ btn_icon('eye', 'btn-ico') }}نمای کلی</a>
     {{ inbox_dismiss_btn('capacity_warn') }}
   </div>
 </div>
@@ -93,7 +94,7 @@
     <span class="muted">مشتری پیش از تمام شدن زمان یا حجم سرویسش پیامی نمی‌گیرد. اگر نمی‌خواهید روشنش کنید، این اعلان را حذف کنید.</span>
   </div>
   <div class="inbox-alert-actions">
-    <a class="btn btn-sm btn-ghost" href="{{ customer_alerts_off }}">روشن کردن هشدار</a>
+    <a class="btn btn-sm btn-ghost" href="{{ customer_alerts_off }}">{{ btn_icon('power', 'btn-ico') }}روشن کردن هشدار</a>
     {{ inbox_dismiss_btn('customer_alerts_off') }}
   </div>
 </div>
@@ -106,7 +107,7 @@
     <span class="muted">{% for r in pr.suspended[:3] %}{{ r.label }}{% if not loop.last %}، {% endif %}{% endfor %}{% if pr.suspended|length > 3 %}…{% endif %}</span>
   </div>
   <div class="inbox-alert-actions">
-    <a class="btn btn-sm btn-ghost" href="/resellers">نمایندگان</a>
+    <a class="btn btn-sm btn-ghost" href="/resellers">{{ btn_icon('reseller', 'btn-ico') }}نمایندگان</a>
     {{ inbox_dismiss_btn('payg_suspended') }}
   </div>
 </div>
@@ -118,7 +119,7 @@
     <span class="muted">پنل پاسخ روشن نداد؛ اعمال شدن یا نشدن تغییر را مشخص کنید</span>
   </div>
   <div class="inbox-alert-actions">
-    <a class="btn btn-sm btn-ghost" href="/payg/charges/review">بازبینی</a>
+    <a class="btn btn-sm btn-ghost" href="/payg/charges/review">{{ btn_icon('eye', 'btn-ico') }}بازبینی</a>
   </div>
 </div>
 {% endif %}
@@ -129,7 +130,7 @@
     <span class="muted">آستانه <span dir="ltr">{{ pr.threshold | money }}</span> — {% for r in pr.low[:3] %}{{ r.label }} (<span dir="ltr">{{ r.balance | money }}</span>){% if not loop.last %}، {% endif %}{% endfor %}{% if pr.low|length > 3 %}…{% endif %}</span>
   </div>
   <div class="inbox-alert-actions">
-    <a class="btn btn-sm btn-ghost" href="/resellers">نمایندگان</a>
+    <a class="btn btn-sm btn-ghost" href="/resellers">{{ btn_icon('reseller', 'btn-ico') }}نمایندگان</a>
     {{ inbox_dismiss_btn('payg_low') }}
   </div>
 </div>

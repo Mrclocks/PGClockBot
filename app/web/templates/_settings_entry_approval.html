@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# «تأیید ورود کاربران جدید»: requests waiting for a decision, and the rejected or blocked ones.
    The card stays hidden until the list loads, so staff without the permission never see it. #}
 {% from "macros.html" import empty_state, row_actions %}
@@ -39,9 +40,9 @@
       <td class="li-badge"><span class="badge" data-ea="status"></span></td>
       <td class="col-actions">
         {% call row_actions() %}
-        <button type="button" class="btn btn-sm" data-ea-action="approve">تأیید</button>
-        <button type="button" class="btn btn-sm btn-ghost" data-ea-action="reject">رد</button>
-        <button type="button" class="btn btn-sm btn-danger" data-ea-action="block">مسدود</button>
+        <button type="button" class="btn btn-sm" data-ea-action="approve">{{ btn_icon('check', 'btn-ico') }}تأیید</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-ea-action="reject">{{ btn_icon('close', 'btn-ico') }}رد</button>
+        <button type="button" class="btn btn-sm btn-danger" data-ea-action="block">{{ btn_icon('ban', 'btn-ico') }}مسدود</button>
         {% endcall %}
       </td>
     </tr>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import page_header, empty_state %}
 {% block title %}گزارش کارکنان{% endblock %}
 {% block content %}
@@ -42,7 +43,7 @@
 </div>
 {% if next_before %}
 <div class="actions">
-  <a class="btn btn-ghost" href="/staff-actions?before={{ next_before }}">موارد قدیمی‌تر</a>
+  <a class="btn btn-ghost" href="/staff-actions?before={{ next_before }}">{{ btn_icon('chev', 'btn-ico') }}موارد قدیمی‌تر</a>
 </div>
 {% endif %}
 </div>

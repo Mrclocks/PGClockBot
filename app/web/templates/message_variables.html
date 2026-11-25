@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "_settings_hub.html" import settings_area_header, settings_menu %}
 {% block title %}متغیرهای پیام{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
@@ -20,7 +21,7 @@
     <div class="card-flush-head">
       <h2>{{ g.label }}</h2>
       <div class="actions">
-        <a class="btn btn-sm" href="{{ g.settings_href }}">تنظیمات</a>
+        <a class="btn btn-sm" href="{{ g.settings_href }}">{{ btn_icon('gear', 'btn-ico') }}تنظیمات</a>
       </div>
     </div>
     <div class="table-wrap">
@@ -40,7 +41,7 @@
                 <code class="msg-vars-token-box mono" dir="ltr">{{ v.token }}</code>
                 <button type="button" class="btn btn-ghost btn-sm"
                         data-copy="{{ v.token }}"
-                        data-copy-idle="کپی">کپی</button>
+                        data-copy-idle="کپی">{{ btn_icon('copy', 'btn-ico') }}کپی</button>
               </div>
             </td>
             <td>

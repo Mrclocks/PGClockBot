@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import pay_status, page_header, act_label, card_title %}
 {% from "_home_widgets.html" import delta, status_tiles %}
 {% block title %}نمای کلی فروشگاه{% endblock %}
@@ -14,7 +15,7 @@
   <div class="dash-bot-setup-inner">
     <strong>ربات تلگرام شما هنوز تنظیم نشده</strong>
     <p class="muted">برای راه‌اندازی فروشگاه، توکن ربات اختصاصی را در تنظیمات ثبت کنید.</p>
-    <a class="btn btn-sm" href="/shop-settings?tab=bot">تنظیمات ربات تلگرام</a>
+    <a class="btn btn-sm" href="/shop-settings?tab=bot">{{ btn_icon('gear', 'btn-ico') }}تنظیمات ربات تلگرام</a>
   </div>
 </div>
 {% elif not viewer.has_shop %}

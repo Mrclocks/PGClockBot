@@ -95,12 +95,12 @@
   </div>
 
   <div class="actions sticky-actions">
-    <button type="submit" class="btn" name="action" value="issue" id="ssl-issue-btn" {% if st.running %}disabled{% endif %}>
+    <button type="submit" class="btn" name="action" value="issue" id="ssl-issue-btn" {% if st.running %}disabled{% endif %}>{{ icon('refresh', 'btn-ico') }}
       {% if st.has_cert %}صدور مجدد گواهی{% else %}دریافت گواهی{% endif %}
     </button>
     {% if st.has_cert %}
-    <button type="submit" class="btn btn-ghost" name="action" value="renew" id="ssl-renew-btn" {% if st.running %}disabled{% endif %}>تمدید</button>
-    <button type="submit" class="btn" name="action" value="enable" id="ssl-enable-btn" {% if st.running %}disabled{% endif %}>
+    <button type="submit" class="btn btn-ghost" name="action" value="renew" id="ssl-renew-btn" {% if st.running %}disabled{% endif %}>{{ icon('refresh', 'btn-ico') }}تمدید</button>
+    <button type="submit" class="btn" name="action" value="enable" id="ssl-enable-btn" {% if st.running %}disabled{% endif %}>{{ icon('refresh', 'btn-ico') }}
       {% if st.ssl_enabled %}اعمال مجدد HTTPS{% else %}فعال‌سازی HTTPS{% endif %}
     </button>
     {% if st.ssl_enabled %}
@@ -108,7 +108,7 @@
       data-confirm="HTTPS غیرفعال شود؟ پنل با HTTP ری‌استارت می‌شود."
       data-confirm-title="غیرفعال‌سازی HTTPS"
       data-confirm-warn="1"
-      data-confirm-label="غیرفعال‌سازی">غیرفعال‌سازی HTTPS</button>
+      data-confirm-label="غیرفعال‌سازی">{{ icon('power', 'btn-ico') }}غیرفعال‌سازی HTTPS</button>
     {% endif %}
     {% endif %}
   </div>
@@ -182,8 +182,8 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
       </p>
       <p class="muted" dir="ltr" id="ssl-done-url"></p>
       <div class="actions">
-        <a class="btn" id="ssl-open-panel" href="#" target="_self" rel="noopener">ورود به پنل (HTTPS)</a>
-        <button type="button" class="btn btn-ghost" data-ssl-modal-close>بمان در تنظیمات</button>
+        <a class="btn" id="ssl-open-panel" href="#" target="_self" rel="noopener">{{ icon('login', 'btn-ico') }}ورود به پنل (HTTPS)</a>
+        <button type="button" class="btn btn-ghost" data-ssl-modal-close>{{ icon('gear', 'btn-ico') }}بمان در تنظیمات</button>
       </div>
     </div>
   </div>
