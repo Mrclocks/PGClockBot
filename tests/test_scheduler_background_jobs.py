@@ -37,6 +37,8 @@ OPERATIONS = {
     "chat_message_purge",
     # Deletes subscription rows of panel admins the panel confirms are gone; needs no running bot.
     "admin_subscription_cleanup",
+    # Turns held customers and shops off on the panel, and back on at release; needs no running bot.
+    "account_holds",
     # Queues the warnings before an expired service is deleted; needs no running bot.
     "service_cleanup",
     # Puts timed quick switches back when their time comes; needs no running bot.

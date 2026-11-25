@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import BotUser, BotUserShop, Plan, ResellerCharge, Role, UserService, WalletTransaction
+from app.services.account_hold_guard import defer_reenable_to_holds
 from app.services.authz import authz_from_staff, can_shop
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import (
@@ -1141,6 +1142,9 @@ async def admin_set_service_quota(
         reset=do_reset,
     )
     charges, reset_done = await _reset_usage(session, pg, service, charges) if do_reset else (charges, False)
+    # A held account keeps the user off; the hold's release turns it on with the new quota.
+    if activate and await defer_reenable_to_holds(session, [int(service.pg_user_id)]):
+        activate = False
     payload = build_user_modify_payload(
         data_limit=data_limit_bytes,
         expire_ts=expire_ts,

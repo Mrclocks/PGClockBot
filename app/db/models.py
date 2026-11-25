@@ -2883,3 +2883,82 @@ class DiscountBudget(Base):
     shop_key: Mapped[int] = mapped_column(Integer)
     month: Mapped[str] = mapped_column(String(7))
     used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class AccountHold(Base):
+    """An owner turned a customer or a shop off: ``applying`` -> ``held`` -> ``releasing`` -> ``released``.
+
+    ``kind`` is ``customer`` or ``shop``. ``scope_shop_id`` is the shop a customer hold belongs to
+    (0 for the platform owner's account-wide hold; for a shop hold, the shop itself). The panel
+    users it turned off are its items; release turns back on only those. At most one open hold per
+    target and scope (partial unique index). ``restore_*`` say what release turns back on: what was
+    on before the hold, plus anything another path wanted to re-enable while the hold was open.
+    """
+
+    __tablename__ = "account_holds"
+    __table_args__ = (
+        Index(
+            "uq_account_holds_open",
+            "kind",
+            "target_user_id",
+            "scope_shop_id",
+            unique=True,
+            postgresql_where=text("status <> 'released'"),
+        ),
+        Index("ix_account_holds_status_id", "status", "id"),
+        Index("ix_account_holds_parent", "parent_hold_id"),
+        Index("ix_account_holds_admin_open", "pg_admin_username", postgresql_where=text("status <> 'released'")),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    target_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
+    scope_shop_id: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(16), default="applying", server_default="applying")
+    parent_hold_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("account_holds.id", ondelete="CASCADE"), nullable=True
+    )
+    # Shop holds: the shop's panel admin and what release switches back on.
+    pg_admin_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    admin_state: Mapped[str] = mapped_column(String(16), default="none", server_default="none")
+    restore_shop_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # Shop holds list the admin's panel users once (a network read), then work from the saved rows.
+    items_listed: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # Customer holds: the block flag release puts back (it may have been on before the hold).
+    restore_unblock: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    actor: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Who may release it: 0 for the platform owner, else the shop whose staff placed it.
+    placed_by_shop_id: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    lease_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    released_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AccountHoldItem(Base):
+    """One panel user a hold covers: ``pending`` -> ``sending`` -> ``disabled`` | ``skipped`` | ``gone``.
+
+    On release: ``disabled`` -> ``enabling`` -> ``restored`` | ``left`` (kept off: frozen, held by
+    another open hold, or removed). ``sending`` and ``enabling`` mean the panel call may have run;
+    a retry repeats the same call, which is safe because disabling or enabling twice changes nothing.
+    """
+
+    __tablename__ = "account_hold_items"
+    __table_args__ = (
+        UniqueConstraint("hold_id", "pg_user_id", name="uq_account_hold_items_user"),
+        Index("ix_account_hold_items_pg_user", "pg_user_id"),
+        Index("ix_account_hold_items_hold_state", "hold_id", "state"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hold_id: Mapped[int] = mapped_column(ForeignKey("account_holds.id", ondelete="CASCADE"))
+    pg_user_id: Mapped[int] = mapped_column(BigInteger)
+    service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("user_services.id", ondelete="SET NULL"), nullable=True
+    )
+    state: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

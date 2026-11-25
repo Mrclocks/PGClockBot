@@ -24,6 +24,7 @@ from app.bot.auth import (
 )
 from app.config import get_settings
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan, Role, Ticket, UserService
+from app.services.account_hold_guard import UNBLOCK_REFUSAL, customer_hold_open
 from app.services.color_tags import risk_mark
 from app.services.home_overview import bot_dashboard_summary
 from app.services.formatting import (
@@ -1942,6 +1943,9 @@ async def adm_users_block(
         return
 
     # Unblock immediately; ask reason only when blocking
+    if user.is_blocked and await customer_hold_open(session, int(user.id), None):
+        await callback.answer(UNBLOCK_REFUSAL, show_alert=True)
+        return
     if user.is_blocked:
         from app.services.notifications import notify_account_edit
 

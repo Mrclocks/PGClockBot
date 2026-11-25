@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, Plan, ServiceFreeze, UserService
+from app.services.account_hold_guard import defer_reenable_to_holds
 from app.services.formatting import parse_expire
 from app.services.pasarguard import PasarGuardError, get_pg, get_pg_for_reseller
 from app.services.service_import import is_external_service
@@ -340,8 +341,13 @@ async def _apply_resume(session: AsyncSession, row: ServiceFreeze) -> bool:
         await _close(session, row, expected=STATUS_RESUMING)
         return False
     pg = await _panel(session, row.shop_id)
+    payload: dict[str, object] = {"expire": int(row.target_expire), "status": "active"}
+    # A held account keeps the user off: write the saved days; the hold's release turns it on.
+    if await defer_reenable_to_holds(session, [int(service.pg_user_id)]):
+        payload.pop("status")
+    await session.commit()
     try:
-        await pg.modify_user_by_id(int(service.pg_user_id), {"expire": int(row.target_expire), "status": "active"})
+        await pg.modify_user_by_id(int(service.pg_user_id), payload)
     except PasarGuardError as exc:
         if exc.status_code != 404:
             raise

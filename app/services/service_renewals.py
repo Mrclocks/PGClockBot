@@ -27,6 +27,7 @@ from app.services.formatting import (
     format_bytes, format_expire_short, hold_duration_from_info, is_on_hold_status,
     parse_expire,
 )
+from app.services.account_hold_guard import assert_service_not_held
 from app.services.service_freeze_guard import assert_not_frozen
 from app.services.service_live_info import validate_service_info
 
@@ -315,6 +316,7 @@ async def validate_renewal_selection(session, *, user_id, service, plan, shop_id
     if not service.pg_user_id or (service.remark or "").strip() == "linked":
         raise ValueError("تمدید این سرویس از این مسیر ممکن نیست")
     await assert_not_frozen(session, service.id)
+    await assert_service_not_held(session, service.id)
     assert_service_on_panel(service)
     from app.services.service_automation import service_shop_id
     if await service_shop_id(session, service) != shop_id:

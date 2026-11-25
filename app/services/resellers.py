@@ -78,6 +78,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("wallet_adjust", "تنظیم دستی کیف پول مشتری"),
     ("loyalty_adjust", "تغییر دستی امتیاز مشتری"),
     ("customers_block", "مسدودسازی مشتری در فروشگاه"),
+    ("accounts_disable", "غیرفعال‌سازی مشتری یا زیرنماینده با همهٔ سرویس‌ها"),
     ("customers_approve", "تأیید ورود مشتریان جدید"),
     ("loyalty", "باشگاه مشتریان"),
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
@@ -118,7 +119,8 @@ FEATURE_PERM_LAYOUT: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
                                    "discount_rules", "loyalty")),
     ("فروشگاه و فنی", False, ("shop_settings", "miniapp", "service_import", "connection_status",
                              "connection_status_manage")),
-    ("عملیات حساس مالی", True, ("payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "service_cleanup", "free_checkout")),
+    ("عملیات حساس مالی", True, ("payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "service_cleanup", "free_checkout",
+                            "accounts_disable")),
 )
 
 
