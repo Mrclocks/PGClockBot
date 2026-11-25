@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AccountHold, AccountHoldItem, PgAdminSubscription, ResellerProfile, UserService
 from app.services.account_hold_guard import defer_reenable_to_holds
+from app.services.account_hold_notices import notify_hold
 from app.services.account_holds import (
     KIND_CUSTOMER,
     STATUS_APPLYING,
@@ -368,6 +369,7 @@ async def _finish_release(factory: SessionFactory, hold: AccountHold, token: str
         await session.commit()
         if hold.kind != KIND_CUSTOMER:
             await sync_shop_bots(session, [int(hold.target_user_id)])
+        await notify_hold(session, int(hold.id), disabled=False)
 
 
 async def run_hold(factory: SessionFactory, pg: Any, hold_id: int) -> str | None:

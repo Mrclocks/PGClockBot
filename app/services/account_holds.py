@@ -289,3 +289,12 @@ async def shop_hold_tree_ids(session: AsyncSession, hold_id: int) -> list[int]:
         )
     )
     return [int(i) for i in rows]
+
+
+async def shop_hold_tree_hold_ids(session: AsyncSession, hold_id: int) -> list[int]:
+    """The ids of a shop hold and its child holds."""
+    rows = await session.scalars(
+        select(AccountHold.id).where((AccountHold.id == int(hold_id)) | (AccountHold.parent_hold_id == int(hold_id)))
+        .order_by(AccountHold.id)
+    )
+    return [int(i) for i in rows]

@@ -113,9 +113,17 @@ class HoldHarness(unittest.IsolatedAsyncioTestCase):
             await conn.run_sync(Base.metadata.create_all)
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
         self.panel = FakePanel()
+        self.notices: list[dict] = []
+
+        async def record_notice(session, **kw):
+            self.notices.append({"user": int(kw["user"].id), "event": kw["event"], "reason": kw.get("reason"),
+                                 "shop_id": kw.get("shop_id")})
+            return {"subject": True, "admins": False}
+
         self.patches = [
             patch("app.services.pasarguard.get_pg", return_value=self.panel),
             patch("app.services.account_hold_actions.run_job_now", return_value=False),
+            patch("app.services.notifications.notify_account_edit", new=record_notice),
         ]
         for p in self.patches:
             p.start()
@@ -495,6 +503,58 @@ class AccountHoldRouteTests(HoldHarness):
     async def test_shop_route_refuses_shop_staff_on_an_unrelated_shop(self) -> None:
         self.assertIn("err=", await self._post(f"/resellers/{SHOP_B}/account-hold", action="disable", reason="debt!"))
         self.assertEqual(await self._holds(), [])
+
+
+class HoldNoticeTests(HoldHarness):
+    async def test_customer_hears_once_when_disabled_and_once_when_enabled(self) -> None:
+        await self._disable_customer(OWNER)
+        await self._run_all()
+        await self._enable_customer(OWNER)
+        await self._run_all()
+        self.assertEqual(
+            [(n["user"], n["event"], n["shop_id"]) for n in self.notices],
+            [(CUSTOMER, "account_hold", None), (CUSTOMER, "account_release", None)],
+        )
+        self.assertEqual(self.notices[0]["reason"], "تخلف از قوانین")
+        self.assertIsNone(self.notices[1]["reason"])
+
+    async def test_shop_notice_comes_from_that_shops_bot(self) -> None:
+        await self._disable_customer(shop_staff(SHOP_A))
+        self.assertEqual([(n["event"], n["shop_id"]) for n in self.notices], [("account_hold", SHOP_A)])
+
+    async def test_refused_disable_sends_nothing(self) -> None:
+        with self.assertRaises((PermissionError, ValueError)):
+            async with self.Session() as session:
+                await disable_customer(session, shop_staff(SHOP_B), CUSTOMER, "تخلف از قوانین")
+        self.assertEqual(self.notices, [])
+
+    async def test_shop_and_its_sub_shop_both_hear(self) -> None:
+        await ShopHoldTests._tree(self)
+        async with self.Session() as session:
+            await disable_shop(session, OWNER, SHOP_A, "بدهی پرداخت نشده")
+        await self._run_all()
+        self.assertEqual(sorted((n["user"], n["event"]) for n in self.notices),
+                         [(SHOP_A, "shop_hold"), (CHILD, "shop_hold")])
+        async with self.Session() as session:
+            await enable_shop(session, OWNER, SHOP_A)
+        await self._run_all()
+        self.assertEqual(sorted((n["user"], n["event"]) for n in self.notices[2:]),
+                         [(SHOP_A, "shop_release"), (CHILD, "shop_release")])
+
+
+class HoldNoticeTextTests(unittest.TestCase):
+    def test_reason_and_name_are_escaped_for_telegram_html(self) -> None:
+        from types import SimpleNamespace
+
+        from app.services.notifications import format_account_edit_admin, format_account_edit_subject
+
+        text = format_account_edit_subject(event="account_hold", reason="<b>x</b>")
+        self.assertIn("&lt;b&gt;x&lt;/b&gt;", text)
+        self.assertIn("خاموش", text)
+        user = SimpleNamespace(full_name="<i>evil</i>", username=None, telegram_id=5, role="user")
+        admin = format_account_edit_admin(event="shop_hold", user=user, reason="r", actor="<a>")
+        self.assertNotIn("<i>evil", admin)
+        self.assertNotIn("<a>", admin)
 
 
 class HoldRowActionTests(unittest.TestCase):

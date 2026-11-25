@@ -23,6 +23,7 @@ from app.services.account_hold_access import (
     shop_target,
 )
 from app.services.account_hold_guard import OPEN_STATUSES
+from app.services.account_hold_notices import notify_hold
 from app.services.account_holds import (
     KIND_CUSTOMER,
     KIND_SHOP,
@@ -33,6 +34,7 @@ from app.services.account_holds import (
     hold_progress,
     open_customer_hold,
     open_shop_hold,
+    shop_hold_tree_hold_ids,
     shop_hold_tree_ids,
     start_release,
     sync_shop_bots,
@@ -71,12 +73,13 @@ def _request(staff: dict[str, Any], reason_raw: object, placed_by_shop_id: int) 
 async def disable_customer(session: AsyncSession, staff: dict[str, Any], customer_id: int, reason_raw: object) -> None:
     target = await customer_target(session, staff, customer_id)
     request = _request(staff, reason_raw, target.placed_by_shop_id)
-    await open_customer_hold(session, customer=target.customer, scope_shop_id=target.scope_shop_id,
-                             request=request)
+    hold = await open_customer_hold(session, customer=target.customer, scope_shop_id=target.scope_shop_id,
+                                    request=request)
     _audit(session, staff, shop_id=target.scope_shop_id, action="account_disable", target_type="customer",
            target_id=int(target.customer.id), reason=request.reason)
     await session.commit()
     run_job_now(HOLD_JOB_ID)
+    await notify_hold(session, int(hold.id), disabled=True)
 
 
 async def _release(session: AsyncSession, staff: dict[str, Any], hold: AccountHold | None, *, placed_by: int,
@@ -107,6 +110,8 @@ async def disable_shop(session: AsyncSession, staff: dict[str, Any], shop_user_i
     await session.commit()
     run_job_now(HOLD_JOB_ID)
     await sync_shop_bots(session, await shop_hold_tree_ids(session, int(hold.id)))
+    for held_id in await shop_hold_tree_hold_ids(session, int(hold.id)):
+        await notify_hold(session, held_id, disabled=True)
 
 
 async def enable_shop(session: AsyncSession, staff: dict[str, Any], shop_user_id: int) -> None:
