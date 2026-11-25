@@ -62,6 +62,7 @@ JOB_LABELS: dict[str, str] = {
     "chat_message_purge": "پاکسازی پیام‌های گفتگو",
     "service_cleanup": "پاکسازی سرویس‌ها",
     "switch_reverts": "برگشت سوییچ‌های زمان‌دار",
+    "admin_subscription_cleanup": "پاکسازی اشتراک ادمین‌های حذف‌شده",
     "bot_profile_photo": "عکس پروفایل ربات",
     "user_photo_prune": "پاکسازی عکس کاربران",
     "cancellation_notifications": "اعلان لغو سرویس",

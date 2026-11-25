@@ -35,6 +35,8 @@ OPERATIONS = {
     "paid_order_recovery",
     "volume_external_sync",
     "chat_message_purge",
+    # Deletes subscription rows of panel admins the panel confirms are gone; needs no running bot.
+    "admin_subscription_cleanup",
     # Queues the warnings before an expired service is deleted; needs no running bot.
     "service_cleanup",
     # Puts timed quick switches back when their time comes; needs no running bot.
