@@ -94,6 +94,15 @@ def option_labels(*, renew: bool, labels: ScreenLabels | None, links: dict[str, 
     return out
 
 
+def option_icons(labels: ScreenLabels | None) -> dict[str, str]:
+    """Checklist key -> premium emoji id of the screen's menu label, for the screens that have one."""
+    return {key: label.icon for key, label in (labels or {}).items() if label.icon}
+
+
+def _icon_extra(icon: str | None) -> dict[str, str]:
+    return {"icon_custom_emoji_id": icon} if icon else {}
+
+
 def checklist_markup(
     selected: list[str],
     *,
@@ -104,8 +113,12 @@ def checklist_markup(
     may_link: bool = False,
 ) -> InlineKeyboardMarkup:
     """Two columns of ✅/⬜ targets and added links, «لینک دلخواه», one row per saved set, then «ادامه»."""
+    icons = option_icons(labels)
     options = [
-        InlineKeyboardButton(text=f"{'✅' if key in selected else '⬜'} {label}", callback_data=f"{CB_TOGGLE}{key}")
+        InlineKeyboardButton(
+            text=f"{'✅' if key in selected else '⬜'} {label}", callback_data=f"{CB_TOGGLE}{key}",
+            **_icon_extra(icons.get(key)),
+        )
         for key, label in option_labels(renew=renew, labels=labels, links=links or {}).items()
     ]
     rows = [options[i:i + 2] for i in range(0, len(options), 2)]
@@ -125,14 +138,18 @@ def next_style(style: str) -> str:
     return STYLE_CYCLE[(STYLE_CYCLE.index(current) + 1) % len(STYLE_CYCLE)]
 
 
-def colors_markup(selected: list[str], styles: dict[str, str], *, labels: dict[str, str]) -> InlineKeyboardMarkup:
-    """Each chosen button drawn in its colour (a tap changes it), then «ارسال» and «بازگشت»."""
+def colors_markup(
+    selected: list[str], styles: dict[str, str], *, labels: dict[str, str], icons: dict[str, str] | None = None
+) -> InlineKeyboardMarkup:
+    """Each chosen button drawn in its colour and premium emoji (a tap changes the colour), then «ارسال» and «بازگشت»."""
     rows = []
     for key in selected:
         style = normalize_style(styles.get(key))
         extra = {"style": style} if style else {}
         text = f"{labels.get(key, key)} · {STYLE_NAMES[style]}"
-        rows.append([InlineKeyboardButton(text=text, callback_data=f"{CB_COLOR}{key}", **extra)])
+        rows.append([InlineKeyboardButton(
+            text=text, callback_data=f"{CB_COLOR}{key}", **extra, **_icon_extra((icons or {}).get(key))
+        )])
     rows.append([
         InlineKeyboardButton(text="✅ ارسال", callback_data=CB_SEND),
         InlineKeyboardButton(text="⬅️ بازگشت", callback_data=CB_YES),
@@ -232,8 +249,10 @@ async def on_toggle(callback: CallbackQuery, state: FSMContext, session: AsyncSe
 
 async def _show_colors(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     data = await state.get_data()
+    icons = option_icons(await sender_screen_labels(session, data.get("mbp_shop")))
     markup = colors_markup(
-        list(data.get("mbp_selected") or []), dict(data.get("mbp_styles") or {}), labels=await _labels(state, session)
+        list(data.get("mbp_selected") or []), dict(data.get("mbp_styles") or {}),
+        labels=await _labels(state, session), icons=icons,
     )
     if isinstance(callback.message, Message):
         await callback.message.edit_text(COLORS, reply_markup=markup)

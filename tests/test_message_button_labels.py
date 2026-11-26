@@ -63,6 +63,27 @@ class ScreenLabelTests(unittest.TestCase):
         self.assertEqual(row[0][0].text, SCREENS["shop"][1])
 
 
+class PickerPremiumEmojiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.labels = screen_labels({"btn_wallet": premium_label("👛 کیف من"), "btn_shop": "🛒 خرید"})
+
+    def test_the_checklist_shows_each_screens_premium_emoji(self) -> None:
+        markup = picker.checklist_markup(["wallet"], renew=False, presets=[], labels=self.labels)
+        buttons = {b.callback_data: b for row in markup.inline_keyboard for b in row}
+        wallet, shop = buttons["mbp:t:wallet"], buttons["mbp:t:shop"]
+        self.assertEqual((wallet.text, wallet.icon_custom_emoji_id), ("✅ کیف من", PREMIUM_ID))
+        self.assertIsNone(shop.icon_custom_emoji_id)
+
+    def test_the_colour_step_keeps_the_premium_emoji(self) -> None:
+        labels = picker.option_labels(renew=False, labels=self.labels, links={})
+        markup = picker.colors_markup(
+            ["wallet", "shop"], {"wallet": "success"}, labels=labels, icons=picker.option_icons(self.labels)
+        )
+        wallet, shop = markup.inline_keyboard[0][0], markup.inline_keyboard[1][0]
+        self.assertEqual((wallet.icon_custom_emoji_id, wallet.style), (PREMIUM_ID, "success"))
+        self.assertIsNone(shop.icon_custom_emoji_id)
+
+
 class ShopLabelTests(DbCase):
     async def test_each_shop_sends_its_own_menu_label(self) -> None:
         async with self.Session() as session:
