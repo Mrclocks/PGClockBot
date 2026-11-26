@@ -35,6 +35,7 @@ from app.jobs.service_cleanup import run_service_cleanup
 from app.jobs.switch_reverts import run_switch_reverts
 from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
+from app.jobs.start_watch import START_WATCH_CHECK_MINUTES, run_start_watch
 from app.jobs.webhook_watch import run_webhook_watch
 from app.services.alert_rearm import Thresholds, rearm_flagged_alerts
 from app.services.alert_thresholds import (
@@ -828,6 +829,10 @@ def start_scheduler(bot: Bot) -> None:
     _add_job(
         run_webhook_watch, "interval", minutes=WEBHOOK_CHECK_MINUTES, args=[bot], id="webhook_watch",
         max_instances=1, coalesce=True, misfire_grace_time=600, replace_existing=True,
+    )
+    _add_job(
+        run_start_watch, "interval", minutes=START_WATCH_CHECK_MINUTES, args=[bot], id="start_watch",
+        max_instances=1, coalesce=True, misfire_grace_time=300, replace_existing=True,
     )
     logger.info("Telegram scheduler jobs attached")
 

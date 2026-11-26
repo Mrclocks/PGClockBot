@@ -79,6 +79,7 @@ JOB_LABELS: dict[str, str] = {
     "expiry": "هشدار کمبود حجم و زمان",
     "admin_daily_report": "گزارش روزانه",
     "webhook_watch": "بررسی دریافت پیام تلگرام",
+    "start_watch": "خبر استارت کاربر منتظر",
 }
 
 # Jobs behind the switches tagged above, plus the panel recount of capacity-gated shops.

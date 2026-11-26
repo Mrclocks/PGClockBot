@@ -642,3 +642,5 @@ tests/test_faq_bot.py
 tests/test_faq_pages.py
 # Main bot token check before saving (format, shop tokens) and webhook auto-repair.
 tests/test_webhook_watch.py
+# Naming a person by id or @username: ambiguity refusal, shop scope, start watches claimed once.
+tests/test_telegram_target.py

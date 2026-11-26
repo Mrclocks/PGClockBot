@@ -2996,3 +2996,32 @@ class FaqItem(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class StartWatch(Base):
+    """A staff member asked to hear when a person first starts the bot, to make them a reseller.
+
+    ``target`` is ``id:<telegram id>`` or ``u:<lower-case username>``. The watch never grants anything:
+    it only tells the watcher who matched (with the numeric id) and offers the usual make-reseller
+    step, so a username that changed hands cannot slip someone into a role. At most one open watch
+    per watcher and target (partial unique index); ``notified_at`` is the atomic claim.
+    """
+
+    __tablename__ = "start_watches"
+    __table_args__ = (
+        Index(
+            "uq_start_watches_open",
+            "watcher_telegram_id",
+            "target",
+            unique=True,
+            postgresql_where=text("notified_at IS NULL"),
+        ),
+        Index("ix_start_watches_open_expiry", "expires_at", postgresql_where=text("notified_at IS NULL")),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    watcher_telegram_id: Mapped[int] = mapped_column(BigInteger)
+    target: Mapped[str] = mapped_column(String(48))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
