@@ -636,3 +636,7 @@ tests/test_account_holds.py
 tests/test_checkout_abandon.py
 # Unpaid-order expiry: opt-in per shop, never cancels an order with money moving.
 tests/test_pending_order_expiry.py
+# FAQ questions: shop isolation in the service, the bot editor, the customer buttons and the web page.
+tests/test_faq_service.py
+tests/test_faq_bot.py
+tests/test_faq_pages.py

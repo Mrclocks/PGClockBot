@@ -20,8 +20,11 @@ FALLBACK_GROUP_LABEL = "سایر"
 MESSAGE_VARIABLES_TAB_KEY = "variables"
 MESSAGE_VARIABLES_TAB = (MESSAGE_VARIABLES_TAB_KEY, "متغیرهای پیام")
 MESSAGE_VARIABLES_PERMISSION = "shop_settings"
+FAQ_TAB_KEY = "faq"
+FAQ_TAB = (FAQ_TAB_KEY, "سوالات متداول")
+FAQ_PAGE = "/faq"
 # Tabs that open their own page instead of ``<settings base>?tab=<key>``.
-_TAB_PAGES = {MESSAGE_VARIABLES_TAB_KEY: "/message-variables"}
+_TAB_PAGES = {MESSAGE_VARIABLES_TAB_KEY: "/message-variables", FAQ_TAB_KEY: FAQ_PAGE}
 
 BOT_AREA = "bot"
 CUSTOMER_AREA = "customer"
@@ -40,7 +43,7 @@ _GROUP_LAYOUT: GroupLayout = (
 )
 # The «مشتری و سرویس» area: what the customer may do, and how a service reaches them and is handled later.
 _CUSTOMER_GROUP_LAYOUT: GroupLayout = (
-    ("customer", "مشتری", ("links", "limits")),
+    ("customer", "مشتری", ("links", "limits", FAQ_TAB_KEY)),
     ("service", "سرویس", ("naming", "qr", "guides", "service_import", "service_actions", "service_cancel")),
 )
 _AREA_LAYOUTS: dict[str, GroupLayout] = {BOT_AREA: _GROUP_LAYOUT, CUSTOMER_AREA: _CUSTOMER_GROUP_LAYOUT}
@@ -98,6 +101,17 @@ def tabs_with_message_variables(
     merged = list(tabs)
     if can_open_message_variables(staff):
         merged.append(MESSAGE_VARIABLES_TAB)
+    return merged
+
+
+def tabs_with_page_tabs(tabs: Sequence[tuple[str, str]], staff: dict) -> list[tuple[str, str]]:
+    """``tabs`` plus every tab with its own page (message variables, FAQ) that ``staff`` may open.
+
+    Both pages are bot settings of the staff's own shop, so they share the ``shop_settings`` rule.
+    """
+    merged = tabs_with_message_variables(tabs, staff)
+    if can_open_message_variables(staff):
+        merged.append(FAQ_TAB)
     return merged
 
 

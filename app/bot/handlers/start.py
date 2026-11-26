@@ -828,23 +828,6 @@ async def help_guide(callback: CallbackQuery, session: AsyncSession):
             **send_kw,
         )
 
-@router.callback_query(F.data == "help:faq")
-async def help_faq(callback: CallbackQuery, session: AsyncSession):
-    from app.services.rich_text import outbound_setting_text
-
-    await callback.answer()
-    ui = await get_all_settings(session)
-    text, send_kw = outbound_setting_text(
-        ui.get("faq_text") or "", title="❓ سوالات متداول"
-    )
-    if callback.message:
-        await safe_edit_text(
-            callback.message,
-            text,
-            reply_markup=kb.back_home(ui),
-            **send_kw,
-        )
-
 async def _link_subscription(
     message: Message,
     session: AsyncSession,

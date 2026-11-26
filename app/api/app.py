@@ -93,7 +93,7 @@ from app.services.settings_tab_groups import (
     resolve_merged_tab,
     settings_area,
     settings_area_of,
-    tabs_with_message_variables,
+    tabs_with_page_tabs,
 )
 from app.services.settings_hub import (
     SYSTEM_LIST_TAB,
@@ -1619,6 +1619,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_admin=require_admin,
         get_db=get_db,
     )
+    from app.api.faq_pages import register_faq_pages
+
+    register_faq_pages(app, render=render, require_perm=require_perm, get_db=get_db)
     from app.api.backup_pages import register_backup_pages
 
     register_backup_pages(app, render=render, require_admin=require_admin, get_db=get_db)
@@ -2507,7 +2510,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "tab_groups": tab_groups,
             "tabs": page_tabs,
             "tab_nav": group_settings_tabs(
-                tabs_with_message_variables(page_tabs, staff) if page_tabs else [], tab, area=area_key
+                tabs_with_page_tabs(page_tabs, staff) if page_tabs else [], tab, area=area_key
             ),
             "tab": tab,
             "settings_area": settings_area(area_key, base="/settings", bot_title="تنظیمات ربات"),

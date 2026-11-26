@@ -2966,3 +2966,33 @@ class AccountHoldItem(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class FaqItem(Base):
+    """One frequently asked question a shop shows under «پشتیبانی» as a button.
+
+    ``reseller_id`` is the shop (NULL for the platform's own bot). ``answer`` is Telegram HTML, so
+    bold text, links and premium emoji written in the bot survive. ``button_style`` NULL inherits the
+    «سوال‌های متداول» color; ``""`` is the client default. The two counters only ever grow by an
+    atomic ``UPDATE`` and tell staff which answers are read and which still end in a ticket.
+    """
+
+    __tablename__ = "faq_items"
+    __table_args__ = (Index("ix_faq_items_shop_order", "reseller_id", "sort_order", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True
+    )
+    question: Mapped[str] = mapped_column(String(160))
+    answer: Mapped[str] = mapped_column(Text)
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    icon_custom_emoji_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    view_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    ticket_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

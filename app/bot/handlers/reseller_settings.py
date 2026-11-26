@@ -113,6 +113,7 @@ from app.bot.handlers.settings_labels import (
     sub_back,
 )
 from app.bot.handlers.guide_editor import entry_button as guides_entry_button
+from app.bot.handlers.faq_editor import entry_button as faq_entry_button
 from app.bot.handlers.screen_editor import entry_button as editor_entry_button
 from app.services.screen_editor import is_editor_enabled
 import html
@@ -593,6 +594,7 @@ async def _section_panel(session: AsyncSession, sec_id: str, reseller_id: int) -
             rows.append(
                 [InlineKeyboardButton(text="➕ پشتیبان جدید", callback_data="res:st:sup:add")]
             )
+            rows.append([faq_entry_button(for_reseller=True)])
             rows.append([kb.back_button(None, "res:st:hub")])
             body = "پشتیبان فعال نیست." if not contacts else "برای حذف روی مورد بزنید."
             return f"💬 <b>پشتیبان‌ها</b>\n\n{body}", _kb(rows)

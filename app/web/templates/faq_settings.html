@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
+{% from "macros.html" import row_actions, page_header, act_label, empty_state %}
+{% from "_ds.html" import ico, ds_switch, ds_sec, ds_modal_head, ds_foot %}
+{% from "_settings_hub.html" import settings_menu %}
+{% from "_message_buttons.html" import message_preview %}
+
+{# Add / edit form of one question. ``key`` is the item id or 'new'; ``d`` the values to show (the stored
+   question, or what was typed when the save was refused). #}
+{% macro faq_modal(key, d, is_open) %}
+{% set mid = 'modal-faq-' ~ key %}
+{% set cur = 'inherit' if d is none or d.button_style is none else d.button_style %}
+{% set tone = 'default' if cur in ('inherit', '') else cur %}
+<div class="ui-modal ds{% if is_open %} open{% endif %}" id="{{ mid }}"{% if not is_open %} hidden{% endif %}>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="{{ mid }}-title">
+    {{ ds_modal_head('chat', 'سوال تازه' if key == 'new' else 'ویرایش سوال', mid ~ '-title') }}
+    <form method="post" action="{{ '/faq' if key == 'new' else '/faq/' ~ key }}" class="form-stack ds-body">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if is_open and flash_err %}<div class="flash err" role="alert">{{ flash_err }}</div>{% endif %}
+      {% call ds_sec('سوال و جواب', extra_class='ds-sec-first') %}
+        <label class="form-field">سوال
+          <input name="question" required maxlength="120" value="{{ d.question if d else '' }}" placeholder="مثلاً: لینک اشتراک وصل نمی‌شود؟" />
+          <small class="muted">همین متن روی دکمه می‌آید؛ روی دکمه تا ۶۴ نویسه دیده می‌شود.</small>
+        </label>
+        <label class="form-field">جواب
+          <textarea name="answer" id="{{ mid }}-answer" required maxlength="3500" rows="7">{{ d.answer if d else '' }}</textarea>
+          <small class="muted">بولد با <bdi dir="ltr"><code>&lt;b&gt;…&lt;/b&gt;</code></bdi> و لینک با <bdi dir="ltr"><code>&lt;a href="https://…"&gt;…&lt;/a&gt;</code></bdi>. جوابی که در ربات بنویسید، بولد و اموجی پریمیوم را هم نگه می‌دارد.</small>
+        </label>
+        {{ message_preview('#' ~ mid ~ '-answer', id=mid ~ '-preview', empty='جواب اینجا همان‌طور که مشتری می‌بیند دیده می‌شود.') }}
+      {% endcall %}
+      {% call ds_sec('دکمه') %}
+        <div class="ds-grid-2">
+          <div class="form-field">
+            <span class="ds-label-text">رنگ دکمه</span>
+            <span class="ds-dot-select" data-ds-dot data-menu-min-width="168" data-value="{{ cur }}" data-tone="{{ tone }}">
+              <select name="button_style" class="btn-color-select" data-tone="{{ tone }}" aria-label="رنگ دکمهٔ سوال در ربات">
+                {% for opt_val, opt_label, opt_tone in style_options %}
+                <option value="{{ opt_val }}" data-tone="{{ opt_tone }}"{% if cur == opt_val %} selected{% endif %}>{{ 'پیش‌فرض سوال‌ها' if opt_val == 'inherit' else opt_label }}</option>
+                {% endfor %}
+              </select>
+            </span>
+          </div>
+          <label class="form-field">شناسهٔ اموجی پریمیوم
+            <input name="icon_custom_emoji_id" maxlength="32" inputmode="numeric" pattern="[0-9]*" dir="ltr" value="{{ d.icon_custom_emoji_id or '' if d else '' }}" placeholder="اختیاری" />
+          </label>
+        </div>
+        <small class="muted">ساده‌تر: در ربات، تنظیمات ← پشتیبان‌ها ← سوالات متداول، اموجی پریمیوم را همراه متن سوال بفرستید تا آیکون دکمه شود. پیش‌فرض رنگ همهٔ سوال‌ها در «رنگ دکمه‌ها» است.</small>
+      {% endcall %}
+      {% call ds_sec('نمایش') %}
+        <div class="ds-rows">{{ ds_switch('is_active', 'نمایش به مشتری', 'خاموش: سوال می‌ماند ولی در ربات دیده نمی‌شود.', d.is_active if d else true, id=mid ~ '-active') }}</div>
+      {% endcall %}
+      {{ ds_foot('افزودن سوال' if key == 'new' else 'ذخیرهٔ سوال') }}
+    </form>
+  </div>
+</div>
+{% endmacro %}
+
+{% block title %}سوالات متداول{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/view-transition.css?v={{ asset_v('view-transition.css') if asset_v is defined else app_version }}" />{% endblock %}
+{% block content %}
+<div class="ds ds-settings">
+{% call(slot) page_header(settings_area.icon, 'سوالات متداول', help=settings_area.help, back=settings_area.list_href, back_label=settings_area.title) %}
+  {%- if slot == 'primary' and can_add %}
+  <button type="button" class="btn" data-modal-open="modal-faq-new">{{ act_label('سوال تازه', 'سوال') }}</button>
+  {%- endif %}
+{% endcall %}
+{% if tab_nav %}{{ settings_menu(settings_nav(tab_nav, settings_base, 'faq', area_icon=settings_area.icon)) }}{% endif %}
+
+<p class="muted page-intro">هر سوال یک دکمه زیر «پشتیبانی» ربات است. مشتری با زدن دکمه جواب را می‌بیند و اگر جوابش را نگرفت، با «جوابم را نگرفتم» تیکتی با همان سوال باز می‌کند.</p>
+
+{% if has_legacy %}
+<form method="post" action="/faq/import" class="card" data-confirm="متن فعلی «سوالات متداول» به سوال‌های جدا تبدیل شود؟ هر بند که با ❓ شروع شده یک سوال می‌شود؛ متن قبلی دست نمی‌خورد." data-confirm-title="تبدیل متن قبلی" data-confirm-label="تبدیل شود">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="ds-note">{{ ico('info') }}<span>تا وقتی سوالی نسازید، ربات همان متن قبلی «سوالات متداول» را یکجا نشان می‌دهد. می‌توانید آن را با یک کلیک به سوال‌های جدا تبدیل کنید.</span></div>
+  <div class="actions"><button type="submit" class="btn btn-ghost">{{ btn_icon('download', 'btn-ico') }}تبدیل متن قبلی به سوال‌ها</button></div>
+</form>
+{% endif %}
+
+<div class="card card-flush">
+  <div class="card-flush-head"><h2>سوال‌ها</h2></div>
+  {% if items %}<p class="muted card-flush-note">{{ total_views | num }} بار باز شده · {{ total_tickets | num }} بار «جوابم را نگرفتم» · حداکثر {{ max_items | num }} سوال</p>{% endif %}
+  <div class="table-wrap"><table class="table-compact table-list-sm">
+    {% if items %}
+    <thead><tr>
+      <th>سوال</th><th class="col-hide-sm">آمار</th><th class="col-status">وضعیت</th>
+      <th class="col-actions"><span class="sr-only">اقدام</span></th>
+      <th class="li-head" scope="col"><span class="li-count">{{ items | length | num }} سوال</span></th>
+    </tr></thead>
+    {% endif %}
+    <tbody>
+    {% for item in items %}
+      <tr>
+        <td class="li-title cell-wrap"><span dir="auto">{{ item.question }}</span></td>
+        <td class="col-hide-sm li-sub">{{ item.view_count | num }} بازدید · {{ item.ticket_count | num }} «جوابم را نگرفتم»</td>
+        <td class="cell-tight li-badge"><span class="badge {{ 'ok' if item.is_active else 'neutral' }}">{{ 'نمایش' if item.is_active else 'پنهان' }}</span></td>
+        <td class="col-actions">
+          {% call row_actions() %}
+          <button type="button" class="btn btn-sm" data-modal-open="modal-faq-{{ item.id }}">{{ btn_icon('edit', 'btn-ico') }}ویرایش</button>
+          {% if not loop.first %}
+          <form method="post" action="/faq/{{ item.id }}/up">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('chev-up', 'btn-ico') }}بالاتر</button>
+          </form>
+          {% endif %}
+          {% if not loop.last %}
+          <form method="post" action="/faq/{{ item.id }}/down">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('chev-down', 'btn-ico') }}پایین‌تر</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/faq/{{ item.id }}/{{ 'hide' if item.is_active else 'show' }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('pause' if item.is_active else 'play', 'btn-ico') }}{{ 'پنهان کردن' if item.is_active else 'نمایش دادن' }}</button>
+          </form>
+          <form method="post" action="/faq/{{ item.id }}/delete" data-confirm="سوال «{{ item.question }}» حذف شود؟ آمار بازدیدش هم پاک می‌شود و برگشت ندارد." data-confirm-title="حذف سوال" data-confirm-danger="1" data-confirm-label="حذف">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn btn-danger btn-sm" type="submit" aria-label="حذف سوال {{ item.question }}">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
+          </form>
+          {% endcall %}
+        </td>
+      </tr>
+    {% else %}
+      {{ empty_state('هنوز سوالی نساخته‌اید؛ اولین سوال، دکمهٔ «سوالات متداول» را زیر پشتیبانی ربات نشان می‌دهد.', 'chat', colspan=4, action_label='سوال تازه', action_modal='modal-faq-new') }}
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+</div>
+
+{% if can_add %}{{ faq_modal('new', reopen_draft if reopen_key == 'new' else none, reopen_key == 'new') }}{% endif %}
+{% for item in items %}
+{% set key = item.id | string %}
+{{ faq_modal(key, reopen_draft if reopen_key == key else drafts[item.id], reopen_key == key) }}
+{% endfor %}
+<script src="/static/message-buttons.js?v={{ asset_v('message-buttons.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
+{% endblock %}
