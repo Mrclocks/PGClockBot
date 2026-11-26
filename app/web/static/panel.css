@@ -1025,6 +1025,8 @@ button.cell-user-link {
 .card.card-flush > .user-card-hint { margin: 0; padding: var(--space-2) var(--card-pad); }
 .card.card-flush > .search-bar ~ .user-card-hint { padding-top: 0; }
 .card.card-flush > .card-flush-head ~ .user-card-hint { padding-top: var(--space-1); }
+/* A visible selection bar (table_bulk_bar) sits between the search and the hint: the hint gets its own air back. */
+.card.card-flush > .table-bulk-bar:not([hidden]) ~ .user-card-hint { padding-top: var(--space-2); }
 .user-card-hint-ico { flex: 0 0 auto; width: 16px; height: 16px; }
 
 .side-foot {
