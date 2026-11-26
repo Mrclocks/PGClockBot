@@ -235,7 +235,7 @@
                   data-confirm-title="{% if u.is_blocked %}رفع مسدودی{% else %}تأیید مسدودسازی{% endif %}"
                   {% if not u.is_blocked %}data-confirm-warn="1"{% endif %}
                   data-confirm-label="{% if u.is_blocked %}رفع مسدودی{% else %}مسدود کردن{% endif %}">
-              <button class="btn btn-sm {% if not u.is_blocked %}btn-warn{% endif %}" type="submit">{{ icon('unlock', 'btn-ico') }}
+              <button class="btn btn-sm {% if not u.is_blocked %}btn-warn{% endif %}" type="submit">{{ icon('unlock' if u.is_blocked else 'ban', 'btn-ico') }}
                 {% if u.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}
               </button>
             </form>

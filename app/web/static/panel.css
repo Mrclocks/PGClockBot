@@ -7249,21 +7249,26 @@ td.col-address {
   padding: 0 var(--space-2);
   font-size: var(--fs-2);
 }
-/* Operations menu: neutral actions; keep warn/danger colored */
-.row-actions-menu .btn:not(.btn-danger):not(.btn-warn),
-.row-actions-menu a.btn:not(.btn-danger):not(.btn-warn),
-.row-actions-menu button.btn:not(.btn-danger):not(.btn-warn) {
-  color: var(--foreground) !important;
+/* Operations menu (row «⋯» popover and the inline desktop row): every item sits on the same neutral box; a danger
+   or warning item keeps only its coloured text and icon (DESIGN_SYSTEM.md §4). */
+.row-actions-menu .btn,
+.row-actions-menu a.btn,
+.row-actions-menu button.btn {
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
   font-weight: var(--btn-fw);
 }
-.row-actions-menu .btn:not(.btn-danger):not(.btn-warn):hover,
-.row-actions-menu a.btn:not(.btn-danger):not(.btn-warn):hover,
-.row-actions-menu button.btn:not(.btn-danger):not(.btn-warn):hover {
+.row-actions-menu .btn:hover,
+.row-actions-menu a.btn:hover,
+.row-actions-menu button.btn:hover {
   background: rgba(255, 255, 255, 0.09);
-  color: var(--foreground) !important;
   opacity: 1;
+  transform: none;
+}
+.row-actions-menu .btn:not(.btn-danger):not(.btn-warn),
+.row-actions-menu a.btn:not(.btn-danger):not(.btn-warn),
+.row-actions-menu button.btn:not(.btn-danger):not(.btn-warn) {
+  color: var(--foreground) !important;
 }
 .row-actions-menu .ui-select,
 .row-actions-stack .ui-select {
@@ -7466,20 +7471,6 @@ td.col-address {
   /* Icon and label start at the inline start (the right in RTL), like a menu list. */
   justify-content: flex-start;
   text-align: start;
-}
-/* Every actions menu (the row «⋯» popover and its inline desktop row): a danger or warning item keeps only its
-   coloured text and icon, on the same neutral box as the other items. The warning colours come from --btn-tone
-   (panel-ds.css), so the tone becomes the neutral border colour. */
-.row-actions-menu .btn-danger {
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--foreground) 4%, transparent);
-}
-.row-actions-menu .btn-warn { --btn-tone: var(--border); }
-/* The neutral items have no visible fill on the light card; the danger item matches them. */
-html[data-theme="light"] .row-actions-menu .btn-danger { background: transparent; }
-.row-actions-menu .btn-danger:hover {
-  background: color-mix(in srgb, var(--foreground) 9%, transparent);
-  transform: none;
 }
 
 

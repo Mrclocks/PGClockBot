@@ -44,13 +44,18 @@
 .ds .btn-sm, .ds a.btn-sm { height: var(--cmp-h); min-height: var(--cmp-h); padding: 0 var(--g3); font-size: var(--fs-2); }
 .ds .icon-btn { width: var(--ctl-h); height: var(--ctl-h); min-height: var(--ctl-h); padding: 0; flex: 0 0 auto; }
 .ds .icon-btn .ico { width: 18px; height: 18px; }
-/* Warnings act like main actions: the brand colour, so a colour change in the panel settings reaches them. */
-.btn-warn, a.btn.btn-warn {
-  color: var(--btn-fg, var(--brand-fg)) !important;
+/* Warnings act like main actions: the brand colour, so a colour change in the panel settings reaches them.
+   Inside an actions menu only the text and icon take it; the box stays the menu's neutral one (DESIGN_SYSTEM.md §4). */
+.btn-warn, a.btn.btn-warn { color: var(--btn-fg, var(--brand-fg)) !important; }
+.btn-warn:not(.row-actions-menu .btn-warn, .page-more .btn-warn),
+a.btn.btn-warn:not(.row-actions-menu .btn-warn, .page-more .btn-warn) {
   border: 1.5px solid color-mix(in srgb, var(--btn-tone, var(--brand)) 72%, transparent) !important;
   background: color-mix(in srgb, var(--btn-tone, var(--brand)) 8%, transparent) !important;
 }
-.btn-warn:hover, a.btn.btn-warn:hover { background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent) !important; }
+.btn-warn:not(.row-actions-menu .btn-warn, .page-more .btn-warn):hover,
+a.btn.btn-warn:not(.row-actions-menu .btn-warn, .page-more .btn-warn):hover {
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent) !important;
+}
 html[data-theme="light"] .btn-warn { color: var(--btn-fg, var(--brand-fg)) !important; }
 
 /* ===================================================================== 3. Modal shell */

@@ -59,7 +59,7 @@
     <form method="post" action="/connection-status/runtime" class="form-stack"{% if page.settings.enabled %} data-confirm="تست‌ها متوقف و همهٔ کانفیگ‌ها از فهرست کاربران مخفی می‌شوند. ادامه می‌دهید؟" data-confirm-title="توقف تست‌ها" data-confirm-danger="1" data-confirm-label="توقف"{% endif %}>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="enabled" value="{{ '0' if page.settings.enabled else '1' }}">
-      <div class="actions"><button class="btn {{ 'btn-danger' if page.settings.enabled else '' }}" type="submit"{% if not page.settings.enabled and (not page.settings.has_account or not binary_configured) %} disabled{% endif %}>{{ btn_icon('pause', 'btn-ico') }}{{ 'توقف تست‌ها' if page.settings.enabled else 'شروع تست‌ها' }}</button></div>
+      <div class="actions"><button class="btn {{ 'btn-danger' if page.settings.enabled else '' }}" type="submit"{% if not page.settings.enabled and (not page.settings.has_account or not binary_configured) %} disabled{% endif %}>{{ btn_icon('pause' if page.settings.enabled else 'play', 'btn-ico') }}{{ 'توقف تست‌ها' if page.settings.enabled else 'شروع تست‌ها' }}</button></div>
     </form>
     <small class="muted">روشن کردن دوبارهٔ تست‌ها، کانفیگ‌ها را خودکار به کاربران نشان نمی‌دهد.</small>
   </section>

@@ -140,7 +140,7 @@
               <input type="hidden" name="action" value="{{ 'unblock' if row.is_blocked else 'block' }}" />
               <input type="hidden" name="ids" value="{{ row.user_id }}" />
               <input type="hidden" name="return_to" value="{{ return_to }}" />
-              <button class="btn btn-sm {% if not row.is_blocked %}btn-warn{% endif %}" type="submit">{{ btn_icon('unlock', 'btn-ico') }}{% if row.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}</button>
+              <button class="btn btn-sm {% if not row.is_blocked %}btn-warn{% endif %}" type="submit">{{ btn_icon('unlock' if row.is_blocked else 'ban', 'btn-ico') }}{% if row.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}</button>
             </form>
             {% endif %}
           {% endcall %}
