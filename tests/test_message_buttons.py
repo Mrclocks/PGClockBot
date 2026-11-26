@@ -121,11 +121,11 @@ class ChecklistTests(unittest.TestCase):
     def test_checklist_marks_choices_and_lists_presets(self) -> None:
         markup = picker.checklist_markup(["shop"], renew=True, presets=[(3, "فروش")])
         texts = [b.text for row in markup.inline_keyboard for b in row]
-        # Each checklist line starts with a right-to-left mark so the checkbox stays first (on the right).
-        self.assertIn("\u200f✅ 🛒 خرید سرویس", texts)
-        self.assertIn("\u200f⬜ 🔄 تمدید سرویس", texts)
+        # The checkbox ends each line, after the label, so a premium emoji never sits between them.
+        self.assertIn("\u200f🛒 خرید سرویس ✅", texts)
+        self.assertIn("\u200f🔄 تمدید سرویس ⬜", texts)
         self.assertIn("📚 قالب: فروش", texts)
-        self.assertNotIn("⬜ 🔗 لینک", texts)
+        self.assertNotIn("🔗 لینک ⬜", texts)
 
 
 class DbCase(unittest.IsolatedAsyncioTestCase):
