@@ -411,7 +411,6 @@
     /* A danger or warning row: only its text and icon take the colour (no box), as in the row actions menu. */
     .page-head[data-page-head="capsule"] .page-more .btn-danger .more-ico,
     .page-head[data-page-head="capsule"] .page-more .btn-warn .more-ico { color: currentColor; }
-    .page-head[data-page-head="capsule"] .page-more .btn-warn { --btn-tone: transparent; }
     .page-head[data-page-head="capsule"] .page-more > .btn:active,
     .page-head[data-page-head="capsule"] .page-more > a.btn:active,
     .page-head[data-page-head="capsule"] .page-more > form > .btn:active { background: color-mix(in srgb, var(--foreground) 7%, transparent); }

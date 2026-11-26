@@ -18,13 +18,15 @@ from app.services.message_buttons import (
     ButtonSpec,
     build_keyboard,
     dump_buttons,
+    load_buttons,
     make_buttons,
+    preview_keyboard,
     screen_labels,
     stored_keyboard,
 )
 from app.services.rich_text import pack_rich_text
 from app.services.users import clear_settings_cache
-from tests.test_message_buttons import NO_LINKS, SHOP_A, SHOP_B, DbCase
+from tests.test_message_buttons import LINKS, NO_LINKS, SHOP_A, SHOP_B, DbCase
 
 PREMIUM_ID = "5368324170671202286"
 
@@ -71,7 +73,7 @@ class PickerPremiumEmojiTests(unittest.TestCase):
         markup = picker.checklist_markup(["wallet"], renew=False, presets=[], labels=self.labels)
         buttons = {b.callback_data: b for row in markup.inline_keyboard for b in row}
         wallet, shop = buttons["mbp:t:wallet"], buttons["mbp:t:shop"]
-        self.assertEqual((wallet.text, wallet.icon_custom_emoji_id), ("✅ کیف من", PREMIUM_ID))
+        self.assertEqual((wallet.text, wallet.icon_custom_emoji_id), ("\u200f✅ کیف من", PREMIUM_ID))
         self.assertIsNone(shop.icon_custom_emoji_id)
 
     def test_the_colour_step_keeps_the_premium_emoji(self) -> None:
@@ -82,6 +84,36 @@ class PickerPremiumEmojiTests(unittest.TestCase):
         wallet, shop = markup.inline_keyboard[0][0], markup.inline_keyboard[1][0]
         self.assertEqual((wallet.icon_custom_emoji_id, wallet.style), (PREMIUM_ID, "success"))
         self.assertIsNone(shop.icon_custom_emoji_id)
+
+
+class LinkPremiumEmojiTests(unittest.TestCase):
+    def label_message(self, text: str, entities: list | None) -> MagicMock:
+        message = MagicMock(spec=Message)
+        message.text, message.entities = text, entities
+        return message
+
+    def test_a_premium_emoji_typed_with_the_label_becomes_the_buttons_icon(self) -> None:
+        entity = MessageEntity(type="custom_emoji", offset=0, length=2, custom_emoji_id=PREMIUM_ID)
+        self.assertEqual(picker.link_label_from_message(self.label_message("📣 کانال ما", [entity])), ("کانال ما", PREMIUM_ID))
+        self.assertEqual(picker.link_label_from_message(self.label_message("📣 کانال ما", None)), ("📣 کانال ما", ""))
+        # Only a premium emoji: its fallback character stays as the text, without an icon.
+        self.assertEqual(picker.link_label_from_message(self.label_message("📣", [entity])), ("📣", ""))
+
+    def test_the_icon_is_stored_with_the_link_and_sent_on_the_button(self) -> None:
+        links = {"u1": {"label": "کانال ما", "url": "https://t.me/example", "icon": PREMIUM_ID}}
+        [item] = picker.chosen_inputs(["u1"], {}, links)
+        stored = dump_buttons(make_buttons([item], LINKS))
+        [[button]] = build_keyboard(load_buttons(stored, LINKS))
+        self.assertEqual((button.text, button.url, button.icon_custom_emoji_id), ("کانال ما", "https://t.me/example", PREMIUM_ID))
+        [[preview]] = preview_keyboard(stored)
+        self.assertEqual(preview.icon_custom_emoji_id, PREMIUM_ID)
+        self.assertEqual(picker.option_icons(None, links), {"u1": PREMIUM_ID})
+
+    def test_an_icon_that_is_not_a_telegram_id_is_dropped(self) -> None:
+        for bad in ("abc", "1" * 40, "12 34", "<b>"):
+            with self.subTest(bad=bad):
+                [spec] = make_buttons([ButtonInput("link", "x", "https://t.me/a", icon=bad)], LINKS)
+                self.assertEqual(spec.icon, "")
 
 
 class ShopLabelTests(DbCase):
@@ -101,6 +133,7 @@ class ShopLabelTests(DbCase):
 def _message(text: str) -> MagicMock:
     message = MagicMock(spec=Message)
     message.text = text
+    message.entities = None  # a plain text message
     message.answer = AsyncMock()
     return message
 

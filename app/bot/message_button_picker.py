@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.nav_input import finish_text_step
 from app.db.models import BotUser
 from app.services.button_styles import STYLE_OPTIONS, normalize_style
+from app.services.rich_text import button_display_text, button_icon_custom_emoji_id, pack_rich_text
 from app.services.message_buttons import (
     BUTTONS_MAX,
     TARGET_LINK,
@@ -50,7 +51,7 @@ CB_COLOR = "mbp:c:"
 CB_SEND = "mbp:s"
 CB_LINK = "mbp:l"
 LINK_KEY_PREFIX = "u"
-LINK_ASK_LABEL = "🔗 متن دکمهٔ لینک را بفرستید (حداکثر ۴۰ نویسه)؛ ایموجی هم مجاز است."
+LINK_ASK_LABEL = "🔗 متن دکمهٔ لینک را بفرستید (حداکثر ۴۰ نویسه). ایموجی و ایموجی پریمیوم هم مجاز است؛ اولین ایموجی پریمیوم آیکن دکمه می‌شود."
 LINK_ASK_URL = "🔗 حالا لینک دکمه را بفرستید؛ باید با https:// شروع شود."
 LINK_ADDED = "دکمهٔ لینک اضافه شد."
 LINK_BUTTON = "🔗 لینک دلخواه"
@@ -61,6 +62,10 @@ NONE_CHOSEN = "دست‌کم یک دکمه انتخاب کنید یا «بدون
 EXPIRED = "این انتخاب منقضی شده؛ دوباره پیام را بفرستید"
 COLORS = "رنگ دکمه‌ها: روی هر دکمه بزنید تا رنگ بعدی را بگیرد (سفید، آبی، سبز، قرمز). پیام با همین رنگ‌ها ارسال می‌شود."
 # The web form's colours, in the order a tap walks through them ("" is Telegram's default white).
+# Right-to-left mark: the checklist text starts with a symbol (✅/⬜), so Telegram would lay it out left to right and
+# put the checkbox between a premium emoji (always drawn first) and the label. Starting with RLM keeps the line
+# right to left: the checkbox stays first on the right, the label next, the premium emoji at the far end.
+RTL_MARK = "\u200f"
 STYLE_CYCLE: tuple[str, ...] = tuple(value for value, _label, _css in STYLE_OPTIONS)
 STYLE_NAMES: dict[str, str] = {value: label for value, label, _css in STYLE_OPTIONS}
 
@@ -94,9 +99,23 @@ def option_labels(*, renew: bool, labels: ScreenLabels | None, links: dict[str, 
     return out
 
 
-def option_icons(labels: ScreenLabels | None) -> dict[str, str]:
-    """Checklist key -> premium emoji id of the screen's menu label, for the screens that have one."""
-    return {key: label.icon for key, label in (labels or {}).items() if label.icon}
+def option_icons(labels: ScreenLabels | None, links: dict[str, dict] | None = None) -> dict[str, str]:
+    """Checklist key -> premium emoji id: a screen's menu label, or the one typed with a link button's text."""
+    icons = {key: label.icon for key, label in (labels or {}).items() if label.icon}
+    icons.update({key: str(link["icon"]) for key, link in (links or {}).items() if link.get("icon")})
+    return icons
+
+
+def link_label_from_message(message: Message) -> tuple[str, str]:
+    """(text, premium emoji id) of a typed button label; the premium emoji becomes the button's icon.
+
+    A label made only of a premium emoji keeps the emoji's own fallback character as its text.
+    """
+    raw = message.text or ""
+    packed = pack_rich_text(raw, message.entities or None)
+    icon = button_icon_custom_emoji_id(packed) or ""
+    text = button_display_text(packed).strip() if icon else raw.strip()
+    return (text, icon) if text else (raw.strip(), "")
 
 
 def _icon_extra(icon: str | None) -> dict[str, str]:
@@ -113,10 +132,10 @@ def checklist_markup(
     may_link: bool = False,
 ) -> InlineKeyboardMarkup:
     """Two columns of ✅/⬜ targets and added links, «لینک دلخواه», one row per saved set, then «ادامه»."""
-    icons = option_icons(labels)
+    icons = option_icons(labels, links)
     options = [
         InlineKeyboardButton(
-            text=f"{'✅' if key in selected else '⬜'} {label}", callback_data=f"{CB_TOGGLE}{key}",
+            text=f"{RTL_MARK}{'✅' if key in selected else '⬜'} {label}", callback_data=f"{CB_TOGGLE}{key}",
             **_icon_extra(icons.get(key)),
         )
         for key, label in option_labels(renew=renew, labels=labels, links=links or {}).items()
@@ -249,7 +268,7 @@ async def on_toggle(callback: CallbackQuery, state: FSMContext, session: AsyncSe
 
 async def _show_colors(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     data = await state.get_data()
-    icons = option_icons(await sender_screen_labels(session, data.get("mbp_shop")))
+    icons = option_icons(await sender_screen_labels(session, data.get("mbp_shop")), dict(data.get("mbp_links") or {}))
     markup = colors_markup(
         list(data.get("mbp_selected") or []), dict(data.get("mbp_styles") or {}),
         labels=await _labels(state, session), icons=icons,
@@ -301,7 +320,9 @@ def chosen_inputs(selected: list[str], styles: dict[str, str], links: dict[str, 
         style = normalize_style(styles.get(key))
         link = links.get(key)
         if link is not None:
-            out.append(ButtonInput(TARGET_LINK, str(link.get("label") or ""), str(link.get("url") or ""), style))
+            out.append(ButtonInput(
+                TARGET_LINK, str(link.get("label") or ""), str(link.get("url") or ""), style, icon=str(link.get("icon") or "")
+            ))
         else:
             out.append(ButtonInput(key, style=style))
     return out
@@ -326,7 +347,7 @@ async def on_link(callback: CallbackQuery, state: FSMContext, session: AsyncSess
 
 @router.message(PickerStates.link_label)
 async def on_link_label(message: Message, state: FSMContext) -> None:
-    label = (message.text or "").strip()
+    label, icon = link_label_from_message(message)
     try:
         # Checked with a placeholder link; the real one is checked in the next step.
         make_button(ButtonInput(TARGET_LINK, label, "https://example.com"), ButtonRules(allow_links=True))
@@ -336,7 +357,7 @@ async def on_link_label(message: Message, state: FSMContext) -> None:
     if not label:
         await message.answer(LINK_ASK_LABEL)
         return
-    await state.update_data(mbp_link_label=label)
+    await state.update_data(mbp_link_label=label, mbp_link_icon=icon)
     await state.set_state(PickerStates.link_url)
     await message.answer(LINK_ASK_URL)
 
@@ -356,9 +377,11 @@ async def on_link_url(message: Message, state: FSMContext, session: AsyncSession
         await message.answer(TOO_MANY)
     else:
         key = new_link_key(links)
-        links[key] = {"label": str(data.get("mbp_link_label") or ""), "url": url}
+        links[key] = {
+            "label": str(data.get("mbp_link_label") or ""), "url": url, "icon": str(data.get("mbp_link_icon") or ""),
+        }
         selected.append(key)
-    await state.update_data(mbp_links=links, mbp_selected=selected, mbp_link_label=None)
+    await state.update_data(mbp_links=links, mbp_selected=selected, mbp_link_label=None, mbp_link_icon=None)
     await state.set_state(PickerStates.picking)
     await message.answer(f"{LINK_ADDED}\n{CHECKLIST}", reply_markup=await _checklist(state, session))
 

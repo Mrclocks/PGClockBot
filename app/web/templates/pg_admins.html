@@ -254,7 +254,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit">{{ icon('save', 'btn-ico') }}{% if src == 'pg_staff' %}ذخیره{% else %}اعطای دسترسی ادمین فرعی{% endif %}</button>
+        <button class="btn" type="submit">{{ icon('save' if src == 'pg_staff' else 'plus', 'btn-ico') }}{% if src == 'pg_staff' %}ذخیره{% else %}اعطای دسترسی ادمین فرعی{% endif %}</button>
 
       </div></div>
     </form>

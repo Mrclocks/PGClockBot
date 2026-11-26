@@ -95,12 +95,12 @@
   </div>
 
   <div class="actions sticky-actions">
-    <button type="submit" class="btn" name="action" value="issue" id="ssl-issue-btn" {% if st.running %}disabled{% endif %}>{{ icon('refresh', 'btn-ico') }}
+    <button type="submit" class="btn" name="action" value="issue" id="ssl-issue-btn" {% if st.running %}disabled{% endif %}>{{ icon('refresh' if st.has_cert else 'download', 'btn-ico') }}
       {% if st.has_cert %}صدور مجدد گواهی{% else %}دریافت گواهی{% endif %}
     </button>
     {% if st.has_cert %}
     <button type="submit" class="btn btn-ghost" name="action" value="renew" id="ssl-renew-btn" {% if st.running %}disabled{% endif %}>{{ icon('refresh', 'btn-ico') }}تمدید</button>
-    <button type="submit" class="btn" name="action" value="enable" id="ssl-enable-btn" {% if st.running %}disabled{% endif %}>{{ icon('refresh', 'btn-ico') }}
+    <button type="submit" class="btn" name="action" value="enable" id="ssl-enable-btn" {% if st.running %}disabled{% endif %}>{{ icon('refresh' if st.ssl_enabled else 'power', 'btn-ico') }}
       {% if st.ssl_enabled %}اعمال مجدد HTTPS{% else %}فعال‌سازی HTTPS{% endif %}
     </button>
     {% if st.ssl_enabled %}
