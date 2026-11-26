@@ -10,7 +10,6 @@
 {% macro faq_modal(key, d, is_open, rows) %}
 {% set mid = 'modal-faq-' ~ key %}
 {% set cur = 'inherit' if d is none or d.button_style is none else d.button_style %}
-{% set tone = 'default' if cur in ('inherit', '') else cur %}
 <div class="ui-modal ds{% if is_open %} open{% endif %}" id="{{ mid }}"{% if not is_open %} hidden{% endif %}>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="{{ mid }}-title">
@@ -35,22 +34,13 @@
         {{ button_list(button_target_groups, button_styles, button_plans, button_presets, button_max, preview='#' ~ mid ~ '-preview', initial=rows) }}
       {% endcall %}
       {% call ds_sec('دکمهٔ سوال') %}
-        <div class="ds-grid-2">
-          <div class="form-field">
-            <span class="ds-label-text">رنگ دکمه</span>
-            <span class="ds-dot-select" data-ds-dot data-menu-min-width="168" data-value="{{ cur }}" data-tone="{{ tone }}">
-              <select name="button_style" class="btn-color-select" data-tone="{{ tone }}" aria-label="رنگ دکمهٔ سوال در ربات">
-                {% for opt_val, opt_label, opt_tone in style_options %}
-                <option value="{{ opt_val }}" data-tone="{{ opt_tone }}"{% if cur == opt_val %} selected{% endif %}>{{ 'پیش‌فرض سوال‌ها' if opt_val == 'inherit' else opt_label }}</option>
-                {% endfor %}
-              </select>
-            </span>
-          </div>
-          <label class="form-field">شناسهٔ اموجی پریمیوم
-            <input name="icon_custom_emoji_id" maxlength="32" inputmode="numeric" pattern="[0-9]*" dir="ltr" value="{{ d.icon_custom_emoji_id or '' if d else '' }}" placeholder="اختیاری" />
-          </label>
+        {% set plan_style_options = style_options %}
+        {% set plan_button_style = cur %}
+        {% set plan_color_compact = true %}
+        <div class="form-field">رنگ دکمه{% include "_plan_button_style_field.html" %}
+          <small class="muted">«پیش‌فرض سوال‌ها» رنگی است که در «رنگ دکمه‌ها» برای همهٔ سوال‌ها گذاشته‌اید.</small>
         </div>
-        <small class="muted">ساده‌تر: در ربات، تنظیمات ← پشتیبان‌ها ← سوالات متداول، اموجی پریمیوم را همراه متن سوال بفرستید تا آیکون دکمه شود. پیش‌فرض رنگ همهٔ سوال‌ها در «رنگ دکمه‌ها» است.</small>
+        <small class="muted">{% if d and d.icon_custom_emoji_id %}این سوال اموجی پریمیوم دارد و با ذخیره از اینجا می‌ماند. {% endif %}اموجی پریمیوم دکمه فقط از ربات گذاشته می‌شود: تنظیمات ← پشتیبان‌ها ← سوالات متداول، و اموجی را همراه متن سوال بفرستید.</small>
       {% endcall %}
       {% call ds_sec('نمایش') %}
         <div class="ds-rows">{{ ds_switch('is_active', 'نمایش به مشتری', 'خاموش: سوال می‌ماند ولی در ربات دیده نمی‌شود.', d.is_active if d else true, id=mid ~ '-active') }}</div>
