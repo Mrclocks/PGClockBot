@@ -78,6 +78,7 @@ JOB_LABELS: dict[str, str] = {
     "service_transfers": "تغییر لینک سرویس‌های منتقل‌شده",
     "expiry": "هشدار کمبود حجم و زمان",
     "admin_daily_report": "گزارش روزانه",
+    "webhook_watch": "بررسی دریافت پیام تلگرام",
 }
 
 # Jobs behind the switches tagged above, plus the panel recount of capacity-gated shops.

@@ -640,3 +640,5 @@ tests/test_pending_order_expiry.py
 tests/test_faq_service.py
 tests/test_faq_bot.py
 tests/test_faq_pages.py
+# Main bot token check before saving (format, shop tokens) and webhook auto-repair.
+tests/test_webhook_watch.py

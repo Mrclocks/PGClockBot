@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.services.terminal_text import terminal_text
+from app.services.webhook_address import webhook_after_domain_change
 from app.config import DATA_DIR, ROOT_DIR, get_settings
 from app.util_which import which
 
@@ -1051,6 +1052,22 @@ def configure_for_install(
     return {"ok": False, "error": f"حالت SSL نامعتبر: {mode}"}
 
 
+def _public_address_keys(current: dict[str, str], url: str) -> dict[str, str]:
+    """``.env`` keys for a panel now served at ``url``.
+
+    A webhook that was riding the panel's old address moves with it; otherwise the bot would keep
+    asking Telegram to post to a domain this server no longer answers on.
+    """
+    keys = {"PUBLIC_BASE_URL": url}
+    moved = webhook_after_domain_change(
+        old_public=current.get("PUBLIC_BASE_URL") or "", old_webhook=current.get("WEBHOOK_URL") or "", new_public=url
+    )
+    if moved:
+        keys["WEBHOOK_URL"] = moved
+        logger.info("Webhook follows the panel to its new address")
+    return keys
+
+
 def enable_https(*, restart: bool = True) -> dict[str, Any]:
     """Turn on uvicorn TLS + PUBLIC_BASE_URL, then optionally restart."""
     if not cert_files_exist():
@@ -1065,9 +1082,9 @@ def enable_https(*, restart: bool = True) -> dict[str, Any]:
         return {"ok": False, "error": "میزبان گواهی نامعتبر است"}
     url = public_https_url(domain)
     try:
-        from app.services.setup_wizard import update_env_keys
+        from app.services.setup_wizard import current_setup_values, update_env_keys
 
-        update_env_keys({"PUBLIC_BASE_URL": url})
+        update_env_keys(_public_address_keys(current_setup_values(), url))
         get_settings.cache_clear()
     except Exception as exc:
         logger.warning("PUBLIC_BASE_URL update failed: %s", exc)

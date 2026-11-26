@@ -67,6 +67,23 @@
         <span class="badge info bot-conn-badge" id="bot-mode-status-badge"><bdi dir="ltr">Polling</bdi></span>
         {% endif %}
       </div>
+      {% if webhook_health %}
+      {% set wh_badges = {'ok': ('ok', 'سالم'), 'repaired': ('ok', 'اصلاح شد'), 'removed': ('ok', 'اصلاح شد'),
+                          'delivery_error': ('danger', 'خطا'), 'restart_needed': ('warn', 'ری‌استارت'), 'unreachable': ('neutral', 'بررسی نشد')} %}
+      {% set wh_badge = wh_badges.get(webhook_health.result, ('neutral', '—')) %}
+      <div class="bot-conn {% if webhook_health.is_ok %}is-ok{% else %}is-err{% endif %}" role="listitem">
+        {{ icon('refresh', 'bot-conn-ico') }}
+        <span class="bot-conn-text">
+          <span class="bot-conn-k">رسیدن پیام‌ها</span>
+          <span class="bot-conn-cap muted" title="{{ webhook_health.text }}">{{ webhook_health.text }}{% if webhook_health.pending_updates %} · {{ webhook_health.pending_text }} پیام در صف تلگرام{% endif %}</span>
+        </span>
+        <span class="badge {{ wh_badge[0] }} bot-conn-badge">{{ wh_badge[1] }}</span>
+      </div>
+      {% endif %}
+    </div>
+    <p class="muted">هر {{ webhook_check_minutes }} دقیقه بررسی می‌شود که تلگرام پیام‌ها را به همین سرور بفرستد؛ اگر آدرس در تلگرام جا مانده باشد، خودکار درست می‌شود و به ادمین‌ها خبر داده می‌شود.</p>
+    <div class="actions">
+      <button type="submit" form="bot-webhook-check-form" class="btn btn-ghost">{{ icon('refresh', 'btn-ico') }}بررسی همین حالا</button>
     </div>
   </div>
 
@@ -227,6 +244,9 @@
   <div class="actions sticky-actions">
     <button class="btn" type="submit" id="bot-save-btn">{{ icon('save', 'btn-ico') }}ذخیره تنظیمات</button>
   </div>
+</form>
+<form method="post" action="/settings/bot/webhook-check" id="bot-webhook-check-form" hidden>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
 </form>
 
 <div class="ui-modal ds ds-dialog" id="modal-bot-restart-confirm" hidden>
