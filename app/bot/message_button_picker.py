@@ -61,6 +61,10 @@ NONE_CHOSEN = "دست‌کم یک دکمه انتخاب کنید یا «بدون
 EXPIRED = "این انتخاب منقضی شده؛ دوباره پیام را بفرستید"
 COLORS = "رنگ دکمه‌ها: روی هر دکمه بزنید تا رنگ بعدی را بگیرد (سفید، آبی، سبز، قرمز). پیام با همین رنگ‌ها ارسال می‌شود."
 # The web form's colours, in the order a tap walks through them ("" is Telegram's default white).
+# Right-to-left mark: the checklist text starts with a symbol (✅/⬜), so Telegram would lay it out left to right and
+# put the checkbox between a premium emoji (always drawn first) and the label. Starting with RLM keeps the line
+# right to left: the checkbox stays first on the right, the label next, the premium emoji at the far end.
+RTL_MARK = "\u200f"
 STYLE_CYCLE: tuple[str, ...] = tuple(value for value, _label, _css in STYLE_OPTIONS)
 STYLE_NAMES: dict[str, str] = {value: label for value, label, _css in STYLE_OPTIONS}
 
@@ -116,7 +120,7 @@ def checklist_markup(
     icons = option_icons(labels)
     options = [
         InlineKeyboardButton(
-            text=f"{'✅' if key in selected else '⬜'} {label}", callback_data=f"{CB_TOGGLE}{key}",
+            text=f"{RTL_MARK}{'✅' if key in selected else '⬜'} {label}", callback_data=f"{CB_TOGGLE}{key}",
             **_icon_extra(icons.get(key)),
         )
         for key, label in option_labels(renew=renew, labels=labels, links=links or {}).items()
