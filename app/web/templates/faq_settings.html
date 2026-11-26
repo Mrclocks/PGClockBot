@@ -3,11 +3,11 @@
 {% from "macros.html" import row_actions, page_header, act_label, empty_state %}
 {% from "_ds.html" import ico, ds_switch, ds_sec, ds_modal_head, ds_foot %}
 {% from "_settings_hub.html" import settings_menu %}
-{% from "_message_buttons.html" import message_preview %}
+{% from "_message_buttons.html" import message_preview, button_list, preset_chips %}
 
 {# Add / edit form of one question. ``key`` is the item id or 'new'; ``d`` the values to show (the stored
    question, or what was typed when the save was refused). #}
-{% macro faq_modal(key, d, is_open) %}
+{% macro faq_modal(key, d, is_open, rows) %}
 {% set mid = 'modal-faq-' ~ key %}
 {% set cur = 'inherit' if d is none or d.button_style is none else d.button_style %}
 {% set tone = 'default' if cur in ('inherit', '') else cur %}
@@ -29,7 +29,12 @@
         </label>
         {{ message_preview('#' ~ mid ~ '-answer', id=mid ~ '-preview', empty='جواب اینجا همان‌طور که مشتری می‌بیند دیده می‌شود.') }}
       {% endcall %}
-      {% call ds_sec('دکمه') %}
+      {% call ds_sec('دکمه‌های زیر جواب') %}
+        <p class="ds-desc">مثل پیام گروهی: تا {{ button_max | num }} دکمه زیر جواب، برای باز کردن بخشی از ربات، خرید یک پلن یا یک لینک. زیر آن‌ها همیشه «جوابم را نگرفتم» و «بازگشت» هست.</p>
+        {{ preset_chips(button_presets) }}
+        {{ button_list(button_target_groups, button_styles, button_plans, button_presets, button_max, preview='#' ~ mid ~ '-preview', initial=rows) }}
+      {% endcall %}
+      {% call ds_sec('دکمهٔ سوال') %}
         <div class="ds-grid-2">
           <div class="form-field">
             <span class="ds-label-text">رنگ دکمه</span>
@@ -128,10 +133,10 @@
 </div>
 </div>
 
-{% if can_add %}{{ faq_modal('new', reopen_draft if reopen_key == 'new' else none, reopen_key == 'new') }}{% endif %}
+{% if can_add %}{{ faq_modal('new', reopen_draft if reopen_key == 'new' else none, reopen_key == 'new', reopen_buttons if reopen_key == 'new' else []) }}{% endif %}
 {% for item in items %}
 {% set key = item.id | string %}
-{{ faq_modal(key, reopen_draft if reopen_key == key else drafts[item.id], reopen_key == key) }}
+{{ faq_modal(key, reopen_draft if reopen_key == key else drafts[item.id], reopen_key == key, reopen_buttons if reopen_key == key else item_buttons[item.id]) }}
 {% endfor %}
 <script src="/static/message-buttons.js?v={{ asset_v('message-buttons.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>
 {% endblock %}

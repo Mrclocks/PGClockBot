@@ -17,12 +17,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
+from app.services.message_buttons import ButtonInput, buttons_form_context, form_inputs, stored_inputs
 from app.services.faq import (
     INHERIT_STYLE,
     MAX_FAQ_ITEMS,
     NOT_FOUND,
     FaqDraft,
     FaqError,
+    clean_answer_buttons,
     create_faq_item,
     delete_faq_item,
     draft_of,
@@ -91,6 +93,11 @@ def draft_from_form(form: dict) -> FaqDraft:
     )
 
 
+def button_rows(items: list[ButtonInput]) -> list[dict[str, str]]:
+    """Buttons as the web button list fills its rows."""
+    return [{"target": i.target, "label": i.label, "url": i.url, "plan": i.plan, "style": i.style} for i in items]
+
+
 def parse_item_id(raw: object) -> int | None:
     text = str(raw or "")
     return int(text) if text.isdigit() and len(text) <= 10 else None
@@ -120,7 +127,7 @@ def register_faq_pages(  # noqa: C901 - counts the nested routes; each is listed
         scope: FaqScope,
         *,
         error: str | None = None,
-        reopen: tuple[str, FaqDraft] | None = None,
+        reopen: tuple[str, FaqDraft, list[ButtonInput]] | None = None,
         status_code: int = 200,
     ) -> HTMLResponse:
         items = await list_faq_items(session, reseller_id=scope.reseller_id)
@@ -144,16 +151,26 @@ def register_faq_pages(  # noqa: C901 - counts the nested routes; each is listed
             "settings_base": scope.settings_base,
             "reopen_key": reopen[0] if reopen else None,
             "reopen_draft": reopen[1] if reopen else None,
+            "reopen_buttons": button_rows(reopen[2]) if reopen else [],
+            "item_buttons": {item.id: button_rows(stored_inputs(item.buttons)) for item in items},
+            **await buttons_form_context(session, scope.reseller_id),
             "flash_ok": None if error else ok,
             "flash_err": error,
         }
         return render(request, "faq_settings.html", context, status_code=status_code)
 
     async def refused(
-        request: Request, session: AsyncSession, staff: dict, scope: FaqScope, exc: FaqError, key: str, draft: FaqDraft
+        request: Request, session: AsyncSession, staff: dict, scope: FaqScope, exc: FaqError, key: str, form: dict
     ) -> HTMLResponse:
-        """The page again with the reason and the form reopened with what was typed."""
-        return await page(request, session, staff, scope, error=str(exc), reopen=(key, draft), status_code=400)
+        """The page again with the reason and the form reopened with what was typed, buttons included."""
+        reopen = (key, draft_from_form(form), form_inputs(form))
+        return await page(request, session, staff, scope, error=str(exc), reopen=reopen, status_code=400)
+
+    async def submitted(session: AsyncSession, form: object, scope: FaqScope) -> FaqDraft:
+        """The form as a draft with its buttons checked for this shop; ``FaqError`` with the reason."""
+        draft = draft_from_form(dict(form))
+        draft.buttons = await clean_answer_buttons(session, form_inputs(form), reseller_id=scope.reseller_id)
+        return draft
 
     @app.get(FAQ_PAGE, response_class=HTMLResponse)
     async def faq_page(request: Request, staff: dict = Depends(require_shop), session: AsyncSession = Depends(get_db)):
@@ -167,11 +184,11 @@ def register_faq_pages(  # noqa: C901 - counts the nested routes; each is listed
         scope = faq_scope(staff)
         if scope is None:
             return _deny()
-        draft = draft_from_form(dict(await request.form()))
+        form = await request.form()
         try:
-            await create_faq_item(session, draft, reseller_id=scope.reseller_id)
+            await create_faq_item(session, await submitted(session, form, scope), reseller_id=scope.reseller_id)
         except FaqError as exc:
-            return await refused(request, session, staff, scope, exc, NEW_KEY, draft)
+            return await refused(request, session, staff, scope, exc, NEW_KEY, form)
         return _done("created")
 
     @app.post(FAQ_PAGE + "/import")
@@ -193,13 +210,13 @@ def register_faq_pages(  # noqa: C901 - counts the nested routes; each is listed
         scope, iid = faq_scope(staff), parse_item_id(item_id)
         if scope is None:
             return _deny()
-        draft = draft_from_form(dict(await request.form()))
+        form = await request.form()
         try:
             if iid is None:
                 raise FaqError(NOT_FOUND)
-            await update_faq_item(session, iid, draft, reseller_id=scope.reseller_id)
+            await update_faq_item(session, iid, await submitted(session, form, scope), reseller_id=scope.reseller_id)
         except FaqError as exc:
-            return await refused(request, session, staff, scope, exc, str(iid or ""), draft)
+            return await refused(request, session, staff, scope, exc, str(iid or ""), form)
         return _done("saved")
 
     @app.post(FAQ_PAGE + "/{item_id}/{action}")

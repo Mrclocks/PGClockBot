@@ -4,7 +4,9 @@ The shop is the bot the update arrived on (``reseller_owner_id``; ``None`` on th
 a value from the callback. Every id in a callback is looked up inside that shop by
 ``app.services.faq``, so a forged id from another shop just reads as «not found».
 
-Callback data: ``faq:l`` (list), ``faq:v:<id>`` (answer), ``faq:t:<id>`` (open a ticket about it).
+Callback data: ``faq:l`` (list), ``faq:v:<id>`` (answer, counted as a view), ``faq:b:<id>`` (the same
+answer reached with «بازگشت», not counted again), ``faq:t:<id>`` (open a ticket about it). Every screen
+has the shared «بازگشت» leading one step back: ticket prompt → answer → list → support.
 ``help:faq`` is the older entry used by message buttons and links; it opens the same list and
 falls back to the old single FAQ text while a shop has not made any question yet.
 """
@@ -21,12 +23,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.handlers.support import SupportStates
-from app.bot.nav_input import ask_text
+from app.bot.nav_input import ask_text, cancel_callback
 from app.bot.tg_utils import safe_edit_text
+from app.db.models import FaqItem
 from app.services import bot_feedback_texts as feedback
 from app.services.button_icons import ICON_KEY
 from app.services.button_styles import style_or_none
-from app.services.faq import NOT_FOUND, FaqButton, faq_buttons, record_faq_ticket, record_faq_view
+from app.services.faq import (
+    NOT_FOUND,
+    FaqButton,
+    active_faq_item,
+    answer_button_rows,
+    faq_buttons,
+    record_faq_ticket,
+    record_faq_view,
+)
 from app.services.rich_text import outbound_setting_text, rich_plain_text
 from app.services.users import get_all_settings
 
@@ -40,9 +51,10 @@ ITEM_STYLE_ID = "faq_item"
 LIST_TITLE = "❓ <b>سوالات متداول</b>\nسوال خود را انتخاب کنید؛ اگر جوابتان را نگرفتید از زیر جواب، تیکت بفرستید."
 EMPTY_LIST = "❓ <b>سوالات متداول</b>\nهنوز سوالی ثبت نشده است. از بخش پشتیبانی برای ما پیام بفرستید."
 BTN_NOT_ANSWERED = "🙋 جوابم را نگرفتم — تیکت"
-BTN_ALL_QUESTIONS = "❓ همهٔ سوال‌ها"
 ASK_TICKET_BODY = "❓ <b>{question}</b>\n\nمشکل خود را بنویسید؛ همین سوال موضوع تیکت می‌شود."
 TICKET_SUBJECT_MAX = 120
+# The support ticket body prompt; with ``return_to`` its «بازگشت» reopens the answer.
+TICKET_CANCEL_CODE = "s_body"
 
 
 def item_style(ui: dict | None, stored: str | None) -> str | None:
@@ -65,12 +77,15 @@ def list_keyboard(ui: dict | None, items: list[FaqButton]) -> InlineKeyboardMark
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def answer_keyboard(ui: dict | None, item_id: int) -> InlineKeyboardMarkup:
+def answer_keyboard(
+    ui: dict | None, item_id: int, extra_rows: list[list[InlineKeyboardButton]] | None = None
+) -> InlineKeyboardMarkup:
+    """The answer's own buttons (two to a row), «جوابم را نگرفتم», then «بازگشت» to the question list."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            *(extra_rows or []),
             [InlineKeyboardButton(text=BTN_NOT_ANSWERED, callback_data=f"faq:t:{item_id}")],
-            [InlineKeyboardButton(text=BTN_ALL_QUESTIONS, callback_data=LIST_CALLBACK)],
-            [kb.back_button(ui, SUPPORT_HOME_CALLBACK)],
+            [kb.back_button(ui, LIST_CALLBACK)],
         ]
     )
 
@@ -112,6 +127,15 @@ async def faq_list(
         await _show_list(callback, session, reseller_owner_id, legacy=callback.data == LEGACY_CALLBACK)
 
 
+async def _show_answer(callback: CallbackQuery, session: AsyncSession, item: FaqItem, shop: int | None) -> None:
+    await callback.answer()
+    ui = await get_all_settings(session)
+    rows = await answer_button_rows(session, item.buttons, reseller_id=shop)
+    await safe_edit_text(
+        callback.message, answer_text(item.question, item.answer), reply_markup=answer_keyboard(ui, item.id, rows)
+    )
+
+
 @router.callback_query(F.data.startswith("faq:v:"))
 async def faq_answer(
     callback: CallbackQuery, session: AsyncSession, reseller_owner_id: int | None = None
@@ -121,9 +145,20 @@ async def faq_answer(
     if item is None:
         await callback.answer(NOT_FOUND, show_alert=True)
         return
-    await callback.answer()
-    ui = await get_all_settings(session)
-    await safe_edit_text(callback.message, answer_text(item.question, item.answer), reply_markup=answer_keyboard(ui, item.id))
+    await _show_answer(callback, session, item, reseller_owner_id)
+
+
+@router.callback_query(F.data.startswith("faq:b:"))
+async def faq_answer_again(
+    callback: CallbackQuery, session: AsyncSession, reseller_owner_id: int | None = None
+) -> None:
+    """The answer reached with «بازگشت» from the ticket prompt: shown again, not counted again."""
+    item_id = parse_item_id(callback.data)
+    item = await active_faq_item(session, item_id, reseller_id=reseller_owner_id) if item_id else None
+    if item is None:
+        await callback.answer(NOT_FOUND, show_alert=True)
+        return
+    await _show_answer(callback, session, item, reseller_owner_id)
 
 
 @router.callback_query(F.data.startswith("faq:t:"))
@@ -141,12 +176,14 @@ async def faq_ticket(
     await callback.answer()
     subject = f"❓ {item.question}"[:TICKET_SUBJECT_MAX]
     await state.update_data(subject=subject)
+    ui = await get_all_settings(session)
     await ask_text(
         callback,
         state,
         prompt=ASK_TICKET_BODY.format(question=html.escape(item.question)),
-        cancel_code="s_body",
+        cancel_code=TICKET_CANCEL_CODE,
         fsm_state=SupportStates.body,
         edit=True,
-        return_to=LIST_CALLBACK,
+        return_to=f"faq:b:{item.id}",
+        cancel_button=kb.back_button(ui, cancel_callback(TICKET_CANCEL_CODE)),
     )

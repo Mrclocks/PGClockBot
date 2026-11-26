@@ -26,12 +26,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.handlers.button_colors import shop_settings_shop_id
 from app.bot.handlers.faq import answer_text, item_style
+from app.bot.auth import require_bot_owner
+from app.bot.message_button_picker import open_checklist, register_flow
 from app.bot.nav_input import (
     PROMPT_CHAT_ID,
     PROMPT_MSG_ID,
     CancelEntry,
     ask_text,
-    cancel_keyboard,
+    cancel_callback,
     delete_user_message,
     finish_text_step,
     register_cancel_code,
@@ -42,9 +44,13 @@ from app.services import bot_feedback_texts as feedback
 from app.services.button_icons import ICON_KEY, PREMIUM_ICON_HINT, split_label_and_icon
 from app.services.faq import (
     MAX_FAQ_ITEMS,
+    NOT_FOUND,
     FaqDraft,
     FaqError,
+    answer_button_count,
+    answer_button_rows,
     button_label,
+    clean_answer_buttons,
     change_faq_item,
     create_faq_item,
     delete_faq_item,
@@ -52,6 +58,7 @@ from app.services.faq import (
     list_faq_items,
     move_faq_item,
 )
+from app.services.message_buttons import stored_inputs
 from app.services.numbers import to_fa_digits
 from app.services.rich_text import rich_plain_text
 from app.services.users import get_all_settings
@@ -73,6 +80,7 @@ EMPTY_LIST = "❓ <b>سوالات متداول</b>\nهنوز سوالی نساخ
 ASK_QUESTION = "متن سوال را بفرستید (همان که روی دکمه می‌آید، یک خط).\n" + PREMIUM_ICON_HINT
 ASK_ANSWER = "جواب سوال را بفرستید. بولد، لینک و اموجی پریمیوم حفظ می‌شود."
 TEXT_REQUIRED = "متن را خالی نگذارید."
+SAVE_BUTTONS_LABEL = "✅ ذخیرهٔ دکمه‌ها"
 DELETE_CONFIRM = "⚠️ سوال «{question}» حذف شود؟ آمار بازدیدش هم پاک می‌شود و برگشت ندارد."
 
 # (code in callback, stored button_style, label)
@@ -150,13 +158,15 @@ def card_view(actor: Actor, item: FaqItem) -> tuple[str, InlineKeyboardMarkup]:
         f"❓ <b>{html.escape(item.question)}</b>\n"
         f"وضعیت: {'روشن ✅' if item.is_active else 'خاموش ⏸'} · رنگ: {_COLOR_LABEL.get(item.button_style, '—')}"
         f" · اموجی پریمیوم: {'دارد' if item.icon_custom_emoji_id else 'ندارد'}\n"
-        f"بازدید: {to_fa_digits(item.view_count)} · «جوابم را نگرفتم»: {to_fa_digits(item.ticket_count)}\n\n"
+        f"بازدید: {to_fa_digits(item.view_count)} · «جوابم را نگرفتم»: {to_fa_digits(item.ticket_count)}"
+        f" · دکمه زیر جواب: {to_fa_digits(answer_button_count(item.buttons))}\n\n"
         f"{_preview(item.answer)}"
     )
     rows = [
         [_button("👁 پیش‌نمایش برای مشتری", actor.data("p", iid))],
         [_button("✏️ سوال", actor.data("q", iid)), _button("✏️ جواب", actor.data("b", iid))],
         [_button("🎨 رنگ دکمه", actor.data("c", iid)), _button("⏸ خاموش کن" if item.is_active else "▶️ روشن کن", actor.data("e", iid))],
+        [_button(f"🔘 دکمه‌های زیر جواب ({to_fa_digits(answer_button_count(item.buttons))})", actor.data("k", iid))],
         [_button("⬆️ بالاتر", actor.data("o", iid, "u")), _button("⬇️ پایین‌تر", actor.data("o", iid, "d"))],
         [_button("🗑 حذف سوال", actor.data("x", iid))],
         [kb.back_button(None, actor.data("l"))],
@@ -174,10 +184,12 @@ def color_view(actor: Actor, item: FaqItem) -> tuple[str, InlineKeyboardMarkup]:
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def preview_view(actor: Actor, item: FaqItem, ui: dict) -> tuple[str, InlineKeyboardMarkup]:
-    """The answer as the customer sees it, under the question's own button (tap returns to the card)."""
+def preview_view(
+    actor: Actor, item: FaqItem, ui: dict, answer_rows: list[list[InlineKeyboardButton]] | None = None
+) -> tuple[str, InlineKeyboardMarkup]:
+    """The answer as the customer sees it: the question's own button, the answer's buttons, then «بازگشت»."""
     button = _button(button_label(item.question), actor.data("g", item.id), style=item_style(ui, item.button_style), **_icon(item))
-    rows = [[button], [kb.back_button(None, actor.data("g", item.id))]]
+    rows = [[button], *(answer_rows or []), [kb.back_button(None, actor.data("g", item.id))]]
     return answer_text(item.question, item.answer), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -240,7 +252,9 @@ async def _view_set_color(callback: CallbackQuery, session: AsyncSession, actor:
 
 async def _view_preview(callback: CallbackQuery, session: AsyncSession, actor: Actor, args: list[str]) -> None:
     ui = await get_all_settings(session, reseller_id=actor.reseller_id)
-    await _show(callback, preview_view(actor, await _item(session, actor, args), ui))
+    item = await _item(session, actor, args)
+    rows = await answer_button_rows(session, item.buttons, reseller_id=actor.reseller_id)
+    await _show(callback, preview_view(actor, item, ui, rows))
 
 
 async def _view_delete_ask(callback: CallbackQuery, session: AsyncSession, actor: Actor, args: list[str]) -> None:
@@ -250,6 +264,19 @@ async def _view_delete_ask(callback: CallbackQuery, session: AsyncSession, actor
 async def _view_delete(callback: CallbackQuery, session: AsyncSession, actor: Actor, args: list[str]) -> None:
     await delete_faq_item(session, _item_id(args), reseller_id=actor.reseller_id)
     await _view_list(callback, session, actor, [])
+
+
+FLOWS = {"a": "faq_answer_a", "r": "faq_answer_r"}
+_ITEM_KEY = "fqe_buttons_item"
+
+
+async def _view_buttons(callback: CallbackQuery, session: AsyncSession, actor: Actor, args: list[str], state: FSMContext) -> None:
+    """The group-message button picker, filled with this answer's buttons; its «بازگشت» returns to the card."""
+    item = await _item(session, actor, args)
+    await open_checklist(
+        callback, state, session, flow=FLOWS[actor.audience], shop_id=actor.reseller_id,
+        initial=stored_inputs(item.buttons), flow_data={_ITEM_KEY: int(item.id)},
+    )
 
 
 _VIEWS: dict[str, tuple[int, ViewHandler]] = {
@@ -282,8 +309,16 @@ async def _start_input(
     else:
         return False
     await state.update_data(**{_STATE_KEY: {"audience": actor.audience, "item_id": item_id}})
-    await ask_text(callback, state, prompt=prompt, cancel_code=_CANCEL_CODES[actor.audience], fsm_state=fsm_state, edit=True)
+    await ask_text(
+        callback, state, prompt=prompt, cancel_code=_CANCEL_CODES[actor.audience], fsm_state=fsm_state, edit=True,
+        cancel_button=_back_button(actor),
+    )
     return True
+
+
+def _back_button(actor: Actor) -> InlineKeyboardButton:
+    """«بازگشت» on a typing step: back to the card being edited, or to the list for a new question."""
+    return kb.back_button(None, cancel_callback(_CANCEL_CODES[actor.audience]))
 
 
 async def handle_callback(callback: CallbackQuery, session: AsyncSession, state: FSMContext, actor: Actor) -> None:
@@ -292,6 +327,10 @@ async def handle_callback(callback: CallbackQuery, session: AsyncSession, state:
     try:
         if await _start_input(callback, session, state, actor, view, args):
             await callback.answer()
+            return
+        if view == "k" and len(args) == 1:
+            await callback.answer()
+            await _view_buttons(callback, session, actor, args, state)
             return
         arity, handler = _VIEWS.get(view, (-1, None))
         if handler is None or len(args) != arity:
@@ -325,12 +364,15 @@ async def _next_prompt(message: Message, state: FSMContext, actor: Actor, *, pro
         try:
             await message.bot.edit_message_text(
                 chat_id=int(chat_id), message_id=int(prompt_id), text=prompt,
-                reply_markup=cancel_keyboard(_CANCEL_CODES[actor.audience]),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[_back_button(actor)]]),
             )
             return
         except TelegramAPIError:
             logger.debug("faq editor prompt edit failed; sending a new one", exc_info=True)
-    await ask_text(message, state, prompt=prompt, cancel_code=_CANCEL_CODES[actor.audience], fsm_state=fsm_state)
+    await ask_text(
+        message, state, prompt=prompt, cancel_code=_CANCEL_CODES[actor.audience], fsm_state=fsm_state,
+        cancel_button=_back_button(actor),
+    )
 
 
 async def _save_question(message: Message, session: AsyncSession, state: FSMContext, actor: Actor, step: str) -> None:
@@ -482,3 +524,58 @@ async def _reopen_shop(
 
 register_cancel_code(_CANCEL_CODES["a"], CancelEntry(reopen=_reopen_owner))
 register_cancel_code(_CANCEL_CODES["r"], CancelEntry(reopen=_reopen_shop))
+
+
+# --- Buttons under the answer (the group-message picker) ----------------------------------------
+async def _picker_actor(
+    session: AsyncSession, db_user: BotUser, audience: str, *, is_reseller_bot: bool, reseller_owner_id: int | None
+) -> Actor | None:
+    """Who saves: checked again here, because the picker's own callbacks are not behind the editor's gates."""
+    if audience == "a":
+        allowed = await require_bot_owner(session, db_user, is_reseller_bot=is_reseller_bot, notify=False)
+        return _OWNER if allowed else None
+    return await _shop_actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+
+
+async def _picked_item(state: FSMContext, session: AsyncSession, actor: Actor) -> FaqItem | None:
+    item_id = int((await state.get_data()).get(_ITEM_KEY) or 0)
+    try:
+        return await get_faq_item(session, item_id, reseller_id=actor.reseller_id)
+    except FaqError:
+        return None
+
+
+def _picker_flow(audience: str) -> tuple:
+    async def finish(
+        callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser, buttons: list,
+        is_reseller_bot: bool = False, reseller_owner_id: int | None = None, **_: object,
+    ) -> None:
+        actor = await _picker_actor(session, db_user, audience, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+        item = await _picked_item(state, session, actor) if actor else None
+        await state.set_state(None)
+        if actor is None or item is None:
+            await callback.message.answer(feedback.NO_SHOP_SETTINGS_ACCESS if actor is None else NOT_FOUND)
+            return
+        try:
+            stored = await clean_answer_buttons(session, buttons, reseller_id=actor.reseller_id)
+            item = await change_faq_item(session, item.id, reseller_id=actor.reseller_id, buttons=stored)
+        except FaqError as exc:
+            await callback.message.answer(html.escape(str(exc)))
+            return
+        await _show(callback, card_view(actor, item))
+
+    async def back(
+        callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser,
+        is_reseller_bot: bool = False, reseller_owner_id: int | None = None, **_: object,
+    ) -> None:
+        actor = await _picker_actor(session, db_user, audience, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+        item = await _picked_item(state, session, actor) if actor else None
+        if actor is not None:
+            await _show(callback, card_view(actor, item) if item else list_view(actor, await list_faq_items(session, reseller_id=actor.reseller_id)))
+
+    return finish, back
+
+
+for _audience, _flow in FLOWS.items():
+    _finish_flow, _back_flow = _picker_flow(_audience)
+    register_flow(_flow, _finish_flow, back=_back_flow, send_label=SAVE_BUTTONS_LABEL)

@@ -2988,6 +2988,8 @@ class FaqItem(Base):
     answer: Mapped[str] = mapped_column(Text)
     button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     icon_custom_emoji_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Up to four buttons under the answer, stored like a group message's (``message_buttons``).
+    buttons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     view_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

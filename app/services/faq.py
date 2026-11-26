@@ -14,11 +14,20 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, replace
 
+from aiogram.types import InlineKeyboardButton
 from sqlalchemy import ColumnElement, delete, exists, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import FaqItem
 from app.services.button_icons import clean_icon_id
+from app.services.message_buttons import (
+    ButtonInput,
+    dump_buttons,
+    make_buttons,
+    sender_rules,
+    stored_inputs,
+    stored_keyboard,
+)
 from app.services.rich_text import rich_plain_text
 from app.services.telegram_html import normalize_telegram_html
 from app.services.users import current_shop_reseller_id
@@ -61,6 +70,8 @@ class FaqDraft:
     button_style: str | None = None
     icon_custom_emoji_id: str | None = None
     is_active: bool = True
+    # Buttons under the answer: JSON made by ``clean_answer_buttons`` (validated for this shop), or None.
+    buttons: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,7 +152,30 @@ def checked_draft(draft: FaqDraft) -> FaqDraft:
         button_style=clean_button_style(draft.button_style),
         icon_custom_emoji_id=clean_icon(draft.icon_custom_emoji_id),
         is_active=bool(draft.is_active),
+        buttons=draft.buttons or None,
     )
+
+
+async def clean_answer_buttons(
+    session: AsyncSession, items: list[ButtonInput], *, reseller_id: int | None
+) -> str | None:
+    """Buttons under an answer, checked like a group message's of the same shop (links only with the
+    shop's link permission, plans only the shop's own); ``FaqError`` with the reason."""
+    try:
+        return dump_buttons(make_buttons(items, await sender_rules(session, reseller_id)))
+    except ValueError as exc:
+        raise FaqError(str(exc)) from None
+
+
+async def answer_button_rows(
+    session: AsyncSession, stored: str | None, *, reseller_id: int | None
+) -> list[list[InlineKeyboardButton]]:
+    """The answer's buttons as sent now: checked again, so a revoked link or a plan no longer sold is dropped."""
+    return await stored_keyboard(session, stored, shop_id=reseller_id)
+
+
+def answer_button_count(stored: str | None) -> int:
+    return len(stored_inputs(stored))
 
 
 def button_label(question: str) -> str:
@@ -197,6 +231,13 @@ async def get_faq_item(session: AsyncSession, item_id: int, *, reseller_id: int 
     return item
 
 
+async def active_faq_item(session: AsyncSession, item_id: int, *, reseller_id: int | None) -> FaqItem | None:
+    """The shop's question when customers may see it; ``None`` when hidden or not the shop's."""
+    return await session.scalar(
+        select(FaqItem).where(FaqItem.id == int(item_id), _shop(reseller_id), FaqItem.is_active.is_(True))
+    )
+
+
 async def create_faq_item(session: AsyncSession, draft: FaqDraft, *, reseller_id: int | None) -> FaqItem:
     """Add a question at the end of the shop's list."""
     clean = checked_draft(draft)
@@ -216,6 +257,7 @@ async def create_faq_item(session: AsyncSession, draft: FaqDraft, *, reseller_id
         button_style=clean.button_style,
         icon_custom_emoji_id=clean.icon_custom_emoji_id,
         is_active=clean.is_active,
+        buttons=clean.buttons,
         sort_order=int(last or 0) + 1,
     )
     session.add(item)
@@ -234,6 +276,7 @@ async def update_faq_item(
     item.button_style = clean.button_style
     item.icon_custom_emoji_id = clean.icon_custom_emoji_id
     item.is_active = clean.is_active
+    item.buttons = clean.buttons
     await session.commit()
     return item
 
@@ -246,6 +289,7 @@ def draft_of(item: FaqItem) -> FaqDraft:
         button_style=item.button_style,
         icon_custom_emoji_id=item.icon_custom_emoji_id,
         is_active=bool(item.is_active),
+        buttons=item.buttons,
     )
 
 

@@ -3,7 +3,7 @@
 "use strict";
 
 const assert = require("assert");
-const { canAdd, needsUrl, needsPlan, presetButtons, previewRows, plainText } = require("../app/web/static/message-buttons.js");
+const { canAdd, needsUrl, needsPlan, presetButtons, initialButtons, previewRows, plainText } = require("../app/web/static/message-buttons.js");
 
 assert.strictEqual(canAdd(0, 4), true);
 assert.strictEqual(canAdd(3, 4), true);
@@ -30,5 +30,15 @@ assert.deepStrictEqual(previewRows([]), []);
 assert.strictEqual(plainText("<b>سلام</b> &lt;دوست&gt;<br>خط دوم"), "سلام <دوست>\nخط دوم");
 assert.strictEqual(plainText('<a href="https://x.example">لینک</a>'), "لینک");
 assert.strictEqual(plainText(null), "");
+
+// Saved buttons a list starts with: rows without a target, junk and anything past the limit are left out.
+assert.deepStrictEqual(
+  initialButtons('[{"target":"shop","style":"success"},{"label":"x"},null,{"target":"link","url":"https://a.example"}]', 4)
+    .map((b) => b.target),
+  ["shop", "link"],
+);
+assert.deepStrictEqual(initialButtons('[{"target":"a"},{"target":"b"},{"target":"c"}]', 2).map((b) => b.target), ["a", "b"]);
+assert.deepStrictEqual(initialButtons("not json", 4), []);
+assert.deepStrictEqual(initialButtons(null, 4), []);
 
 console.log("message_buttons tests passed");

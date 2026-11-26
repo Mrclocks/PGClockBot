@@ -644,3 +644,5 @@ tests/test_faq_pages.py
 tests/test_webhook_watch.py
 # Naming a person by id or @username: ambiguity refusal, shop scope, start watches claimed once.
 tests/test_telegram_target.py
+# FAQ answer buttons: shop rules (links, plans), forged items, owner check in the picker flow.
+tests/test_faq_answer_buttons.py
