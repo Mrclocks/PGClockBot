@@ -21,9 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.auth import require_bot_owner_handler
 from app.bot.broadcast_media_input import (
     MEDIA_DATA_KEY,
-    ONLY_TEXT_OR_MEDIA,
     answer_preview,
     has_content,
+    refusal_text,
     media_data,
     media_from_data,
     media_from_message,
@@ -78,8 +78,8 @@ async def preview_broadcast(message: Message, state: FSMContext, session: AsyncS
     """Check the text (or the photo or video and its caption), then ask for buttons; the preview comes after."""
     back = await _back(session)
     if not has_content(message):
-        await finish_text_step(message, state, text=ONLY_TEXT_OR_MEDIA, inline=back)
-        await state.clear()
+        # The step stays open: the owner sends the photo, video or text again.
+        await message.answer(refusal_text(message), reply_markup=back)
         return
     media = media_from_message(message)
     try:

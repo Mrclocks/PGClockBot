@@ -13,9 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.broadcast_media_input import (
     MEDIA_DATA_KEY,
-    ONLY_TEXT_OR_MEDIA,
+    TEXT_PROMPT,
     answer_preview,
     has_content,
+    refusal_text,
     media_data,
     media_from_data,
     media_from_message,
@@ -314,7 +315,7 @@ async def cb_audience(
     await ask_text(
         callback,
         state,
-        prompt="متن پیام:",
+        prompt=TEXT_PROMPT,
         cancel_code="shp_bc",
         fsm_state=ShopBroadcastStates.waiting_text,
         edit=False,
@@ -354,7 +355,7 @@ async def on_text(
         )
         return
     if not has_content(message):
-        await message.answer(ONLY_TEXT_OR_MEDIA)
+        await message.answer(refusal_text(message))
         return
     media = media_from_message(message)
     try:

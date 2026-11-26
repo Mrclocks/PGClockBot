@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
+from app.bot.broadcast_media_input import TEXT_PROMPT
 from app.bot.handlers.admin_broadcast_confirm import preview_broadcast
 from app.bot.handlers.admin_states import AdminStates
 from app.bot.handlers.admin_plan_editor import register_admin_plan_editor
@@ -3464,7 +3465,7 @@ async def adm_broadcast_audience(callback: CallbackQuery, db_user: BotUser, stat
         await ask_text(
             callback,
             state,
-            prompt="متن پیام:",
+            prompt=TEXT_PROMPT,
             cancel_code="adm_bc",
             fsm_state=AdminStates.broadcast_text,
             edit=False,

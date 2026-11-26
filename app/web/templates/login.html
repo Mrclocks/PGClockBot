@@ -2,6 +2,10 @@
 {% from "_icons.html" import icon %}
 {% block title %}ورود{% endblock %}
 {% block auth %}
+{# The platform brand from the web panel settings (api/login_brand); the product default until one is set. #}
+{% set login_brand = panel_brand if panel_brand is defined and panel_brand else none %}
+{% set login_name = login_brand.name if login_brand and login_brand.name else 'MrClockBot' %}
+{% set login_logo = login_brand.logo_url if login_brand else '/static/logo-64.png' %}
 <div class="auth-wrap auth-wrap--atmo">
   <div class="auth-atmosphere" aria-hidden="true">
     <span class="auth-orb auth-orb-a"></span>
@@ -10,8 +14,8 @@
   </div>
   <div class="auth-panel auth-panel--stage ds">
     <div class="auth-brand">
-      <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" /></span>
-      <h1 dir="ltr">MrClockBot</h1>
+      <span class="brand-logo{% if login_brand and login_brand.has_custom_logo %} brand-logo--custom{% endif %}" aria-hidden="true"><img src="{{ login_logo }}" alt="" /></span>
+      <h1 dir="auto">{{ login_name }}</h1>
       <p>ورود به پنل مدیریت فروش — نمایندگان: همان یوزر/رمز پاسارگارد</p>
     </div>
     <form class="auth-form auth-form--card" method="post" action="/login" autocomplete="on" id="login-form"
@@ -39,7 +43,7 @@
       </label>
       <button class="btn" type="submit" id="login-submit">{{ icon('login', 'btn-ico') }}ورود به پنل</button>
     </form>
-    <div class="auth-foot">© ۲۰۲۶ MrClockBot</div>
+    <div class="auth-foot">© ۲۰۲۶ <bdi dir="auto">{{ login_name }}</bdi></div>
   </div>
 </div>
 <script>
