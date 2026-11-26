@@ -752,7 +752,8 @@ function setButtonText(button, text) {
       menu.style.maxHeight = 'none';
       menu.style.height = 'auto';
       menu.style.overflow = 'visible';
-      const mw = Math.max(menu.offsetWidth || 168, 168);
+      /* The menu is as wide as its longest item (CSS width: max-content, 128px floor). */
+      const mw = menu.offsetWidth || 128;
       const mh = menu.offsetHeight || 120;
       /* getBoundingClientRect = visual viewport; position:fixed = layout viewport.
          Convert with visualViewport.offset* so the menu stays glued to the toggle

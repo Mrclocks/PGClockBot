@@ -7433,8 +7433,11 @@ td.col-address {
   align-items: stretch !important;
   gap: var(--space-1);
   padding: var(--space-1);
-  min-width: 168px;
-  max-width: min(260px, calc(100vw - 16px));
+  /* As wide as its longest item (icon and label), like the page «⋯» menu; the floor keeps a one-word item
+     from looking like a chip. */
+  width: max-content;
+  min-width: 128px;
+  max-width: calc(100vw - 16px);
   max-height: none !important;
   height: auto !important;
   overflow: visible !important;
@@ -7464,16 +7467,17 @@ td.col-address {
   justify-content: flex-start;
   text-align: start;
 }
-/* A danger or warning item keeps only its coloured text and icon, on the same neutral box as the other items.
-   The warning colours come from --btn-tone (panel-ds.css), so the tone becomes the neutral border colour. */
-.row-actions-menu.is-ported .btn-danger {
+/* Every actions menu (the row «⋯» popover and its inline desktop row): a danger or warning item keeps only its
+   coloured text and icon, on the same neutral box as the other items. The warning colours come from --btn-tone
+   (panel-ds.css), so the tone becomes the neutral border colour. */
+.row-actions-menu .btn-danger {
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--foreground) 4%, transparent);
 }
-.row-actions-menu.is-ported .btn-warn { --btn-tone: var(--border); }
+.row-actions-menu .btn-warn { --btn-tone: var(--border); }
 /* The neutral items have no visible fill on the light card; the danger item matches them. */
-html[data-theme="light"] .row-actions-menu.is-ported .btn-danger { background: transparent; }
-.row-actions-menu.is-ported .btn-danger:hover {
+html[data-theme="light"] .row-actions-menu .btn-danger { background: transparent; }
+.row-actions-menu .btn-danger:hover {
   background: color-mix(in srgb, var(--foreground) 9%, transparent);
   transform: none;
 }
