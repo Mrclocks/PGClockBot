@@ -89,6 +89,8 @@ SCREEN_LABEL_KEYS: dict[str, str] = {
 TELEGRAM_BUTTON_TEXT_MAX = 64
 PLAN_CALLBACK_PREFIX = "shop:plan:"
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+# A Telegram custom (premium) emoji id: digits only.
+_ICON_RE = re.compile(r"[0-9]{1,32}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +102,7 @@ class ButtonInput:
     url: str = ""
     style: str = ""
     plan: str = ""
+    icon: str = ""  # premium emoji id typed with the label in the bot (link buttons)
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +111,7 @@ class ButtonSpec:
     label: str
     target: str
     style: str = ""
+    icon: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,8 +198,14 @@ def make_button(item: ButtonInput, rules: ButtonRules) -> ButtonSpec:
             raise ValueError("لینک دکمه باید با https:// شروع شود و فاصله نداشته باشد")
         if not rules.allow_links:
             raise ValueError("اجازهٔ دکمهٔ لینک بیرونی را ندارید؛ فقط دکمه‌های ربات مجاز است")
-        return ButtonSpec(KIND_URL, _clean_label(item.label, ""), url, style)
+        return ButtonSpec(KIND_URL, _clean_label(item.label, ""), url, style, clean_icon(item.icon))
     raise ValueError("مقصد دکمه نامعتبر است")
+
+
+def clean_icon(raw: object) -> str:
+    """A premium emoji id as Telegram gives it, or "" for anything else (never refused: it is decoration)."""
+    value = str(raw or "").strip()
+    return value if _ICON_RE.fullmatch(value) else ""
 
 
 def make_buttons(items: Iterable[ButtonInput], rules: ButtonRules) -> list[ButtonSpec]:
@@ -209,13 +219,16 @@ def make_buttons(items: Iterable[ButtonInput], rules: ButtonRules) -> list[Butto
 def dump_buttons(buttons: list[ButtonSpec]) -> str | None:
     if not buttons:
         return None
-    return json.dumps([{"k": b.kind, "l": b.label, "t": b.target, "s": b.style} for b in buttons], ensure_ascii=False)
+    return json.dumps(
+        [{"k": b.kind, "l": b.label, "t": b.target, "s": b.style, **({"i": b.icon} if b.icon else {})} for b in buttons],
+        ensure_ascii=False,
+    )
 
 
 def _stored_input(item: Mapping) -> ButtonInput:
     kind, target = str(item["k"]), str(item["t"])
     if kind == KIND_URL:
-        return ButtonInput(TARGET_LINK, str(item["l"]), target, str(item.get("s") or ""))
+        return ButtonInput(TARGET_LINK, str(item["l"]), target, str(item.get("s") or ""), icon=str(item.get("i") or ""))
     if kind == KIND_RENEW:
         return ButtonInput(TARGET_RENEW, str(item["l"]), "", str(item.get("s") or ""))
     if kind == KIND_PLAN:
@@ -281,6 +294,8 @@ def build_keyboard(buttons: list[ButtonSpec], labels: ScreenLabels | None = None
     def button(spec: ButtonSpec) -> InlineKeyboardButton:
         extra: dict[str, str] = {"style": spec.style} if spec.style else {}
         if spec.kind == KIND_URL:
+            if spec.icon:
+                extra["icon_custom_emoji_id"] = spec.icon
             return InlineKeyboardButton(text=spec.label, url=spec.target, **extra)
         label = _menu_label(spec, labels) if spec.kind == KIND_SCREEN else ScreenLabel(spec.label)
         if label.icon:
@@ -325,7 +340,9 @@ async def stored_keyboard(session: AsyncSession, stored: str | None, *, shop_id:
 def preview_keyboard(stored: str | None, labels: ScreenLabels | None = None) -> list[list[InlineKeyboardButton]]:
     """Buttons this request has just validated, for a preview (``labels``: the sender's menu labels)."""
     items = json.loads(stored) if stored else []
-    specs = [ButtonSpec(str(i["k"]), str(i["l"]), str(i["t"]), str(i.get("s") or "")) for i in items]
+    specs = [
+        ButtonSpec(str(i["k"]), str(i["l"]), str(i["t"]), str(i.get("s") or ""), clean_icon(i.get("i"))) for i in items
+    ]
     return build_keyboard(specs, labels)
 
 
