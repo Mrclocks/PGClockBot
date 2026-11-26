@@ -17,12 +17,18 @@ def hrefs(base: str, keys: list[str]) -> list[str]:
     return [f"{base}?tab={key}" for key in keys]
 
 
+def area_rows(base: str) -> list[str]:
+    """The area's rows in order; «سوالات متداول» sits in the «مشتری» group and opens its own page."""
+    pages = hrefs(base, CUSTOMER_PAGES)
+    return [*pages[:2], "/faq", *pages[2:]]
+
+
 class CustomerAreaListTests(ToolsAreaHarness):
     async def test_the_owner_list_holds_only_the_customer_and_service_pages_and_each_opens(self) -> None:
         listing = await self.get(OWNER_SESSION, "/settings?tab=customer")
         self.assertEqual(listing.status_code, 200)
         self.assertIn("<h1>مشتری و سرویس</h1>", listing.text)
-        self.assertEqual(HUB_ROW.findall(listing.text), hrefs("/settings", CUSTOMER_PAGES))
+        self.assertEqual(HUB_ROW.findall(listing.text), area_rows("/settings"))
         for href in HUB_ROW.findall(listing.text):
             with self.subTest(href=href):
                 self.assertEqual((await self.get(OWNER_SESSION, href)).status_code, 200)
@@ -38,7 +44,7 @@ class CustomerAreaListTests(ToolsAreaHarness):
         await self.grant_shop("dashboard", "shop_settings")
         listing = await self.get(SHOP_SESSION, "/shop-settings?tab=customer")
         self.assertEqual(listing.status_code, 200)
-        self.assertEqual(HUB_ROW.findall(listing.text), hrefs("/shop-settings", CUSTOMER_PAGES))
+        self.assertEqual(HUB_ROW.findall(listing.text), area_rows("/shop-settings"))
         self.assertIn('href="/shop-settings?tab=customer"', listing.text)
         self.assertNotIn('href="/settings?tab=customer"', listing.text)
 
@@ -63,7 +69,7 @@ class CustomerAreaPageTests(ToolsAreaHarness):
                 page = await self.get(session, f"{base}?tab=limits")
                 self.assertEqual(page.status_code, 200)
                 self.assertIn(f'<a class="page-back" href="{base}?tab=customer"', page.text)
-                self.assertEqual(MENU_ROW.findall(page.text), hrefs(base, CUSTOMER_PAGES))
+                self.assertEqual(MENU_ROW.findall(page.text), area_rows(base))
                 self.assertIn("<title>مشتری و سرویس", page.text)
 
     async def test_a_bot_page_keeps_the_bot_area_menu(self) -> None:
