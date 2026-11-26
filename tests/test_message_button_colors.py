@@ -43,7 +43,9 @@ class ColorChoiceTests(unittest.TestCase):
         self.assertEqual([(b.callback_data, b.style) for b in (rows[0][0], rows[1][0])],
                          [("mbp:c:shop", "success"), ("mbp:c:support", None)])
         self.assertIn("سبز", rows[0][0].text)
-        self.assertEqual([b.callback_data for b in rows[-1]], [picker.CB_SEND, picker.CB_YES])
+        # «ارسال» on its own row, then the shared «بازگشت» alone on the last row, like every other screen.
+        self.assertEqual([b.callback_data for b in rows[-2]], [picker.CB_SEND])
+        self.assertEqual([b.callback_data for b in rows[-1]], [picker.CB_YES])
         self.assertTrue(all(len(b.callback_data.encode()) <= 64 for row in rows for b in row))
 
 

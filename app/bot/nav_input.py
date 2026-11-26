@@ -40,6 +40,8 @@ PROMPT_CHAT_ID = "_nav_input_prompt_chat_id"
 CANCEL_CODE_KEY = "_nav_input_cancel_code"
 # Callback data of the screen a prompt was opened from; cancel replays it (one step back).
 RETURN_TO_KEY = "_nav_input_return_to"
+# The prompt text, so a later step (the button picker) can ask exactly this step again with «بازگشت».
+PROMPT_TEXT_KEY = "_nav_input_prompt_text"
 
 CancelReopen = Callable[..., Awaitable[Any]]
 
@@ -155,6 +157,7 @@ async def ask_text(
                 PROMPT_CHAT_ID: int(msg.chat.id),
                 CANCEL_CODE_KEY: cancel_code,
                 RETURN_TO_KEY: return_to,
+                PROMPT_TEXT_KEY: prompt,
             }
         )
         await _tidy_after_step(target.message if isinstance(target, CallbackQuery) else target, msg)

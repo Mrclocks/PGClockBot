@@ -13,7 +13,7 @@ from app.services.settings_tab_groups import (
     BOT_AREA,
     MESSAGE_VARIABLES_TAB_KEY,
     group_settings_tabs,
-    tabs_with_message_variables,
+    tabs_with_page_tabs,
 )
 from app.services.users import SETTINGS_TABS
 
@@ -49,7 +49,7 @@ def register_message_variables_pages(
         )
         settings_tabs = SETTINGS_TABS if settings_base == "/settings" else RESELLER_SETTINGS_TABS
         tab_nav = group_settings_tabs(
-            tabs_with_message_variables(settings_tabs, staff), MESSAGE_VARIABLES_TAB_KEY, area=BOT_AREA
+            tabs_with_page_tabs(settings_tabs, staff), MESSAGE_VARIABLES_TAB_KEY, area=BOT_AREA
         )
         return render(
             request,

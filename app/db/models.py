@@ -2966,3 +2966,64 @@ class AccountHoldItem(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class FaqItem(Base):
+    """One frequently asked question a shop shows under «پشتیبانی» as a button.
+
+    ``reseller_id`` is the shop (NULL for the platform's own bot). ``answer`` is Telegram HTML, so
+    bold text, links and premium emoji written in the bot survive. ``button_style`` NULL inherits the
+    «سوال‌های متداول» color; ``""`` is the client default. The two counters only ever grow by an
+    atomic ``UPDATE`` and tell staff which answers are read and which still end in a ticket.
+    """
+
+    __tablename__ = "faq_items"
+    __table_args__ = (Index("ix_faq_items_shop_order", "reseller_id", "sort_order", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True
+    )
+    question: Mapped[str] = mapped_column(String(160))
+    answer: Mapped[str] = mapped_column(Text)
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    icon_custom_emoji_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Up to four buttons under the answer, stored like a group message's (``message_buttons``).
+    buttons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    view_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    ticket_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class StartWatch(Base):
+    """A staff member asked to hear when a person first starts the bot, to make them a reseller.
+
+    ``target`` is ``id:<telegram id>`` or ``u:<lower-case username>``. The watch never grants anything:
+    it only tells the watcher who matched (with the numeric id) and offers the usual make-reseller
+    step, so a username that changed hands cannot slip someone into a role. At most one open watch
+    per watcher and target (partial unique index); ``notified_at`` is the atomic claim.
+    """
+
+    __tablename__ = "start_watches"
+    __table_args__ = (
+        Index(
+            "uq_start_watches_open",
+            "watcher_telegram_id",
+            "target",
+            unique=True,
+            postgresql_where=text("notified_at IS NULL"),
+        ),
+        Index("ix_start_watches_open_expiry", "expires_at", postgresql_where=text("notified_at IS NULL")),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    watcher_telegram_id: Mapped[int] = mapped_column(BigInteger)
+    target: Mapped[str] = mapped_column(String(48))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -638,3 +638,14 @@ tests/test_checkout_abandon.py
 tests/test_pending_order_expiry.py
 # Sign-in page shows only the platform brand, never a shop's.
 tests/test_login_brand.py
+
+# FAQ questions: shop isolation in the service, the bot editor, the customer buttons and the web page.
+tests/test_faq_service.py
+tests/test_faq_bot.py
+tests/test_faq_pages.py
+# Main bot token check before saving (format, shop tokens) and webhook auto-repair.
+tests/test_webhook_watch.py
+# Naming a person by id or @username: ambiguity refusal, shop scope, start watches claimed once.
+tests/test_telegram_target.py
+# FAQ answer buttons: shop rules (links, plans), forged items, owner check in the picker flow.
+tests/test_faq_answer_buttons.py

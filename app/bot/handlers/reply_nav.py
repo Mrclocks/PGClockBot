@@ -30,6 +30,7 @@ from app.db.models import BotUser, Order, ResellerProfile, Role
 from app.services.button_icons import icon_kwargs
 from app.services.db_safe import rollback_quiet
 from app.services.formatting import format_message
+from app.services.faq import current_shop_has_faq
 from app.services.home_overview import admin_customer_counts
 from app.services.numbers import to_fa_digits
 from app.services.payg_charges import count_review_charges
@@ -619,7 +620,9 @@ async def open_support_home(
     await present_inline_only(
         message,
         text=text,
-        inline=support_hub_keyboard(ui, contact_rows=contact_rows or None),
+        inline=support_hub_keyboard(
+            ui, contact_rows=contact_rows or None, show_faq=await current_shop_has_faq(session)
+        ),
         **send_kw,
     )
     return

@@ -12027,6 +12027,8 @@ table:has(> tbody > tr.table-empty) .table-select-all { visibility: hidden; }
 .form-inline { display: inline; }
 .form-stack[hidden] { display: none; }
 .cell-wrap { max-width: 480px; overflow-wrap: anywhere; }
+/* Outranks the table-wide `td:not(.col-actions)` nowrap, without which this class never wrapped. */
+td.cell-wrap { white-space: normal; }
 .pre-flush { margin: 0; padding: var(--space-2); }
 .btn.btn-block { width: 100%; }
 .receipt-matches { margin-top: var(--space-0); }

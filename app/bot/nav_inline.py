@@ -412,8 +412,23 @@ def support_hub_keyboard(
     ui: dict | None = None,
     *,
     contact_rows: list[list[InlineKeyboardButton]] | None = None,
+    show_faq: bool = False,
 ) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = [
+    """Support hub; ``show_faq`` puts «سوالات متداول» first when the shop has questions."""
+    rows: list[list[InlineKeyboardButton]] = []
+    if show_faq:
+        rows.append(
+            [
+                _ikb(
+                    _t(ui, "btn_faq") or "❓ سوالات متداول",
+                    callback_data="faq:l",
+                    ui=ui,
+                    label_key="btn_faq",
+                    style_id="faq",
+                )
+            ]
+        )
+    rows.append(
         [
             _ikb(
                 _t(ui, "btn_support_new") or "✉️ تیکت جدید",
@@ -430,7 +445,7 @@ def support_hub_keyboard(
                 style_id="support_list",
             ),
         ]
-    ]
+    )
     if contact_rows:
         rows.extend(contact_rows)
     rows.append(

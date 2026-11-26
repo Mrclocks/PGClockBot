@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Ticket, TicketStatus
+from app.services.faq import current_shop_has_faq
 from app.services.formatting import format_message, ticket_status_fa
 from app.services.support_contacts import (
     active_support_contacts,
@@ -63,7 +64,7 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
             callback.message,
             text,
             reply_markup=support_hub_keyboard(
-                ui, contact_rows=contact_rows or None
+                ui, contact_rows=contact_rows or None, show_faq=await current_shop_has_faq(session)
             ),
             **send_kw,
         )
