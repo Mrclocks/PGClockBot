@@ -73,7 +73,7 @@ class PickerPremiumEmojiTests(unittest.TestCase):
         markup = picker.checklist_markup(["wallet"], renew=False, presets=[], labels=self.labels)
         buttons = {b.callback_data: b for row in markup.inline_keyboard for b in row}
         wallet, shop = buttons["mbp:t:wallet"], buttons["mbp:t:shop"]
-        self.assertEqual((wallet.text, wallet.icon_custom_emoji_id), ("\u200f✅ کیف من", PREMIUM_ID))
+        self.assertEqual((wallet.text, wallet.icon_custom_emoji_id), ("\u200fکیف من ✅", PREMIUM_ID))
         self.assertIsNone(shop.icon_custom_emoji_id)
 
     def test_the_colour_step_keeps_the_premium_emoji(self) -> None:
