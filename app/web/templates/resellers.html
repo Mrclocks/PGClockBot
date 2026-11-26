@@ -287,10 +287,9 @@
       {% endif %}
       <div class="form-row">
         <div>
-          <label class="form-field">آیدی عددی تلگرام
-            
-            <input name="telegram_id" type="number" required dir="ltr" />
-        <small class="muted">مثال: 123456789</small>
+          <label class="form-field">آیدی عددی یا یوزرنیم تلگرام
+            <input name="telegram_id" required dir="ltr" maxlength="64" autocomplete="off" placeholder="123456789 یا @username" />
+            <small class="muted">باید یک بار ربات را استارت کرده باشد. یوزرنیم فقط برای پیدا کردن است و آیدی عددی ذخیره می‌شود.</small>
           </label>
         </div>
         <div>

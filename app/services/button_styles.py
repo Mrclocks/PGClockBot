@@ -98,6 +98,8 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "svc_add_existing", "label": "افزودن سرویس قبلی", "group": "زیرمنوها", "default": ""},
     {"id": "wallet_tx", "label": "تراکنش‌های کیف پول", "group": "زیرمنوها", "default": ""},
     {"id": "support_list", "label": "تیکت‌های من", "group": "زیرمنوها", "default": ""},
+    {"id": "faq", "label": "سوالات متداول (پشتیبانی)", "group": "زیرمنوها", "default": ""},
+    {"id": "faq_item", "label": "هر سوال متداول (پیش‌فرض)", "group": "زیرمنوها", "default": "primary"},
     # Shop flow (inline) — submenu plan rows inherit the matching kind color
     {
         "id": "shop_kind_fixed",

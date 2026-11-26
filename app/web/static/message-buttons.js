@@ -48,6 +48,17 @@
       .replace(/&(lt|gt|amp|quot|#39|nbsp);/g, (m) => ENTITIES[m] || m);
   }
 
+  /** The buttons a list starts with (``data-initial``, e.g. an FAQ answer's saved buttons), at most ``max``. */
+  function initialButtons(raw, max) {
+    let parsed = [];
+    try {
+      parsed = JSON.parse(raw || "[]");
+    } catch (_err) {
+      return [];
+    }
+    return Array.isArray(parsed) ? parsed.filter((b) => b && typeof b === "object" && b.target).slice(0, max) : [];
+  }
+
   function readPresets(list) {
     try {
       return JSON.parse(list.getAttribute("data-presets") || "[]");
@@ -198,6 +209,7 @@
       rows().forEach((row) => row.remove());
       buttons.forEach((b) => addRow(b, false));
     });
+    initialButtons(list.getAttribute("data-initial"), max).forEach((b) => addRow(b, false));
     syncAll();
     return { addRow, rows, syncAll };
   }
@@ -230,7 +242,7 @@
     });
   }
 
-  const api = { canAdd, needsUrl, needsPlan, presetButtons, previewRows, plainText, bind, bindAll };
+  const api = { canAdd, needsUrl, needsPlan, presetButtons, initialButtons, previewRows, plainText, bind, bindAll };
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   } else {

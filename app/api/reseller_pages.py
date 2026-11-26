@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +44,7 @@ from app.services.volume_allocation import apply_create_form_oversell, apply_ove
 from app.services.pasarguard import get_pg
 from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
 from app.services.support_button import support_markup
+from app.services.telegram_target import find_target_user
 from app.services.resellers import (
     DEFAULT_FEATURE_PERMS,
     FEATURE_PERMS,
@@ -475,16 +476,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         _require_rep_mgmt(staff)
         form = await request.form()
         try:
-            telegram_id = int(str(form.get("telegram_id") or "0"))
-        except ValueError:
-            return RedirectResponse(f"/resellers?err={_q('آیدی تلگرام نامعتبر')}", status_code=303)
-        result = await session.execute(select(BotUser).where(BotUser.telegram_id == telegram_id))
-        user = result.scalar_one_or_none()
-        if not user:
-            return RedirectResponse(
-                f"/resellers?err={_q('کاربر با این آیدی در ربات پیدا نشد — اول باید استارت زده باشد')}",
-                status_code=303,
-            )
+            # A numeric id or @username of someone who started the main bot (any shop's customer may be promoted).
+            user = await find_target_user(session, str(form.get("telegram_id") or ""), scope=true())
+        except ValueError as exc:
+            return RedirectResponse(f"/resellers?err={_q(str(exc))}", status_code=303)
         plan_raw = str(form.get("plan_id") or "").strip()
         if not plan_raw.isdigit():
             return RedirectResponse(

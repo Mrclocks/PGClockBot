@@ -93,8 +93,10 @@ from app.services.settings_tab_groups import (
     resolve_merged_tab,
     settings_area,
     settings_area_of,
-    tabs_with_message_variables,
+    tabs_with_page_tabs,
 )
+from app.services.numbers import to_fa_digits
+from app.services.webhook_watch import WEBHOOK_CHECK_MINUTES, last_webhook_health, verify_main_bot_token
 from app.services.settings_hub import (
     SYSTEM_LIST_TAB,
     first_settings_href,
@@ -1620,6 +1622,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_admin=require_admin,
         get_db=get_db,
     )
+    from app.api.webhook_watch_pages import register_webhook_watch_pages
+
+    register_webhook_watch_pages(app, require_admin=require_admin)
+    from app.api.faq_pages import register_faq_pages
+
+    register_faq_pages(app, render=render, require_perm=require_perm, get_db=get_db)
     from app.api.backup_pages import register_backup_pages
 
     register_backup_pages(app, render=render, require_admin=require_admin, get_db=get_db)
@@ -2509,7 +2517,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "tab_groups": tab_groups,
             "tabs": page_tabs,
             "tab_nav": group_settings_tabs(
-                tabs_with_message_variables(page_tabs, staff) if page_tabs else [], tab, area=area_key
+                tabs_with_page_tabs(page_tabs, staff) if page_tabs else [], tab, area=area_key
             ),
             "tab": tab,
             "settings_area": settings_area(area_key, base="/settings", bot_title="تنظیمات ربات"),
@@ -2645,6 +2653,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "webhook" if wh_base else "polling"
             )
             ctx["webhook_full_url"] = (wh_base + wh_path) if wh_base else ""
+            ctx["webhook_health"] = last_webhook_health()
+            ctx["webhook_check_minutes"] = to_fa_digits(WEBHOOK_CHECK_MINUTES)
         elif tab == "links":
             from app.services.quick_links import build_magic_links_context
 
@@ -2960,6 +2970,12 @@ def create_api_app(lifespan=None) -> FastAPI:
                     "همه فیلدهای الزامی را پر کنید "
                     "(برای پاسارگارد: نام کاربری + رمز یا کلید API)"
                 )
+            if token != str(current.get("BOT_TOKEN") or "").strip():
+                # Checked before anything is written: a mistyped token no longer restarts into a dead bot.
+                try:
+                    uname = await verify_main_bot_token(session, token)
+                except ValueError as exc:
+                    return _bot_err(str(exc))
             try:
                 ids = parse_admin_ids(ids_raw)
             except ValueError:

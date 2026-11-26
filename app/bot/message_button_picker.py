@@ -8,6 +8,12 @@ an https link; the link is checked at once and joins the checklist as a chosen b
 colours the web form offers. A saved set (made on the web, where links and colours are set) is taken
 as it is. The flow that asked continues through the finisher it registered, with the chosen buttons;
 the buttons are validated there, against the sender's shop and permissions, before anything is sent.
+
+Every step has the shared «بازگشت» (``kb.back_button``: the bot's own label, colour and premium emoji)
+on a row of its own, and it goes exactly one step back: links → link text → checklist, colours →
+checklist, checklist → the question, question → the text prompt the flow asked before it (asked again
+as it was). A flow that opens straight on the checklist (``open_checklist``, e.g. the buttons under an
+FAQ answer) registers where the checklist's «بازگشت» leads.
 """
 
 from __future__ import annotations
@@ -21,13 +27,17 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.nav_input import finish_text_step
+from app.bot import keyboards as kb
+from app.bot.nav_input import CANCEL_CODE_KEY, PROMPT_TEXT_KEY, RETURN_TO_KEY, ask_text, finish_text_step
 from app.db.models import BotUser
 from app.services.button_styles import STYLE_OPTIONS, normalize_style
 from app.services.rich_text import button_display_text, button_icon_custom_emoji_id, pack_rich_text
+from app.services.users import current_ui_snapshot
 from app.services.message_buttons import (
     BUTTONS_MAX,
+    SCREENS,
     TARGET_LINK,
+    TARGET_PLAN,
     ButtonInput,
     ButtonRules,
     ScreenLabels,
@@ -50,6 +60,12 @@ CB_PRESET = "mbp:p:"
 CB_COLOR = "mbp:c:"
 CB_SEND = "mbp:s"
 CB_LINK = "mbp:l"
+CB_BACK = "mbp:b"
+CB_QUESTION = "mbp:q"
+CB_LINK_BACK = "mbp:lb"
+ENTRY_QUESTION = "question"
+ENTRY_CHECKLIST = "checklist"
+SEND_LABEL = "✅ ارسال"
 LINK_KEY_PREFIX = "u"
 LINK_ASK_LABEL = "🔗 متن دکمهٔ لینک را بفرستید (حداکثر ۴۰ نویسه). ایموجی و ایموجی پریمیوم هم مجاز است؛ اولین ایموجی پریمیوم آیکن دکمه می‌شود."
 LINK_ASK_URL = "🔗 حالا لینک دکمه را بفرستید؛ باید با https:// شروع شود."
@@ -71,7 +87,11 @@ STYLE_NAMES: dict[str, str] = {value: label for value, label, _css in STYLE_OPTI
 
 # finisher(callback, state, session, db_user, buttons, **middleware data)
 Finisher = Callable[..., Awaitable[None]]
+# back(callback, state, session, db_user, **middleware data): the screen before an ``open_checklist`` flow.
+Back = Callable[..., Awaitable[None]]
 _FINISHERS: dict[str, Finisher] = {}
+_BACKS: dict[str, Back] = {}
+_SEND_LABELS: dict[str, str] = {}
 
 
 class PickerStates(StatesGroup):
@@ -80,22 +100,37 @@ class PickerStates(StatesGroup):
     link_url = State()
 
 
-def register_flow(name: str, finisher: Finisher) -> None:
-    """A flow that asks for buttons; ``finisher`` continues it with the chosen buttons."""
+def register_flow(name: str, finisher: Finisher, *, back: Back | None = None, send_label: str = SEND_LABEL) -> None:
+    """A flow that asks for buttons; ``finisher`` continues it with the chosen buttons.
+
+    ``back`` is where the first screen's «بازگشت» leads for a flow opened with ``open_checklist``;
+    ``send_label`` names the last step's button («ارسال», or «ذخیره» for a flow that saves).
+    """
     _FINISHERS[name] = finisher
+    _SEND_LABELS[name] = send_label
+    if back is not None:
+        _BACKS[name] = back
 
 
-def question_markup() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
+def back_row(callback_data: str) -> list[InlineKeyboardButton]:
+    """The shared «بازگشت» on a row of its own, like every other screen of the bot."""
+    return [kb.back_button(current_ui_snapshot(), callback_data)]
+
+
+def question_markup(*, has_back: bool = False) -> InlineKeyboardMarkup:
+    rows = [
         [InlineKeyboardButton(text="✅ بله، دکمه بگذار", callback_data=CB_YES)],
         [InlineKeyboardButton(text="➡️ ارسال بدون دکمه", callback_data=CB_NO)],
-    ])
+    ]
+    if has_back:
+        rows.append(back_row(CB_BACK))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def option_labels(*, renew: bool, labels: ScreenLabels | None, links: dict[str, dict]) -> dict[str, str]:
     """Checklist key -> text: the bot screens (menu labels), then each link button added in this flow."""
     out = dict(target_options(renew=renew, links=False, labels=labels))
-    out.update({key: f"🔗 {link.get('label', '')}" for key, link in links.items()})
+    out.update({key: f"{'💎' if link.get('target') == TARGET_PLAN else '🔗'} {link.get('label', '')}" for key, link in links.items()})
     return out
 
 
@@ -130,8 +165,9 @@ def checklist_markup(
     labels: ScreenLabels | None = None,
     links: dict[str, dict] | None = None,
     may_link: bool = False,
+    back: str | None = None,
 ) -> InlineKeyboardMarkup:
-    """Two columns of ✅/⬜ targets and added links, «لینک دلخواه», one row per saved set, then «ادامه»."""
+    """Two columns of ✅/⬜ targets and added links, «لینک دلخواه», one row per saved set, «ادامه», then «بازگشت»."""
     icons = option_icons(labels, links)
     options = [
         InlineKeyboardButton(
@@ -148,6 +184,8 @@ def checklist_markup(
         InlineKeyboardButton(text=f"ادامه ({len(selected)})", callback_data=CB_DONE),
         InlineKeyboardButton(text="بدون دکمه", callback_data=CB_NO),
     ])
+    if back:
+        rows.append(back_row(back))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -158,9 +196,10 @@ def next_style(style: str) -> str:
 
 
 def colors_markup(
-    selected: list[str], styles: dict[str, str], *, labels: dict[str, str], icons: dict[str, str] | None = None
+    selected: list[str], styles: dict[str, str], *, labels: dict[str, str], icons: dict[str, str] | None = None,
+    send_label: str = SEND_LABEL,
 ) -> InlineKeyboardMarkup:
-    """Each chosen button drawn in its colour and premium emoji (a tap changes the colour), then «ارسال» and «بازگشت»."""
+    """Each chosen button drawn in its colour and premium emoji (a tap changes the colour), «ارسال», then «بازگشت»."""
     rows = []
     for key in selected:
         style = normalize_style(styles.get(key))
@@ -169,10 +208,8 @@ def colors_markup(
         rows.append([InlineKeyboardButton(
             text=text, callback_data=f"{CB_COLOR}{key}", **extra, **_icon_extra((icons or {}).get(key))
         )])
-    rows.append([
-        InlineKeyboardButton(text="✅ ارسال", callback_data=CB_SEND),
-        InlineKeyboardButton(text="⬅️ بازگشت", callback_data=CB_YES),
-    ])
+    rows.append([InlineKeyboardButton(text=send_label, callback_data=CB_SEND)])
+    rows.append(back_row(CB_YES))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -188,12 +225,60 @@ def toggle(selected: list[str], key: str) -> list[str]:
 async def ask_for_buttons(
     message: Message, state: FSMContext, *, flow: str, shop_id: int | None, renew: bool = False
 ) -> None:
-    """Ask the question in place of the text prompt (the same panel); the flow's own data stays in ``state``."""
-    await finish_text_step(message, state, text=QUESTION, inline=question_markup())
+    """Ask the question in place of the text prompt (the same panel); the flow's own data stays in ``state``.
+
+    The text prompt this message answered is remembered, so the question's «بازگشت» asks it again.
+    """
+    text_step = await _text_step(state)
+    await finish_text_step(message, state, text=QUESTION, inline=question_markup(has_back=text_step is not None))
     await state.set_state(PickerStates.picking)
     await state.update_data(
-        mbp_flow=flow, mbp_shop=shop_id, mbp_renew=renew, mbp_selected=[], mbp_styles={}, mbp_links={}
+        mbp_flow=flow, mbp_shop=shop_id, mbp_renew=renew, mbp_selected=[], mbp_styles={}, mbp_links={},
+        mbp_entry=ENTRY_QUESTION, mbp_text_step=text_step,
     )
+
+
+async def _text_step(state: FSMContext) -> dict[str, str | None] | None:
+    """The prompt the flow is in (state, text, cancel code, return), or ``None`` when it cannot be asked again."""
+    current = await state.get_state()
+    data = await state.get_data()
+    prompt, cancel = data.get(PROMPT_TEXT_KEY), data.get(CANCEL_CODE_KEY)
+    if not current or not prompt or not cancel:
+        return None
+    return {"state": current, "prompt": str(prompt), "cancel": str(cancel), "return_to": data.get(RETURN_TO_KEY)}
+
+
+def initial_choice(buttons: list[ButtonInput]) -> tuple[list[str], dict[str, str], dict[str, dict]]:
+    """Saved buttons as the checklist's (selected keys, colours, link and plan entries)."""
+    selected: list[str] = []
+    styles: dict[str, str] = {}
+    links: dict[str, dict] = {}
+    for item in buttons[:BUTTONS_MAX]:
+        if item.target in SCREENS:
+            key = item.target
+        elif item.target in (TARGET_LINK, TARGET_PLAN):
+            key = new_link_key(links)
+            links[key] = {"target": item.target, "label": item.label, "url": item.url, "icon": item.icon, "plan": item.plan}
+        else:
+            continue
+        if key not in selected:
+            selected.append(key)
+            styles[key] = normalize_style(item.style)
+    return selected, styles, links
+
+
+async def open_checklist(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, *, flow: str, shop_id: int | None,
+    initial: list[ButtonInput], flow_data: dict | None = None,
+) -> None:
+    """Open the checklist directly, filled with ``initial`` (editing saved buttons); «بازگشت» runs the flow's ``back``."""
+    selected, styles, links = initial_choice(initial)
+    await state.set_state(PickerStates.picking)
+    await state.update_data(
+        mbp_flow=flow, mbp_shop=shop_id, mbp_renew=False, mbp_selected=selected, mbp_styles=styles, mbp_links=links,
+        mbp_entry=ENTRY_CHECKLIST, mbp_text_step=None, **(flow_data or {}),
+    )
+    await _show_checklist(callback, state, session)
 
 
 async def _checklist(state: FSMContext, session: AsyncSession) -> InlineKeyboardMarkup:
@@ -207,6 +292,7 @@ async def _checklist(state: FSMContext, session: AsyncSession) -> InlineKeyboard
         labels=await sender_screen_labels(session, shop_id),
         links=dict(data.get("mbp_links") or {}),
         may_link=await shop_may_link(session, shop_id),
+        back=CB_QUESTION if data.get("mbp_entry") != ENTRY_CHECKLIST else CB_BACK,
     )
 
 
@@ -272,6 +358,7 @@ async def _show_colors(callback: CallbackQuery, state: FSMContext, session: Asyn
     markup = colors_markup(
         list(data.get("mbp_selected") or []), dict(data.get("mbp_styles") or {}),
         labels=await _labels(state, session), icons=icons,
+        send_label=_SEND_LABELS.get(str(data.get("mbp_flow") or ""), SEND_LABEL),
     )
     if isinstance(callback.message, Message):
         await callback.message.edit_text(COLORS, reply_markup=markup)
@@ -319,7 +406,9 @@ def chosen_inputs(selected: list[str], styles: dict[str, str], links: dict[str, 
     for key in selected:
         style = normalize_style(styles.get(key))
         link = links.get(key)
-        if link is not None:
+        if link is not None and link.get("target") == TARGET_PLAN:
+            out.append(ButtonInput(TARGET_PLAN, str(link.get("label") or ""), "", style, str(link.get("plan") or "")))
+        elif link is not None:
             out.append(ButtonInput(
                 TARGET_LINK, str(link.get("label") or ""), str(link.get("url") or ""), style, icon=str(link.get("icon") or "")
             ))
@@ -341,8 +430,7 @@ async def on_link(callback: CallbackQuery, state: FSMContext, session: AsyncSess
     await callback.answer()
     await state.set_state(PickerStates.link_label)
     if isinstance(callback.message, Message):
-        back = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ بازگشت", callback_data=CB_YES)]])
-        await callback.message.edit_text(LINK_ASK_LABEL, reply_markup=back)
+        await callback.message.edit_text(LINK_ASK_LABEL, reply_markup=InlineKeyboardMarkup(inline_keyboard=[back_row(CB_YES)]))
 
 
 @router.message(PickerStates.link_label)
@@ -359,7 +447,7 @@ async def on_link_label(message: Message, state: FSMContext) -> None:
         return
     await state.update_data(mbp_link_label=label, mbp_link_icon=icon)
     await state.set_state(PickerStates.link_url)
-    await message.answer(LINK_ASK_URL)
+    await message.answer(LINK_ASK_URL, reply_markup=InlineKeyboardMarkup(inline_keyboard=[back_row(CB_LINK_BACK)]))
 
 
 @router.message(PickerStates.link_url)
@@ -399,6 +487,47 @@ async def on_link_back(callback: CallbackQuery, state: FSMContext, session: Asyn
     await state.set_state(PickerStates.picking)
     await callback.answer()
     await _show_checklist(callback, state, session)
+
+
+@router.callback_query(F.data == CB_LINK_BACK, PickerStates.link_url)
+async def on_link_url_back(callback: CallbackQuery, state: FSMContext) -> None:
+    """From the link step back to the link's text."""
+    await state.set_state(PickerStates.link_label)
+    await state.update_data(mbp_link_label=None, mbp_link_icon=None)
+    await callback.answer()
+    if isinstance(callback.message, Message):
+        await callback.message.edit_text(LINK_ASK_LABEL, reply_markup=InlineKeyboardMarkup(inline_keyboard=[back_row(CB_YES)]))
+
+
+@router.callback_query(F.data == CB_QUESTION, PickerStates.picking)
+async def on_question(callback: CallbackQuery, state: FSMContext) -> None:
+    """From the checklist back to «دکمه پایین پیام باشه؟»."""
+    data = await state.get_data()
+    await callback.answer()
+    if isinstance(callback.message, Message):
+        await callback.message.edit_text(QUESTION, reply_markup=question_markup(has_back=bool(data.get("mbp_text_step"))))
+
+
+@router.callback_query(F.data == CB_BACK, PickerStates.picking)
+async def on_back(callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser, **kwargs) -> None:
+    """The first screen's «بازگشت»: the flow's own screen, or the text prompt asked again as it was."""
+    data = await state.get_data()
+    flow = str(data.get("mbp_flow") or "")
+    step = data.get("mbp_text_step")
+    back = _BACKS.get(flow) if data.get("mbp_entry") == ENTRY_CHECKLIST else None
+    if back is None and not step:
+        await callback.answer(EXPIRED, show_alert=True)
+        return
+    await callback.answer()
+    await state.update_data(mbp_selected=[], mbp_links={}, mbp_styles={}, mbp_text_step=None)
+    if back is not None:
+        await state.set_state(None)
+        await back(callback, state, session, db_user, **_extra(kwargs))
+        return
+    await ask_text(
+        callback, state, prompt=str(step["prompt"]), cancel_code=str(step["cancel"]), fsm_state=str(step["state"]),
+        return_to=step.get("return_to"), edit=True,
+    )
 
 
 @router.callback_query(F.data == CB_NO, PickerStates.picking)

@@ -7,7 +7,7 @@ from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
@@ -30,6 +30,7 @@ from app.services.color_tags import risk_mark
 from app.services.home_overview import bot_dashboard_summary
 from app.services.formatting import (
     bot_user_panel_label,
+    format_user_label,
     format_number,
     format_system_stats,
     format_toman,
@@ -78,6 +79,10 @@ from app.bot.handlers.cancellation_review import show_card as show_cancellation_
 from app.bot.handlers import stuck_orders
 from app.bot.handlers.payment_voids import void_button
 from app.bot.handlers.make_reseller_plan import ask_reseller_plan
+from app.bot.handlers.start_watch import watch_offer_markup
+from app.bot.menu_nav import build_main_reply_keyboard
+from app.bot.user_picker import PICK_HINT, picker_keyboard, shared_user_id
+from app.services.telegram_target import TargetNotFound, find_target_user, parse_telegram_target
 from app.bot.handlers.subscription_lookup import (
     RESELLER_SEARCH_PROMPT,
     SEARCH_PROMPT,
@@ -2971,17 +2976,19 @@ async def adm_resellers_add(callback: CallbackQuery, state: FSMContext, db_user:
         callback,
         state,
         prompt=(
-            "آیدی عددی تلگرام کاربر را برای نماینده‌شدن بفرستید.\n\n"
+            "آیدی عددی یا یوزرنیم تلگرام کاربر را برای نماینده‌شدن بفرستید.\n\n"
             "مثال:\n"
-            "<code>123456789 1</code>\n\n"
-            "• عدد اول: آیدی تلگرام\n"
-            "• عدد دوم: ۱ = اجازه تأیید رسید، ۰ یا خالی = بدون تأیید"
+            "<code>123456789 1</code> یا <code>@username 1</code>\n\n"
+            "• اول: آیدی عددی یا یوزرنیم\n"
+            "• بعد: ۱ = اجازه تأیید رسید، ۰ یا خالی = بدون تأیید"
         ),
         cancel_code="adm_home",
         return_to="adm:resellers",
         fsm_state=AdminStates.make_reseller,
         edit=True,
     )
+    if callback.message:
+        await callback.message.answer(PICK_HINT, reply_markup=picker_keyboard())
 
 @router.callback_query(F.data == "adm:resapp:list")
 @require_bot_owner_handler
@@ -3193,20 +3200,22 @@ async def make_res(
             reseller_owner_id=None,
         )
         return
+    picked = shared_user_id(message)
     parts = (message.text or "").split()
+    raw = str(picked) if picked is not None else (parts[0] if parts else "")
+    can_approve = picked is None and len(parts) > 1 and parts[1] in {"1", "approve=1", "yes", "بله"}
     try:
-        tg_id = int(parts[0])
-        can_approve = len(parts) > 1 and parts[1] in {"1", "approve=1", "yes", "بله"}
-    except ValueError:
-        await message.answer(
-            "پیام را به همین شکل بفرستید:\n<code>123456789 1</code>"
-        )
+        user = await find_target_user(session, raw, scope=true())
+    except TargetNotFound as exc:
+        target = parse_telegram_target(raw)
+        await message.answer(html.escape(str(exc)), reply_markup=watch_offer_markup(target))
         return
-    result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        await message.answer("کاربر باید حداقل یک بار ربات را استارت کرده باشد.")
+    except ValueError as exc:
+        await message.answer(html.escape(str(exc)))
         return
+    # The picker keyboard is gone after one use; the admin's own menu comes back with the choice.
+    main_kb, _ui, _role = await build_main_reply_keyboard(session, db_user, is_reseller_bot=False, reseller_owner_id=None)
+    await message.answer(f"✅ {format_user_label(user)}", reply_markup=main_kb)
     await ask_reseller_plan(
         message, state, session, user_id=int(user.id), can_approve=can_approve
     )

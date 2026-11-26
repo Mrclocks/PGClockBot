@@ -311,17 +311,17 @@
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-create-title">
     {{ ds_modal_head('users', 'ساخت کاربر ربات', 'user-create-title') }}
     <form method="post" action="/users/create" class="form-stack ds-body"
-          data-confirm="کاربر جدید با این شناسه تلگرام ساخته شود؟"
+          data-confirm="با آیدی عددی، کاربر تازه ساخته می‌شود؛ با یوزرنیم، کاربر موجود باز می‌شود. ادامه می‌دهید؟"
           data-confirm-title="تأیید ساخت کاربر"
           data-confirm-label="ساخت کاربر">
       <input type="hidden" name="return_filter" value="{{ flt }}" />
       {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
       {% call ds_sec('حساب تلگرام', extra_class='ds-sec-first') %}
         <p class="ds-desc">کاربر با نقش «کاربر» ساخته می‌شود. اگر بعداً در ربات /start بزند، پروفایل تلگرام به‌روز می‌شود.</p>
-        <label class="form-field"><span>شناسه تلگرام (عددی) <span class="ds-req" aria-hidden="true">*</span></span>
-          <input name="telegram_id" type="number" required min="1" step="1" inputmode="numeric"
-                 placeholder="مثلاً 123456789" dir="ltr" autocomplete="off" />
-          <small class="muted">همان عددی که در @userinfobot یا پروفایل تلگرام می‌بینید — نه @username</small>
+        <label class="form-field"><span>آیدی عددی یا یوزرنیم تلگرام <span class="ds-req" aria-hidden="true">*</span></span>
+          <input name="telegram_id" required maxlength="64"
+                 placeholder="مثلاً 123456789 یا @username" dir="ltr" autocomplete="off" />
+          <small class="muted">با آیدی عددی کاربر تازه ساخته می‌شود. با یوزرنیم، اگر پیش‌تر ربات را استارت کرده باشد پروفایلش باز می‌شود؛ تلگرام از یوزرنیم آیدی نمی‌دهد، پس کاربر تازه فقط با آیدی عددی ساخته می‌شود.</small>
         </label>
         <label class="form-field">نام کاربری تلگرام
           <input name="username" type="text" maxlength="64" placeholder="@username (اختیاری)" dir="ltr" autocomplete="off" />

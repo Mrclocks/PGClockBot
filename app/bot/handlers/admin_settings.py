@@ -126,6 +126,7 @@ from app.bot.handlers.settings_labels import (
     sub_back,
 )
 from app.bot.handlers.guide_editor import entry_button as guides_entry_button
+from app.bot.handlers.faq_editor import entry_button as faq_entry_button
 
 
 def _hub_markup(ui: dict[str, str]) -> InlineKeyboardMarkup:
@@ -879,6 +880,7 @@ async def _supports_panel(session: AsyncSession) -> Panel:
         )
     if not contacts:
         rows.append([InlineKeyboardButton(text="لیست خالی است", callback_data="adm:st:noop")])
+    rows.append([faq_entry_button(for_reseller=False)])
     rows.append(_back_row("adm:st:hub"))
     return (
         "🎧 <b>پشتیبان‌ها</b>\n"

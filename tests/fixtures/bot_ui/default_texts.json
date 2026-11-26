@@ -292,6 +292,8 @@
   "btn_style_cancel": "danger",
   "btn_style_confirm": "success",
   "btn_style_connection_status_admin": "primary",
+  "btn_style_faq": "",
+  "btn_style_faq_item": "primary",
   "btn_style_force_join_check": "primary",
   "btn_style_guides": "primary",
   "btn_style_home": "",
