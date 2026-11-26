@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import httpx
+import sqlalchemy as sa
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import select
 
@@ -78,8 +79,9 @@ class ScopeTests(FaqPageCase):
         self.assertIsNone(faq_scope(BARE_ADMIN))
 
     def test_form_values_become_a_draft(self) -> None:
-        draft = draft_from_form({**FORM, "button_style": "danger", "icon_custom_emoji_id": "", "is_active": ""})
+        draft = draft_from_form({**FORM, "button_style": "danger", "icon_custom_emoji_id": "999", "is_active": ""})
         self.assertEqual((draft.button_style, draft.icon_custom_emoji_id, draft.is_active), ("danger", None, False))
+        self.assertEqual(draft_from_form(FORM, icon="42").icon_custom_emoji_id, "42")
         self.assertIsNone(draft_from_form(FORM).button_style)
 
     def test_the_faq_row_is_in_the_customer_area_for_staff_who_may_open_it(self) -> None:
@@ -148,11 +150,25 @@ class PageTests(FaqPageCase):
 
     async def test_update_keeps_the_values_sent(self) -> None:
         item = await self.seed(SHOP)
-        data = {**FORM, "button_style": "", "icon_custom_emoji_id": "5368324170671202286", "is_active": ""}
+        data = {**FORM, "button_style": "", "is_active": ""}
         await self.call(SHOP_STAFF, "POST", f"/faq/{item.id}", data=data)
         async with self.Session() as session:
             stored = await session.get(FaqItem, item.id)
-        self.assertEqual((stored.button_style, stored.icon_custom_emoji_id, stored.is_active), ("", "5368324170671202286", False))
+        self.assertEqual((stored.button_style, stored.is_active), ("", False))
+
+    async def test_the_web_never_sets_a_premium_icon_but_keeps_the_one_set_in_the_bot(self) -> None:
+        item = await self.seed(SHOP)
+        async with self.Session() as session:
+            await faq.change_faq_item(session, item.id, reseller_id=SHOP, icon_custom_emoji_id="5368324170671202286")
+        forged = {**FORM, "icon_custom_emoji_id": "111"}
+        await self.call(SHOP_STAFF, "POST", f"/faq/{item.id}", data=forged)
+        await self.call(SHOP_STAFF, "POST", FAQ_PAGE, data=forged)
+        async with self.Session() as session:
+            icons = dict((await session.execute(sa.select(FaqItem.id, FaqItem.icon_custom_emoji_id))).all())
+        self.assertEqual(icons.pop(item.id), "5368324170671202286")
+        self.assertEqual(list(icons.values()), [None])
+        page = await self.call(SHOP_STAFF, "GET", FAQ_PAGE)
+        self.assertNotIn('name="icon_custom_emoji_id"', page.text)
 
     async def test_hostile_question_is_escaped_on_the_page(self) -> None:
         await self.seed(SHOP, '<script>alert(1)</script>"')

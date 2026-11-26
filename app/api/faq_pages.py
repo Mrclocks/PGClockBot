@@ -16,7 +16,7 @@ from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
+from app.services.button_styles import STYLE_OPTIONS
 from app.services.message_buttons import ButtonInput, buttons_form_context, form_inputs, stored_inputs
 from app.services.faq import (
     INHERIT_STYLE,
@@ -61,6 +61,8 @@ RESULTS = {
     "deleted": "سوال حذف شد.",
     "imported": "متن قبلی به سوال‌ها تبدیل شد.",
 }
+# The colour choices of a question's button: its own colour, or the «هر سوال متداول» colour of the colours tab.
+QUESTION_STYLE_OPTIONS = [(INHERIT_STYLE, "پیش‌فرض سوال‌ها", "default"), *STYLE_OPTIONS]
 NO_SHOP = "محدوده فروشگاه مشخص نیست — به این بخش دسترسی ندارید"
 
 
@@ -80,15 +82,19 @@ def faq_scope(staff: dict) -> FaqScope | None:
     return FaqScope(shop, "/shop-settings") if shop else None
 
 
-def draft_from_form(form: dict) -> FaqDraft:
-    """The submitted fields as a draft; ``FaqError`` from the service checks the values."""
+def draft_from_form(form: dict, *, icon: str | None = None) -> FaqDraft:
+    """The submitted fields as a draft; ``FaqError`` from the service checks the values.
+
+    The web panel cannot type a premium emoji, so the icon is never read from the form: ``icon`` is the one
+    the question already has (set in the bot), kept as it is.
+    """
     # "" is the white client default, so only a missing field means «inherit».
     style = str(form.get("button_style", INHERIT_STYLE))
     return FaqDraft(
         question=str(form.get("question") or ""),
         answer=str(form.get("answer") or ""),
         button_style=None if style == INHERIT_STYLE else style,
-        icon_custom_emoji_id=str(form.get("icon_custom_emoji_id") or "") or None,
+        icon_custom_emoji_id=icon,
         is_active=str(form.get("is_active") or "") in {"1", "on", "true"},
     )
 
@@ -145,7 +151,7 @@ def register_faq_pages(  # noqa: C901 - counts the nested routes; each is listed
             "has_legacy": bool(legacy.strip()),
             "total_views": sum(item.view_count for item in items),
             "total_tickets": sum(item.ticket_count for item in items),
-            "style_options": PLAN_BUTTON_STYLE_OPTIONS,
+            "style_options": QUESTION_STYLE_OPTIONS,
             "tab_nav": group_settings_tabs(tabs_with_page_tabs(tabs, staff), FAQ_TAB_KEY, area=CUSTOMER_AREA),
             "settings_area": settings_area(CUSTOMER_AREA, base=scope.settings_base, bot_title="تنظیمات ربات"),
             "settings_base": scope.settings_base,
@@ -166,9 +172,9 @@ def register_faq_pages(  # noqa: C901 - counts the nested routes; each is listed
         reopen = (key, draft_from_form(form), form_inputs(form))
         return await page(request, session, staff, scope, error=str(exc), reopen=reopen, status_code=400)
 
-    async def submitted(session: AsyncSession, form: object, scope: FaqScope) -> FaqDraft:
+    async def submitted(session: AsyncSession, form: object, scope: FaqScope, *, icon: str | None = None) -> FaqDraft:
         """The form as a draft with its buttons checked for this shop; ``FaqError`` with the reason."""
-        draft = draft_from_form(dict(form))
+        draft = draft_from_form(dict(form), icon=icon)
         draft.buttons = await clean_answer_buttons(session, form_inputs(form), reseller_id=scope.reseller_id)
         return draft
 
@@ -214,7 +220,9 @@ def register_faq_pages(  # noqa: C901 - counts the nested routes; each is listed
         try:
             if iid is None:
                 raise FaqError(NOT_FOUND)
-            await update_faq_item(session, iid, await submitted(session, form, scope), reseller_id=scope.reseller_id)
+            stored = await get_faq_item(session, iid, reseller_id=scope.reseller_id)
+            draft = await submitted(session, form, scope, icon=stored.icon_custom_emoji_id)
+            await update_faq_item(session, iid, draft, reseller_id=scope.reseller_id)
         except FaqError as exc:
             return await refused(request, session, staff, scope, exc, str(iid or ""), form)
         return _done("saved")
