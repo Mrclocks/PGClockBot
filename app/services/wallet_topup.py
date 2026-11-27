@@ -103,6 +103,21 @@ class TopupError(ValueError):
     """A top-up rule the customer must see (Persian, safe to show)."""
 
 
+TYPED_AMOUNT_RULE = f"مبلغ را به تومان و بین {MIN_TOPUP_AMOUNT:,} تا {MAX_TOPUP_AMOUNT:,} بفرستید."
+_AMOUNT_GROUPING = str.maketrans("", "", ",٬، ")
+
+
+def parse_typed_topup_amount(raw: str | None) -> int:
+    """A top-up amount the customer typed («۷۳٬۰۰۰» or 73000); ``TopupError`` when it is not one."""
+    text = (raw or "").translate(_AMOUNT_GROUPING).strip()
+    if not text.isdecimal() or len(text) > 12:
+        raise TopupError(TYPED_AMOUNT_RULE)
+    amount = int(text)
+    if not MIN_TOPUP_AMOUNT <= amount <= MAX_TOPUP_AMOUNT:
+        raise TopupError(TYPED_AMOUNT_RULE)
+    return amount
+
+
 def parse_topup_presets(ui: dict | None = None) -> list[int]:
     """CSV of toman amounts from ``wallet_topup_presets`` (falls back to defaults)."""
     raw = str((ui or {}).get("wallet_topup_presets") or "").strip()

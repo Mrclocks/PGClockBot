@@ -176,7 +176,7 @@ class StoredNameTests(NameFixture):
         self.assertEqual(username, "clk_ali")
         self.assertEqual(order.requested_username, "ali")
 
-    async def test_a_username_already_in_use_gets_a_number_after_the_suffix(self) -> None:
+    async def test_a_username_already_in_use_gets_a_number_after_the_name(self) -> None:
         self.session.add(UserService(bot_user_id=self.other.id, pg_username="CLK_ali"))
         await self.session.commit()
         order = await self.order(self.buyer)
@@ -186,15 +186,15 @@ class StoredNameTests(NameFixture):
         self.assertEqual(username, "clk_ali2")
         self.assertEqual(order.requested_username, "ali-2")
 
-    async def test_the_number_goes_after_the_plan_suffix_and_counts_up(self) -> None:
+    async def test_the_number_goes_before_the_plan_suffix_and_counts_up(self) -> None:
         plan = SimpleNamespace(data_limit_gb=30, pg_username_prefix="vip", pg_username_suffix="_x",
                                pg_username_pattern=None)
         with patch("app.services.users.get_all_settings", AsyncMock(return_value={})):
             first = await generate_pg_username(AsyncMock(), user_id=7, plan=plan, chosen_name="ali-2")
             third = await generate_pg_username(AsyncMock(), user_id=7, plan=plan, chosen_name="ali-10")
 
-        self.assertEqual(first, "vip_ali_x2")
-        self.assertEqual(third, "vip_ali_x10")
+        self.assertEqual(first, "vip_ali2_x")
+        self.assertEqual(third, "vip_ali10_x")
         self.assertEqual(chosen_name_variant("ali"), "ali-2")
         self.assertEqual(chosen_name_variant("ali-2"), "ali-3")
 
@@ -228,6 +228,15 @@ class StoredNameTests(NameFixture):
         await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali")
 
         self.assertRegex(order.requested_username, r"^ali-\d+$")
+
+    async def test_a_typed_name_ending_in_a_number_clashes_with_a_numbered_open_order(self) -> None:
+        await self.order(self.other, requested_username="ali-2")
+        order = await self.order(self.buyer)
+
+        username = await naming.set_service_name(self.session, order, buyer_id=self.buyer.id, raw="ali2")
+
+        self.assertNotEqual(username, "clk_ali2")
+        self.assertEqual(order.requested_username, "ali2-2")
 
     async def test_a_long_taken_name_stays_within_the_limit(self) -> None:
         wanted = "a" * naming.MAX_LENGTH

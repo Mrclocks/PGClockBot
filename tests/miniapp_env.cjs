@@ -49,6 +49,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
   const back = { visible: false, handler: null };
   const toasts = [];
   const location = { hash, pathname };
+  const listeners = {};
   const doc = {
     documentElement: { attrs: {}, setAttribute(name, value) { this.attrs[name] = String(value); } },
     body: { classList: element("body").classList, appendChild(el) { toasts.push(el); } },
@@ -56,8 +57,10 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
     querySelectorAll: () => [],
     querySelector: () => null,
     createElement: () => ({ setAttribute() {}, remove() {}, className: "", textContent: "" }),
-    addEventListener() {},
+    addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
   };
+  /** Fire a document-level event (input, change, ...) at a fake target. */
+  const dispatch = (type, target) => (listeners[type] || []).forEach((fn) => fn({ type, target, preventDefault() {} }));
   const tg = telegram ? {
     initData, colorScheme: "dark", ready() {}, expand() {},
     colors: {}, setHeaderColor(c) { this.colors.header = c; }, setBackgroundColor(c) { this.colors.background = c; },
@@ -98,7 +101,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
   for (const file of SCRIPTS) {
     vm.runInContext(fs.readFileSync(path.join(STATIC, file), "utf8"), context, { filename: file });
   }
-  return { context, mini: context.PGMini, element, calls, back, toasts, location };
+  return { context, mini: context.PGMini, element, calls, back, toasts, location, dispatch };
 }
 
 /** Wait until queued promise callbacks (fetch mocks, renders) have run. */

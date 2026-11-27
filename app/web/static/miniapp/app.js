@@ -1146,9 +1146,11 @@
     setSheetBody(seq, R.topupFormHtml(r.data));
   }
 
+  /** A typed amount always wins over the preset chip that is selected by default. */
   function topupAmount(form, options) {
+    const typed = String(form.elements.custom_amount.value || "").trim();
     const preset = form.elements.preset ? String(form.elements.preset.value || "custom") : "custom";
-    const amount = preset === "custom" ? core.parseAmount(form.elements.custom_amount.value) : Number(preset);
+    const amount = typed || preset === "custom" ? core.parseAmount(typed) : Number(preset);
     if (!amount || amount < options.min_amount || amount > options.max_amount) return null;
     return amount;
   }
@@ -1762,8 +1764,25 @@
     action(el, event);
   }
 
+  /** Keep the chips and the typed amount in step, so the screen shows the amount that is sent. */
+  function syncTopupAmount(el) {
+    const form = el.form;
+    if (!form) return;
+    if (el.name === "preset" && el.value !== "custom") {
+      form.elements.custom_amount.value = "";
+      return;
+    }
+    if (el.name !== "custom_amount" || !String(el.value || "").trim()) return;
+    const chip = form.querySelector("input[name=preset][value=custom]");
+    if (chip) chip.checked = true;
+  }
+
   function onChange(event) {
     const el = event.target;
+    if (el.matches && el.matches(".topup-form input[name=preset]")) {
+      syncTopupAmount(el);
+      return;
+    }
     if (el.matches && el.matches("[data-input=receipt-file]")) {
       const label = el.closest(".file-field").querySelector(".file-field-label");
       const file = el.files && el.files[0];
@@ -1805,6 +1824,10 @@
     const el = event.target;
     if (el.matches && el.matches("[data-input=service-name]")) {
       state.serviceName = String(el.value || "");
+      return;
+    }
+    if (el.matches && el.matches("[data-input=topup-custom]")) {
+      syncTopupAmount(el);
       return;
     }
     if (!el.matches || !el.matches("[data-input=service-search]")) return;

@@ -5,7 +5,7 @@ When the platform grants a shop ``custom_service_name`` (or turns on
 required name step (a typed name or «🎲 اسم تصادفی») before the payment screen. The
 name is stored on the order and takes the place of the naming pattern's ``{random}``
 part at delivery, so the shop's prefix and suffix stay. A name already in use gets a
-number at the end of the username (``clk_ali_x2``) without asking the buyer, here and
+number at the end of the name, before the suffix (``clk_ali2_x``), without asking the buyer, here and
 again at delivery if the panel still holds it (see ``orders.create_with_name_fallback``).
 """
 
@@ -22,6 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Order, OrderStatus, Plan, UserService
 from app.services.orders import (
     CHOSEN_NAME_MAX_LENGTH,
+    CHOSEN_NAME_NUMBER_SEPARATOR,
+    chosen_name_in_username,
     chosen_name_variant,
     generate_pg_username,
     is_mutation_order_note,
@@ -116,6 +118,17 @@ async def preview_username(session: AsyncSession, order: Order, name: str) -> st
     )
 
 
+def _same_username_spellings(name: str) -> set[str]:
+    """Every stored name that fills the username like ``name``: "ali2" and "ali-2" both read "ali2"."""
+    shown = chosen_name_in_username(name)
+    digits = len(shown) - len(shown.rstrip(string.digits))
+    spellings = {shown}
+    for cut in range(len(shown) - digits, len(shown)):
+        if cut > 0 and shown[cut] != "0":
+            spellings.add(f"{shown[:cut]}{CHOSEN_NAME_NUMBER_SEPARATOR}{shown[cut:]}")
+    return spellings
+
+
 async def _name_in_use(session: AsyncSession, order: Order, name: str, username: str) -> bool:
     """Another service already has this username, or another open order in the shop chose the name."""
     # Deliberately global: one PasarGuard panel serves every shop, and panel usernames
@@ -128,7 +141,12 @@ async def _name_in_use(session: AsyncSession, order: Order, name: str, username:
     shop = Order.reseller_id.is_(None) if order.reseller_id is None else Order.reseller_id == int(order.reseller_id)
     claimed = await session.scalar(
         select(Order.id)
-        .where(Order.requested_username == name, Order.id != int(order.id), shop, Order.status.in_(_HELD_STATUSES))
+        .where(
+            Order.requested_username.in_(_same_username_spellings(name)),
+            Order.id != int(order.id),
+            shop,
+            Order.status.in_(_HELD_STATUSES),
+        )
         .limit(1)
     )
     return claimed is not None
@@ -166,7 +184,7 @@ async def _store_name(session: AsyncSession, order_id: int, *, buyer_id: int, na
 async def set_service_name(session: AsyncSession, order: Order, *, buyer_id: int, raw: str | None) -> str:
     """Store the name on the buyer's own unpaid order; returns the panel username.
 
-    A name already in use silently gets a number at the end. Two buyers sending
+    A name already in use silently gets a number after the name. Two buyers sending
     the same name at the same moment both pass the lookup; the unique index on open
     orders refuses the second write, and the retry finds the name taken.
     """
