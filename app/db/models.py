@@ -134,6 +134,9 @@ class PlanCategory(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # ``description`` with its premium emoji, packed by rich_text when edited in the bot; used only
+    # while its text still equals ``description`` (a web edit leaves it stale and ignored).
+    description_rich: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # users | resellers — which unified-modal audience can pick this label
     audience: Mapped[str] = mapped_column(String(16), default="users", index=True)
     # NULL = platform (admin) catalog; set for reseller-owned shop categories
@@ -166,6 +169,8 @@ class Plan(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Same as PlanCategory.description_rich: premium emoji of a bot-edited description.
+    description_rich: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     price: Mapped[int] = mapped_column(Integer)  # toman
     # 0 = unlimited duration (no expire on custom PG create / renew)
     duration_days: Mapped[int] = mapped_column(Integer, default=30)

@@ -15,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Order, Plan
+from app.services.catalog_descriptions import description_html
 from app.services.catalog_pricing import active_discounts, price_html, product_target, quote_price
 from app.services.formatting import copyable, format_message, format_plan_duration_days, format_toman, info_block, kv_line
 from app.services.custom_service_name import preview_username
@@ -43,7 +44,7 @@ async def _plan_lines(session: AsyncSession, plan: Plan, order: Order, currency:
     each = " هر سرویس" if quantity > 1 else ""
     lines = [kv_line("💎", "پلن", f"<b>{html.escape(plan.name or 'پلن')}</b>")]
     if plan.description and not custom:
-        lines.append(html.escape(plan.description.strip()))
+        lines.append(description_html(plan, limit=None))
     lines += [
         kv_line("⏱", f"مدت{each}", f"<b>{format_plan_duration_days(plan.duration_days)}</b>"),
         kv_line("📦", f"حجم{each}", f"<b>{_volume(plan)}</b>"),

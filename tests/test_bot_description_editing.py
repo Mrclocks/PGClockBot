@@ -2,8 +2,14 @@ import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from aiogram.types import MessageEntity
+
 from app.bot.handlers import plan_catalog_manage as pcm
 from app.bot.handlers import reseller_plans as rp
+from app.services.catalog_descriptions import description_html
+
+PREMIUM = MessageEntity(type="custom_emoji", offset=0, length=1, custom_emoji_id="77")
+PREMIUM_HTML = '<tg-emoji emoji-id="77">⭐</tg-emoji>'
 
 
 def _state(data: dict) -> MagicMock:
@@ -14,15 +20,16 @@ def _state(data: dict) -> MagicMock:
     return state
 
 
-def _message(text: str) -> MagicMock:
+def _message(text: str, entities: list | None = None) -> MagicMock:
     message = MagicMock()
     message.text = text
+    message.entities = entities or []
     message.answer = AsyncMock()
     return message
 
 
 class CategoryDescriptionBotTests(unittest.IsolatedAsyncioTestCase):
-    async def _save(self, text: str) -> AsyncMock:
+    async def _save(self, text: str, entities: list | None = None) -> AsyncMock:
         update = AsyncMock()
         with patch.object(pcm, "resolve_catalog_staff", AsyncMock(return_value={"role": "admin"})), \
              patch.object(pcm, "_pcm_ui", AsyncMock(return_value={})), \
@@ -30,7 +37,7 @@ class CategoryDescriptionBotTests(unittest.IsolatedAsyncioTestCase):
              patch("app.services.plan_categories.update_category", update), \
              patch("app.services.plan_categories.list_categories", AsyncMock(return_value=[])):
             await pcm.pcm_cat_desc_save(
-                _message(text), _state({"_pcm_edit_cat_id": 7}), MagicMock(), MagicMock()
+                _message(text, entities), _state({"_pcm_edit_cat_id": 7}), MagicMock(), MagicMock()
             )
         return update
 
@@ -41,14 +48,20 @@ class CategoryDescriptionBotTests(unittest.IsolatedAsyncioTestCase):
     async def test_dash_clears_category_description(self) -> None:
         update = await self._save("-")
         self.assertEqual(update.await_args.kwargs["description"], "")
+        self.assertIsNone(update.await_args.kwargs["description_rich"])
+
+    async def test_premium_emoji_of_the_description_are_kept(self) -> None:
+        update = await self._save("⭐ پرسرعت", [PREMIUM])
+        saved = NS(**{k: update.await_args.kwargs[k] for k in ("description", "description_rich")})
+        self.assertEqual(description_html(saved), f"{PREMIUM_HTML} پرسرعت")
 
 
 class ResellerPlanDescriptionBotTests(unittest.IsolatedAsyncioTestCase):
-    async def _save(self, plan: NS, owner_id: int, text: str) -> MagicMock:
+    async def _save(self, plan: NS, owner_id: int, text: str, entities: list | None = None) -> MagicMock:
         session = MagicMock()
         session.get = AsyncMock(return_value=plan)
         session.commit = AsyncMock()
-        message = _message(text)
+        message = _message(text, entities)
         with patch.object(rp, "_actor", AsyncMock(return_value=(owner_id, NS()))), \
              patch.object(rp, "has_bot_perm", return_value=True), \
              patch.object(rp, "_plan_text_for", AsyncMock(return_value="x")), \
@@ -64,6 +77,13 @@ class ResellerPlanDescriptionBotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(plan.description, "یک ماهه")
         await self._save(plan, 5, "-")
         self.assertIsNone(plan.description)
+
+    async def test_premium_emoji_of_a_plan_description_are_kept(self) -> None:
+        plan = NS(id=3, owner_reseller_id=5, description=None, description_rich=None)
+        await self._save(plan, 5, "⭐ یک ماهه", [PREMIUM])
+        self.assertEqual(description_html(plan, limit=None), f"{PREMIUM_HTML} یک ماهه")
+        await self._save(plan, 5, "-")
+        self.assertEqual((plan.description, plan.description_rich), (None, None))
 
     async def test_other_shops_plan_is_not_changed(self) -> None:
         plan = NS(id=3, owner_reseller_id=99, description="keep")

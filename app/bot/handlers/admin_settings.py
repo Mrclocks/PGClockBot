@@ -1374,14 +1374,14 @@ async def settings_edit_ask(
     if key == "force_join_channel":
         hint = "هر خط یک کانال (@channel یا آیدی).\nعضویت همه الزامی ذخیره می‌شود.\nبرای انصراف: انصراف"
     else:
-        from app.services.rich_text import is_button_label_key, is_message_rich_key
+        from app.services.rich_text import is_button_label_key, keeps_premium_emoji
 
         if is_button_label_key(key):
             hint += (
                 "\n<i>ایموجی پریمیوم به‌عنوان آیکن دکمه "
                 "(icon_custom_emoji_id) ذخیره می‌شود.</i>"
             )
-        elif is_message_rich_key(key):
+        elif keeps_premium_emoji(key):
             hint += "\n<i>ایموجی پریمیوم در متن پیام حفظ می‌شود.</i>"
     template_hint = text_template_hint(key)
     if template_hint:

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.auth import resolve_bot_owner_principal
 from app.bot.keyboards import back_button
 from app.db.models import BotUser
+from app.services.rich_text import custom_emoji_html, unpack_rich_text
 from app.services.connection_monitor_timing import DEFAULT_INTERVAL_SECONDS, INTERVAL_CHOICES
 from app.services.authz import authz_from_staff
 from app.services.connection_monitor_access import MONITOR_ACCESS_DENIED, MonitorAccess
@@ -51,7 +52,11 @@ async def bot_monitor_access(session: AsyncSession, user: BotUser, *, is_reselle
 
 
 def monitor_text(ui: dict[str, str], key: str) -> str:
-    return html.escape(safe_format(ui[key]))
+    """A connection-status text as HTML; a bot-edited one keeps its premium emoji."""
+    text, entities = unpack_rich_text(ui[key])
+    if entities:
+        return custom_emoji_html(text, entities)
+    return html.escape(safe_format(text))
 
 
 def checked_time(value: datetime | None) -> str:

@@ -19,6 +19,8 @@ from typing import Any, Mapping, Sequence
 
 from aiogram.types import MessageEntity
 
+from app.services.customer_notice_texts import NOTICE_TEXT_KEYS
+
 logger = logging.getLogger(__name__)
 
 _PACK_VERSION = 1
@@ -259,6 +261,43 @@ def custom_emoji_html(
     return "".join(parts)
 
 
+def premium_text_from_message(
+    text: str | None, entities: Sequence[MessageEntity] | None, *, limit: int | None = None
+) -> tuple[str, str | None]:
+    """A bot message's text as stored (stripped, cut to ``limit`` characters) and its packed premium emoji.
+
+    The second value is None when no premium emoji survives the strip and cut. Other entities
+    (bold, links, ...) are not kept: the text is shown inside the bot's own HTML.
+    """
+    raw = text or ""
+    plain = raw.strip()
+    if limit is not None:
+        plain = plain[:limit].rstrip()
+    lead = utf16_len(raw) - utf16_len(raw.lstrip())
+    size = utf16_len(plain)
+    kept = [
+        clone_entity(e, offset=int(e.offset) - lead)
+        for e in entities or []
+        if _entity_type_str(e) == "custom_emoji" and e.custom_emoji_id
+        and int(e.offset) >= lead and int(e.offset) - lead + int(e.length) <= size
+    ]
+    return plain, (pack_rich_text(plain, kept) if kept else None)
+
+
+def premium_text_html(plain: str | None, packed: str | None, *, end: int | None = None) -> str:
+    """HTML of ``plain`` with the premium emoji of ``packed`` while its text is still ``plain``.
+
+    ``end`` cuts the text at that many characters. Without a matching ``packed`` the text is escaped.
+    """
+    body = plain or ""
+    shown = body if end is None else body[:end]
+    if packed:
+        text, entities = unpack_rich_text(packed)
+        if entities and text == body:
+            return custom_emoji_html(text, entities, end=utf16_len(shown))
+    return html.escape(shown, quote=False)
+
+
 def strip_custom_emoji_spans(
     text: str, entities: Sequence[MessageEntity] | None
 ) -> str:
@@ -354,6 +393,23 @@ TERMS_RICH_KEYS = frozenset(
     }
 )
 
+# Connection status texts: rendered by connection_status_ui.monitor_text, premium emoji included.
+CONNECTION_STATUS_RICH_KEYS = frozenset(
+    {
+        "connection_status_title",
+        "connection_status_empty",
+        "connection_status_error",
+        "connection_status_admin_title",
+        "connection_status_account_prompt",
+        "connection_status_name_prompt",
+        "connection_status_order_prompt",
+    }
+)
+
+# HTML message templates (placeholders filled by message_variables) whose bot edit keeps premium
+# emoji as <tg-emoji> tags in the stored HTML instead of a packed value.
+HTML_TEMPLATE_EMOJI_KEYS = frozenset({"user_alert_time_text", "user_alert_traffic_text", *NOTICE_TEXT_KEYS})
+
 # Message bodies packed/re-sent with entities. Button labels use icon_custom_emoji_id
 # separately (see is_button_label_key) — do not put btn_* here except legacy terms btns.
 MESSAGE_RICH_KEYS = frozenset(
@@ -390,6 +446,7 @@ MESSAGE_RICH_KEYS = frozenset(
         "stars_title",
         "stars_description",
         *TERMS_RICH_KEYS,
+        *CONNECTION_STATUS_RICH_KEYS,
     }
 )
 
@@ -398,12 +455,19 @@ def is_message_rich_key(key: str | None) -> bool:
     return bool(key) and str(key) in MESSAGE_RICH_KEYS
 
 
+def keeps_premium_emoji(key: str | None) -> bool:
+    """Whether a bot edit of this setting keeps the premium emoji of the message (for the edit hint)."""
+    return is_message_rich_key(key) or str(key or "") in HTML_TEMPLATE_EMOJI_KEYS
+
+
 def pack_setting_from_message(key: str, message: Any) -> str:
     """Pack bot-edited setting; preserve entities for message bodies + button icons."""
     text = getattr(message, "text", None) or ""
     entities = getattr(message, "entities", None)
     if is_message_rich_key(key):
         return pack_rich_text(text, entities)
+    if key in HTML_TEMPLATE_EMOJI_KEYS and first_custom_emoji_id(entities):
+        return custom_emoji_html(text, entities).strip()
     if is_button_label_key(key) and first_custom_emoji_id(entities):
         return pack_rich_text(text, entities)
     return (text or "").strip()

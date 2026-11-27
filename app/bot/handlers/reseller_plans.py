@@ -16,6 +16,8 @@ from app.bot import web_panel_card
 from app.bot.list_pages import page_number
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
+from app.services.catalog_descriptions import description_html
+from app.services.rich_text import premium_text_from_message
 from app.services.plan_panel_groups import (
     PANEL_GROUPS_LABEL,
     apply_plan_group_target,
@@ -34,6 +36,9 @@ from app.services import bot_feedback_texts as feedback
 import logging
 
 logger = logging.getLogger(__name__)
+
+# A shop plan description is shown under the plan in the bot; longer text is cut when saved.
+PLAN_DESCRIPTION_LIMIT = 1000
 
 # The shop plans screen: add / catalog actions and the plan list.
 PLANS_SCREEN = "res:plans"
@@ -153,7 +158,7 @@ def _plan_text(plan: Plan, *, category_name: str | None = None) -> str:
         else (f"گروه {plan.pg_group_ids}" if plan.pg_group_ids else (PANEL_GROUPS_LABEL if plan.pg_panel_groups else "—"))
     )
     cat = category_name or "—"
-    description = html.escape((plan.description or "").strip()) or "—"
+    description = description_html(plan, limit=None) or "—"
     return (
         f"💎 <b>{html.escape(plan.name)}</b>\n"
         f"قیمت: {plan.price:,} تومان\n"
@@ -353,8 +358,10 @@ async def res_plan_description_save(
         await state.clear()
         await message.answer(feedback.NOT_FOUND)
         return
-    text = (message.text or "").strip()
-    plan.description = None if text == "-" else (text[:1000] or None)
+    text, premium = premium_text_from_message(message.text, message.entities, limit=PLAN_DESCRIPTION_LIMIT)
+    if text == "-":
+        text, premium = "", None
+    plan.description, plan.description_rich = text or None, premium
     await session.commit()
     await state.clear()
     await message.answer(
