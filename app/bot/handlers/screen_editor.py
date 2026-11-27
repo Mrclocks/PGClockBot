@@ -7,6 +7,7 @@ Callback data ``ed:<a|r>:<view>[:<screen>[:<button>[:<color>]]]``:
 mode, ``o`` a menu's buttons, ``b`` one button, ``t`` new text, ``c`` color,
 ``n``/``nr`` new/default title, ``d``/``dh``/``dr`` new/hidden/default caption;
 every view but the switches needs my edit mode to be on.
+A menu whose rows can be regrouped also links to «▦ چیدمان منو» (``menu_rows_editor``).
 Button numbers are positions in ``screen_buttons``; every step rebuilds the
 real menu and re-checks the position and permissions before acting.
 """
@@ -25,10 +26,10 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
-from app.bot.edit_mode import CATALOG_ROW_ROOT, CATALOG_ROW_SCREENS, EDIT_CALLBACK_ROOT, audience_code
+from app.bot.edit_mode import CATALOG_ROW_ROOT, CATALOG_ROW_SCREENS, EDIT_CALLBACK_ROOT, MENU_ROWS_ROOT, audience_code
 from app.bot.handlers.button_colors import shop_settings_shop_id
 from app.bot.reply_keyboard_state import is_menu_tap
-from app.bot.screen_registry import SCREENS, ScreenButton, ScreenContext, ScreenSpec, screen_buttons
+from app.bot.screen_registry import SCREENS, ScreenButton, ScreenContext, ScreenSpec, screen_body, screen_buttons
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.user_errors import domain_error_text
@@ -91,6 +92,7 @@ BTN_EDIT_TEXT = "✏️ تغییر متن"
 BTN_RESET = "↺ رنگ پیش‌فرض"
 BTN_CONTINUE = "✏️ ادامهٔ ویرایش"
 BTN_CATALOG_ROWS = "🗂 نام و رنگ دسته‌ها و پلن‌ها"
+BTN_MENU_ROWS = "▦ چیدمان منو"
 TEXT_FEATURE_OFF_FOR_SHOP = "✏️ <b>حالت ویرایش منوها</b>\n\nاین قابلیت فعلاً توسط مدیر سیستم خاموش است."
 TEXT_FEATURE_OFF = "قابلیت ویرایش منوها خاموش است."
 TEXT_SHOP_BOT_ONLY = "حالت ویرایش فروشگاه فقط داخل ربات فروشگاه کار می‌کند."
@@ -205,7 +207,13 @@ def _main_menu_rows(actor: EditorActor) -> list[list[InlineKeyboardButton]]:
 
 
 def panel_view(
-    actor: EditorActor, spec: ScreenSpec, buttons: list[ScreenButton], ui: dict[str, str], *, minutes_left: int
+    actor: EditorActor,
+    spec: ScreenSpec,
+    buttons: list[ScreenButton],
+    ui: dict[str, str],
+    *,
+    minutes_left: int,
+    has_rows: bool = False,
 ) -> tuple[str, InlineKeyboardMarkup]:
     rows = [
         [_button(f"{_button_marker(actor, button, ui)} {button.text}", _cb(actor, "b", spec.id, index))]
@@ -220,6 +228,8 @@ def panel_view(
     rows = text_rows + rows
     if spec.id in CATALOG_ROW_SCREENS:
         rows.append([_button(BTN_CATALOG_ROWS, f"{CATALOG_ROW_ROOT}:{audience_code(actor)}:l")])
+    if has_rows:
+        rows.append([_button(BTN_MENU_ROWS, f"{MENU_ROWS_ROOT}:{audience_code(actor)}:o:{spec.id}")])
     rows.append([_button(BTN_BACK_TO_MENU, spec.reopen_callback)])
     hint = (
         "روی تیتر، توضیح یا یک دکمه بزنید تا آن را عوض کنید."
@@ -293,6 +303,7 @@ class _Screen:
     spec: ScreenSpec
     buttons: list[ScreenButton]
     ui: dict[str, str]
+    has_rows: bool = False
 
 
 async def _load_screen(session: AsyncSession, actor: EditorActor, screen_id: str) -> _Screen:
@@ -301,7 +312,15 @@ async def _load_screen(session: AsyncSession, actor: EditorActor, screen_id: str
         raise ValueError(feedback.INVALID)
     ui = await get_all_settings(session, reseller_id=actor.settings_scope)
     profile = await get_reseller_profile(session, actor.shop_id) if actor.for_reseller else None
-    return _Screen(spec, screen_buttons(screen_id, ScreenContext(ui=ui, profile=profile)), ui)
+    ctx = ScreenContext(ui=ui, profile=profile)
+    return _Screen(spec, screen_buttons(screen_id, ctx), ui, has_rows=screen_body(screen_id, ctx) is not None)
+
+
+def _panel(actor: EditorActor, screen: _Screen) -> tuple[str, InlineKeyboardMarkup]:
+    return panel_view(
+        actor, screen.spec, screen.buttons, screen.ui,
+        minutes_left=edit_mode_store.minutes_left(actor), has_rows=screen.has_rows,
+    )
 
 
 def _button_at(screen: _Screen, index: int) -> ScreenButton:
@@ -351,8 +370,7 @@ async def _screen_views(
         await state.set_state(None)
     if request.view == "o":
         await callback.answer()
-        minutes_left = edit_mode_store.minutes_left(actor)
-        await _show(callback, panel_view(actor, screen.spec, screen.buttons, screen.ui, minutes_left=minutes_left))
+        await _show(callback, _panel(actor, screen))
         return
     if request.view in {"n", "d"}:
         await _ask_screen_text(callback, actor, screen, state, part="title" if request.view == "n" else "caption")
@@ -452,8 +470,7 @@ async def _change_screen_text(
     edit_mode_store.extend(actor)
     screen = await _load_screen(session, actor, spec.id)
     await callback.answer(toast)
-    minutes_left = edit_mode_store.minutes_left(actor)
-    await _show(callback, panel_view(actor, screen.spec, screen.buttons, screen.ui, minutes_left=minutes_left))
+    await _show(callback, _panel(actor, screen))
 
 
 async def _handle(
@@ -543,9 +560,7 @@ async def _answer_with_panel(
     except ValueError:
         await message.answer(notice, reply_markup=_after_label_markup(actor, screen_id))
         return
-    text, markup = panel_view(
-        actor, screen.spec, screen.buttons, screen.ui, minutes_left=edit_mode_store.minutes_left(actor)
-    )
+    text, markup = _panel(actor, screen)
     await message.answer(f"{notice}\n\n{text}", reply_markup=markup)
 
 

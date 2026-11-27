@@ -129,6 +129,7 @@ def bot_routers() -> list[Router]:
         connection_status_admin,
         connection_status_admin_input,
         action_reason,
+        menu_rows_editor,
         connection_status,
         customer_orders,
         checkout_cancel,
@@ -208,6 +209,8 @@ def bot_routers() -> list[Router]:
         # Its typed names come before navigation, like the menu editor's above.
         catalog_row_editor.owner_router,
         catalog_row_editor.shop_router,
+        menu_rows_editor.owner_router,
+        menu_rows_editor.shop_router,
         start.router,
         terms.router,
         # Before purchase_contact: its phone step takes a contact only while the gate asks for one.
@@ -350,6 +353,7 @@ def create_dispatcher() -> Dispatcher:
         payment_destinations_editor,
         reseller_plan_extra_packs_admin,
         screen_editor,
+        menu_rows_editor,
     )
 
 
@@ -369,6 +373,7 @@ def create_dispatcher() -> Dispatcher:
         payment_destinations_editor.owner_router,
         screen_editor.owner_router,
         catalog_row_editor.owner_router,
+        menu_rows_editor.owner_router,
         admin_plans.router,
         admin_resplan_payg.router,
         reseller_plan_extra_packs_admin.router,

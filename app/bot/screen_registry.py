@@ -24,6 +24,7 @@ from app.bot import reply_keyboards as rk
 from app.bot.button_sources import recording_button_sources
 from app.bot.edit_mode import without_editor
 from app.bot.reseller_hub_groups import RESELLER_GROUPS
+from app.bot.row_layout import MenuBody, recording_menu_bodies
 from app.db.models import Role
 from app.py_compat import StrEnum
 from app.services.button_styles import CATALOG_IDS, setting_key
@@ -87,15 +88,17 @@ def _customer_screens() -> list[ScreenSpec]:
     ) -> ScreenSpec:
         return ScreenSpec(screen_id, title, Audience.CUSTOMER, build, reopen_callback=reopen)
 
+    # Buttons that show only for some customers (a trial, the FAQ) are built in, so the editor
+    # can rename them and the row layout knows where they sit.
     return [
         customer(
             "c.main",
             "منوی اصلی",
-            lambda ctx: rk.main_reply_keyboard("user", has_services=True, ui=ctx.ui),
+            lambda ctx: rk.main_reply_keyboard("user", has_services=True, ui=ctx.ui, show_trial=True),
             "menu:home",
         ),
         customer("c.wallet", "کیف پول", lambda ctx: hubs.wallet_hub_keyboard(ctx.ui), "nv:w:home"),
-        customer("c.support", "پشتیبانی", lambda ctx: hubs.support_hub_keyboard(ctx.ui), "nv:s:home"),
+        customer("c.support", "پشتیبانی", lambda ctx: hubs.support_hub_keyboard(ctx.ui, show_faq=True), "nv:s:home"),
         customer("c.loyalty", "باشگاه مشتریان", lambda ctx: hubs.loyalty_hub_keyboard(ctx.ui), "nv:loy:home"),
         customer(
             "c.services",
@@ -239,3 +242,17 @@ def screen_buttons(screen_id: str, ctx: ScreenContext) -> list[ScreenButton]:
                 )
             )
     return buttons
+
+
+def screen_body(screen_id: str, ctx: ScreenContext) -> MenuBody | None:
+    """The menu's own buttons as its row layout sees them; None when its rows cannot be edited."""
+    spec = SCREENS.get(screen_id)
+    if spec is None:
+        raise ValueError(f"unknown screen {screen_id!r}")
+    with without_editor(), recording_menu_bodies() as bodies:
+        spec.build(ctx)
+    own = [body for body in bodies if body.screen_id == screen_id]
+    # A menu built from more than one packer has no single row order to edit.
+    if len(own) != 1 or not own[0].is_editable:
+        return None
+    return own[0]
