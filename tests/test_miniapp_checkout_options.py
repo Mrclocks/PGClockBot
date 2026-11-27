@@ -9,9 +9,10 @@ from unittest.mock import AsyncMock, patch
 from sqlalchemy import select, update
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, ResellerProfile
+from app.services.users import clear_settings_cache, set_setting
 from tests.test_miniapp_shop_purchase import SHOP_PLAN, ShopPurchaseTests
 from tests.test_miniapp_shop_readonly import CUSTOMER, KEY, PERMS, SHOP
-from tests.test_miniapp_shop_scope import SHOP_TOKEN, signed
+from tests.test_miniapp_shop_scope import MAIN_TOKEN, SHOP_TOKEN, signed
 
 # The fixture's shop owner (BotUser SHOP) in Telegram.
 OWNER_TELEGRAM_ID = 5005
@@ -47,11 +48,37 @@ class MiniCheckoutOptionsTests(ShopPurchaseTests):
     async def test_me_reports_the_checkout_options(self) -> None:
         await self.grant("custom_service_name,free_checkout")
         options = (await self.as_owner("GET", "/api/mini/me")).json()["customer"]["checkout"]
-        self.assertEqual(options, {"service_name_required": True, "staff_free": True})
+        self.assertEqual(
+            options, {"service_name_required": True, "staff_free": True, "discount_code_enabled": True}
+        )
 
         await self.grant("")
         options = (await self.as_owner("GET", "/api/mini/me")).json()["customer"]["checkout"]
-        self.assertEqual(options, {"service_name_required": False, "staff_free": False})
+        self.assertEqual(
+            options, {"service_name_required": False, "staff_free": False, "discount_code_enabled": True}
+        )
+
+    async def test_me_reports_the_shops_own_discount_code_switch(self) -> None:
+        async with self.Session() as session:
+            await set_setting(session, "pay_discount_enabled", "0", reseller_id=SHOP)
+        clear_settings_cache()
+        shop = (await self.shop_get("/api/mini/me")).json()["customer"]["checkout"]
+        platform = await self.client.get(
+            "/api/mini/me", headers={"X-Telegram-Init-Data": signed(MAIN_TOKEN, CUSTOMER)}
+        )
+        self.assertFalse(shop["discount_code_enabled"])
+        self.assertTrue(platform.json()["customer"]["checkout"]["discount_code_enabled"])
+
+    async def test_a_code_is_refused_when_the_shop_turned_codes_off(self) -> None:
+        async with self.Session() as session:
+            await set_setting(session, "pay_discount_enabled", "0", reseller_id=SHOP)
+        clear_settings_cache()
+        response = await self.post("/api/mini/checkout", {"plan_id": SHOP_PLAN, "price": 5_000, "code": "OFF"})
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(response.json()["detail"], "کد تخفیف غیرفعال است")
+        self.assertEqual(await self.orders(), [])
+        plain = await self.post("/api/mini/buy", {"plan_id": SHOP_PLAN, "price": 5_000})
+        self.assertEqual(plain.status_code, 200, "buying without a code still works")
 
     async def test_a_shop_bot_admin_is_not_offered_free_checkout(self) -> None:
         await self.grant("free_checkout", staff=True)

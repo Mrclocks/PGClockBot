@@ -43,7 +43,7 @@ class MiniAppCodesTestCase(unittest.IsolatedAsyncioTestCase):
         await self.session.commit()
         self.shop_token = set_shop_reseller_id(None)
         discount_checkout._failures.clear()
-        self.settings = {"pay_wallet_enabled": "1"}
+        self.settings = {"pay_wallet_enabled": "1", "pay_discount_enabled": "1"}
 
         async def load_user(session, _request):
             return await session.scalar(select(BotUser).where(BotUser.id == self.caller_id))
@@ -162,6 +162,13 @@ class DiscountCheckoutTests(MiniAppCodesTestCase):
         self.settings["pay_wallet_enabled"] = "0"
         self.assertEqual((await self.checkout()).status_code, 403)
         self.assertEqual(await self.wallet(), 100_000)
+
+    async def test_codes_off_refuses_the_code_and_reserves_nothing(self) -> None:
+        self.settings["pay_discount_enabled"] = "0"
+        response = await self.checkout()
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(await self.session.scalar(select(func.count()).select_from(Order)), 0)
+        self.assertEqual((await self.discount(1)).used_count, 0)
 
     async def test_open_discounted_orders_are_limited(self) -> None:
         for _ in range(OPEN_CHECKOUT_LIMIT):

@@ -29,6 +29,7 @@ from app.jobs.customer_notices import run_customer_notices
 from app.jobs.service_freezes import run_service_freezes
 from app.jobs.service_transfers import run_service_transfers
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
+from app.jobs.ticket_reminders import run_ticket_reminders
 from app.jobs.paid_order_recovery import run_paid_order_recovery
 from app.jobs.pg_link_watchdog import run_pg_link_watchdog
 from app.jobs.service_cleanup import run_service_cleanup
@@ -785,6 +786,11 @@ def start_scheduler(bot: Bot) -> None:
     _add_job(
         run_panel_alert_notifications, "interval", minutes=5, args=[bot], id="panel_alert_notifications",
         max_instances=1, coalesce=True, misfire_grace_time=300, replace_existing=True,
+    )
+    # Off until a shop sets ticket_reminder_hours; two indexed queries when nothing is due.
+    _add_job(
+        run_ticket_reminders, "interval", minutes=10, args=[bot], id="ticket_reminders",
+        max_instances=1, coalesce=True, misfire_grace_time=600, replace_existing=True,
     )
     _add_job(
         run_targeted_campaigns_tick, "interval", minutes=1, args=[bot], id="targeted_campaigns",

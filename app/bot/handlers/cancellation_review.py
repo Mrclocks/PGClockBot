@@ -28,6 +28,7 @@ from app.services.cancellation_context import cancellation_detail_lines, load_ca
 from app.services.formatting import format_message, format_toman
 from app.services.notifications import customer_markup
 from app.services.numbers import normalize_number_text
+from app.services.reject_reasons import button_label, cancellation_reasons, reason_at
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
 from app.services.service_cancellations import (
@@ -44,11 +45,6 @@ CANCEL_CODE = "cn_rev"
 APPROVE_PERMISSIONS = ("orders", "payments")
 REJECT_PERMISSIONS = ("orders",)
 MAX_REFUND = 2**31 - 1
-REJECT_NOTES = {
-    "1": "درخواست با شرایط لغو فروشگاه مطابقت ندارد.",
-    "2": "سرویس هنوز قابل استفاده است؛ در صورت نیاز با پشتیبانی تماس بگیرید.",
-    "3": "این درخواست تکراری است.",
-}
 OPEN_FOR_APPROVAL = ("pending", "processing", "review")
 ID = r"(\d{1,12})"
 PLATFORM_LIST = "adm:cancellations"
@@ -293,9 +289,10 @@ async def reject_ask(
         await callback.answer(feedback.INVALID, show_alert=True)
         return
     await callback.answer()
+    reasons = cancellation_reasons(await get_all_settings(session, reseller_id=row.reseller_id))
     rows = [
-        [InlineKeyboardButton(text=text, callback_data=f"cnrv:rn:{request_id}:{key}")]
-        for key, text in REJECT_NOTES.items()
+        [InlineKeyboardButton(text=button_label(text), callback_data=f"cnrv:rn:{request_id}:{number}")]
+        for number, text in enumerate(reasons, start=1)
     ]
     ui = await get_all_settings(session)
     markup = with_inline_back(InlineKeyboardMarkup(inline_keyboard=rows), ui, _view(request_id))
@@ -313,11 +310,19 @@ async def reject_run(
         return
     _, _, raw_id, key = callback.data.split(":")
     request_id = int(raw_id)
-    if key not in REJECT_NOTES:
+    row = await session.get(ServiceCancellation, request_id)
+    try:
+        assert_cancellation_scope(row, shop_id)
+    except ValueError:
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        return
+    try:
+        note = reason_at(cancellation_reasons(await get_all_settings(session, reseller_id=row.reseller_id)), int(key))
+    except ValueError:
         await callback.answer(feedback.INVALID, show_alert=True)
         return
     try:
-        await reject_cancellation(session, request_id, shop_id=shop_id, actor=f"tg:{db_user.telegram_id}", note=REJECT_NOTES[key])
+        await reject_cancellation(session, request_id, shop_id=shop_id, actor=f"tg:{db_user.telegram_id}", note=note)
     except ValueError as exc:
         await session.rollback()
         await callback.answer(domain_error_text(exc), show_alert=True)

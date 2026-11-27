@@ -63,7 +63,9 @@ from app.services.service_cancellation_settings import (
     WEB_FIELDS as SERVICE_CANCEL_FIELDS,
 )
 from app.services.psp_gateways import KEY_PSP_GATEWAYS, merge_submitted_psp_gateways
+from app.services.reject_reasons import PAYMENT_REASONS_KEY, REASON_DEFAULTS
 from app.services.retired_text_defaults import refresh_retired_defaults
+from app.services.ticket_reminders import DEFAULT_HOURS as TICKET_REMINDER_DEFAULT, SETTING_KEY as TICKET_REMINDER_KEY
 from app.services.user_purge import purge_user_references
 
 logger = logging.getLogger("pgclock.users")
@@ -852,6 +854,7 @@ DEFAULT_SETTINGS = {
     "lucky_wheel_spin_cost_points": "10",
     "lucky_wheel_daily_limit": "3",
     "lucky_wheel_cooldown_seconds": "0",
+    "lucky_wheel_interval_days": "0",
     "lucky_wheel_free_spins_daily": "0",
     "loyalty_submenu_order": "loy_referral,loy_points,loy_rewards,loy_wheel,loy_history",
     "auto_approve_payments": "0",
@@ -920,6 +923,7 @@ DEFAULT_SETTINGS = {
     "notify_trial_claimed": "1",
     "notify_wallet_topup": "1",
     "notify_new_ticket": "1",
+    TICKET_REMINDER_KEY: TICKET_REMINDER_DEFAULT,
     "notify_service_cancellation": "1",
     "notify_panel_update": "1",
     "notify_panel_capacity": "1",
@@ -1317,6 +1321,7 @@ DEFAULT_SETTINGS.update(ENTRY_APPROVAL_DEFAULTS)
 DEFAULT_SETTINGS.update(FREEZE_DEFAULTS)
 DEFAULT_SETTINGS.update(TRANSFER_DEFAULTS)
 DEFAULT_SETTINGS.update(CANCEL_DEFAULTS)
+DEFAULT_SETTINGS.update(REASON_DEFAULTS)
 DEFAULT_SETTINGS.update(RECEIPT_RISK_DEFAULTS)
 DEFAULT_SETTINGS.update(AUTO_RENEW_DEFAULTS)
 DEFAULT_SETTINGS.update(notice_text_defaults())
@@ -1448,6 +1453,12 @@ SETTING_GROUPS = {
     ],
     "متن پشتیبانی ربات": [
         ("support_text", "متن صفحه پشتیبانی", "textarea", "بالای دکمه/فرم پشتیبانی در ربات نمایش داده می‌شود"),
+        (
+            TICKET_REMINDER_KEY,
+            "یادآوری تیکت بی‌پاسخ (ساعت)",
+            "number",
+            "اگر تیکتی این مدت بدون پاسخ بماند، یک بار به پشتیبان‌های همین فروشگاه یادآوری می‌شود. ۰ = خاموش، حداکثر ۱۶۸.",
+        ),
     ],
     "معرف اجباری": [
         (
@@ -1883,6 +1894,12 @@ SETTING_GROUPS = {
             "مثلاً ۱۲۰",
         ),
         ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
+        (
+            PAYMENT_REASONS_KEY,
+            "دلایل آمادهٔ رد رسید",
+            "textarea",
+            "هر خط یک دلیل، حداکثر ۸ دلیل. دلیل انتخاب‌شده زیر متن رد برای مشتری فرستاده می‌شود. خالی = رد بدون پرسیدن دلیل.",
+        ),
     ],
     "کد تخفیف": [
         ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),

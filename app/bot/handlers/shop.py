@@ -67,6 +67,7 @@ from app.services.orders import (
     wholesale_tier_percent,
 )
 from app.services.users import get_all_settings, on
+from app.services.shop_maintenance import maintenance_message
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 from app.services import bot_feedback_texts as feedback
 from app.services.notice_links import notice_markup
@@ -153,16 +154,7 @@ async def shop_under_maintenance(session: AsyncSession, ui: dict | None = None) 
     """Return maintenance message if shop buying is gated; renew flows stay open."""
     if ui is None:
         ui = await get_all_settings(session)
-    if on(ui.get("shop_maintenance_enabled")):
-        from app.services.rich_text import rich_plain_text
-
-        raw = ui.get("shop_maintenance_text")
-        return (
-            raw
-            if rich_plain_text(raw).strip()
-            else "فروشگاه موقتاً در حال به‌روزرسانی است.\nتمدید و پشتیبانی فعال است."
-        )
-    return None
+    return maintenance_message(ui)
 
 async def _answer_shop_maintenance(callback: CallbackQuery, session: AsyncSession, ui: dict | None = None) -> bool:
     """If maintenance is on, answer the callback and return True (caller should return)."""

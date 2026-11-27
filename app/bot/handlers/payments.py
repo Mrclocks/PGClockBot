@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
+from aiogram.exceptions import TelegramAPIError
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.pasarguard import failure_text
@@ -21,6 +22,14 @@ from app.services.orders import (
 )
 from app.services.resellers import reseller_can_review_payment
 from app.services.receipt_review import DEFAULT_REJECT_TEXT
+from app.services.reject_reasons import (
+    NO_REASON_NOTE,
+    PAYMENT_REASONS_KEY,
+    button_label,
+    parse_reasons,
+    reason_at,
+    with_reason,
+)
 from app.services.support_button import support_markup
 from app.services.users import get_all_settings, get_setting
 from app.services import bot_feedback_texts as feedback
@@ -295,9 +304,10 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
 
 
 async def _payrev_load(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, *, payment_id: int | None = None
 ) -> Payment | None:
-    payment_id = int(callback.data.split(":")[-1])
+    if payment_id is None:
+        payment_id = int(callback.data.split(":")[-1])
     payment = await session.get(Payment, payment_id)
     if not payment:
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
@@ -392,18 +402,79 @@ async def pay_resend(callback: CallbackQuery, session: AsyncSession, db_user: Bo
 
 @router.callback_query(F.data.startswith("payrev:no:"))
 async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    """Offer the shop's ready-made reasons; without any, reject at once as before."""
     payment = await _payrev_load(callback, session, db_user)
     if not payment:
         return
+    reasons = parse_reasons((await get_all_settings(session)).get(PAYMENT_REASONS_KEY))
+    if not reasons or not callback.message:
+        await _reject_with_reason(callback, session, db_user, payment, None)
+        return
+    await callback.answer()
+    with keep_sent():  # the picker is removed by its own buttons, not by chat cleanup
+        await callback.message.answer(
+            f"دلیل رد پرداخت #{int(payment.id)} را انتخاب کنید (برای مشتری فرستاده می‌شود):",
+            reply_markup=_reject_reason_markup(int(payment.id), reasons),
+        )
+
+
+def _reject_reason_markup(payment_id: int, reasons: list[str]) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=button_label(reason), callback_data=f"payrev:nr:{payment_id}:{number}")]
+        for number, reason in enumerate(reasons, start=1)
+    ]
+    rows.append([InlineKeyboardButton(text="رد بدون دلیل", callback_data=f"payrev:nr:{payment_id}:0")])
+    rows.append([InlineKeyboardButton(text="↩️ رد نکن", callback_data=f"payrev:nx:{payment_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(F.data.regexp(r"^payrev:nr:(\d{1,12}):([0-8])$"))
+async def pay_reject_with_reason(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    _, _, raw_id, raw_number = callback.data.split(":")
+    payment = await _payrev_load(callback, session, db_user, payment_id=int(raw_id))
+    if not payment:
+        return
+    number = int(raw_number)
+    reason: str | None = None
+    if number:
+        reasons = parse_reasons((await get_all_settings(session)).get(PAYMENT_REASONS_KEY))
+        try:
+            reason = reason_at(reasons, number)
+        except ValueError as exc:
+            await callback.answer(str(exc), show_alert=True)
+            return
+    if await _reject_with_reason(callback, session, db_user, payment, reason):
+        await _drop_picker(callback)
+
+
+@router.callback_query(F.data.regexp(r"^payrev:nx:\d{1,12}$"))
+async def pay_reject_dismiss(callback: CallbackQuery):
+    await callback.answer()
+    await _drop_picker(callback)
+
+
+async def _drop_picker(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    try:
+        await callback.message.delete()
+    except TelegramAPIError:
+        logger.debug("reject reason picker: delete failed", exc_info=True)
+
+
+async def _reject_with_reason(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, payment: Payment, reason: str | None
+) -> bool:
+    """Reject once (the claim in ``reject_payment``) and tell the payer, with the reason when one was chosen."""
     try:
         await reject_payment(
-            session, payment, db_user.telegram_id, "rejected", bot=callback.bot
+            session, payment, db_user.telegram_id, reason or NO_REASON_NOTE, bot=callback.bot
         )
     except ValueError as exc:
         from app.services.redact import user_safe_error
 
         await callback.answer(user_safe_error(exc), show_alert=True)
-        return
+        return False
     await callback.answer(feedback.REJECTED)
     user = await session.get(BotUser, payment.user_id)
     ui = await get_all_settings(session)
@@ -414,6 +485,7 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         text, send_kw = outbound_setting_text(
             reject_body, title="❌ پرداخت رد شد"
         )
+        text = with_reason(text, send_kw, reason)
         try:
             # An inline button under the notice; the buyer's main keyboard stays as it is.
             with keep_sent():  # a notice or review item, never a temporary panel
@@ -425,3 +497,4 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
                 )
         except Exception:
             logger.debug("pay_reject: ignored failure", exc_info=True)
+    return True

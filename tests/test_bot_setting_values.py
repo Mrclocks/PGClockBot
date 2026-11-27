@@ -47,6 +47,54 @@ class BoundsCoverageTests(unittest.TestCase):
                 self.assertLessEqual(low, high)
 
 
+class WheelSettingsInBotTests(unittest.TestCase):
+    """The bots edit the same wheel settings as the web panel, with the same limits."""
+
+    def test_both_bots_offer_every_web_wheel_setting(self) -> None:
+        from app.services.lucky_wheel_settings import BOT_FIELDS
+
+        keys = {key for key, _label, _kind in BOT_FIELDS}
+        self.assertIn("lucky_wheel_interval_days", keys)
+        for fields in (admin_settings.FIELDS, reseller_settings.FIELDS):
+            self.assertLessEqual(keys, set(fields))
+
+    def test_wheel_numbers_use_the_panels_limits(self) -> None:
+        self.assertEqual(parse_number_setting("lucky_wheel_interval_days", "۷"), "7")
+        self.assertEqual(parse_number_setting("lucky_wheel_interval_days", "365"), "365")
+        for raw in (*HOSTILE_NUMBERS, "366"):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                parse_number_setting("lucky_wheel_interval_days", raw)
+        with self.assertRaises(ValueError):
+            parse_number_setting("lucky_wheel_cooldown_seconds", "86401")
+
+
+class WheelSettingsScreenTests(unittest.IsolatedAsyncioTestCase):
+    """The club settings button opens the wheel group in the editor of the bot that owns the scope."""
+
+    async def test_the_button_opens_the_wheel_fields_for_the_owner_and_for_a_shop(self) -> None:
+        from app.bot.handlers.loyalty import wheel_settings_callback
+
+        owner = wheel_settings_callback(None).split(":")
+        shop = wheel_settings_callback(5).split(":")
+        self.assertEqual(owner[:3], ["adm", "st", "sub"])
+        self.assertEqual(shop[:3], ["res", "st", "sub"])
+
+        callback = SimpleNamespace(message=AsyncMock(), answer=AsyncMock(), data=wheel_settings_callback(None))
+        with patch.object(admin_settings, "get_all_settings", AsyncMock(return_value={})):
+            await admin_settings._render_sub(callback, None, owner[3], owner[4])
+        buttons = [b.callback_data for row in callback.message.edit_text.await_args.kwargs["reply_markup"].inline_keyboard for b in row]
+        self.assertTrue(any("lucky_wheel_interval_days" in b for b in buttons), buttons)
+
+        callback = SimpleNamespace(message=AsyncMock(), answer=AsyncMock(), data=wheel_settings_callback(5))
+        with (
+            patch.object(reseller_settings, "get_setting", AsyncMock(return_value="0")),
+            patch.object(reseller_settings, "safe_edit_text", AsyncMock()) as edit,
+        ):
+            await reseller_settings._render_sub(callback, None, shop[3], shop[4], 5)
+        buttons = [b.callback_data for row in edit.await_args.kwargs["reply_markup"].inline_keyboard for b in row]
+        self.assertTrue(any("lucky_wheel_interval_days" in b for b in buttons), buttons)
+
+
 class ParseNumberTests(unittest.TestCase):
     def test_previously_unbounded_money_fields_refuse_hostile_input(self) -> None:
         for key in ("referral_bonus", "stars_toman_per_star", "custom_plan_price_per_gb", "custom_plan_min_gb"):

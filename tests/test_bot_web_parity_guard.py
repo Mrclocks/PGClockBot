@@ -12,6 +12,7 @@ from __future__ import annotations
 import unittest
 
 
+from app.services.lucky_wheel_settings import BOT_FIELDS as WHEEL_BOT_FIELDS
 from app.bot.handlers import admin_settings, reseller_settings
 from app.services import marketing_nav, panel_nav
 from app.services.resellers import RESELLER_SETTINGS_TABS, SHOP_SETTINGS_DOMAIN_POST_TABS
@@ -81,6 +82,8 @@ MARKETING_WEB_ONLY: dict[str, str] = {
 }
 
 # Owner-bot settings that are not fields of the web settings tabs, and where the web edits them.
+WHEEL_KEYS = tuple(key for key, _label, _kind in WHEEL_BOT_FIELDS)
+
 BOT_SETTINGS_OUTSIDE_WEB_TABS: dict[str, str] = {
     **{key: "وب: مالی › مقصدهای پرداخت" for key in (
         "card_holder", "card_number", "crypto_address", "crypto_asset", "crypto_network", "gateway_link", "gateway_name",
@@ -98,6 +101,7 @@ BOT_SETTINGS_OUTSIDE_WEB_TABS: dict[str, str] = {
     **{key: "وب: هشدار سرویس کاربر › واحد کنار عدد آستانه" for key in (
         "user_alert_low_traffic_unit", "user_alert_low_time_unit",
     )},
+    **{key: "وب: باشگاه › چرخ شانس › تنظیمات" for key in WHEEL_KEYS},
     "custom_service_name_enabled": "وب: تنظیمات ربات › قالب نام‌گذاری",
     "miniapp_shops_enabled": "وب: تنظیمات ربات › مینی‌اپ (فرم اختصاصی)",
     "miniapp_notice": "وب: تنظیمات ربات › مینی‌اپ (فرم اختصاصی)",

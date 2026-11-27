@@ -46,6 +46,8 @@ tests/test_bot_admin_role.py
 tests/test_button_color_editor.py
 # In-menu screen editor: owner/shop permissions, per-shop writes, edit-mode switch.
 tests/test_screen_editor.py
+# Menu row layout editor: owner/shop scope, per-shop writes, stale drafts refused.
+tests/test_menu_rows.py
 tests/test_hub_entry_labels.py
 # Editable menu titles: owner/shop scope, unsafe titles refused.
 tests/test_screen_titles.py
@@ -650,3 +652,11 @@ tests/test_webhook_watch.py
 tests/test_telegram_target.py
 # FAQ answer buttons: shop rules (links, plans), forged items, owner check in the picker flow.
 tests/test_faq_answer_buttons.py
+# Shop maintenance: the Mini App refuses new purchases the bot refuses.
+tests/test_shop_maintenance.py
+
+# Ready-made reject reasons: one claim per payment, reviewer access, escaped reason text.
+tests/test_payment_reject_reasons.py
+
+# Unanswered ticket reminders: each shop's own switch and staff, one claim per waiting period.
+tests/test_ticket_reminders.py

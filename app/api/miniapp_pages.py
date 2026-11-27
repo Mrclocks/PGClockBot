@@ -81,6 +81,7 @@ from app.services.miniapp_shop import (
 from app.services.pasarguard import get_pg
 from app.services.service_live_info import fetch_subscription_info, service_info_error, validate_service_info
 from app.services.service_cancellations import CancellationOffer, cancellation_offer, request_cancellation
+from app.services.shop_maintenance import maintenance_plain_text
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import get_wallet_balance
 
@@ -152,6 +153,13 @@ async def _require_commerce_ready(session: AsyncSession, user: BotUser) -> str:
 async def _scope_ui(session: AsyncSession, request: Request) -> dict:
     """Settings of this Mini App's shop (the platform's outside a shop)."""
     return await get_all_settings(session, reseller_id=mini_scope(request).shop_id)
+
+
+async def _require_shop_open(session: AsyncSession, request: Request) -> None:
+    """Refuse a new purchase while this Mini App's shop is in maintenance, as the bot does."""
+    closed = maintenance_plain_text(await _scope_ui(session, request))
+    if closed is not None:
+        raise HTTPException(403, closed)
 
 
 async def _scope_wallet(session: AsyncSession, user: BotUser, request: Request) -> int:
@@ -406,7 +414,7 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
         "commerce_allowed": True,
         "home": home,
         "badges": (await home_badges(session, user, shop_id=scope.shop_id)).payload(),
-        "checkout": await checkout_options(session, user, scope),
+        "checkout": await checkout_options(session, user, scope, ui=ui),
     }
     shop_id = scope.shop_id
     if on(ui.get("loyalty_enabled")):
@@ -885,6 +893,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
+        await _require_shop_open(session, request)
         try:
             body = await request.json()
         except Exception:
