@@ -288,7 +288,7 @@ USERNAME_TAKEN_STATUS = 409
 # Longest buyer-chosen name; a taken name keeps this length after its random ending.
 CHOSEN_NAME_MAX_LENGTH = 20
 # A buyer's name is stored as "ali" or, once taken, "ali-2": the "-" cannot occur in a
-# valid name, so the number can go after the shop's suffix instead of inside the name.
+# valid name, so the counter stays readable; the username shows it as "ali2", before the suffix.
 CHOSEN_NAME_NUMBER_SEPARATOR = "-"
 FIRST_TAKEN_NAME_NUMBER = 2
 NAME_FALLBACK_TRIES = 5
@@ -305,6 +305,12 @@ def split_chosen_name(stored: str) -> tuple[str, str]:
     if separator and base and number.isdigit():
         return base, number
     return stored, ""
+
+
+def chosen_name_in_username(stored: str) -> str:
+    """The part of the username a stored name fills: ``"ali2"`` for ``"ali-2"``."""
+    base, number = split_chosen_name(stored)
+    return f"{base}{number}"
 
 
 def chosen_name_variant(name: str) -> str:
@@ -511,18 +517,16 @@ async def generate_pg_username(
     volume = getattr(plan, "data_limit_gb", None)
     fallback_id = "" if user_id is None else str(user_id)
     tg_fallback = str(getattr(user, "telegram_id", None) or fallback_id)
-    base_name, number = split_chosen_name(chosen_name) if chosen_name else (None, "")
-    built = _random_username(
+    return _random_username(
         prefix=prefix,
         suffix=suffix,
         pattern=pattern,
         user_id=user_id,
         username=getattr(user, "username", None) or tg_fallback,
         plan_volume=f"{volume:g}" if volume is not None and volume > 0 else "unlimited",
-        chosen_name=base_name,
+        # The number of a taken name ends the name, so the shop's suffix still closes the username.
+        chosen_name=chosen_name_in_username(chosen_name) if chosen_name else None,
     )
-    # The number of a taken name closes the username, after the shop's suffix.
-    return f"{built[: PG_USERNAME_MAX_LENGTH - len(number)]}{number}"
 
 
 async def list_active_plans(
