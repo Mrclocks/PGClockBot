@@ -269,8 +269,7 @@ class DiscountRuleOrderTests(unittest.IsolatedAsyncioTestCase):
             session.add(service)
             await session.commit()
             plan = await session.get(Plan, 1)
-            with patch("app.services.service_renewals.validate_renewal_selection", AsyncMock(return_value={})), \
-                    patch("app.services.service_renewals.assert_renewal_category", AsyncMock()):
+            with patch("app.services.service_renewals.validate_renewal_selection", AsyncMock(return_value={})):
                 order = await renew_service_with_plan(session, user_id=1, service=service, plan=plan)
         self.assertEqual(order.amount, 90_000)
 

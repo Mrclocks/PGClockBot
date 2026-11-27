@@ -6,7 +6,7 @@ import math
 import secrets
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -17,14 +17,7 @@ from app.db.models import Order, Plan
 from app.services.orders import list_active_plans
 from app.services.plan_categories import shop_categories_for_menu
 from app.services.renewal_carry import CARRY_TIME, CARRY_VOLUME, plan_carries
-from app.services.renewal_category import (
-    assert_category_switch,
-    cached_leftover,
-    check_live_category_switch,
-    offered_plans,
-    refuse_other_category,
-    same_category,
-)
+from app.services.renewal_category import offered_plans, refuse_other_category
 from app.services.formatting import (
     format_bytes, format_expire_short, hold_duration_from_info, is_on_hold_status,
     parse_expire,
@@ -81,9 +74,8 @@ class RenewalChoices:
 async def load_renewal_choices(session: AsyncSession, service: Any, *, shop_id: int | None = None) -> RenewalChoices:
     """The renewal choices of ``service`` in its shop's catalog (``shop_id`` None: the bot's own shop)."""
     plans = await list_active_plans(session, include_trial=False, reseller_id=shop_id)
-    # Another category's plan is offered only when it would carry nothing over (renewal_category).
-    leftover = cached_leftover(service, now=datetime.now(timezone.utc))
-    plans = offered_plans(plans, current_plan=await current_plan_of(session, service), leftover=leftover)
+    # Only the service's own category is offered (renewal_category).
+    plans = offered_plans(plans, current_plan=await current_plan_of(session, service))
     categories = await shop_categories_for_menu(session, fixed_plans=plans, reseller_id=shop_id)
     return renewal_choices(plans, categories, current_plan_id=getattr(service, "plan_id", None))
 
@@ -94,42 +86,9 @@ async def current_plan_of(session: AsyncSession, service: Any) -> Plan | None:
     return await session.get(Plan, int(plan_id)) if plan_id else None
 
 
-async def own_category_has_plans(session: AsyncSession, current_plan: Plan, *, shop_id: int | None) -> bool:
-    """Whether the shop still sells a renewable plan in the service's own category."""
-    category_id = getattr(current_plan, "category_id", None)
-    query = select(Plan.id).where(
-        Plan.is_active.is_(True),
-        Plan.is_trial.is_(False),
-        Plan.owner_reseller_id == shop_id if shop_id is not None else Plan.owner_reseller_id.is_(None),
-        Plan.category_id == int(category_id) if category_id is not None else Plan.category_id.is_(None),
-    )
-    return await session.scalar(query.limit(1)) is not None
-
-
-async def assert_own_category(session: AsyncSession, *, service: Any, plan: Any, shop_id: int | None) -> None:
-    """Refuse another category's plan while the service's own category has a plan to renew onto."""
-    current = await current_plan_of(session, service)
-    if current is None or same_category(current, plan):
-        return
-    refuse_other_category(
-        current, plan, own_category_open=await own_category_has_plans(session, current, shop_id=shop_id)
-    )
-
-
-async def assert_renewal_category(
-    session: AsyncSession, *, service: Any, plan: Any, terms: dict, shop_id: int | None
-) -> None:
-    """Before a renewal order: another category's plan must carry nothing (live panel numbers)."""
-    # Resolved at call time like preview_renewal does, so the current panel client is the one used.
-    from app.services.pasarguard import get_pg, get_pg_for_reseller
-
-    async def load_info() -> dict:
-        pg = await get_pg_for_reseller(session, shop_id) if shop_id else get_pg()
-        return await pg.get_user_by_id(service.pg_user_id)
-
-    await check_live_category_switch(
-        await current_plan_of(session, service), plan, terms, load_info=load_info, calculate=calculate_renewal
-    )
+async def assert_own_category(session: AsyncSession, *, service: Any, plan: Any) -> None:
+    """Refuse renewing onto a plan of another category than the service's own."""
+    refuse_other_category(await current_plan_of(session, service), plan)
 
 
 def renewal_choices(plans: list[Any], categories: list[Any], *, current_plan_id: int | None) -> RenewalChoices:
@@ -346,7 +305,7 @@ async def validate_renewal_selection(session, *, user_id, service, plan, shop_id
     if await service_shop_id(session, service) != shop_id:
         raise ValueError("سرویس این فروشگاه نیست")
     await assert_service_quota_available(session, service.id)
-    await assert_own_category(session, service=service, plan=plan, shop_id=shop_id)
+    await assert_own_category(session, service=service, plan=plan)
     return renewal_terms(plan)
 
 
@@ -360,7 +319,6 @@ async def preview_renewal(session, *, user_id, service, plan) -> dict:
     )
     pg = await get_pg_for_reseller(session, shop_id) if shop_id else get_pg()
     result = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), terms)
-    assert_category_switch(await current_plan_of(session, service), plan, result)
     result.pop("payload")
     result.pop("period_start")
     quote = await quote_product(session, plan, shop_id=shop_id)
