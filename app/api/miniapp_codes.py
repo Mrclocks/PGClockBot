@@ -13,7 +13,13 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.miniapp_buy_extras import service_name_field
-from app.api.miniapp_pages import _no_store, _require_commerce_ready, _scope_ui, _scope_wallet
+from app.api.miniapp_pages import (
+    _no_store,
+    _require_commerce_ready,
+    _require_shop_open,
+    _scope_ui,
+    _scope_wallet,
+)
 from app.db.models import Order
 from app.services.custom_service_name import name_order_at_checkout
 from app.services.db_safe import rollback_quiet
@@ -78,6 +84,7 @@ def register_miniapp_codes(app: FastAPI, *, get_db) -> None:
     async def mini_checkout(request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
+        await _require_shop_open(session, request)
         await _require_wallet_pay(session, request)
         user_id = int(user.id)
         body = await _json_object(request)
@@ -94,6 +101,7 @@ def register_miniapp_codes(app: FastAPI, *, get_db) -> None:
     async def mini_checkout_pay(order_id: int, request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
+        await _require_shop_open(session, request)
         await _require_wallet_pay(session, request)
         user_id = int(user.id)
         service_name = service_name_field(await _optional_json_object(request))

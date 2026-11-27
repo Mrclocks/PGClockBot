@@ -649,3 +649,5 @@ tests/test_webhook_watch.py
 tests/test_telegram_target.py
 # FAQ answer buttons: shop rules (links, plans), forged items, owner check in the picker flow.
 tests/test_faq_answer_buttons.py
+# Shop maintenance: the Mini App refuses new purchases the bot refuses.
+tests/test_shop_maintenance.py
