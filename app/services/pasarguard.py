@@ -785,8 +785,8 @@ class PasarGuardClient:
     async def get_user_by_username(self, username: str) -> dict:
         return await self.request("GET", f"/api/user/by-username/{username}")
 
-    async def get_user_by_id(self, user_id: int) -> dict:
-        return await self.request("GET", f"/api/user/by-id/{user_id}")
+    async def get_user_by_id(self, user_id: int, *, use_cache: bool = True) -> dict:
+        return await self.request("GET", f"/api/user/by-id/{user_id}", use_cache=use_cache)
 
     async def create_user(self, payload: dict) -> dict:
         return await self.request("POST", "/api/user", json=payload)

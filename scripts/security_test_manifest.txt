@@ -660,3 +660,6 @@ tests/test_payment_reject_reasons.py
 
 # Unanswered ticket reminders: each shop's own switch and staff, one claim per waiting period.
 tests/test_ticket_reminders.py
+
+# Staff link revokes save the panel's new link on the acting shop's services only.
+tests/test_subscription_link_store.py

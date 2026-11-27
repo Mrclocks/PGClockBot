@@ -27,13 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ServiceAutomation, ServiceTransfer, UserService
 from app.services.customer_notice_queue import add_notice
-from app.services.pasarguard import (
-    PasarGuardError,
-    extract_sub_token,
-    get_pg,
-    get_pg_for_reseller,
-    user_subscription_url,
-)
+from app.services.pasarguard import PasarGuardError, get_pg, get_pg_for_reseller
 from app.services.service_freeze import (
     can_be_frozen as is_self_service,
     has_open_order,
@@ -41,6 +35,7 @@ from app.services.service_freeze import (
     open_freeze,
 )
 from app.services.service_scope import service_shop_id
+from app.services.subscription_link_store import LinkScope, link_after_revoke, save_links
 from app.services.service_transfer_settings import (
     DONE_ACTION,
     PERIOD,
@@ -279,15 +274,15 @@ async def rotate_subscription_link(session: AsyncSession, service: UserService, 
     except (PasarGuardError, httpx.HTTPError, TimeoutError, ValueError):
         logger.warning("subscription link not rotated after transfer service=%s; the job retries", service.id, exc_info=True)
         return False
-    url = user_subscription_url(user if isinstance(user, dict) else None)
-    if url:
-        service.subscription_url = url
-        service.subscription_token = extract_sub_token(url) or service.subscription_token
+    link = await link_after_revoke(pg, int(service.pg_user_id), user)
+    if link is not None:
+        await save_links(session, {int(service.pg_user_id): link}, scope=LinkScope(shop_id=shop_id))
     await session.execute(
         update(ServiceTransfer).where(ServiceTransfer.id == int(transfer_id))
         .values(link_rotation_pending=False).execution_options(synchronize_session=False)
     )
     await session.commit()
+    await session.refresh(service)
     return True
 
 
