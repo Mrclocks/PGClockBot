@@ -414,7 +414,7 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
         "commerce_allowed": True,
         "home": home,
         "badges": (await home_badges(session, user, shop_id=scope.shop_id)).payload(),
-        "checkout": await checkout_options(session, user, scope),
+        "checkout": await checkout_options(session, user, scope, ui=ui),
     }
     shop_id = scope.shop_id
     if on(ui.get("loyalty_enabled")):

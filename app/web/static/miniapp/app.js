@@ -82,10 +82,13 @@
     };
   }
 
-  /** Name field and staff free button of the checkout card (server decides; see /api/mini/me). */
+  /** Name field, staff free button and code field of the checkout card (server decides; see /api/mini/me). */
   function checkoutOptions() {
     const c = customer().checkout || {};
-    return { nameRequired: !!c.service_name_required, staffFree: !!c.staff_free, name: state.serviceName };
+    return {
+      nameRequired: !!c.service_name_required, staffFree: !!c.staff_free,
+      discountCode: !!c.discount_code_enabled, name: state.serviceName,
+    };
   }
 
   /** The name to send, or null after telling the buyer what is wrong (only when a name is required). */
