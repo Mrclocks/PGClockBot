@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_renewal import register_miniapp_renewal
 from app.db.models import Base, BotUser, Plan, PlanCategory, UserService
+from app.services.renewal_category import RENEWAL_UNAVAILABLE
 from tests.postgres_support import add_rows, scoped_async_engine
 
 SHOP = 900
@@ -91,6 +92,18 @@ class RenewalOptionsTests(unittest.IsolatedAsyncioTestCase):
         every_id = {p["id"] for c in data["categories"] for p in c["plans"]} | {p["id"] for p in data["other"]}
         self.assertNotIn(4, every_id, "a trial plan is never offered for renewal")
         self.assertNotIn(5, every_id, "another shop's plan is never offered")
+
+    async def test_an_empty_own_category_says_why_renewal_is_unavailable(self) -> None:
+        for plan in (1, 2):
+            (await self.session.get(Plan, plan)).is_active = False
+        await self.session.commit()
+        response = await self.options(70)
+        data = response.json()
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(data["unavailable"], RENEWAL_UNAVAILABLE)
+        self.assertEqual((data["current"], data["categories"], data["other"], data["plans"]), (None, [], [], []))
+        self.scope = SimpleNamespace(shop_id=SHOP)
+        self.assertEqual((await self.options(73)).json()["unavailable"], "", "another shop's catalog is untouched")
 
     async def test_without_categories_every_plan_is_listed_current_first(self) -> None:
         for plan in (1, 2):

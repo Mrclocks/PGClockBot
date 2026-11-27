@@ -92,6 +92,15 @@ test("a shop without categories keeps one list, current plan first", async () =>
   assert.ok(sheet().indexOf('data-plan="1"') < sheet().indexOf('data-plan="2"'));
 });
 
+test("a service with nothing to renew onto shows why and the way to buy a new one", async () => {
+  const why = "امکان تمدید این سرویس وجود ندارد، چون پلن‌های دستهٔ آن دیگر برای تمدید عرضه نمی‌شوند. " + HOSTILE;
+  const { sheet } = await boot({ wallet_pay_enabled: true, unavailable: why, grouped: false, current: null,
+    categories: [], other: [], plans: [] });
+  assert.ok(sheet().includes("امکان تمدید این سرویس وجود ندارد"));
+  assert.ok(!sheet().includes("<img"), "the server text is escaped");
+  assert.ok(!sheet().includes("data-plan="));
+});
+
 (async () => {
   for (const [name, fn] of tests) {
     try {

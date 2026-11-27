@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.bot.panel_history import panel_history
 from app.db.models import BotUser, Plan, PlanCategory, UserService
+from app.services.renewal_category import RENEWAL_UNAVAILABLE
 from app.services.service_renewals import renewal_choices
 from tests.chat_sim import ChatSim
 from tests.postgres_support import add_rows
@@ -135,6 +136,16 @@ class GroupedRenewalTests(_RenewalFlow):
         await self.tap("svc:renewcat:71:10")
         self.assertEqual(self.buttons(), before)
         self.assertTrue(self.sim.telegram.alerts)
+
+
+    async def test_an_empty_own_category_tells_the_customer_to_buy_a_new_service(self) -> None:
+        async with self.sim.Session() as session:
+            for plan_id in (1, 2):
+                (await session.get(Plan, plan_id)).is_active = False
+            await session.commit()
+        await self.tap("svc:renew:70")
+        self.assertEqual(self.sim.telegram.alerts[-1], RENEWAL_UNAVAILABLE)
+        self.assertNotIn("svc:renewpay:", " ".join(d for _, d in self.buttons()))
 
 
 class UngroupedRenewalTests(_RenewalFlow):

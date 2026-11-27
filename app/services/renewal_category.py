@@ -11,6 +11,11 @@ from __future__ import annotations
 
 from typing import Any
 
+# When nothing in the service's category can be renewed onto (at most 200 characters: a Telegram alert).
+RENEWAL_UNAVAILABLE = (
+    "امکان تمدید این سرویس وجود ندارد، چون پلن‌های دستهٔ آن دیگر برای تمدید عرضه نمی‌شوند. "
+    "می‌توانید از «خرید اشتراک» یک سرویس جدید تهیه کنید."
+)
 OWN_CATEGORY_ONLY = "این سرویس فقط با پلن‌های دستهٔ خودش تمدید می‌شود؛ پلنی از همان دسته انتخاب کنید."
 
 
