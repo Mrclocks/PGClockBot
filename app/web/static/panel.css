@@ -2944,8 +2944,8 @@ a.btn.btn-ghost:hover {
     display: grid;
     grid-template-columns: 20px minmax(0, 1fr) auto 32px;
     grid-template-areas:
-      ". title value ."
-      ". sub   badge .";
+      ". title value act"
+      ". sub   badge act";
     grid-template-rows: 22px 22px;
     align-items: center;
     column-gap: var(--space-1_5);
@@ -2960,6 +2960,9 @@ a.btn.btn-ghost:hover {
   .table-list-sm .li-child > .li-sub { grid-area: sub; font-size: var(--fs-2); line-height: 22px; color: var(--muted-fg); }
   .table-list-sm .li-child > .li-badge { grid-area: badge; }
   .table-list-sm .li-child > .li-badge { display: flex; align-items: center; justify-content: flex-end; height: 22px; }
+  /* A child's own «⋯» (one service of a user) sits under the row's menu button, same size. */
+  .table-list-sm .li-child > .row-actions { grid-area: act; align-self: center; justify-self: center; width: 32px; height: 32px; min-height: 32px; overflow: visible; }
+  .table-list-sm .li-child .row-actions-toggle--icon { box-sizing: border-box; width: 32px; height: 32px; margin: 0; }
   .table-list-sm .li-child > .li-badge .badge { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 20px; min-height: 0; padding: 0 var(--space-1); font-size: var(--fs-1); font-weight: 600; line-height: 1; }
 }
 
