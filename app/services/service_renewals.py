@@ -22,6 +22,8 @@ from app.services.renewal_category import (
     cached_leftover,
     check_live_category_switch,
     offered_plans,
+    refuse_other_category,
+    same_category,
 )
 from app.services.formatting import (
     format_bytes, format_expire_short, hold_duration_from_info, is_on_hold_status,
@@ -90,6 +92,28 @@ async def current_plan_of(session: AsyncSession, service: Any) -> Plan | None:
     """The service's own plan, active or not: its category decides where a renewal may go."""
     plan_id = getattr(service, "plan_id", None)
     return await session.get(Plan, int(plan_id)) if plan_id else None
+
+
+async def own_category_has_plans(session: AsyncSession, current_plan: Plan, *, shop_id: int | None) -> bool:
+    """Whether the shop still sells a renewable plan in the service's own category."""
+    category_id = getattr(current_plan, "category_id", None)
+    query = select(Plan.id).where(
+        Plan.is_active.is_(True),
+        Plan.is_trial.is_(False),
+        Plan.owner_reseller_id == shop_id if shop_id is not None else Plan.owner_reseller_id.is_(None),
+        Plan.category_id == int(category_id) if category_id is not None else Plan.category_id.is_(None),
+    )
+    return await session.scalar(query.limit(1)) is not None
+
+
+async def assert_own_category(session: AsyncSession, *, service: Any, plan: Any, shop_id: int | None) -> None:
+    """Refuse another category's plan while the service's own category has a plan to renew onto."""
+    current = await current_plan_of(session, service)
+    if current is None or same_category(current, plan):
+        return
+    refuse_other_category(
+        current, plan, own_category_open=await own_category_has_plans(session, current, shop_id=shop_id)
+    )
 
 
 async def assert_renewal_category(
@@ -322,6 +346,7 @@ async def validate_renewal_selection(session, *, user_id, service, plan, shop_id
     if await service_shop_id(session, service) != shop_id:
         raise ValueError("سرویس این فروشگاه نیست")
     await assert_service_quota_available(session, service.id)
+    await assert_own_category(session, service=service, plan=plan, shop_id=shop_id)
     return renewal_terms(plan)
 
 

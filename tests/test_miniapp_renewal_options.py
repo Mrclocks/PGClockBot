@@ -1,4 +1,4 @@
-"""Mini App renewal choices: the service's own plan, then its shop's categories, never another shop's."""
+"""Mini App renewal choices: the service's own plan, then its own category, never another shop's."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ SHOP = 900
 
 
 
-# A used-up service (expired, unlimited volume): nothing would carry over, so every category is offered.
+# A used-up service (expired, unlimited volume): nothing would carry over, yet only its own category is offered.
 USED_UP = {"quota_synced_at": datetime.now(timezone.utc), "quota_status": "expired", "quota_data_limit_bytes": 0}
 
 class RenewalOptionsTests(unittest.IsolatedAsyncioTestCase):
@@ -76,7 +76,7 @@ class RenewalOptionsTests(unittest.IsolatedAsyncioTestCase):
     async def options(self, service_id: int) -> httpx.Response:
         return await self.client.get(f"/api/mini/service/{service_id}/renewal-options")
 
-    async def test_the_current_plan_then_this_shops_categories(self) -> None:
+    async def test_the_current_plan_then_only_its_own_category(self) -> None:
         response = await self.options(70)
         self.assertEqual(response.status_code, 200, response.text)
         self.assertIn("no-store", response.headers["cache-control"])
@@ -86,7 +86,7 @@ class RenewalOptionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([c["id"] for c in data["categories"]], [10])
         self.assertEqual([p["id"] for p in data["categories"][0]["plans"]], [1, 2])
         self.assertEqual(data["categories"][0]["plans"][1]["relation"], "downgrade")
-        self.assertEqual([p["id"] for p in data["other"]], [3])
+        self.assertEqual(data["other"], [], "another category's plan is not offered")
         self.assertEqual(data["plans"], [])
         every_id = {p["id"] for c in data["categories"] for p in c["plans"]} | {p["id"] for p in data["other"]}
         self.assertNotIn(4, every_id, "a trial plan is never offered for renewal")

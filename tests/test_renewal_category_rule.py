@@ -1,4 +1,4 @@
-"""A renewal that carries leftover volume or time stays in the service's plan category."""
+"""A renewal stays in the service's plan category; another category only when that one is empty."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from app.services.orders import renew_service_with_plan
 from app.services.renewal_category import (
     CATEGORY_CHECK_FAILED,
     CATEGORY_SWITCH_REFUSED,
+    OWN_CATEGORY_ONLY,
     Leftover,
     assert_category_switch,
     cached_leftover,
@@ -51,17 +52,22 @@ def ids(plans) -> list[int]:
 
 
 class ListingTests(unittest.TestCase):
-    def test_with_leftover_only_the_own_category_and_plans_that_carry_nothing(self) -> None:
-        offered = offered_plans(ALL, current_plan=CURRENT, leftover=Leftover(volume=True, time=True))
-        self.assertEqual(ids(offered), [1, 2, 4])
+    def test_only_the_own_category_is_offered(self) -> None:
+        for leftover in (Leftover(True, True), Leftover(False, False), Leftover(True, False)):
+            self.assertEqual(ids(offered_plans(ALL, current_plan=CURRENT, leftover=leftover)), [1, 2], leftover)
 
-    def test_a_used_up_service_may_switch_to_any_category(self) -> None:
-        self.assertEqual(ids(offered_plans(ALL, current_plan=CURRENT, leftover=Leftover(False, False))), ids(ALL))
+    def test_an_uncategorized_service_is_offered_only_uncategorized_plans(self) -> None:
+        bare = plan(7, None)
+        self.assertEqual(ids(offered_plans(ALL, current_plan=bare, leftover=Leftover(True, True))), [6])
 
-    def test_only_the_part_still_left_decides(self) -> None:
+    def test_an_empty_own_category_falls_back_to_plans_that_carry_nothing(self) -> None:
+        others = [OTHER_CARRIES, OTHER_CARRIES_NOTHING, OTHER_TIME_ONLY, UNCATEGORIZED]
+        offered = offered_plans(others, current_plan=CURRENT, leftover=Leftover(volume=True, time=True))
+        self.assertEqual(ids(offered), [4])
         # Volume left, time over: a plan that carries only time carries nothing.
-        offered = offered_plans(ALL, current_plan=CURRENT, leftover=Leftover(volume=True, time=False))
-        self.assertEqual(ids(offered), [1, 2, 4, 5])
+        offered = offered_plans(others, current_plan=CURRENT, leftover=Leftover(volume=True, time=False))
+        self.assertEqual(ids(offered), [4, 5])
+        self.assertEqual(ids(offered_plans(others, current_plan=CURRENT, leftover=Leftover(False, False))), ids(others))
 
     def test_a_service_without_a_known_plan_keeps_every_choice(self) -> None:
         self.assertEqual(ids(offered_plans(ALL, current_plan=None, leftover=Leftover(True, True))), ids(ALL))
@@ -146,17 +152,38 @@ class OrderTests(unittest.IsolatedAsyncioTestCase):
         return FakePanel({"status": "active", "data_limit": 30 * GB, "used_traffic": int(used_gb * GB),
                           "expire": int(time.time() + days_left * 86400)})
 
-    async def test_another_category_with_leftover_is_refused_and_no_order_is_made(self) -> None:
-        with self.assertRaisesRegex(ValueError, CATEGORY_SWITCH_REFUSED):
-            await self.renew(3, self.live(used_gb=5, days_left=10))
+    async def test_another_category_is_refused_without_reading_the_panel(self) -> None:
+        for panel in (self.live(used_gb=5, days_left=10), self.live(used_gb=30, days_left=-1)):
+            with self.assertRaisesRegex(ValueError, OWN_CATEGORY_ONLY):
+                await self.renew(3, panel)
+            self.assertEqual(panel.calls, 0)
         self.assertEqual(await self.orders(), 0)
 
-    async def test_an_unreadable_panel_refuses_the_switch(self) -> None:
+    async def close_own_category(self) -> None:
+        for plan_id in (1, 2):
+            (await self.session.get(Plan, plan_id)).is_active = False
+        await self.session.commit()
+
+    async def test_an_empty_own_category_allows_a_used_up_service_into_another(self) -> None:
+        await self.close_own_category()
+        order = await self.renew(3, self.live(used_gb=30, days_left=-1))
+        self.assertEqual(order.plan_id, 3)
+
+    async def test_an_empty_own_category_still_refuses_carrying_leftover(self) -> None:
+        await self.close_own_category()
+        with self.assertRaisesRegex(ValueError, CATEGORY_SWITCH_REFUSED):
+            await self.renew(3, self.live(used_gb=5, days_left=10))
         with self.assertRaisesRegex(ValueError, CATEGORY_CHECK_FAILED):
             await self.renew(3, FakePanel(error=httpx.ConnectError("refused")))
         self.assertEqual(await self.orders(), 0)
 
-    async def test_a_used_up_service_may_renew_in_another_category(self) -> None:
+    async def test_another_shop_s_plans_do_not_keep_the_category_open(self) -> None:
+        self.session.add(BotUser(id=9, telegram_id=909, referral_code="shop9", role="reseller"))
+        await self.session.flush()
+        self.session.add(Plan(id=9, name="فروشگاه", price=1, data_limit_gb=30, duration_days=30, category_id=10,
+                              is_active=True, owner_reseller_id=9))
+        await self.session.commit()
+        await self.close_own_category()
         order = await self.renew(3, self.live(used_gb=30, days_left=-1))
         self.assertEqual(order.plan_id, 3)
 
@@ -165,7 +192,7 @@ class OrderTests(unittest.IsolatedAsyncioTestCase):
         order = await self.renew(2, panel)
         self.assertEqual((order.plan_id, panel.calls), (2, 0))
 
-    async def test_automatic_renewal_offers_and_keeps_only_plans_that_may_take_the_leftover(self) -> None:
+    async def test_automatic_renewal_offers_and_keeps_only_the_own_category(self) -> None:
         from app.db.models import ServiceAutomation
         from app.services.service_automation import automation_choices, selected_choice
 
@@ -176,6 +203,18 @@ class OrderTests(unittest.IsolatedAsyncioTestCase):
             row = ServiceAutomation(service_id=70, shop_id=None, renew_plan_id=plan_id)
             chosen = await selected_choice(self.session, row, "renew")
             self.assertEqual(chosen is not None, allowed, plan_id)
+
+    async def test_automatic_renewal_with_an_empty_own_category_keeps_plans_that_carry_nothing(self) -> None:
+        from app.db.models import ServiceAutomation
+        from app.services.service_automation import selected_choice
+
+        self.session.add(Plan(id=4, name="اقتصادی بی‌انتقال", price=90, data_limit_gb=30, duration_days=30,
+                              category_id=11, is_active=True, carry_remaining_volume=False, carry_remaining_time=False))
+        await self.session.commit()
+        await self.close_own_category()
+        for plan_id, allowed in ((3, False), (4, True)):
+            row = ServiceAutomation(service_id=70, shop_id=None, renew_plan_id=plan_id)
+            self.assertEqual(await selected_choice(self.session, row, "renew") is not None, allowed, plan_id)
 
 
 if __name__ == "__main__":

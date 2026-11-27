@@ -29,8 +29,8 @@ from app.db.models import (
 )
 from app.services import auto_renew_timing as timing
 from app.services.catalog_pricing import annotate_prices, displayed_quote, sale_price
-from app.services.renewal_category import Leftover, offered_plans
-from app.services.service_renewals import current_plan_of
+from app.services.renewal_category import Leftover, offered_plans, same_category, would_carry
+from app.services.service_renewals import current_plan_of, own_category_has_plans
 from app.services.account_hold_guard import is_service_held
 from app.services.service_freeze_guard import is_frozen
 from app.services.service_scope import service_shop_id
@@ -189,10 +189,14 @@ async def selected_choice(session: AsyncSession, row: ServiceAutomation, action:
 
 
 async def _renewal_allowed(session: AsyncSession, row: ServiceAutomation, choice: Plan) -> bool:
-    """Another category's plan is valid only when it would carry nothing over (renewal_category)."""
+    """The service's own category; another one only when that is empty and the plan carries nothing."""
     service = await session.get(UserService, row.service_id)
     current = await current_plan_of(session, service) if service is not None else None
-    return bool(offered_plans([choice], current_plan=current, leftover=AUTO_RENEW_LEFTOVER))
+    if current is None or same_category(current, choice):
+        return True
+    if await own_category_has_plans(session, current, shop_id=row.shop_id):
+        return False
+    return not would_carry(choice, AUTO_RENEW_LEFTOVER)
 
 
 async def claim_automation(session: AsyncSession, service_id: int) -> str | None:

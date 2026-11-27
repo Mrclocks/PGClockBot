@@ -1,10 +1,13 @@
 """Which plans a service may be renewed onto across plan categories.
 
-Plan categories are priced differently. Carrying a service's leftover volume or time into a plan of
-another category would move quota bought at one price into a category sold at another. So while a
-renewal would carry something over, it stays in the service's own category; a plan of another
-category is offered only when it carries nothing: it does not carry that part, or the service has
-none of it left. A service without a known plan keeps every choice, as before.
+A service is renewed within its own plan category: the category is the product the customer
+bought (volume-based, unlimited, ...), so the renewal list shows only that category's plans and an
+order for another category's plan is refused.
+
+When the service's category has no active plan left, the customer would have nothing to renew onto;
+then another category's plan is offered only when it carries nothing over, because categories are
+priced differently and carrying leftover volume or time would move quota bought at one price into a
+category sold at another. A service without a known plan keeps every choice.
 
 The renewal list decides from the stored quota cache (no panel call; unknown means "has leftover").
 The preview and the order decide from the panel's live numbers, the same ones the renewal uses.
@@ -26,6 +29,7 @@ CATEGORY_SWITCH_REFUSED = (
     "تا وقتی سرویس حجم یا زمان باقی‌مانده دارد، فقط با پلن‌های دستهٔ خودش تمدید می‌شود؛ "
     "پلن دیگری از همان دسته انتخاب کنید."
 )
+OWN_CATEGORY_ONLY = "این سرویس فقط با پلن‌های دستهٔ خودش تمدید می‌شود؛ پلنی از همان دسته انتخاب کنید."
 CATEGORY_CHECK_FAILED = (
     "مانده سرویس الان قابل بررسی نیست؛ کمی بعد دوباره امتحان کنید یا پلنی از دستهٔ خود سرویس انتخاب کنید."
 )
@@ -73,10 +77,21 @@ def would_carry(plan: Any, leftover: Leftover) -> bool:
 
 
 def offered_plans(plans: list[Any], *, current_plan: Any | None, leftover: Leftover) -> list[Any]:
-    """The renewal list: the service's own category, plus other categories' plans that carry nothing."""
+    """The renewal list: the service's own category; without one left, other plans that carry nothing."""
     if current_plan is None:
         return list(plans)
-    return [p for p in plans if same_category(current_plan, p) or not would_carry(p, leftover)]
+    own = [p for p in plans if same_category(current_plan, p)]
+    if own:
+        return own
+    return [p for p in plans if not would_carry(p, leftover)]
+
+
+def refuse_other_category(current_plan: Any | None, target_plan: Any, *, own_category_open: bool) -> None:
+    """Refuse another category's plan while the service's own category still has a plan to renew onto."""
+    if current_plan is None or same_category(current_plan, target_plan):
+        return
+    if own_category_open:
+        raise ValueError(OWN_CATEGORY_ONLY)
 
 
 def assert_category_switch(current_plan: Any | None, target_plan: Any, renewal: dict) -> None:
