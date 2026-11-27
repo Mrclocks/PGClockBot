@@ -149,7 +149,6 @@ SECTIONS: dict[str, dict] = {
                 ("referral_text", "متن دعوت", "textarea"),
                 ("referral_bonus", "پاداش دعوت", "number"),
             ]),
-            ("wheel", WHEEL_GROUP, WHEEL_BOT_FIELDS),
             ("profile", "پروفایل تلگرام ربات", PROFILE_BOT_FIELDS),
             *MESSAGE_TEXT_SUBS,
             ("status_texts", "متن‌های وضعیت اتصال", CONNECTION_STATUS_CUSTOMER_TEXTS),
@@ -261,6 +260,11 @@ SECTIONS: dict[str, dict] = {
                 ("pg_username_pattern", "الگو", "text"),
             ]),
         ],
+    },
+    # Same keys as the web club page's wheel settings; prizes and the club menu order stay on the web.
+    "loyalty": {
+        "title": "باشگاه مشتریان",
+        "subs": [("wheel", WHEEL_GROUP, WHEEL_BOT_FIELDS)],
     },
     "limits": {
         "title": "ورود و عضویت",

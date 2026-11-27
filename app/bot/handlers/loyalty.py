@@ -879,7 +879,12 @@ async def open_admin_loyalty_tiers(
         reseller_owner_id=reseller_owner_id,
     )
 
-def _staff_settings_markup(*, enabled: bool) -> InlineKeyboardMarkup:
+def wheel_settings_callback(scope: int | None) -> str:
+    """The settings editor group of the wheel: the shop's own (``res``) or the platform's (``adm``)."""
+    return "res:st:sub:loyalty:wheel" if scope is not None else "adm:st:sub:loyalty:wheel"
+
+
+def _staff_settings_markup(*, enabled: bool, scope: int | None) -> InlineKeyboardMarkup:
     mark = "✅ فعال" if enabled else "⛔️ غیرفعال"
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -895,6 +900,7 @@ def _staff_settings_markup(*, enabled: bool) -> InlineKeyboardMarkup:
                     callback_data="loyadm:edit:rate",
                 )
             ],
+            [InlineKeyboardButton(text="🎡 تنظیمات چرخ شانس", callback_data=wheel_settings_callback(scope))],
             [InlineKeyboardButton(text="🔄 تازه‌سازی", callback_data="loyadm:settings")],
             [kb.back_button(None, "nv:adm:loy")],
         ]
@@ -939,7 +945,7 @@ async def open_admin_loyalty_settings(
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
-        content_inline=_staff_settings_markup(enabled=enabled),
+        content_inline=_staff_settings_markup(enabled=enabled, scope=scope),
         content_caption="تنظیمات:",
     )
 
@@ -1433,7 +1439,7 @@ async def staff_tog_enabled(
         await safe_edit_text(
             callback.message,
             "تنظیمات باشگاه به‌روز شد.",
-            reply_markup=_staff_settings_markup(enabled=new_val == "1"),
+            reply_markup=_staff_settings_markup(enabled=new_val == "1", scope=scope),
         )
 
 @router.callback_query(F.data == "loyadm:settings")
@@ -1467,7 +1473,7 @@ async def staff_settings_refresh(
     await safe_edit_text(
         callback.message,
         format_message("⚙️ تنظیمات باشگاه", body),
-        reply_markup=_staff_settings_markup(enabled=enabled),
+        reply_markup=_staff_settings_markup(enabled=enabled, scope=scope),
     )
 
 @router.callback_query(F.data == "loyadm:edit:rate")
@@ -1698,7 +1704,7 @@ async def staff_save_wallet_rate(
             can_tiers=can_tiers,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
-            content_inline=_staff_settings_markup(enabled=enabled),
+            content_inline=_staff_settings_markup(enabled=enabled, scope=scope),
         )
         return
     raw = text.replace(",", "").replace("٬", "").strip()
@@ -1725,7 +1731,7 @@ async def staff_save_wallet_rate(
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
-        content_inline=_staff_settings_markup(enabled=enabled),
+        content_inline=_staff_settings_markup(enabled=enabled, scope=scope),
     )
 
 @router.message(LoyaltyManageStates.edit_referral_text)
