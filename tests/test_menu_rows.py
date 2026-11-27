@@ -380,6 +380,13 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         _, back = self._shown(await self._panel(view.inline_keyboard[-1][0].callback_data))
         self.assertIn("edl:a:o:c.wallet", self._data(back))
 
+    async def test_layout_view_colors_save_and_reset_and_reads_row_sizes_clearly(self) -> None:
+        await self._start_editing()
+        _, view = self._shown(await self._owner("edl:a:o:a.settings"))
+        actions = next(row for row in view.inline_keyboard if row[0].text == rows_ui.BTN_SAVE)
+        self.assertEqual([(b.text, b.style) for b in actions], [(rows_ui.BTN_SAVE, "success"), (rows_ui.BTN_RESET, "danger")])
+        self.assertEqual(view.inline_keyboard[0][1].text, "ردیف ۱: ۲ ستون")
+
     async def test_plus_and_minus_change_only_the_draft_until_saved(self) -> None:
         await self._start_editing()
         text, view = self._shown(await self._owner("edl:a:m:c.wallet:2:0"))

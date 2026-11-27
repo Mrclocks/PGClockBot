@@ -127,7 +127,9 @@ def _cb(actor: EditorActor, *parts: object) -> str:
     return ":".join([MENU_ROWS_ROOT, audience_code(actor), *map(str, parts)])
 
 
-def _button(text: str, data: str) -> InlineKeyboardButton:
+def _button(text: str, data: str, *, style: str | None = None) -> InlineKeyboardButton:
+    if style:
+        return InlineKeyboardButton(text=text, callback_data=data, style=style)
     return InlineKeyboardButton(text=text, callback_data=data)
 
 
@@ -157,13 +159,17 @@ def rows_view(
         lines.append(f"ردیف {to_fa_digits(index + 1)}: {texts}")
         keyboard.append([
             _button(BTN_NARROW, _cb(actor, "m", spec.id, sizes, index)),
-            _button(f"ردیف {to_fa_digits(index + 1)} · {to_fa_digits(size)} ستون", _cb(actor, "i", spec.id)),
+            # A colon, not «·»: between Persian digits a middle dot reads as a zero («۱ · ۲» like «۱۰۲»).
+            _button(f"ردیف {to_fa_digits(index + 1)}: {to_fa_digits(size)} ستون", _cb(actor, "i", spec.id)),
             _button(BTN_WIDEN, _cb(actor, "p", spec.id, sizes, index)),
         ])
         start += size
     if draft != _sizes_of(body.rows):
         lines.extend(["", TEXT_UNSAVED])
-    keyboard.append([_button(BTN_SAVE, _cb(actor, "s", spec.id, sizes)), _button(BTN_RESET, _cb(actor, "r", spec.id))])
+    keyboard.append([
+        _button(BTN_SAVE, _cb(actor, "s", spec.id, sizes), style="success"),
+        _button(BTN_RESET, _cb(actor, "r", spec.id), style="danger"),
+    ])
     keyboard.append([_button(BTN_BACK, f"{EDIT_CALLBACK_ROOT}:{audience_code(actor)}:o:{spec.id}")])
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=keyboard)
 
