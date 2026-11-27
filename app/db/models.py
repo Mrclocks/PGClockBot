@@ -889,6 +889,39 @@ class ServiceTransfer(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ServiceLinkReset(Base):
+    """A customer's own change of a service's subscription link.
+
+    ``pending`` -> ``done`` / ``failed``, or ``unknown`` when the panel's answer was lost; the job then
+    reads the panel and never revokes again. Only the SHA-256 of the old token is kept, to tell
+    whether the panel changed it. At most one open change per service (partial unique index).
+    """
+
+    __tablename__ = "service_link_resets"
+    __table_args__ = (
+        Index("ix_service_link_resets_service_created", "service_id", "created_at"),
+        Index("ix_service_link_resets_open_id", "id", postgresql_where=text("status IN ('pending', 'unknown')")),
+        Index(
+            "uq_service_link_resets_open",
+            "service_id",
+            unique=True,
+            postgresql_where=text("status IN ('pending', 'unknown')"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_id: Mapped[int] = mapped_column(ForeignKey("user_services.id", ondelete="CASCADE"))
+    shop_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    pg_user_id: Mapped[int] = mapped_column(Integer)
+    old_token_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Ticket(Base):
     __tablename__ = "tickets"
 

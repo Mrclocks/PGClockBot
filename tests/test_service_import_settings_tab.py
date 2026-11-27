@@ -150,6 +150,18 @@ class FreezeSettingsPageTests(TabHarness):
             self.assertTrue(body.startswith(" hidden"), f"{title}: the body stays closed while the switch is off")
         self.assertNotIn("ds-sec-head", page.split('id="settings-form"', 1)[1].split("</form>", 1)[0])
 
+    async def test_the_link_change_card_opens_off_and_a_shop_saves_a_clamped_limit(self):
+        page = (await self.call(SHOP_SESSION, "GET", "/shop-settings?tab=service_actions")).text
+        self.assertIn('name="s_service_link_reset_enabled" value="1" id="slr-enabled"', page)
+        self.assertIn('data-ds-show-when="#slr-enabled:1" hidden', page)
+        self.assertIn('name="s_service_link_reset_per_period" type="number" min="1" max="10"', page)
+        await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
+            "s_service_link_reset_enabled": "1", "s_service_link_reset_per_period": "50",
+        })
+        shop, owner = await self.stored(5), await self.stored(None)
+        self.assertEqual((shop["service_link_reset_enabled"], shop["service_link_reset_per_period"]), ("1", "10"))
+        self.assertEqual((owner["service_link_reset_enabled"], owner["service_link_reset_plans"]), ("0", ""))
+
     async def test_out_of_range_numbers_are_stored_as_the_limit(self):
         await self.form(SHOP_SESSION, "/shop-settings?tab=service_actions", {
             "s_service_freeze_enabled": "1", "s_service_freeze_max_days": "900",

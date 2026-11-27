@@ -28,6 +28,7 @@ from app.jobs.connection_status import run_connection_status
 from app.jobs.customer_notices import run_customer_notices
 from app.jobs.service_freezes import run_service_freezes
 from app.jobs.service_transfers import run_service_transfers
+from app.jobs.service_link_resets import run_service_link_resets
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
 from app.jobs.ticket_reminders import run_ticket_reminders
 from app.jobs.paid_order_recovery import run_paid_order_recovery
@@ -700,6 +701,8 @@ def start_background_scheduler() -> None:
         ("service_freezes", run_service_freezes, {"minutes": 1}, 120),
         # Rotates the old owner's subscription link when it failed at acceptance; needs no bot.
         ("service_transfers", run_service_transfers, {"minutes": 1}, 120),
+        # Reads the panel for customer link changes whose answer was lost; never revokes again.
+        ("service_link_resets", run_service_link_resets, {"minutes": 2}, 240),
         # Timed quick switches; one indexed query when nothing is due.
         ("switch_reverts", run_switch_reverts, {"minutes": 1}, 120),
     )

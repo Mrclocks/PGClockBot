@@ -249,6 +249,7 @@ BTN_SERVICE_PAUSE_TRANSFER: list[Field] = [
     ("btn_svc_unfreeze", "ادامهٔ سرویس", "text"),
     ("btn_svc_transfer", "انتقال به شخص دیگر", "text"),
     ("btn_svc_transfer_cancel", "لغو لینک انتقال", "text"),
+    ("btn_svc_link_reset", "تغییر لینک اشتراک", "text"),
 ]
 
 BTN_ADMIN_PLAN_KINDS: list[Field] = [
@@ -429,7 +430,7 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         ("btn_adm_loy_sub", "دکمه‌های ادمین — باشگاه", BTN_ADMIN_LOYALTY_SUB),
         ("btn_adm_mkt_sub", "دکمه‌های ادمین — بازاریابی", BTN_ADMIN_MARKETING_SUB),
         ("btn_service_more", "دکمه‌های مدیریت سرویس", BTN_SERVICE_MORE),
-        ("btn_service_pause", "دکمه‌های توقف و انتقال سرویس", BTN_SERVICE_PAUSE_TRANSFER),
+        ("btn_service_pause", "دکمه‌های توقف، انتقال و تغییر لینک سرویس", BTN_SERVICE_PAUSE_TRANSFER),
         ("btn_res_groups", "دکمه‌های پنل نماینده — گروه‌ها", BTN_RESELLER_GROUPS),
         ("btn_res_hub", "دکمه‌های پنل نماینده", BTN_RESELLER_HUB),
         ("btn_res_hub_more", "دکمه‌های پنل نماینده — مشتریان و حساب", BTN_RESELLER_HUB_MORE),

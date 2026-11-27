@@ -82,6 +82,10 @@ from app.services.service_transfer_settings import (
     BOT_FIELDS as SERVICE_TRANSFER_BOT_FIELDS,
     GROUP_TITLE as SERVICE_TRANSFER_GROUP,
 )
+from app.services.service_link_reset_settings import (
+    BOT_FIELDS as SERVICE_LINK_RESET_BOT_FIELDS,
+    GROUP_TITLE as SERVICE_LINK_RESET_GROUP,
+)
 from app.services.settings_operation_fields import (
     AUTO_APPROVE_AFTER_FIELDS,
     AUTO_RENEW_FIELDS,
@@ -255,6 +259,7 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("freeze", SERVICE_FREEZE_GROUP, SERVICE_FREEZE_BOT_FIELDS),
             ("transfer", SERVICE_TRANSFER_GROUP, SERVICE_TRANSFER_BOT_FIELDS),
+            ("linkreset", SERVICE_LINK_RESET_GROUP, SERVICE_LINK_RESET_BOT_FIELDS),
             ("svccancel", SERVICE_CANCEL_GROUP, SERVICE_CANCEL_BOT_FIELDS),
             ("naming", "نام در پاسارگارد", [
                 ("pg_username_prefix", "پیشوند", "text"),

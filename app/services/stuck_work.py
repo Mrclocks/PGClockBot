@@ -19,6 +19,7 @@ from app.db.models import (
     DeliveryFailure,
     PaymentSettlement,
     ServiceFreeze,
+    ServiceLinkReset,
     ServiceTransfer,
     SettlementStatus,
 )
@@ -27,6 +28,7 @@ from app.services.job_trigger import run_job_now
 from app.services.numbers import to_fa_digits
 from app.services.payment_settlement import CHANNEL_PSP, PSP_SETTLING_STALE_AFTER
 from app.services.service_freeze_settings import STATUS_FROZEN, STATUS_PAUSING, STATUS_RESUMING
+from app.services.service_link_reset_settings import OPEN_STATUSES as LINK_RESET_OPEN
 from app.services.staff_audit import actor_from_staff, add_staff_action
 from app.services.system_health import ERR, OK, WARN, HealthGroup, HealthItem
 
@@ -51,6 +53,7 @@ STUCK_KINDS: dict[str, StuckKind] = {
     "freezes": StuckKind("freezes", "سرویس‌های مانده در توقف", "time", "service_freezes", WARN),
     "cashback": StuckKind("cashback", "کش‌بک‌های واریزنشده", "wallet", "cashback_mature", WARN),
     "transfers": StuckKind("transfers", "لینک‌های عوض‌نشده بعد از انتقال", "refresh", "service_transfers", WARN),
+    "link_resets": StuckKind("link_resets", "تغییر لینک‌های نامعلوم مشتری", "refresh", "service_link_resets", WARN),
 }
 DELIVERIES = HealthItem("deliveries", "تحویل‌های ناموفق", "alert", OK, NOTHING_STUCK, "/finance?tab=delivery")
 
@@ -82,6 +85,9 @@ async def stuck_counts(session: AsyncSession, *, now: datetime | None = None) ->
         "transfers": await _count(session, select(func.count(ServiceTransfer.id)).where(
             ServiceTransfer.link_rotation_pending.is_(True), ServiceTransfer.accepted_at < stale,
         )),
+        "link_resets": await _count(session, select(func.count(ServiceLinkReset.id)).where(
+            ServiceLinkReset.status.in_(LINK_RESET_OPEN), ServiceLinkReset.created_at < stale,
+        )),
     }
 
 
@@ -101,7 +107,7 @@ async def stuck_group(session: AsyncSession) -> HealthGroup:
         f"{to_fa_digits(deliveries)} سفارش پرداخت‌شده تحویل نشده", DELIVERIES.href,
     )
     lines = [_line(STUCK_KINDS["settlements"], counts["settlements"]), delivery_line]
-    lines += [_line(STUCK_KINDS[key], counts[key]) for key in ("freezes", "cashback", "transfers")]
+    lines += [_line(STUCK_KINDS[key], counts[key]) for key in ("freezes", "cashback", "transfers", "link_resets")]
     return HealthGroup("کارهای گیرکرده", tuple(lines))
 
 

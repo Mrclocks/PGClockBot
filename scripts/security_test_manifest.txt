@@ -663,3 +663,6 @@ tests/test_ticket_reminders.py
 
 # Staff link revokes save the panel's new link on the acting shop's services only.
 tests/test_subscription_link_store.py
+
+# Customer link change: one revoke per change, own service and shop only, lost answers never revoked again.
+tests/test_service_link_reset.py

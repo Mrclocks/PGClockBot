@@ -33,6 +33,7 @@ from app.services.service_import_config import (
 from app.services.service_cancellation_settings import CANCEL_BOUNDS, CHOICES as CANCEL_CHOICES
 from app.services.service_freeze_settings import FREEZE_BOUNDS
 from app.services.service_transfer_settings import TRANSFER_BOUNDS
+from app.services.service_link_reset_settings import LINK_RESET_BOUNDS
 from app.services.lucky_wheel_settings import WHEEL_NUMBER_BOUNDS
 from app.services.ticket_reminders import MAX_HOURS as TICKET_REMINDER_MAX_HOURS, SETTING_KEY as TICKET_REMINDER_KEY
 from app.services.settings_operation_fields import ALERT_UNIT_OPTIONS, OPERATION_NUMBER_BOUNDS
@@ -70,6 +71,7 @@ NUMBER_BOUNDS: dict[str, tuple[int, int]] = {
     IMPORT_KEY_MAX_PER_USER: (IMPORT_MIN_PER_USER, IMPORT_MAX_PER_USER_LIMIT),
     **FREEZE_BOUNDS,
     **TRANSFER_BOUNDS,
+    **LINK_RESET_BOUNDS,
     **CANCEL_BOUNDS,
     **ENTRY_APPROVAL_NUMBER_BOUNDS,
     **WHEEL_NUMBER_BOUNDS,

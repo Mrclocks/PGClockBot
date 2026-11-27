@@ -32,6 +32,7 @@ from app.services.service_cancellation_settings import cancellation_policy
 from app.services.service_cancellations import cancellation_offer, request_cancellation, shows_cancel_button
 from app.services.service_freeze import freeze_button
 from app.services.service_transfer import transfer_button
+from app.services.service_link_reset import link_reset_button
 from app.services.service_import import is_external_service
 from app.services.service_panel_presence import (
     ABSENT,
@@ -1107,6 +1108,7 @@ async def svc_more(callback: CallbackQuery, session: AsyncSession, db_user: BotU
                 wireguard=has_wireguard(info),
                 freeze=await freeze_button(session, svc, ui),
                 transfer=await transfer_button(session, svc, ui),
+                link_reset=await link_reset_button(session, svc, ui),
             ),
         )
 
