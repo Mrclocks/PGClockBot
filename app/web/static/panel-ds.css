@@ -144,6 +144,8 @@ html[data-theme="light"] .btn-warn { color: var(--btn-fg, var(--brand-fg)) !impo
 .ui-modal.ds.open:not(.is-closing) .ui-modal-panel { animation: ds-slide-up var(--motion-med) cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .ui-modal.ds.open.is-closing .ui-modal-backdrop { animation: ds-fade-out var(--motion-fast) ease-in forwards; }
 .ui-modal.ds.open.is-closing .ui-modal-panel { animation: ds-slide-down var(--motion-fast) cubic-bezier(0.4, 0, 1, 1) forwards; }
+/* Settled (panel.js): the slide has ended, so the panel drops it and no longer sits on a moved layer (iOS caret). */
+.ui-modal.ds.open.is-settled:not(.is-closing) .ui-modal-panel { animation: none; }
 @media (max-width: 640px) {
   /* A phone sheet slides in whole, without fading. */
   .ui-modal.ds { --ds-slide: 100%; --ds-slide-opacity: 1; }
