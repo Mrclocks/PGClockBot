@@ -57,6 +57,8 @@ OPERATIONS = {
     "service_freezes",
     # Retries the subscription link rotation of transferred services; needs no running bot.
     "service_transfers",
+    # Reads the panel for customer link changes whose answer was lost; needs no running bot.
+    "service_link_resets",
 }
 NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "broadcast", "first_use_nudge", "cancellation_notifications", "panel_alert_notifications", "customer_notices", "webhook_watch", "start_watch", "ticket_reminders"}
 
