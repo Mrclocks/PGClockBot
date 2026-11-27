@@ -1524,17 +1524,17 @@ def service_more_keyboard(
     rows.append([_service_button(ui, "btn_svc_auto", "⚙️ تنظیمات خودکار", f"svc:auto:{sid}", "svc_auto")])
     # From service_link_reset.link_reset_button; False when the shop has it off for the service.
     if link_reset:
-        rows.append([_service_button(ui, "btn_svc_link_reset", "🔗 تغییر لینک اشتراک", f"svc:lnk:{sid}", "svc_auto")])
+        rows.append([_service_button(ui, "btn_svc_link_reset", "🔗 تغییر لینک اشتراک", f"svc:lnk:{sid}", "svc_link_reset")])
     # «pause» or «resume» from service_freeze.freeze_button; None when the shop has it off.
     if freeze == "pause":
-        rows.append([_service_button(ui, "btn_svc_freeze", "⏸ توقف موقت سرویس", f"svc:frz:{sid}", "svc_auto")])
+        rows.append([_service_button(ui, "btn_svc_freeze", "⏸ توقف موقت سرویس", f"svc:frz:{sid}", "svc_freeze")])
     elif freeze == "resume":
-        rows.append([_service_button(ui, "btn_svc_unfreeze", "▶️ ادامهٔ سرویس", f"svc:frzres:{sid}", "svc_auto")])
+        rows.append([_service_button(ui, "btn_svc_unfreeze", "▶️ ادامهٔ سرویس", f"svc:frzres:{sid}", "svc_freeze")])
     # «start» or «cancel» from service_transfer.transfer_button; None when the shop has it off.
     if transfer == "start":
-        rows.append([_service_button(ui, "btn_svc_transfer", "🔁 انتقال به شخص دیگر", f"svc:trn:{sid}", "svc_auto")])
+        rows.append([_service_button(ui, "btn_svc_transfer", "🔁 انتقال به شخص دیگر", f"svc:trn:{sid}", "svc_transfer")])
     elif transfer == "cancel":
-        rows.append([_service_button(ui, "btn_svc_transfer_cancel", "✖️ لغو لینک انتقال", f"svc:trnx:{sid}", "svc_auto")])
+        rows.append([_service_button(ui, "btn_svc_transfer_cancel", "✖️ لغو لینک انتقال", f"svc:trnx:{sid}", "svc_transfer")])
     if cancel and not external:
         rows.append([_service_button(ui, "btn_svc_cancel", "📝 درخواست لغو", f"svc:cancel:{sid}", "svc_cancel")])
     rows.append(
