@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_account_hold_actions.html" import customer_hold_actions %}
 {% from "macros.html" import row_actions, page_header, act_label, table_select_head, table_select_cell, table_bulk_bar, modal_title, empty_state, search_submit %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
 {% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
@@ -113,7 +114,7 @@
         <th class="col-exp" data-sort-type="num" data-list-sort-label="زودترین انقضا" data-list-sort-dir="ascending" data-list-sort-order="2">انقضا</th>
         <th class="col-wallet" data-sort-type="num" data-list-sort-label="بیشترین موجودی" data-list-sort-dir="descending" data-list-sort-order="3">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
-        {% if ops or manage or provision or edit_svc %}<th class="col-actions"></th>{% endif %}
+        {% if ops or manage or provision or edit_svc or can_hold_customers %}<th class="col-actions"></th>{% endif %}
         <th class="li-head" scope="col">
           <span class="li-count">{{ rows | length | num }} کاربر</span>
           <select class="select-sm li-sort" data-list-sort aria-label="مرتب‌سازی" hidden></select>
@@ -194,14 +195,14 @@
           <span class="badge active">فعال</span>
           {% endif %}
         </td>
-        {% if ops or manage or provision or edit_svc %}
+        {% if ops or manage or provision or edit_svc or can_hold_customers %}
         <td class="col-actions">
           {% call row_actions() %}
             {% if ops and not u.is_blocked %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-user-message"
                     data-msg-uid="{{ u.id }}"
-                    data-msg-name="{{ u.full_name or u.username or u.telegram_id }}">پیام</button>
+                    data-msg-name="{{ u.full_name or u.username or u.telegram_id }}">{{ icon('message', 'btn-ico') }}پیام</button>
             {% endif %}
             {% if ops and pg_update and row.service_count > 0 %}
             <form method="post" action="/users/{{ u.id }}/quick-renew"
@@ -214,7 +215,7 @@
           <input type="hidden" name="reason" value="" />
               <input type="hidden" name="return_filter" value="{{ flt }}" />
               {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
-              <button class="btn btn-sm" type="submit">تمدید</button>
+              <button class="btn btn-sm" type="submit">{{ icon('refresh', 'btn-ico') }}تمدید</button>
             </form>
             {% endif %}
             {% if can_open_edit %}
@@ -223,7 +224,10 @@
                     data-modal-load="/users/{{ u.id }}/edit?fragment=1"
                     data-modal-load-target="user-edit-body"
                     data-edit-url="/users/{{ u.id }}/edit?fragment=1"
-                    data-edit-title="ویرایش کاربر #{{ u.id }}">ویرایش</button>
+                    data-edit-title="ویرایش کاربر #{{ u.id }}">{{ icon('edit', 'btn-ico') }}ویرایش</button>
+            {% endif %}
+            {% if can_hold_customers and u.role != 'admin' %}
+            {{ customer_hold_actions(u.id, customer_holds.get(u.id), platform=can_manage_users) }}
             {% endif %}
             {% if manage %}
             <form method="post" action="/users/{{ u.id }}/block"
@@ -231,7 +235,7 @@
                   data-confirm-title="{% if u.is_blocked %}رفع مسدودی{% else %}تأیید مسدودسازی{% endif %}"
                   {% if not u.is_blocked %}data-confirm-warn="1"{% endif %}
                   data-confirm-label="{% if u.is_blocked %}رفع مسدودی{% else %}مسدود کردن{% endif %}">
-              <button class="btn btn-sm {% if not u.is_blocked %}btn-warn{% endif %}" type="submit">
+              <button class="btn btn-sm {% if not u.is_blocked %}btn-warn{% endif %}" type="submit">{{ icon('unlock' if u.is_blocked else 'ban', 'btn-ico') }}
                 {% if u.is_blocked %}رفع مسدودی{% else %}مسدود{% endif %}
               </button>
             </form>
@@ -246,7 +250,7 @@
                   data-confirm-reason-name="reason"
                   data-confirm-label="حذف کاربر">
               <input type="hidden" name="reason" value="" />
-              <button class="btn btn-sm btn-danger" type="submit">حذف</button>
+              <button class="btn btn-sm btn-danger" type="submit">{{ icon('trash', 'btn-ico') }}حذف</button>
             </form>
             {% endif %}
             {% endif %}
@@ -270,7 +274,7 @@
         {% endif %}
       </tr>
     {% else %}
-      {{ empty_state('کاربری نیست', 'users', colspan=(10 if manage or ops or provision or edit_svc else 8)) }}
+      {{ empty_state('کاربری نیست', 'users', colspan=(10 if manage or ops or provision or edit_svc or can_hold_customers else 8)) }}
     {% endfor %}
     </tbody>
   </table>
@@ -307,17 +311,17 @@
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-create-title">
     {{ ds_modal_head('users', 'ساخت کاربر ربات', 'user-create-title') }}
     <form method="post" action="/users/create" class="form-stack ds-body"
-          data-confirm="کاربر جدید با این شناسه تلگرام ساخته شود؟"
+          data-confirm="با آیدی عددی، کاربر تازه ساخته می‌شود؛ با یوزرنیم، کاربر موجود باز می‌شود. ادامه می‌دهید؟"
           data-confirm-title="تأیید ساخت کاربر"
           data-confirm-label="ساخت کاربر">
       <input type="hidden" name="return_filter" value="{{ flt }}" />
       {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
       {% call ds_sec('حساب تلگرام', extra_class='ds-sec-first') %}
         <p class="ds-desc">کاربر با نقش «کاربر» ساخته می‌شود. اگر بعداً در ربات /start بزند، پروفایل تلگرام به‌روز می‌شود.</p>
-        <label class="form-field"><span>شناسه تلگرام (عددی) <span class="ds-req" aria-hidden="true">*</span></span>
-          <input name="telegram_id" type="number" required min="1" step="1" inputmode="numeric"
-                 placeholder="مثلاً 123456789" dir="ltr" autocomplete="off" />
-          <small class="muted">همان عددی که در @userinfobot یا پروفایل تلگرام می‌بینید — نه @username</small>
+        <label class="form-field"><span>آیدی عددی یا یوزرنیم تلگرام <span class="ds-req" aria-hidden="true">*</span></span>
+          <input name="telegram_id" required maxlength="64"
+                 placeholder="مثلاً 123456789 یا @username" dir="ltr" autocomplete="off" />
+          <small class="muted">با آیدی عددی کاربر تازه ساخته می‌شود. با یوزرنیم، اگر پیش‌تر ربات را استارت کرده باشد پروفایلش باز می‌شود؛ تلگرام از یوزرنیم آیدی نمی‌دهد، پس کاربر تازه فقط با آیدی عددی ساخته می‌شود.</small>
         </label>
         <label class="form-field">نام کاربری تلگرام
           <input name="username" type="text" maxlength="64" placeholder="@username (اختیاری)" dir="ltr" autocomplete="off" />

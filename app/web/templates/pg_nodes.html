@@ -72,25 +72,25 @@
           {% call row_actions() %}
             {% if can_reconnect %}
             <form method="post" action="/pg/nodes/{{ n.get('id') }}/reconnect" class="js-busy-form" data-busy-label="در حال اتصال…">
-              <button class="btn btn-ghost btn-sm" type="submit">اتصال مجدد</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ icon('refresh', 'btn-ico') }}اتصال مجدد</button>
             </form>
             {% endif %}
             {% if can_update %}
             <form method="post" action="/pg/nodes/{{ n.get('id') }}/sync" class="js-busy-form" data-busy-label="همگام‌سازی…">
-              <button class="btn btn-ghost btn-sm" type="submit">همگام‌سازی</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ icon('refresh', 'btn-ico') }}همگام‌سازی</button>
             </form>
             <form method="post" action="/pg/nodes/{{ n.get('id') }}/reset"
               data-confirm="مصرف این نود ریست شود؟" data-confirm-title="ریست مصرف نود" data-confirm-warn="1" data-confirm-label="ریست">
-              <button class="btn btn-ghost btn-sm" type="submit">ریست مصرف</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ icon('refresh', 'btn-ico') }}ریست مصرف</button>
             </form>
             <form method="post" action="/pg/nodes/{{ n.get('id') }}/toggle" class="js-busy-form" data-busy-label="…">
-              <button class="btn btn-ghost btn-sm" type="submit">تغییر وضعیت</button>
+              <button class="btn btn-ghost btn-sm" type="submit">{{ icon('edit', 'btn-ico') }}تغییر وضعیت</button>
             </form>
             {% endif %}
             {% if can_delete %}
             <form method="post" action="/pg/nodes/{{ n.get('id') }}/delete"
               data-confirm="این نود حذف شود؟" data-confirm-title="حذف نود" data-confirm-danger="1" data-confirm-label="حذف">
-              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+              <button class="btn btn-danger btn-sm" type="submit">{{ icon('trash', 'btn-ico') }}حذف</button>
             </form>
             {% endif %}
           {% endcall %}
@@ -143,7 +143,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit">ساخت نود</button>
+        <button class="btn" type="submit">{{ icon('plus', 'btn-ico') }}ساخت نود</button>
 
       </div></div>
     </form>
@@ -160,7 +160,7 @@
       const label = form.getAttribute('data-busy-label');
       if (label) {
         btn.dataset.idleLabel = btn.textContent;
-        btn.textContent = label;
+        setButtonText(btn, label);
       }
     });
   });

@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import secrets
 import string
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -19,7 +20,9 @@ from app.services.broadcast_audience import (
     is_broad,
     make_spec,
 )
-from app.services.broadcast_queue import STATUS_QUEUED
+from app.services.broadcast_media import CAPTION_TOO_LONG, BroadcastMedia, text_limit
+from app.services.broadcast_queue import STATUS_QUEUED, media_columns, scheduled_spec
+from app.services.broadcast_schedule import checked_send_after
 from app.services.campaigns import RECIPIENT_LIMIT, claim_shop_message_slot
 from app.services.rich_text import utf16_len
 
@@ -36,16 +39,19 @@ def shop_audience_clause(shop_id: int, spec: AudienceSpec | None = None):
     return audience_clause(spec or make_spec("all", shop_id=int(shop_id)), shop_id=int(shop_id))
 
 
-def clean_shop_broadcast_text(raw: object) -> str:
-    """Validate and return the raw body; escaping happens only at Telegram send time."""
+def clean_shop_broadcast_text(raw: object, *, with_media: bool = False) -> str:
+    """Validate and return the raw body; escaping happens only at Telegram send time.
+
+    With media the body is the caption: it may be empty and is limited to Telegram's caption length.
+    """
     text = str(raw or "").replace("\x00", "").strip()
-    if not text:
+    if not text and not with_media:
         raise ValueError("متن پیام خالی است")
-    if utf16_len(text) > MAX_SHOP_TEXT_UTF16:
-        raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_SHOP_TEXT_UTF16})")
+    limit = text_limit(with_media=with_media, default=MAX_SHOP_TEXT_UTF16)
+    too_long = CAPTION_TOO_LONG if with_media else f"متن پیام خیلی طولانی است (حداکثر {MAX_SHOP_TEXT_UTF16})"
     # Escaped HTML must still fit Telegram's limit when the worker sends with parse_mode=HTML.
-    if utf16_len(html.escape(text, quote=False)) > MAX_SHOP_TEXT_UTF16:
-        raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_SHOP_TEXT_UTF16})")
+    if utf16_len(text) > limit or utf16_len(html.escape(text, quote=False)) > limit:
+        raise ValueError(too_long)
     return text
 
 
@@ -88,6 +94,8 @@ async def queue_shop_broadcast(
     request_key: object = None,
     buttons: str | None = None,
     audience: AudienceSpec | None = None,
+    send_after: datetime | None = None,
+    media: BroadcastMedia | None = None,
 ) -> BroadcastLog:
     """Enqueue one shop broadcast; the daily broad cap and request_key make repeats safe.
 
@@ -96,14 +104,16 @@ async def queue_shop_broadcast(
     """
     if not isinstance(shop_id, int) or isinstance(shop_id, bool) or shop_id <= 0:
         raise ValueError("فروشگاه نامعتبر است")
-    body = clean_shop_broadcast_text(text)
+    body = clean_shop_broadcast_text(text, with_media=media is not None)
     key = parse_shop_request_key(request_key, shop_id=shop_id)
     existing = await session.scalar(select(BroadcastLog).where(BroadcastLog.request_key == key))
     if existing is not None:
         return existing
     if not await shop_can_send_broadcast(session, shop_id=shop_id):
         raise ValueError(SHOP_NO_BOT_MESSAGE)
-    spec = await checked_spec(session, audience or make_spec("all", shop_id=shop_id), shop_id=shop_id)
+    send_after = checked_send_after(send_after)
+    spec = make_spec("all", shop_id=shop_id) if audience is None else audience
+    spec = await checked_spec(session, scheduled_spec(spec, send_after), shop_id=shop_id)
     total = await count_shop_broadcast_targets(session, shop_id=shop_id, spec=spec)
     if not total:
         raise ValueError("مخاطبی برای این گروه وجود ندارد")
@@ -125,6 +135,8 @@ async def queue_shop_broadcast(
                 shop_id=int(shop_id),
                 request_key=key,
                 buttons=buttons,
+                send_after=send_after,
+                **media_columns(media),
             )
             session.add(log)
             await session.flush()

@@ -19,6 +19,7 @@ from app.bot.nav_input import delete_user_message
 from app.bot.tg_utils import safe_edit_text
 from app.bot.verbatim_input import NotVerbatimTextInput
 from app.db.models import BotUser, UserService
+from app.services.broadcast_failures import mark_reachable
 from app.services.formatting import service_card
 from app.services.referral_scope import is_referral_of_shop
 from app.services.service_import_offer import is_offer_dismissed
@@ -210,6 +211,8 @@ async def cmd_start(
     reseller_owner_id: int | None = None,
 ):
     await state.clear()
+    # Someone who blocked this bot or never started it is reachable again; group messages include them.
+    await mark_reachable(session, user_id=db_user.id, shop_id=reseller_owner_id if is_reseller_bot else None)
     # The typed /start goes with the next home, like a menu tap.
     note_throwaway(message)
     args = (command.args or "").strip()
@@ -817,23 +820,6 @@ async def help_guide(callback: CallbackQuery, session: AsyncSession):
             feedback.GUIDE_TEXT_NOT_SET
         )
     text, send_kw = outbound_setting_text(raw, title="📘 راهنما")
-    if callback.message:
-        await safe_edit_text(
-            callback.message,
-            text,
-            reply_markup=kb.back_home(ui),
-            **send_kw,
-        )
-
-@router.callback_query(F.data == "help:faq")
-async def help_faq(callback: CallbackQuery, session: AsyncSession):
-    from app.services.rich_text import outbound_setting_text
-
-    await callback.answer()
-    ui = await get_all_settings(session)
-    text, send_kw = outbound_setting_text(
-        ui.get("faq_text") or "", title="❓ سوالات متداول"
-    )
     if callback.message:
         await safe_edit_text(
             callback.message,

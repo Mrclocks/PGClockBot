@@ -46,7 +46,7 @@ from app.services.settings_tab_groups import (
     group_settings_tabs,
     resolve_merged_tab,
     settings_area,
-    tabs_with_message_variables,
+    tabs_with_page_tabs,
 )
 from app.services.rich_text import merge_rich_settings_on_save, prepare_settings_values_for_web
 from app.services.screen_titles import SCREEN_TEXT_TAB, platform_only_screen_text_keys, validate_screen_text_settings
@@ -286,7 +286,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             "groups": groups,
             "tab_groups": list(groups.keys()),
             "tabs": RESELLER_SETTINGS_TABS,
-            "tab_nav": group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, staff), tab, area=area_key),
+            "tab_nav": group_settings_tabs(tabs_with_page_tabs(RESELLER_SETTINGS_TABS, staff), tab, area=area_key),
             "tab": tab,
             "settings_area": settings_area(area_key, base="/shop-settings", bot_title="تنظیمات فروشگاه"),
             "is_area_list": is_area_list,
@@ -708,7 +708,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
     ):
         if _is_owner_settings_actor(staff):
             return RedirectResponse("/tickets?supports=1&stab=contacts", status_code=303)
-        from app.services.support_contacts import contacts_from_form_json, save_support_contacts
+        from app.services.support_contacts import contacts_from_form_json, save_submitted_support_contacts
 
         rid = _rid(staff)
         if not rid:
@@ -722,7 +722,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                     f"/tickets?supports=1&stab=contacts&err={quote(err)}",
                     status_code=303,
                 )
-            await save_support_contacts(session, contacts or [], reseller_id=rid)
+            await save_submitted_support_contacts(session, contacts or [], reseller_id=rid)
             return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
         from app.services.button_styles import parse_item_button_style_form

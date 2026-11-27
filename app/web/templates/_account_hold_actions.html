@@ -1,0 +1,45 @@
+{% from "_icons.html" import icon as btn_icon %}
+{#- «غیرفعال‌سازی» / «فعال‌سازی دوباره» for a list row's «⋯» menu; the user card copies them from there.
+    ``hold`` is the row's open hold (status, releasable) or none. The route re-checks every permission. -#}
+{% macro account_hold_actions(action_url, hold, disable_label, disable_message, disable_title, enable_message, enable_title) -%}
+{% if not hold %}
+<form method="post" action="{{ action_url }}"
+      data-confirm="{{ disable_message }}"
+      data-confirm-title="{{ disable_title }}"
+      data-confirm-danger="1"
+      data-confirm-reason="1"
+      data-confirm-reason-label="علت غیرفعال‌سازی"
+      data-confirm-reason-name="reason"
+      data-confirm-label="غیرفعال کن">
+  <input type="hidden" name="action" value="disable" />
+  <input type="hidden" name="reason" value="" />
+  <button class="btn btn-sm btn-danger" type="submit">{{ btn_icon('power', 'btn-ico') }}{{ disable_label }}</button>
+</form>
+{% elif hold.releasable and hold.status in ('applying', 'held') %}
+<form method="post" action="{{ action_url }}"
+      data-confirm="{{ enable_message }}"
+      data-confirm-title="{{ enable_title }}"
+      data-confirm-label="فعال کن">
+  <input type="hidden" name="action" value="enable" />
+  <button class="btn btn-sm" type="submit">{{ btn_icon('refresh', 'btn-ico') }}فعال‌سازی دوباره</button>
+</form>
+{% endif %}
+{%- endmacro %}
+
+{% macro customer_hold_actions(user_id, hold, platform=false) -%}
+{{ account_hold_actions('/users/' ~ user_id ~ '/account-hold', hold,
+    disable_label='غیرفعال‌سازی حساب',
+    disable_message=('دسترسی این کاربر به همهٔ ربات‌ها بسته و همهٔ سرویس‌هایش در پاسارگارد خاموش شوند؟' if platform else 'دسترسی این مشتری به فروشگاه شما بسته و سرویس‌هایش در فروشگاه شما خاموش شوند؟') ~ ' تا فعال‌سازی دوباره همین‌طور می‌ماند.',
+    disable_title='غیرفعال‌سازی حساب',
+    enable_message='حساب دوباره فعال شود؟ فقط سرویس‌هایی روشن می‌شوند که با این غیرفعال‌سازی خاموش شده‌اند.',
+    enable_title='فعال‌سازی دوبارهٔ حساب') }}
+{%- endmacro %}
+
+{% macro shop_hold_actions(shop_id, hold) -%}
+{{ account_hold_actions('/resellers/' ~ shop_id ~ '/account-hold', hold,
+    disable_label='غیرفعال‌سازی کامل',
+    disable_message='نماینده، زیرنماینده‌هایش، ادمین پاسارگارد و همهٔ کاربرانش خاموش شوند؟ تا فعال‌سازی دوباره، ربات و پنل این نماینده هم بسته است.',
+    disable_title='غیرفعال‌سازی کامل نماینده',
+    enable_message='نماینده دوباره فعال شود؟ فقط چیزهایی روشن می‌شوند که با غیرفعال‌سازی کامل خاموش شده‌اند.',
+    enable_title='فعال‌سازی دوبارهٔ نماینده') }}
+{%- endmacro %}

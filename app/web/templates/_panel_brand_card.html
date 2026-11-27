@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Panel brand (name, logo, colour) for the signed-in person's own scope.
    Expects: brand_values {name, logo, color} (what this scope saved), brand_form_action, panel_brand (the brand in
    effect, with fallbacks), shop_mode (true for a shop). The scope is never sent from here: the server derives it. #}
@@ -50,7 +51,7 @@
           <div class="ap-photo-row">
             {% if own.get('logo') %}
             <button type="submit" name="panel_brand_logo_clear" value="1" class="btn btn-danger btn-sm"
-                    data-confirm="لوگوی سفارشی حذف شود؟" data-confirm-title="تأیید" data-confirm-danger="1" data-confirm-label="حذف">
+                    data-confirm="لوگوی سفارشی حذف شود؟" data-confirm-title="تأیید" data-confirm-danger="1" data-confirm-label="حذف">{{ btn_icon('trash', 'btn-ico') }}
               حذف لوگو
             </button>
             {% else %}
@@ -82,7 +83,7 @@
   </div>
 
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره برند</button>
+    <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره برند</button>
   </div>
 </form>
 <script src="/static/panel-brand-form.js?v={{ asset_v('panel-brand-form.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %} defer></script>

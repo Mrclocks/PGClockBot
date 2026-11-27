@@ -62,10 +62,11 @@
 </details>
 {%- endmacro %}
 
-{# The editable list. ``preview`` is the selector of the Telegram preview that mirrors it (optional). #}
-{% macro button_list(groups=[], styles=[], plans=[], presets=[], max=4, preview='') -%}
+{# The editable list. ``preview`` is the selector of the Telegram preview that mirrors it (optional);
+   ``initial`` the buttons it starts with (dicts with target, label, url, plan, style), e.g. saved ones being edited. #}
+{% macro button_list(groups=[], styles=[], plans=[], presets=[], max=4, preview='', initial=[]) -%}
 <div class="msg-btns" data-msg-btn-list data-max="{{ max or 4 }}"{% if preview %} data-preview="{{ preview }}"{% endif %}
-     data-presets="{{ (presets or []) | tojson | forceescape }}">
+     data-presets="{{ (presets or []) | tojson | forceescape }}"{% if initial %} data-initial="{{ initial | tojson | forceescape }}"{% endif %}>
   <div class="msg-btns-rows" data-msg-btn-rows></div>
   <template data-msg-btn-template>{{ button_item(groups, styles, plans) }}</template>
   <button type="button" class="ds-add" data-msg-btn-add>{{ ico('plus') }}افزودن دکمه</button>
@@ -78,7 +79,7 @@
 <div class="form-field">
   <span>از قالب‌های ذخیره‌شده</span>
   <div class="msg-btn-presets" data-msg-btn-presets>
-    {% for p in presets %}<button type="button" class="btn btn-ghost btn-sm" data-msg-btn-preset="{{ p.id }}"><span dir="auto">{{ p.name }}</span></button>{% endfor %}
+    {% for p in presets %}<button type="button" class="btn btn-ghost btn-sm" data-msg-btn-preset="{{ p.id }}">{{ icon_svg('template', 'btn-ico') }}<span dir="auto">{{ p.name }}</span></button>{% endfor %}
   </div>
 </div>
 {% endif %}

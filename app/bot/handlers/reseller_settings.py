@@ -28,6 +28,7 @@ from app.services.bbc_settlement import ENABLED_KEY as BBC_ENABLED_KEY, bbc_enab
 from app.services.bot_appearance import PROFILE_TEXT_FIELDS, update_bot_profile_text
 from app.services.secret_box import reveal_bot_token
 from app.services.receipt_fingerprints import normalize_dup_policy
+from app.services.button_icons import PREMIUM_ICON_HINT, split_label_and_icon
 from app.services.rich_text import pack_setting_from_message
 from app.services.users import (
     get_all_settings,
@@ -112,6 +113,7 @@ from app.bot.handlers.settings_labels import (
     sub_back,
 )
 from app.bot.handlers.guide_editor import entry_button as guides_entry_button
+from app.bot.handlers.faq_editor import entry_button as faq_entry_button
 from app.bot.handlers.screen_editor import entry_button as editor_entry_button
 from app.services.screen_editor import is_editor_enabled
 import html
@@ -592,6 +594,7 @@ async def _section_panel(session: AsyncSession, sec_id: str, reseller_id: int) -
             rows.append(
                 [InlineKeyboardButton(text="➕ پشتیبان جدید", callback_data="res:st:sup:add")]
             )
+            rows.append([faq_entry_button(for_reseller=True)])
             rows.append([kb.back_button(None, "res:st:hub")])
             body = "پشتیبان فعال نیست." if not contacts else "برای حذف روی مورد بزنید."
             return f"💬 <b>پشتیبان‌ها</b>\n\n{body}", _kb(rows)
@@ -1256,7 +1259,7 @@ async def support_add(callback: CallbackQuery, state: FSMContext, session: Async
     await ask_text(
         callback,
         state,
-        prompt="عنوان پشتیبان را بفرستید:",
+        prompt="عنوان پشتیبان را بفرستید:\n" + PREMIUM_ICON_HINT,
         cancel_code="rs_set",
         fsm_state=ResellerSettingsStates.support_title,
         edit=True,
@@ -1276,7 +1279,8 @@ async def support_title_save(message: Message, state: FSMContext, session: Async
         await _typed_cancel(message, state, session, db_user, profile,
                             is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
         return
-    await state.update_data(support_title=text)
+    title, icon = split_label_and_icon(message.text, message.entities)
+    await state.update_data(support_title=title, support_icon=icon)
     from app.bot.nav_input import ask_text
 
     await ask_text(
@@ -1309,6 +1313,7 @@ async def support_telegram_save(message: Message, state: FSMContext, session: As
         contact_id=None,
         title=title,
         telegram=text,
+        icon_custom_emoji_id=data.get("support_icon"),
         reseller_id=profile.user_id,
     )
     if err2:

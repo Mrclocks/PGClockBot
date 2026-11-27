@@ -886,6 +886,9 @@ DEFAULT_SETTINGS = {
     "payment_ok_title": "✅ پرداخت تأیید شد",
     "payment_reject_text": "پرداخت شما تأیید نشد. اگر فکر می‌کنید اشتباهی رخ داده، لطفاً با پشتیبانی تماس بگیرید.",
     "pending_order_cleanup_enabled": "0",
+    # Optional expiry of unpaid orders (pending_order_expiry); off until a shop switches it on.
+    "pending_order_expiry_enabled": "0",
+    "pending_order_expiry_hours": "48",
     "pending_order_ttl_hours": "48",
     "pending_order_cleanup_awaiting_approval": "0",
     "pending_order_approval_ttl_hours": "72",
@@ -1424,7 +1427,7 @@ SETTING_GROUPS = {
     ],
     "متن پیام‌ها": [
         ("guide_text", "متن راهنما", "textarea", "دستور /help در تلگرام"),
-        ("faq_text", "متن سوالات متداول", "textarea", "قابل استفاده در پیام‌ها"),
+        ("faq_text", "متن قدیمی سوالات متداول", "textarea", "فقط تا وقتی سوالی در «مشتری و سرویس ← سوالات متداول» نسازید نشان داده می‌شود"),
         ("empty_services_text", "وقتی سرویسی ندارد", "textarea", "پیام بخش سرویس‌های من اگر لیست خالی باشد"),
         ("shop_empty_text", "وقتی پلنی نیست", "textarea", "پیام فروشگاه اگر پلن فعالی نباشد"),
         ("delivery_title", "عنوان پیام تحویل سرویس", "text", "مثلاً: ✅ سرویس آماده است"),

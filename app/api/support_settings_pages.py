@@ -45,7 +45,7 @@ def register_support_settings_pages(  # noqa: C901 - counts the nested routes; e
     ):
         from urllib.parse import quote
 
-        from app.services.support_contacts import contacts_from_form_json, save_support_contacts
+        from app.services.support_contacts import contacts_from_form_json, save_submitted_support_contacts
 
         form = await request.form()
         raw = form.get("support_contacts")
@@ -56,7 +56,7 @@ def register_support_settings_pages(  # noqa: C901 - counts the nested routes; e
                     f"/tickets?supports=1&stab=contacts&err={quote(err)}",
                     status_code=303,
                 )
-            await save_support_contacts(session, contacts or [])
+            await save_submitted_support_contacts(session, contacts or [])
             return RedirectResponse("/tickets?supports=1&stab=contacts&saved=1", status_code=303)
 
         # Legacy single-row upsert (bot / older clients)

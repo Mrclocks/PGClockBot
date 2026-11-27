@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# «توقف و انتقال»: what a customer may do on their own service, one card per action (DESIGN_SYSTEM.md §6).
    Each card's header is its title, one line and its switch (ds_toggle_sec); the body, with its save button, opens
    only while the switch is on.
@@ -16,7 +17,7 @@
       {{ number_field('service_freeze_per_period', 'تعداد توقف در ۳۰ روز', 'بار') }}
       {{ number_field('service_freeze_min_days_left', 'حداقل زمان باقی‌مانده', 'روز', '۰ یعنی بدون حداقل') }}
     </div>
-    <div class="actions"><button class="btn" type="submit">ذخیرهٔ توقف موقت</button></div>
+    <div class="actions"><button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیرهٔ توقف موقت</button></div>
   {% endcall %}
 
   {% call ds_toggle_sec('انتقال سرویس', 'مشتری سرویسش را با یک لینک یک‌بارمصرف به کاربر دیگری در همین ربات می‌دهد.', 's_service_transfer_enabled', 'st-enabled', is_on('service_transfer_enabled')) %}
@@ -28,6 +29,6 @@
     </div>
     <div class="ds-rows">{{ ds_switch('s_service_transfer_new_link', 'عوض شدن لینک اشتراک بعد از انتقال', help='پیشنهادی: روشن. لینک قبلی از کار می‌افتد تا صاحب قبلی دیگر به سرویس وصل نشود.', checked=is_on('service_transfer_new_link'), id='st-new-link') }}</div>
     <div class="ds-note" data-tone="danger" role="note" data-ds-show-when="#st-new-link:0"{% if is_on('service_transfer_new_link') %} hidden{% endif %}>{{ ico('shield-alert') }}<span>بدون عوض شدن لینک، فرستنده بعد از انتقال هنوز با لینک قبلی به سرویس وصل می‌شود.</span></div>
-    <div class="actions"><button class="btn" type="submit">ذخیرهٔ انتقال سرویس</button></div>
+    <div class="actions"><button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیرهٔ انتقال سرویس</button></div>
   {% endcall %}
 </form>

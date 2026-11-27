@@ -101,6 +101,8 @@ def owner_message(text: str, *, entities=None) -> MagicMock:
     message.text = text
     message.entities = entities
     message.html_text = f"<b>{text}</b>" if entities else text
+    # A plain text message: no photo, video or caption (spec mocks do not expose pydantic fields).
+    message.photo = message.video = message.caption = None
     message.answer = AsyncMock()
     return message
 

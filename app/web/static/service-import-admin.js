@@ -133,8 +133,24 @@
     }
   }
 
-  function requestButton(label, className, onClick) {
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  // Same drawings as icon('check') and icon('close') in _icons.html.
+  const ICON_PATHS = { check: "M5 12.5l4.5 4.5L19 7.5", close: "M6 6l12 12M18 6L6 18" };
+
+  function buttonIcon(name) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    const attrs = { class: "btn-ico", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.8",
+      "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" };
+    Object.keys(attrs).forEach(function (key) { svg.setAttribute(key, attrs[key]); });
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", ICON_PATHS[name]);
+    svg.appendChild(path);
+    return svg;
+  }
+
+  function requestButton(label, className, onClick, iconName) {
     const button = el("button", "btn " + className, label);
+    if (iconName) button.prepend(buttonIcon(iconName));
     button.type = "button";
     button.addEventListener("click", onClick);
     return button;
@@ -177,8 +193,8 @@
       tr.appendChild(user);
       tr.appendChild(el("td", "muted", new Date(row.expires_at).toLocaleDateString("fa-IR")));
       const cell = el("td", "actions");
-      const approve = requestButton("تأیید", "", function () { decide(card, row.id, "approve", [approve, reject]); });
-      const reject = requestButton("رد", "btn-ghost", function () { decide(card, row.id, "reject", [approve, reject]); });
+      const approve = requestButton("تأیید", "", function () { decide(card, row.id, "approve", [approve, reject]); }, "check");
+      const reject = requestButton("رد", "btn-ghost", function () { decide(card, row.id, "reject", [approve, reject]); }, "close");
       cell.appendChild(approve);
       cell.appendChild(reject);
       tr.appendChild(cell);

@@ -24,6 +24,7 @@ from app.db.models import (
     Role,
     UserService,
 )
+from app.services.admin_subscription_cleanup import delete_unheld_subscription
 from app.services.db_safe import rollback_quiet
 from app.services.chat_records import keeps_sent
 from app.services import pasarguard
@@ -77,6 +78,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("wallet_adjust", "تنظیم دستی کیف پول مشتری"),
     ("loyalty_adjust", "تغییر دستی امتیاز مشتری"),
     ("customers_block", "مسدودسازی مشتری در فروشگاه"),
+    ("accounts_disable", "غیرفعال‌سازی مشتری یا زیرنماینده با همهٔ سرویس‌ها"),
     ("customers_approve", "تأیید ورود مشتریان جدید"),
     ("loyalty", "باشگاه مشتریان"),
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
@@ -117,7 +119,8 @@ FEATURE_PERM_LAYOUT: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
                                    "discount_rules", "loyalty")),
     ("فروشگاه و فنی", False, ("shop_settings", "miniapp", "service_import", "connection_status",
                              "connection_status_manage")),
-    ("عملیات حساس مالی", True, ("payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "service_cleanup", "free_checkout")),
+    ("عملیات حساس مالی", True, ("payment_void", "wallet_adjust", "loyalty_adjust", "orders_purge", "service_cleanup", "free_checkout",
+                            "accounts_disable")),
 )
 
 
@@ -2549,6 +2552,14 @@ async def revoke_reseller(
         raise
 
 
+async def _drop_removed_admin_subscription(session: AsyncSession, run: _RevokeRun, pg_username: str | None) -> None:
+    """The panel admin is gone (removed now or already 404), so its clock and capacity go too."""
+    if not (run.delete_pg_admin and pg_username):
+        return
+    await session.flush()
+    await delete_unheld_subscription(session, pg_username)
+
+
 async def _revoke_reseller_tree(
     session: AsyncSession,
     user_id: int,
@@ -2625,6 +2636,7 @@ async def _revoke_reseller_tree(
     )
 
     await session.delete(profile)
+    await _drop_removed_admin_subscription(session, run, pg_username)
     if user.role == Role.RESELLER.value:
         user.role = Role.USER.value
 

@@ -6,7 +6,7 @@
   <h2>خروجی / ورودی تنظیمات فروشگاه</h2>
   <p class="muted update-card-caption">پلن‌ها و متن‌ها/سوییچ‌ها را به‌صورت JSON جابه‌جا کنید (جدا از بکاپ کامل ZIP).</p>
   <div class="actions backup-actions">
-    <a class="btn btn-ghost" href="/settings/shop-export">دانلود خروجی JSON</a>
+    <a class="btn btn-ghost" href="/settings/shop-export">{{ icon('download', 'btn-ico') }}دانلود خروجی JSON</a>
   </div>
   <form method="post" action="/settings/shop-import" enctype="multipart/form-data" class="form-stack">
     <label class="upload-box">
@@ -23,7 +23,7 @@
       </span>
     </label>
     <div class="actions">
-      <button class="btn" type="submit">وارد کردن</button>
+      <button class="btn" type="submit">{{ icon('upload', 'btn-ico') }}وارد کردن</button>
     </div>
   </form>
 </div>
@@ -41,7 +41,7 @@
   </div>
   {% endfor %}
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره تنظیمات بکاپ</button>
+    <button class="btn" type="submit">{{ icon('save', 'btn-ico') }}ذخیره تنظیمات بکاپ</button>
   </div>
 </form>
 {% set tg_status = (values.get('backup_telegram_last_status') or '') %}
@@ -58,7 +58,7 @@
   <p class="muted update-card-caption">هنوز بکاپی به تلگرام ارسال نشده است. بعد از ذخیرهٔ تنظیمات، با دکمهٔ زیر اتصال را بسنجید.</p>
   {% endif %}
   <form method="post" action="/backup/telegram-test" class="actions">
-    <button class="btn btn-ghost" type="submit">ارسال پیام آزمایشی</button>
+    <button class="btn btn-ghost" type="submit">{{ icon('send', 'btn-ico') }}ارسال پیام آزمایشی</button>
   </form>
 </div>
 {% endif %}
@@ -125,7 +125,7 @@
     </div>
   </div>
     <div class="actions sticky-actions">
-    <button class="btn" type="submit" id="backup-create-btn">ساخت بکاپ جدید</button>
+    <button class="btn" type="submit" id="backup-create-btn">{{ icon('download', 'btn-ico') }}ساخت بکاپ جدید</button>
   </div>
 </form>
 
@@ -143,7 +143,7 @@
     </label>
   </div>
   <div class="actions sticky-actions">
-    <button class="btn" type="submit" id="backup-upload-btn">آپلود</button>
+    <button class="btn" type="submit" id="backup-upload-btn">{{ icon('upload', 'btn-ico') }}آپلود</button>
   </div>
 </form>
 
@@ -234,22 +234,22 @@
       <div class="snap-actions">
         {% if loop.first %}
         <form method="post" action="/backup/verify-last" class="form-inline">
-          <button class="btn btn-ghost btn-sm" type="submit" title="بررسی ZIP و manifest آخرین بکاپ">بررسی سلامت</button>
+          <button class="btn btn-ghost btn-sm" type="submit" title="بررسی ZIP و manifest آخرین بکاپ">{{ icon('eye', 'btn-ico') }}بررسی سلامت</button>
         </form>
         {% endif %}
-        <a class="btn btn-ghost btn-sm" href="/backup/download/{{ b.id }}">دانلود</a>
+        <a class="btn btn-ghost btn-sm" href="/backup/download/{{ b.id }}">{{ icon('download', 'btn-ico') }}دانلود</a>
         <form method="post" action="/backup/delete/{{ b.id }}"
               data-confirm="این بکاپ حذف شود؟"
               data-confirm-title="تأیید حذف بکاپ"
               data-confirm-danger="1"
               data-confirm-label="حذف بکاپ">
-          <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+          <button class="btn btn-danger btn-sm" type="submit">{{ icon('trash', 'btn-ico') }}حذف</button>
         </form>
         <button type="button" class="btn btn-sm"
                 data-modal-open="modal-backup-restore"
                 data-backup-id="{{ b.id }}"
                 data-backup-name="{{ b.filename }}"
-                data-backup-env="{{ '1' if b.include_env else '0' }}">ریستور</button>
+                data-backup-env="{{ '1' if b.include_env else '0' }}">{{ icon('upload', 'btn-ico') }}ریستور</button>
       </div>
     </div>
     {% endfor %}
@@ -283,8 +283,8 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn btn-danger" type="submit" id="backup-restore-btn">تأیید ریستور</button>
-        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        <button class="btn btn-danger" type="submit" id="backup-restore-btn">{{ icon('upload', 'btn-ico') }}تأیید ریستور</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>{{ icon('close', 'btn-ico') }}انصراف</button>
       </div></div>
     </form>
   </div>
@@ -372,9 +372,9 @@
       btn.disabled = !!busy;
       if (busy && label) {
         if (!btn.dataset.idleLabel) btn.dataset.idleLabel = btn.textContent;
-        btn.textContent = label;
+        setButtonText(btn, label);
       } else if (!busy && btn.dataset.idleLabel) {
-        btn.textContent = btn.dataset.idleLabel;
+        setButtonText(btn, btn.dataset.idleLabel);
       }
     }
   }

@@ -31,6 +31,7 @@ from app.services import auto_renew_timing as timing
 from app.services.catalog_pricing import annotate_prices, displayed_quote, sale_price
 from app.services.renewal_category import Leftover, offered_plans
 from app.services.service_renewals import current_plan_of
+from app.services.account_hold_guard import is_service_held
 from app.services.service_freeze_guard import is_frozen
 from app.services.service_scope import service_shop_id
 from app.services.notice_links import notice_open_data
@@ -711,6 +712,9 @@ async def process_service_automation(
             return
         # A frozen service keeps its time in the freeze row; buying now would be overwritten on resume.
         if await is_frozen(session, service_id):
+            return
+        # A held account stays off until the owner releases it; nothing is bought meanwhile.
+        if await is_service_held(session, service_id):
             return
         context_token = set_shop_reseller_id(row.shop_id)
         await _process_locked(session, row, service, user, bot)

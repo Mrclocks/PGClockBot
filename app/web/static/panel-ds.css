@@ -41,16 +41,21 @@
 
 /* ===================================================================== 2. Buttons */
 .ds .btn, .ds a.btn { height: var(--ctl-h); min-height: var(--ctl-h); padding: 0 var(--g4); gap: var(--g2); font-size: var(--fs-3); }
-.ds .btn-sm, .ds a.btn-sm, .ds .btn-star { height: var(--cmp-h); min-height: var(--cmp-h); padding: 0 var(--g3); font-size: var(--fs-2); }
+.ds .btn-sm, .ds a.btn-sm { height: var(--cmp-h); min-height: var(--cmp-h); padding: 0 var(--g3); font-size: var(--fs-2); }
 .ds .icon-btn { width: var(--ctl-h); height: var(--ctl-h); min-height: var(--ctl-h); padding: 0; flex: 0 0 auto; }
 .ds .icon-btn .ico { width: 18px; height: 18px; }
-/* Warnings act like main actions: the brand colour, so a colour change in the panel settings reaches them. */
-.btn-warn, a.btn.btn-warn {
-  color: var(--btn-fg, var(--brand-fg)) !important;
+/* Warnings act like main actions: the brand colour, so a colour change in the panel settings reaches them.
+   Inside an actions menu only the text and icon take it; the box stays the menu's neutral one (DESIGN_SYSTEM.md §4). */
+.btn-warn, a.btn.btn-warn { color: var(--btn-fg, var(--brand-fg)) !important; }
+.btn-warn:not(.row-actions-menu .btn-warn, .page-more .btn-warn),
+a.btn.btn-warn:not(.row-actions-menu .btn-warn, .page-more .btn-warn) {
   border: 1.5px solid color-mix(in srgb, var(--btn-tone, var(--brand)) 72%, transparent) !important;
   background: color-mix(in srgb, var(--btn-tone, var(--brand)) 8%, transparent) !important;
 }
-.btn-warn:hover, a.btn.btn-warn:hover { background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent) !important; }
+.btn-warn:not(.row-actions-menu .btn-warn, .page-more .btn-warn):hover,
+a.btn.btn-warn:not(.row-actions-menu .btn-warn, .page-more .btn-warn):hover {
+  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent) !important;
+}
 html[data-theme="light"] .btn-warn { color: var(--btn-fg, var(--brand-fg)) !important; }
 
 /* ===================================================================== 3. Modal shell */
@@ -1056,8 +1061,31 @@ html[data-theme="light"] .ds .plan-color-field .ui-select[data-tone="default"] .
 .ds .bc-reach.is-error { background: color-mix(in srgb, var(--destructive) 9%, transparent); border-color: color-mix(in srgb, var(--destructive) 30%, var(--line)); }
 .ds .bc-reach.is-error .bc-reach-ico { background: color-mix(in srgb, var(--destructive) 14%, transparent); color: var(--danger-text); }
 .ds .bc-reach.is-error small { color: var(--danger-text); white-space: normal; }
-.ds .bc-send { display: flex; margin: 0; }
+/* The send button, then the test send (a ghost button) and its one status line, empty until a test is sent. */
+.ds .bc-send { display: flex; flex-direction: column; gap: var(--g2); margin: 0; }
+.ds .bc-send > * { margin: 0; }
+/* The chosen photo or video, shown above the Telegram preview bubble. */
+.ds .bc-media-preview { overflow: hidden; border-radius: var(--inner-radius); border: 1px solid var(--line); background: var(--card); }
+.ds .bc-media-preview[hidden] { display: none; }
+.ds .bc-media-preview img,
+.ds .bc-media-preview video { display: block; width: 100%; max-height: 320px; object-fit: contain; }
+.ds .bc-media-preview [hidden] { display: none; }
 .ds .bc-send-btn { flex: 1 1 auto; }
+.ds .bc-test-status { margin: 0; font-size: var(--fs-2); line-height: 1.6; color: var(--muted-fg); }
+.ds .bc-test-status:empty { display: none; }
+.ds .bc-test-status.is-ok { color: var(--ok-text); }
+.ds .bc-test-status.is-error { color: var(--danger-text); }
+/* Detail of one sent message: divided lines of a label (with a one-line hint) and its count. */
+.ds .bc-lines { list-style: none; display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; }
+.ds .bc-lines > li { display: flex; align-items: center; justify-content: space-between; gap: var(--g3); min-height: var(--ctl-h); margin: 0; padding: var(--g3) 0; }
+.ds .bc-lines > li:first-child { padding-top: 0; }
+.ds .bc-lines > li:last-child { padding-bottom: 0; }
+.ds .bc-lines > li + li { border-top: 1px dashed var(--dash); }
+.ds .bc-line-copy { display: flex; flex-direction: column; gap: var(--g1); min-width: 0; }
+.ds .bc-line-copy strong { font-size: var(--fs-3); font-weight: 500; }
+.ds .bc-line-copy small { font-size: var(--fs-2); line-height: 1.6; color: var(--muted-fg); }
+.ds .bc-line-value { flex: 0 0 auto; font-size: var(--fs-3); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ds .bc-detail-text { margin: 0; font-size: var(--fs-3); line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Buttons under a message: one collapsible row per button inside a framed list. */
 .ds .msg-btns { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--inner-radius); overflow: hidden; }

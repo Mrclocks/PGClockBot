@@ -132,7 +132,8 @@ class CustomerOrdersBotTests(OrdersCase):
     async def test_cards_guide_the_customer_for_each_state(self):
         text, found = self.shown((await self.press("myord:v:11"))[1])
         self.assertIn("عکس رسید", text)
-        self.assertEqual(found, [bot.SUPPORT_CALLBACK, bot.LIST_CALLBACK])
+        # Waiting for a receipt that has not arrived: the customer may still cancel (after a confirmation).
+        self.assertEqual(found, ["myord:x:11", bot.SUPPORT_CALLBACK, bot.LIST_CALLBACK])
         text, _ = self.shown((await self.press("myord:v:13"))[1])
         self.assertIn("شناسه سفارش", text)
         text, _ = self.shown((await self.press("myord:v:12"))[1])

@@ -11,6 +11,17 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.broadcast_media_input import (
+    MEDIA_DATA_KEY,
+    TEXT_PROMPT,
+    answer_preview,
+    has_content,
+    refusal_text,
+    media_data,
+    media_from_data,
+    media_from_message,
+    plain_source,
+)
 from app.bot.broadcast_segments import SHOP_LIST, SHOP_PICK, TARGETED_LABEL, TITLE, targeted_keyboard
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.tg_utils import safe_edit_text
@@ -20,7 +31,7 @@ from app.services.broadcast import clear_broadcast_history, delete_broadcast_log
 from app.services.broadcast_audience import describe, make_spec
 from app.services.broadcast_queue import STATUS_LABELS, cancel_broadcast
 from app.bot.message_button_picker import ask_for_buttons, register_flow
-from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard
+from app.services.message_buttons import ButtonInput, broadcast_buttons, preview_keyboard, sender_screen_labels
 from app.services.redact import user_safe_error
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.services.shop_broadcast import (
@@ -299,12 +310,12 @@ async def cb_audience(
     )
     if callback.message:
         await callback.message.edit_text(
-            f"📢 مخاطب: <b>{label}</b>\nمتن پیام را بفرستید.\nبرای لغو: انصراف"
+            f"📢 مخاطب: <b>{label}</b>\nمتن پیام، یا یک عکس یا ویدیو با زیرنویس اختیاری را بفرستید.\nبرای لغو: انصراف"
         )
     await ask_text(
         callback,
         state,
-        prompt="متن پیام:",
+        prompt=TEXT_PROMPT,
         cancel_code="shp_bc",
         fsm_state=ShopBroadcastStates.waiting_text,
         edit=False,
@@ -343,12 +354,16 @@ async def on_text(
             reseller_owner_id=reseller_owner_id,
         )
         return
-    try:
-        body = clean_shop_broadcast_text(message.text)
-    except ValueError as exc:
-        await message.answer(f"⚠️ {user_safe_error(exc)}")
+    if not has_content(message):
+        await message.answer(refusal_text(message))
         return
-    await state.update_data(shop_broadcast_text=body)
+    media = media_from_message(message)
+    try:
+        body = clean_shop_broadcast_text(plain_source(message), with_media=media is not None)
+    except ValueError as exc:
+        await message.answer(f"⚠️ {html.escape(user_safe_error(exc))}")
+        return
+    await state.update_data(shop_broadcast_text=body, **{MEDIA_DATA_KEY: media_data(media)})
     await ask_for_buttons(message, state, flow=FLOW, shop_id=shop_id)
 
 
@@ -380,10 +395,12 @@ async def _confirm_with_buttons(
     await state.set_state(ShopBroadcastStates.confirm)
     ui = await get_all_settings(session)
     preview = shop_broadcast_html_snippet(body, limit=500) + ("…" if len(body) > 500 else "")
-    rows = preview_keyboard(stored)
-    if rows:
-        # The buttons exactly as customers will get them, under the message preview.
-        await message.answer(preview, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    rows = preview_keyboard(stored, await sender_screen_labels(session, shop_id))
+    media = media_from_data(data)
+    if rows or media is not None:
+        # The message, its media and buttons exactly as customers will get them.
+        markup = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+        await answer_preview(message, shop_broadcast_html_snippet(body, limit=len(body)), media, markup=markup)
     segment = str(data.get("shop_broadcast_audience") or "all")
     await message.answer(
         f"تأیید ارسال به <b>{html.escape(_audience_label(segment, shop_id))}</b>؟\n\n{preview}",
@@ -423,6 +440,7 @@ async def cb_confirm(
             request_key=request_key,
             buttons=data.get("shop_broadcast_buttons"),
             audience=make_spec(str(data.get("shop_broadcast_audience") or "all"), shop_id=shop_id),
+            media=media_from_data(data),
         )
     except ValueError as exc:
         await session.rollback()

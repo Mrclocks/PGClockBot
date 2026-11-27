@@ -1,10 +1,11 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Ways to close a paid order that has no service (rows marked «گیرکرده» in the failed-delivery list). #}
 {% macro stuck_close_actions(oid, why) -%}
 <form method="post" action="/orders/{{ oid }}/mark-delivered-manually"
       data-confirm="تحویل این سفارش را خودتان انجام داده‌اید (مثلاً سرویس را در پنل ساخته یا تمدید کرده‌اید)؟ سفارش بدون جابه‌جایی پول بسته می‌شود."
       data-confirm-title="تحویل دستی انجام شد"
       data-confirm-label="ثبت تحویل دستی">
-  <button class="btn btn-ghost btn-sm" type="submit">تحویل دستی انجام شد</button>
+  <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('check', 'btn-ico') }}تحویل دستی انجام شد</button>
 </form>
 {% if not why or why.can_refund %}
 <form method="post" action="/orders/{{ oid }}/refund-stuck-order"
@@ -12,7 +13,7 @@
       data-confirm-title="لغو و بازگشت وجه"
       data-confirm-danger="1"
       data-confirm-label="لغو و بازگشت وجه">
-  <button class="btn btn-danger btn-sm" type="submit">لغو و بازگشت وجه</button>
+  <button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('back', 'btn-ico') }}لغو و بازگشت وجه</button>
 </form>
 {% endif %}
 <form method="post" action="/orders/{{ oid }}/close-stuck-order"
@@ -20,6 +21,6 @@
       data-confirm-title="بستن بدون بازگشت وجه"
       data-confirm-danger="1"
       data-confirm-label="بستن و حذف از لیست">
-  <button class="btn btn-ghost btn-sm" type="submit">بستن بدون بازگشت وجه</button>
+  <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('back', 'btn-ico') }}بستن بدون بازگشت وجه</button>
 </form>
 {%- endmacro %}

@@ -9,12 +9,14 @@ from urllib.parse import quote
 
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
+from app.services.account_hold_actions import may_hold_shops, shop_hold_rows
+from app.services.account_hold_guard import shop_hold_open
 from app.services.miniapp_shop import (
     PERMISSION as MINIAPP_PERMISSION,
     STATE_NO_PERMISSION,
@@ -42,6 +44,7 @@ from app.services.volume_allocation import apply_create_form_oversell, apply_ove
 from app.services.pasarguard import get_pg
 from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
 from app.services.support_button import support_markup
+from app.services.telegram_target import find_target_user
 from app.services.resellers import (
     DEFAULT_FEATURE_PERMS,
     FEATURE_PERMS,
@@ -436,6 +439,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "color_filter": color_filter,
                 "color_tags": color_tags_for_ui(),
                 "color_tag_meta": color_tag_meta,
+                "can_hold_shops": may_hold_shops(staff),
+                "shop_holds": await shop_hold_rows(session, staff, [int(u.id) for u, _p in rows]),
             },
         )
 
@@ -471,16 +476,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         _require_rep_mgmt(staff)
         form = await request.form()
         try:
-            telegram_id = int(str(form.get("telegram_id") or "0"))
-        except ValueError:
-            return RedirectResponse(f"/resellers?err={_q('آیدی تلگرام نامعتبر')}", status_code=303)
-        result = await session.execute(select(BotUser).where(BotUser.telegram_id == telegram_id))
-        user = result.scalar_one_or_none()
-        if not user:
-            return RedirectResponse(
-                f"/resellers?err={_q('کاربر با این آیدی در ربات پیدا نشد — اول باید استارت زده باشد')}",
-                status_code=303,
-            )
+            # A numeric id or @username of someone who started the main bot (any shop's customer may be promoted).
+            user = await find_target_user(session, str(form.get("telegram_id") or ""), scope=true())
+        except ValueError as exc:
+            return RedirectResponse(f"/resellers?err={_q(str(exc))}", status_code=303)
         plan_raw = str(form.get("plan_id") or "").strip()
         if not plan_raw.isdigit():
             return RedirectResponse(
@@ -732,6 +731,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "wallet_txs": wallet_txs,
             "pg_limits": pg_limits,
             "pg_subscription": pg_subscription,
+            "shop_held": await shop_hold_open(session, int(user_id)),
             "min_unsuspend": min_unsuspend,
             "format_toman": format_toman,
             "topup_nonce": secrets.token_hex(8),
@@ -869,7 +869,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         profile.web_permissions = perms
         profile.bot_permissions = perms  # must stay identical
         profile.can_approve_receipts = "payments" in parse_perms(perms)
-        profile.is_active = bool(form.get("is_active"))
+        # An owner's hold keeps the shop off until it is released from its own action.
+        profile.is_active = bool(form.get("is_active")) and not await shop_hold_open(session, int(profile.user_id))
         pg_access_target = access_target_from_form(form, profile)
         apply_access_before_save(
             profile,

@@ -48,7 +48,7 @@
         چند مرحله کوتاه برای تنظیم مدیر، ربات و اتصال پاسارگارد.
         فقط با تکمیل هر مرحله می‌توانید ادامه دهید.
       </p>
-      <button type="button" class="btn" data-next="1">شروع</button>
+      <button type="button" class="btn" data-next="1">{{ icon('play', 'btn-ico') }}شروع</button>
     </div>
 
     {# —— Step 1: Admin —— #}
@@ -70,8 +70,8 @@
         <input name="password_confirm" type="password" required autocomplete="new-password" minlength="12" dir="ltr" />
       </label>
       <div class="setup-actions">
-        <button type="button" class="btn btn-ghost" data-prev="0">قبلی</button>
-        <button class="btn" type="submit">ادامه</button>
+        <button type="button" class="btn btn-ghost" data-prev="0">{{ icon('back', 'btn-ico') }}قبلی</button>
+        <button class="btn" type="submit">{{ icon('chev', 'btn-ico') }}ادامه</button>
       </div>
     </form>
 
@@ -88,8 +88,8 @@
       </label>
       {{ list_input('admin_ids', 'آیدی ادمین‌ها', values.ADMIN_IDS or '', kind='telegram', required=true, placeholder='123456789', help='آیدی هر ادمین را جداگانه اضافه کنید.') }}
       <div class="setup-actions">
-        <button type="button" class="btn btn-ghost" data-prev="1">قبلی</button>
-        <button class="btn" type="submit">ادامه</button>
+        <button type="button" class="btn btn-ghost" data-prev="1">{{ icon('back', 'btn-ico') }}قبلی</button>
+        <button class="btn" type="submit">{{ icon('chev', 'btn-ico') }}ادامه</button>
       </div>
     </form>
 
@@ -140,8 +140,8 @@
         <input name="currency" value="{{ values.CURRENCY or 'تومان' }}" required />
       </label>
       <div class="setup-actions">
-        <button type="button" class="btn btn-ghost" data-prev="2">قبلی</button>
-        <button class="btn" type="submit">ادامه</button>
+        <button type="button" class="btn btn-ghost" data-prev="2">{{ icon('back', 'btn-ico') }}قبلی</button>
+        <button class="btn" type="submit">{{ icon('chev', 'btn-ico') }}ادامه</button>
       </div>
     </form>
 
@@ -205,12 +205,12 @@
         <div class="setup-copy-block">
           <small class="muted">آدرس پنل</small>
           <code id="panel-url" dir="ltr">{{ panel_url }}</code>
-          <button type="button" class="btn btn-ghost btn-sm setup-copy-btn" data-copy="panel-url">کپی آدرس پنل</button>
+          <button type="button" class="btn btn-ghost btn-sm setup-copy-btn" data-copy="panel-url">{{ icon('copy', 'btn-ico') }}کپی آدرس پنل</button>
         </div>
         <div class="setup-copy-block">
           <small class="muted">ربات</small>
           <code id="bot-user" dir="ltr">@{{ bot_username or '—' }}</code>
-          <button type="button" class="btn btn-ghost btn-sm setup-copy-btn" data-copy="bot-user">کپی آدرس ربات</button>
+          <button type="button" class="btn btn-ghost btn-sm setup-copy-btn" data-copy="bot-user">{{ icon('copy', 'btn-ico') }}کپی آدرس ربات</button>
         </div>
       </div>
       <div class="flash warn">
@@ -220,7 +220,7 @@
       </div>
       <form method="post" action="/setup/finish" id="setup-finish-form">
         <input type="hidden" name="next" id="setup-finish-next" value="{{ finish_login_url }}" />
-        <button class="btn btn-block" type="submit" id="setup-enter-panel">ورود به پنل</button>
+        <button class="btn btn-block" type="submit" id="setup-enter-panel">{{ icon('login', 'btn-ico') }}ورود به پنل</button>
       </form>
     </div>
 
@@ -477,12 +477,14 @@
         } catch (_) { ok = false; }
       }
       if (ok) {
-        const prev = btn.getAttribute('data-copy-label') || btn.textContent;
-        btn.setAttribute('data-copy-label', prev);
+        // Keep the label's own nodes (its icon) to put back after «کپی شد».
+        const prev = btn._copyNodes || [...btn.childNodes];
+        btn._copyNodes = prev;
         btn.textContent = 'کپی شد';
         btn.classList.add('is-copied');
         setTimeout(() => {
-          btn.textContent = prev;
+          btn.replaceChildren(...prev);
+          btn._copyNodes = null;
           btn.classList.remove('is-copied');
         }, 1200);
       } else {

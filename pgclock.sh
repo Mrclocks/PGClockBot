@@ -2622,7 +2622,7 @@ banner() {
      |_|  |_|_|   \____|_|\___/ \___|_|\_\____/ \___/ \__|
 ART
     printf '%s\n' "$N"
-    printf '  %sPasarGuard Telegram Shop · CLI manager · stable 0.7%s\n' "$D" "$N"
+    printf '  %sPasarGuard Telegram Shop · CLI manager · stable 0.5%s\n' "$D" "$N"
     echo ""
   } > /dev/tty
 }

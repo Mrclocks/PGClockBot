@@ -26,6 +26,9 @@ ALERT_CAPACITY = "capacity"
 ALERT_FAILURES = "delivery_failures"
 ALERT_PANEL_MISSING = "panel_missing"
 
+UPDATE_PAGE_PATH = "/update"
+UPDATE_BUTTON_LABEL = "🔄 رفتن به صفحه آپدیت"
+
 KEY_UPDATE = "notify_panel_update"
 KEY_CAPACITY = "notify_panel_capacity"
 KEY_FAILURES = "notify_panel_delivery_failures"
@@ -51,6 +54,7 @@ class Signal:
     fingerprint: str = ""
     # Quiet period after any announcement, also across a clear and a return; ``None`` keeps the default rules.
     min_interval: timedelta | None = None
+    button_label: str = ""  # text of the panel button; empty uses the generic label
 
 
 def scope_key(shop_id: int | None) -> str:
@@ -225,7 +229,7 @@ def update_signal(info: dict | None) -> Signal | None:
     )
     return Signal(
         shop_id=None, alert=ALERT_UPDATE, notify_key=KEY_UPDATE, count=1 if available else 0,
-        text=text, path="/settings?tab=update", fingerprint=remote[:64],
+        text=text, path=UPDATE_PAGE_PATH, fingerprint=remote[:64], button_label=UPDATE_BUTTON_LABEL,
     )
 
 

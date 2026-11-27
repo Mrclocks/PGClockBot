@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import switch %}
 {% from "_ds.html" import ds_perm_groups %}
 {% from "_list_input.html" import list_input %}
@@ -24,7 +25,7 @@
     {% set selected_color = (user.color_tag or 'green') %}
     {% include "_color_tag_picker.html" %}
     <div class="actions">
-      <button class="btn" type="submit">ذخیره تگ ریسک</button>
+      <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره تگ ریسک</button>
     </div>
   </form>
 </section>
@@ -48,7 +49,7 @@
           <option value="reseller" {% if user.role=='reseller' %}selected{% endif %}>نماینده</option>
         </select>
       </label>
-      <button class="btn" type="submit">اعمال نقش</button>
+      <button class="btn" type="submit">{{ btn_icon('check', 'btn-ico') }}اعمال نقش</button>
     </div>
   </form>
   {% endif %}
@@ -90,7 +91,7 @@
 
     <div class="ui-switch-section">
       <span class="ds-label-row"><span class="ui-switch-section-title">سطح دسترسی (وب = بات)</span>
-        <button type="button" class="ds-link-btn" data-ds-perms-reset="#reseller-edit-perms">بازگشت به پیشنهادی</button></span>
+        <button type="button" class="ds-link-btn" data-ds-perms-reset="#reseller-edit-perms">{{ btn_icon('refresh', 'btn-ico') }}بازگشت به پیشنهادی</button></span>
       <p class="ui-switch-section-hint">هر مورد برای هر دو محیط یکسان اعمال می‌شود؛ نماینده از ربات بیشتر از وب نمی‌تواند.</p>
       <div class="ds-card ds-card-flush" id="reseller-edit-perms" data-ds-perms>
         <div class="ds-acc-top"><span><b data-ds-total></b> از <span data-ds-of></span> دسترسی روشن</span></div>
@@ -138,7 +139,7 @@
     {{ list_input('bot_admin_ids', 'آیدی ادمین‌های ربات اختصاصی', profile.bot_admin_ids or '', kind='telegram', placeholder='123456789', help='آیدی هر ادمین را جداگانه اضافه کنید. فقط روی ربات این نماینده پنل نماینده می‌بینند؛ در ربات اصلی منوی کاربر عادی می‌ماند.') }}
 
     <div class="ui-switch-list">
-      {{ switch('is_active', 'نماینده فعال', checked=profile.is_active) }}
+      {{ switch('is_active', 'نماینده فعال', checked=profile.is_active, help=('با «غیرفعال‌سازی کامل» خاموش است و تا «فعال‌سازی دوباره» از فهرست نمایندگان روشن نمی‌شود' if shop_held else none)) }}
       <input type="hidden" name="pg_access_shown" value="1" />
       {{ switch('allow_pg_panel_access', 'دسترسی به پاسارگارد', checked=profile.allow_pg_panel_access, help='خاموش: منو و صفحه‌های پاسارگارد پنهان می‌شود و رمز ادمین پاسارگارد با یک رمز تازهٔ ارسال‌نشدنی عوض می‌شود') }}
       {{ switch('share_pg_panel_url', 'ارسال لینک پنل پاسارگارد', checked=profile.share_pg_panel_url, help='فقط وقتی دسترسی به پاسارگارد روشن است ارسال می‌شود') }}
@@ -149,7 +150,7 @@
     </div>
 
     <div class="actions">
-      <button class="btn" type="submit">ذخیره</button>
+      <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره</button>
     </div>
   </form>
   {% if not profile.allow_pg_panel_access and pg_api_key_ready %}
@@ -161,7 +162,7 @@
         data-confirm="رمز تازهٔ ذخیره‌شده دوباره به پاسارگارد فرستاده شود؟ این رمز برای نماینده ارسال نمی‌شود."
         data-confirm-title="تکرار تغییر رمز پاسارگارد">
     <div class="actions">
-      <button class="btn btn-ghost" type="submit">تکرار تغییر رمز پاسارگارد</button>
+      <button class="btn btn-ghost" type="submit">{{ btn_icon('refresh', 'btn-ico') }}تکرار تغییر رمز پاسارگارد</button>
     </div>
   </form>
   {% endif %}
@@ -288,7 +289,7 @@
         data-confirm-title="همگام‌سازی ظرفیت"
         data-confirm-label="همگام‌سازی">
     <div class="actions">
-      <button class="btn btn-ghost" type="submit">همگام‌سازی از پاسارگارد</button>
+      <button class="btn btn-ghost" type="submit">{{ btn_icon('refresh', 'btn-ico') }}همگام‌سازی از پاسارگارد</button>
     </div>
   </form>
   {% endif %}
@@ -306,12 +307,10 @@
     </div>
     {#- Same «کاهش» / «افزایش» pair as the wallet and points forms. -#}
     <div class="wallet-adjust-modes" role="group" aria-label="نوع تغییر ظرفیت">
-      <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
-        <span class="wallet-mode-swatch" aria-hidden="true"></span>
+      <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">{{ btn_icon('minus', 'btn-ico') }}
         <span class="wallet-mode-label">کاهش</span>
       </button>
-      <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
-        <span class="wallet-mode-swatch" aria-hidden="true"></span>
+      <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">{{ btn_icon('plus', 'btn-ico') }}
         <span class="wallet-mode-label">افزایش</span>
       </button>
     </div>
@@ -381,7 +380,7 @@
     <div class="ui-switch-list">
       {{ switch('frozen', 'منجمد کردن اعتبار', checked=(credit.status == 'frozen'), help='روشن: تا باز شدن، نماینده فقط با موجودی خودش می‌فروشد. وضعیت سررسید گذشته و مسدود را پلکان بدهی تعیین می‌کند.') }}
     </div>
-    <div class="actions"><button class="btn" type="submit">ذخیرهٔ اعتبار</button></div>
+    <div class="actions"><button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیرهٔ اعتبار</button></div>
   </form>
   {% if credit.statements %}
   <h4 class="edit-section-sub">صورت‌حساب‌ها</h4>
@@ -401,7 +400,7 @@
           <form method="post" action="/resellers/{{ user.id }}/credit/statements/{{ st.id }}/writeoff"
                 data-confirm="بدهی این صورت‌حساب بخشیده شود؟ همین مبلغ به کیف پول نماینده برمی‌گردد و قابل برگشت نیست."
                 data-confirm-title="بخشودگی بدهی" data-confirm-danger="1" data-confirm-label="بخشودگی">
-            <button class="btn btn-danger btn-sm" type="submit">بخشودگی</button>
+            <button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('check', 'btn-ico') }}بخشودگی</button>
           </form>
           {% endcall %}{% endif %}</td>
       </tr>
@@ -528,7 +527,7 @@
         data-confirm-reason-name="reason"
         data-confirm-label="حذف نمایندگی و ادمین">
     <input type="hidden" name="reason" value="" />
-              <button class="btn btn-danger" type="submit">حذف نمایندگی</button>
+              <button class="btn btn-danger" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف نمایندگی</button>
   </form>
 </section>
 
@@ -555,6 +554,6 @@
         data-confirm-reason-name="reason"
         data-confirm-label="حذف کامل">
     <input type="hidden" name="reason" value="" />
-              <button class="btn btn-danger" type="submit">حذف کامل کاربر</button>
+              <button class="btn btn-danger" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف کامل کاربر</button>
   </form>
 </section>

@@ -25,6 +25,8 @@ OPERATIONS = {
     "pg_admin_subscription",
     # Deletes the order and payment rows each shop chose for automatic deletion; needs no running bot.
     "order_purge",
+    # Cancels unpaid orders past the expiry a shop switched on (off by default); needs no running bot.
+    "pending_order_expiry",
     "scheduled_backup",
     "connection_status",
     # Cheap authenticated probe that heals/rebuilds the PasarGuard link; needs no bot.
@@ -35,6 +37,10 @@ OPERATIONS = {
     "paid_order_recovery",
     "volume_external_sync",
     "chat_message_purge",
+    # Deletes subscription rows of panel admins the panel confirms are gone; needs no running bot.
+    "admin_subscription_cleanup",
+    # Turns held customers and shops off on the panel, and back on at release; needs no running bot.
+    "account_holds",
     # Queues the warnings before an expired service is deleted; needs no running bot.
     "service_cleanup",
     # Puts timed quick switches back when their time comes; needs no running bot.
@@ -52,7 +58,7 @@ OPERATIONS = {
     # Retries the subscription link rotation of transferred services; needs no running bot.
     "service_transfers",
 }
-NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "broadcast", "first_use_nudge", "cancellation_notifications", "panel_alert_notifications", "customer_notices"}
+NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "broadcast", "first_use_nudge", "cancellation_notifications", "panel_alert_notifications", "customer_notices", "webhook_watch", "start_watch"}
 
 
 class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):

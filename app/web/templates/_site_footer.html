@@ -1,0 +1,20 @@
+{# Panel footer: the brand line and three quiet text links to the project's GitHub, Telegram channel and group. #}
+{% from "_icons.html" import icon %}
+{% set FOOTER_LINKS = [
+  {'href': 'https://github.com/Mrclocks/PGClockBot', 'label': 'گیت‌هاب', 'icon': 'github'},
+  {'href': 'https://t.me/MrClockHub', 'label': 'کانال', 'icon': 'telegram'},
+  {'href': 'https://t.me/MrClock_Chat', 'label': 'گروه', 'icon': 'chat'}
+] %}
+<footer class="site-footer">
+  <div class="footer-meta">
+    <span>© ۲۰۲۶ <span dir="ltr">MrClock</span></span>
+  </div>
+  <nav class="footer-links" aria-label="پیوندهای پروژه">
+    {% for link in FOOTER_LINKS %}
+    <a class="footer-link" href="{{ link.href }}" target="_blank" rel="noopener noreferrer">
+      {{ icon(link.icon) }}
+      <span>{{ link.label }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+</footer>

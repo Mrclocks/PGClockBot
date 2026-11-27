@@ -33,12 +33,12 @@
     <div class="settings-modal-flash">
       <div class="flash warn">
         لغو خودکار سفارش‌های معلق خاموش شد. دیگر سفارش‌های پرداخت‌نشده به‌صورت ساعتی لغو نمی‌شوند.
-        برای پاکسازی دائمی از پایگاه، تب «پاکسازی» را با دسترسی حذف سفارش‌ها تنظیم کنید.
+        برای لغو خودکار با مهلت دلخواه یا پاکسازی دائمی از پایگاه، تب «پاکسازی» را با دسترسی حذف سفارش‌ها تنظیم کنید.
       </div>
       {% if soft_cancel_retired_ack_action %}
       <form method="post" action="{{ soft_cancel_retired_ack_action }}" class="settings-form">
         <div class="actions">
-          <button class="btn" type="submit">متوجه شدم</button>
+          <button class="btn" type="submit">{{ icon('check', 'btn-ico') }}متوجه شدم</button>
         </div>
       </form>
       {% endif %}

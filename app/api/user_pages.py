@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan
@@ -22,6 +22,7 @@ from app.services.bot_user_admin import (
     may_manage_customer_services,
 )
 from app.services.customer_marks import marks_for_staff, may_edit_private_marks
+from app.services.account_hold_actions import customer_hold_form_context
 from app.services.shop_customer_block import shop_block_form_context
 from app.services.shop_points_adjust import shop_points_form_context
 from app.services.shop_wallet_adjust import shop_wallet_form_context
@@ -44,6 +45,9 @@ from app.services.user_card import (
     user_card_page,
 )
 from app.services.user_photo import photo_bot, user_photo
+from app.services.telegram_target import find_target_user, parse_telegram_target
+
+EXISTING_USER_OPENED = "این کاربر از قبل در ربات هست؛ پروفایلش باز شد."
 
 
 def _q(msg: str) -> str:
@@ -170,6 +174,22 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_user(user_id, err=str(exc))
         return _redirect_user(user_id, ok="وضعیت کاربر دمو ذخیره شد")
 
+    async def _open_existing_by_username(
+        session: AsyncSession, form: object, raw: str, *, owner: bool, scope: int | None
+    ) -> RedirectResponse:
+        from app.services.users_ops import users_list_href
+
+        clause = true() if owner else BotUser.reseller_id == int(scope or 0)
+        try:
+            user = await find_target_user(session, raw, scope=clause)
+        except ValueError as exc:
+            return _redirect_list_form(form, err=str(exc))
+        fk, q = _list_return_from_form(form)
+        href = users_list_href(filter_key=fk, uid=int(user.id), q=q)
+        return RedirectResponse(
+            href + ("&" if "?" in href else "?") + f"ok={_q(EXISTING_USER_OPENED)}&edit={int(user.id)}", status_code=303
+        )
+
     @app.post("/users/create")
     async def user_create(
         request: Request,
@@ -199,9 +219,13 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         full_name = str(form.get("full_name") or "").strip() or None
         color_tag = str(form.get("color_tag") or "").strip() or None
         try:
-            telegram_id = int(raw_tid)
-        except (TypeError, ValueError):
-            return _redirect_list_form(form, err="شناسه تلگرام نامعتبر است")
+            target = parse_telegram_target(raw_tid)
+        except ValueError as exc:
+            return _redirect_list_form(form, err=str(exc))
+        if target.telegram_id is None:
+            # A username cannot create anyone (Telegram never gives its id); it can only open who is already here.
+            return await _open_existing_by_username(session, form, raw_tid, owner=is_explicit_owner_staff(staff), scope=scope)
+        telegram_id = target.telegram_id
 
         try:
             user = await admin_create_bot_user(
@@ -335,6 +359,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             **shop_wallet_form_context(staff),
             **shop_points_form_context(staff),
             **(await shop_block_form_context(session, staff, user)),
+            **(await customer_hold_form_context(session, staff, user)),
             "plans": plans,
             "reseller_plans": (
                 await list_active_reseller_plans(session) if is_explicit_owner_staff(staff) else []

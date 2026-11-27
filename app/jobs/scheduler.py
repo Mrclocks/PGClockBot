@@ -19,6 +19,8 @@ from sqlalchemy import or_, select
 
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
+from app.jobs.admin_subscription_cleanup import run_admin_subscription_cleanup
+from app.jobs.account_holds import run_account_holds
 from app.jobs.bot_profile_photo import run_bot_profile_photo_sync
 from app.jobs.cancellation_notifications import run_cancellation_notifications
 from app.jobs.chat_message_purge import run_chat_message_purge
@@ -33,6 +35,8 @@ from app.jobs.service_cleanup import run_service_cleanup
 from app.jobs.switch_reverts import run_switch_reverts
 from app.jobs.user_photo_cache import run_user_photo_prune
 from app.jobs.volume_external_sync import run_volume_external_sync
+from app.jobs.start_watch import START_WATCH_CHECK_MINUTES, run_start_watch
+from app.jobs.webhook_watch import run_webhook_watch
 from app.services.alert_rearm import Thresholds, rearm_flagged_alerts
 from app.services.alert_thresholds import (
     AlertThreshold,
@@ -55,6 +59,7 @@ from app.services.usage_alert_messages import (
     time_alert_text,
     traffic_alert_text,
 )
+from app.services.webhook_watch import WEBHOOK_CHECK_MINUTES
 from app.services.usage_alerts import (
     ALERT_CHECK_INTERVAL_HOURS,
     ALERT_TIME,
@@ -428,6 +433,19 @@ async def run_auto_order_purge() -> None:
             logger.exception("automatic order purge failed")
 
 
+async def run_pending_order_expiry() -> None:
+    """Every 30 minutes: cancel unpaid orders past the expiry each shop switched on (off by default)."""
+    async with SessionLocal() as session:
+        try:
+            from app.services.pending_order_expiry import expire_all_shops
+
+            total = await expire_all_shops(session)
+            if total:
+                logger.info("pending order expiry cancelled=%s", total)
+        except Exception:
+            logger.exception("pending order expiry failed")
+
+
 async def run_scheduled_receipt_approvals() -> None:
     """Every minute: approve card receipts nobody reviewed within their shop's chosen time."""
     async with SessionLocal() as session:
@@ -658,6 +676,8 @@ def start_background_scheduler() -> None:
         ("coupon_win_back", run_coupon_winback_job, {"hours": 6}, 3600),
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("order_purge", run_auto_order_purge, {"hours": 1}, 3600),
+        # Off by default; one query per shop that switched it on.
+        ("pending_order_expiry", run_pending_order_expiry, {"minutes": 30}, 1800),
         ("scheduled_receipt_approval", run_scheduled_receipt_approvals, {"seconds": 60}, 90),
         ("crypto_rate_refresh", run_crypto_rate_refresh, {"seconds": 60}, 90),
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),
@@ -670,6 +690,10 @@ def start_background_scheduler() -> None:
         # Ticks often; each shop is recounted on the period set in volume_external_sync_minutes.
         ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
         ("chat_message_purge", run_chat_message_purge, {"hours": 1}, 3600),
+        # Subscriptions left by removed panel admins; deletes only after the panel answers 404.
+        ("admin_subscription_cleanup", run_admin_subscription_cleanup, {"hours": 24}, 3600),
+        # Account holds still turning panel users off or back on; one indexed query when none is open.
+        ("account_holds", run_account_holds, {"minutes": 1}, 120),
         ("service_cleanup", run_service_cleanup, {"minutes": 30}, 1800),
         # Resumes frozen services at their deadline and retries unfinished panel steps; needs no bot.
         ("service_freezes", run_service_freezes, {"minutes": 1}, 120),
@@ -801,6 +825,14 @@ def start_scheduler(bot: Bot) -> None:
         coalesce=True,
         misfire_grace_time=3600,
         replace_existing=True,
+    )
+    _add_job(
+        run_webhook_watch, "interval", minutes=WEBHOOK_CHECK_MINUTES, args=[bot], id="webhook_watch",
+        max_instances=1, coalesce=True, misfire_grace_time=600, replace_existing=True,
+    )
+    _add_job(
+        run_start_watch, "interval", minutes=START_WATCH_CHECK_MINUTES, args=[bot], id="start_watch",
+        max_instances=1, coalesce=True, misfire_grace_time=300, replace_existing=True,
     )
     logger.info("Telegram scheduler jobs attached")
 

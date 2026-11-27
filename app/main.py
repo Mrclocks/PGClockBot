@@ -23,6 +23,7 @@ from app.services.shop_bot_webhook import shop_webhook_config
 from app.services.terminal_text import install_english_logging
 from app.services.users import ensure_default_settings
 from app.services.web_auth import load_web_admin
+from app.services.webhook_watch import mark_served_polling, mark_served_webhook
 
 # The journal is read over SSH: every line is English (see services.terminal_text).
 install_english_logging(level=logging.INFO, fmt="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -238,6 +239,7 @@ def main() -> None:
                             timeout=25,
                         )
                         webhook_ok = True
+                        mark_served_webhook(wh_path)
                         logger.info("Webhook set: %s (secret token enabled)", wh_full)
                     except Exception:
                         logger.exception(
@@ -276,6 +278,7 @@ def main() -> None:
                             raise
 
                     poll_task = asyncio.create_task(_poll())
+                    mark_served_polling()
 
                     def _on_done(task: asyncio.Task) -> None:
                         if task.cancelled():

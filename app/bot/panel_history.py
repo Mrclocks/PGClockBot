@@ -45,6 +45,8 @@ VIEW_SCREENS: frozenset[str] = frozenset({
     "autorv:list", "payvoid:list",
     "res:dash", "res:orders", "res:tickets", "res:cancellations",
     "qlk:v",
+    # The «وب‌پنل» cards only show a link, so «بازگشت» leads to the screen they were opened from.
+    "nv:adm:ra:adm_st_panel", "nv:res:ra:res_st_panel", "res:plan:webhint",
     # The scenario list and the «panel is down» scenario's confirmation: nothing changes before a tap.
     # The command center itself (cmd:h) is an input prompt, not a view: recording it made the panel
     # home's «بازگشت» lead back into it.
@@ -53,6 +55,8 @@ VIEW_SCREENS: frozenset[str] = frozenset({
     # Customer screens a group-message button opens (message_buttons.SCREENS): lists and texts only;
     # the trial and custom pickers and the top-up amounts only offer choices until the customer confirms.
     "shop:kind:trial", "shop:kind:custom", "nv:w:topup", "nv:loy:ref", "nv:loy:wheel", "help:guide", "help:faq",
+    # The FAQ question list only lists questions (an answer counts a view, so it is not replayed).
+    "faq:l",
 })
 # Read-only screen families: the part before the id or page.
 VIEW_FAMILIES: tuple[str, ...] = (

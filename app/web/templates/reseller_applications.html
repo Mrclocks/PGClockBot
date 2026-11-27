@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar, page_header, empty_state %}
 {% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
 {% block title %}درخواست‌های نمایندگی{% endblock %}
@@ -46,12 +47,12 @@
         <td class="col-actions">
           {% if a.status == 'awaiting_approval' %}
           {% call row_actions() %}
-          <form method="post" action="/resellers/applications/{{ a.id }}/approve" data-confirm="این درخواست نمایندگی تأیید شود؟" data-confirm-title="تأیید درخواست" data-confirm-label="تأیید"><button class="btn btn-sm" type="submit">تأیید</button></form>
-          <form method="post" action="/resellers/applications/{{ a.id }}/reject" data-confirm="این درخواست رد شود؟" data-confirm-title="رد درخواست" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-ghost btn-sm" type="submit">رد</button></form>
+          <form method="post" action="/resellers/applications/{{ a.id }}/approve" data-confirm="این درخواست نمایندگی تأیید شود؟" data-confirm-title="تأیید درخواست" data-confirm-label="تأیید"><button class="btn btn-sm" type="submit">{{ btn_icon('check', 'btn-ico') }}تأیید</button></form>
+          <form method="post" action="/resellers/applications/{{ a.id }}/reject" data-confirm="این درخواست رد شود؟" data-confirm-title="رد درخواست" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('close', 'btn-ico') }}رد</button></form>
           {% endcall %}
           {% elif a.status == 'pending_payment' %}
           {% call row_actions() %}
-          <form method="post" action="/resellers/applications/{{ a.id }}/reject" data-confirm="درخواست منتظر پرداخت رد/لغو شود؟ کاربر می‌تواند دوباره درخواست بدهد." data-confirm-title="رد درخواست" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-ghost btn-sm" type="submit">رد / لغو</button></form>
+          <form method="post" action="/resellers/applications/{{ a.id }}/reject" data-confirm="درخواست منتظر پرداخت رد/لغو شود؟ کاربر می‌تواند دوباره درخواست بدهد." data-confirm-title="رد درخواست" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('close', 'btn-ico') }}رد / لغو</button></form>
           {% endcall %}
           {% else %}
           <span class="muted li-hide">—</span>

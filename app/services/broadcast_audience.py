@@ -19,6 +19,7 @@ from sqlalchemy import ColumnElement, and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, MarketingPreference, Order, Plan, Role, ShopWallet, UserService
+from app.services.broadcast_failures import unreachable_clause
 from app.services.formatting import format_number
 from app.services.service_scope import shop_services_clause
 from app.services.shop_customer_block import not_blocked_in_shop_clause
@@ -330,7 +331,11 @@ def _filters(spec: AudienceSpec, shop_id: int | None) -> list[ColumnElement[bool
 def audience_clause(spec: AudienceSpec, *, shop_id: int | None) -> list[ColumnElement[bool]]:
     """WHERE clauses over ``BotUser`` for the people ``spec`` reaches in this tenant."""
     segment = SEGMENTS[spec.segment]
-    clauses = [BotUser.is_blocked.is_(False), _members(shop_id), not_blocked_in_shop_clause(shop_id)]
+    clauses = [
+        BotUser.is_blocked.is_(False), _members(shop_id), not_blocked_in_shop_clause(shop_id),
+        # Someone who blocked this bot or never started it only fails again; their next /start includes them.
+        ~unreachable_clause(shop_id),
+    ]
     if shop_id is not None or segment.customers_only:
         clauses.append(BotUser.role.in_(CUSTOMER_ROLES))
     if not spec.notice:

@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# Finance cleanup: status tags + age; auto hourly or run now. Permanent DB delete.
    Expects purge + cleanup_settings_action. #}
 {% set purge_tone = {
@@ -39,12 +40,36 @@
       <form method="post" action="{{ purge.run_action }}"
             data-confirm="{{ purge.ready.orders | num }} سفارش و {{ purge.ready.payments | num }} پرداخت برای همیشه از پایگاه داده حذف شوند؟ این کار برگشت‌ناپذیر است."
             data-confirm-title="حذف از پایگاه داده" data-confirm-label="حذف کامل" data-confirm-danger="1">
-        <button class="btn btn-danger" type="submit"{% if not purge.ready.total %} disabled{% endif %}>حذف از پایگاه الان</button>
+        <button class="btn btn-danger" type="submit"{% if not purge.ready.total %} disabled{% endif %}>{{ btn_icon('trash', 'btn-ico') }}حذف از پایگاه الان</button>
       </form>
     </div>
   </div>
 
   <form method="post" action="{{ cleanup_settings_action }}" class="settings-form">
+    {% if purge.expiry %}
+    <div class="card settings-card">
+      <h2>لغو خودکار خرید نیمه‌تمام</h2>
+      <p class="muted update-card-caption">
+        سفارشی که تا این مهلت پرداخت نشود لغو می‌شود و به مشتری خبر داده می‌شود. فقط سفارش‌هایی که هیچ پولی برایشان
+        در جریان نیست لغو می‌شوند: بدون رسید، بدون پرداخت آنلاین باز و بدون پرداخت تأییدشده. ردیف سفارش حذف نمی‌شود.
+      </p>
+      <div class="order-purge-options">
+        <label class="ui-switch-row">
+          <span class="ui-switch-copy"><strong>لغو خودکار</strong><small>هر ۳۰ دقیقه بررسی می‌شود</small></span>
+          <span class="ui-switch">
+            <input type="checkbox" name="expiry" value="1" {% if purge.expiry.on %}checked{% endif %} />
+            <span class="ui-switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="form-field">مهلت پرداخت (ساعت)
+          <input name="expiry_hours" type="number" min="{{ purge.expiry.min_hours }}" max="{{ purge.expiry.max_hours }}"
+                 value="{{ purge.expiry.hours }}" required dir="ltr" inputmode="numeric"
+                 aria-label="مهلت پرداخت سفارش به ساعت" />
+        </label>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="card settings-card">
       <h2>تگ‌های حذف</h2>
       <p class="muted update-card-caption">
@@ -95,7 +120,7 @@
     </div>
 
     <div class="actions sticky-actions ui-modal-sticky-save">
-      <button class="btn" type="submit">ذخیره تنظیمات</button>
+      <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره تنظیمات</button>
     </div>
   </form>
   {% endif %}

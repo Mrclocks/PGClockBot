@@ -12,11 +12,12 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
     BotUser,
+    OrgPrincipal,
     PgAdminSubscription,
     PgStaffAccess,
     ResellerPlan,
@@ -24,8 +25,10 @@ from app.db.models import (
 )
 from app.services.billing import GB, is_payg
 from app.services.db_safe import rollback_quiet
+from app.services.account_hold_guard import defer_reenable_to_holds, defer_shop_reenable_to_hold
 from app.services.service_freeze_guard import frozen_pg_user_ids
 from app.services.formatting import format_toman
+from app.services.org_principals import DEPTH_TWO
 from app.services.volume_allocation import is_hard_panel_rejection
 from app.services.volume_allocation_cascade import assert_child_growth_fits, assert_parent_has_room
 
@@ -34,6 +37,8 @@ logger = logging.getLogger(__name__)
 STATUS_ACTIVE = "active"
 STATUS_EXPIRED = "expired"
 STATUS_REVOKED = "revoked"
+
+OWNER_BUDGET_UNREADABLE = "سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید"
 
 PLAN_KIND_SUBSCRIPTION = "subscription"
 PLAN_KIND_CURRENT_CAPACITY = "current_capacity"
@@ -442,6 +447,47 @@ async def assert_new_admin_fits_owner_budget(session: AsyncSession, plan: Resell
     )
 
 
+def _sub_shop_principal(pg_username: Any) -> Any:
+    """Level-2 shop principal for a panel admin name (a value or a column); its volume is inside the parent's."""
+    return (
+        select(OrgPrincipal.id)
+        .join(ResellerProfile, ResellerProfile.id == OrgPrincipal.reseller_profile_id)
+        .where(OrgPrincipal.depth == DEPTH_TWO, ResellerProfile.pg_admin_username == pg_username)
+    )
+
+
+async def _sold_capacity_of_others(session: AsyncSession, *, owner_username: str, target: str) -> tuple[int, int]:
+    """GB and user slots sold to every other panel admin, summed in SQL.
+
+    Sub-shop volume is left out of the GB sum because the parent's own total already covers it.
+    """
+    total_gb = func.coalesce(PgAdminSubscription.base_gb, 0) + func.coalesce(
+        PgAdminSubscription.extra_gb_purchased, 0
+    )
+    total_users = func.coalesce(PgAdminSubscription.base_users, 0) + func.coalesce(
+        PgAdminSubscription.extra_users_purchased, 0
+    )
+    sold_gb = func.coalesce(
+        func.sum(case((_sub_shop_principal(PgAdminSubscription.pg_username).exists(), 0), else_=func.greatest(total_gb, 0))), 0
+    )
+    sold_users = func.coalesce(func.sum(func.greatest(total_users, 0)), 0)
+    row = (
+        await session.execute(
+            select(sold_gb, sold_users).where(
+                PgAdminSubscription.access_status == STATUS_ACTIVE,
+                PgAdminSubscription.pg_username.not_in([owner_username, target]),
+            )
+        )
+    ).one()
+    return int(row[0] or 0), int(row[1] or 0)
+
+
+async def _is_sub_shop_admin(session: AsyncSession, pg_username: str) -> bool:
+    if not pg_username:
+        return False
+    return await session.scalar(_sub_shop_principal(pg_username).limit(1)) is not None
+
+
 async def _assert_owner_capacity_budget(
     session: AsyncSession,
     *,
@@ -457,8 +503,8 @@ async def _assert_owner_capacity_budget(
     detection must not re-read the row after ``record_unit_extra`` has already written the
     new extras — that would treat growth as "same capacity" and skip the fail-closed path.
 
-    If the owner admin cannot be read: refuse only when this call **grows** capacity.
-    Same-or-smaller totals (typical renew) still proceed.
+    Only growth is checked, per axis: same-or-smaller totals (a typical renew, an admin cut)
+    always proceed, even when the panel is unreadable or the budget is already overdrawn.
     """
     from app.config import get_settings
     from app.services.pg_quota import _as_int, merge_role_limits
@@ -469,26 +515,20 @@ async def _assert_owner_capacity_budget(
 
     from app.services.pasarguard import get_pg
 
-    growing = int(next_total_gb) > int(previous_total_gb) or int(next_total_users) > int(
-        previous_total_users
-    )
+    gb_grows = int(next_total_gb) > int(previous_total_gb)
+    users_grow = int(next_total_users) > int(previous_total_users)
+    if not (gb_grows or users_grow):
+        return
 
-    pg = get_pg()
     try:
-        admin = await pg.get_admin(owner_username)
+        admin = await get_pg().get_admin(owner_username)
     except Exception as exc:
         logger.warning(
             "owner capacity budget: install admin unreadable (%s)", owner_username, exc_info=True,
         )
-        if growing:
-            raise ValueError(
-                "سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید"
-            ) from exc
-        return
+        raise ValueError(OWNER_BUDGET_UNREADABLE) from exc
     if not isinstance(admin, dict) or not admin:
-        if growing:
-            raise ValueError("سقف ظرفیت ادمین اصلی خوانده نشد؛ کمی بعد دوباره تلاش کنید")
-        return
+        raise ValueError(OWNER_BUDGET_UNREADABLE)
     role = admin.get("role") if isinstance(admin.get("role"), dict) else None
     limits = merge_role_limits(admin, role)
     owner_gb_limit_bytes = max(
@@ -499,44 +539,18 @@ async def _assert_owner_capacity_budget(
         0, _as_int(limits.get("max_users")) or _as_int(admin.get("max_users")) or 0
     )
 
-    rows = list(
-        (
-            await session.execute(
-                select(PgAdminSubscription).where(
-                    PgAdminSubscription.access_status == STATUS_ACTIVE
-                )
-            )
-        ).scalars().all()
-    )
     target = normalize_pg_username(target_pg_username)
-    sold_gb = 0
-    sold_users = 0
-    if target not in {normalize_pg_username(getattr(row, "pg_username", None)) for row in rows}:
-        # An admin about to be created has no subscription row yet; it still sells its capacity.
+    sold_gb, sold_users = await _sold_capacity_of_others(session, owner_username=owner_username, target=target)
+    sold_users += max(0, int(next_total_users))
+    # A sub-shop's volume is carved out of its parent's total, which is already counted.
+    if not await _is_sub_shop_admin(session, target):
         sold_gb += max(0, int(next_total_gb))
-        sold_users += max(0, int(next_total_users))
-    for row in rows:
-        uname = normalize_pg_username(getattr(row, "pg_username", None))
-        if not uname or uname == owner_username:
-            continue
-        total_gb = int(getattr(row, "base_gb", 0) or 0) + int(
-            getattr(row, "extra_gb_purchased", 0) or 0
-        )
-        total_users = int(getattr(row, "base_users", 0) or 0) + int(
-            getattr(row, "extra_users_purchased", 0) or 0
-        )
-        if uname == target:
-            sold_gb += max(0, int(next_total_gb))
-            sold_users += max(0, int(next_total_users))
-        else:
-            sold_gb += max(0, total_gb)
-            sold_users += max(0, total_users)
 
-    if owner_gb_limit > 0 and sold_gb > owner_gb_limit:
+    if gb_grows and owner_gb_limit > 0 and sold_gb > owner_gb_limit:
         raise ValueError(
             f"ظرفیت فروخته‌شده نمایندگی از سقف حجم ادمین اصلی بیشتر می‌شود ({sold_gb} از {owner_gb_limit} گیگ)"
         )
-    if owner_user_limit > 0 and sold_users > owner_user_limit:
+    if users_grow and owner_user_limit > 0 and sold_users > owner_user_limit:
         raise ValueError(
             f"ظرفیت فروخته‌شده نمایندگی از سقف کاربر ادمین اصلی بیشتر می‌شود ({sold_users} از {owner_user_limit})"
         )
@@ -833,11 +847,14 @@ async def restore_subscription_access(
 
     uname = normalize_pg_username(sub.pg_username)
     pg = get_pg()
-    try:
-        await _set_admin_enabled(pg, uname, enabled=True)
-    except Exception:
-        logger.exception("restore: enable admin failed %s", uname)
-        stats["errors"] += 1
+    # An owner's hold keeps the shop off; its release turns the admin and the shop back on.
+    shop_held = await defer_shop_reenable_to_hold(session, uname, include_shop=True)
+    if not shop_held:
+        try:
+            await _set_admin_enabled(pg, uname, enabled=True)
+        except Exception:
+            logger.exception("restore: enable admin failed %s", uname)
+            stats["errors"] += 1
 
     restore_ids = set(_parse_id_list(sub.expiry_disabled_user_ids))
     for uid in also_enable_user_ids or []:
@@ -847,6 +864,7 @@ async def restore_subscription_access(
             continue
     # A service the customer froze stays off; its own resume brings it back with its days.
     frozen = await frozen_pg_user_ids(session, restore_ids)
+    frozen |= await defer_reenable_to_holds(session, restore_ids)
     for uid in sorted(restore_ids - frozen):
         try:
             await pg.set_disabled_by_id(uid, False)
@@ -858,7 +876,8 @@ async def restore_subscription_access(
     sub.access_status = STATUS_ACTIVE
     sub.expired_at = None
     sub.expiry_disabled_user_ids = None
-    await _set_web_active_for_pg_admin(session, uname, active=True)
+    if not shop_held:
+        await _set_web_active_for_pg_admin(session, uname, active=True)
     await session.flush()
     if commit:
         await session.commit()

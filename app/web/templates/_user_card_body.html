@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# User card (modal fragment): one customer's account and services as the current shop sees them. #}
 {% from "_user_identity.html" import user_identity, role_tag %}
 {% set u = card.user %}
@@ -15,22 +16,22 @@
         <button type="button" class="btn"
                 data-modal-open="modal-reseller-edit"
                 data-edit-url="/resellers/{{ u.id }}/edit?fragment=1"
-                data-edit-title="ویرایش نماینده #{{ u.id }}">ویرایش</button>
+                data-edit-title="ویرایش نماینده #{{ u.id }}">{{ btn_icon('edit', 'btn-ico') }}ویرایش</button>
         {% elif edit_target == 'user' %}
         <button type="button" class="btn"
                 data-modal-open="modal-user-edit"
                 data-modal-load="/users/{{ u.id }}/edit?fragment=1"
                 data-modal-load-target="user-edit-body"
                 data-edit-url="/users/{{ u.id }}/edit?fragment=1"
-                data-edit-title="ویرایش کاربر #{{ u.id }}">ویرایش</button>
+                data-edit-title="ویرایش کاربر #{{ u.id }}">{{ btn_icon('edit', 'btn-ico') }}ویرایش</button>
         {% elif edit_target == 'user_link' %}
-        <a class="btn" href="/users?uid={{ u.id }}&amp;edit={{ u.id }}">ویرایش</a>
+        <a class="btn" href="/users?uid={{ u.id }}&amp;edit={{ u.id }}">{{ btn_icon('edit', 'btn-ico') }}ویرایش</a>
         {% endif %}
         {% if can_message %}
         <button type="button" class="btn btn-ghost"
                 data-modal-open="modal-user-message"
                 data-msg-uid="{{ u.id }}"
-                data-msg-name="{{ u.full_name or u.username or u.telegram_id }}">پیام</button>
+                data-msg-name="{{ u.full_name or u.username or u.telegram_id }}">{{ btn_icon('message', 'btn-ico') }}پیام</button>
         {% endif %}
       </div>
       {%- endif -%}

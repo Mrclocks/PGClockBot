@@ -32,6 +32,7 @@ from app.services.support_contacts import (
 from app.bot.entry_gate import ENTRY_APPROVAL_BOT_FIELDS, ENTRY_APPROVAL_SUB, ENTRY_APPROVAL_SUB_TITLE
 from app.services.bot_appearance import PROFILE_TEXT_FIELDS, update_bot_profile_text
 from app.services.receipt_fingerprints import normalize_dup_policy
+from app.services.button_icons import PREMIUM_ICON_HINT, split_label_and_icon
 from app.services.rich_text import pack_setting_from_message
 from app.services.setup_wizard import current_setup_values
 from app.services.users import (
@@ -125,6 +126,7 @@ from app.bot.handlers.settings_labels import (
     sub_back,
 )
 from app.bot.handlers.guide_editor import entry_button as guides_entry_button
+from app.bot.handlers.faq_editor import entry_button as faq_entry_button
 
 
 def _hub_markup(ui: dict[str, str]) -> InlineKeyboardMarkup:
@@ -878,6 +880,7 @@ async def _supports_panel(session: AsyncSession) -> Panel:
         )
     if not contacts:
         rows.append([InlineKeyboardButton(text="لیست خالی است", callback_data="adm:st:noop")])
+    rows.append([faq_entry_button(for_reseller=False)])
     rows.append(_back_row("adm:st:hub"))
     return (
         "🎧 <b>پشتیبان‌ها</b>\n"
@@ -1528,7 +1531,7 @@ async def support_add_start(
     await ask_text(
         callback,
         state,
-        prompt="عنوان پشتیبان (مثلاً پشتیبان ربات):",
+        prompt="عنوان پشتیبان (مثلاً پشتیبان ربات):\n" + PREMIUM_ICON_HINT,
         cancel_code="adm_set",
         fsm_state=SettingsStates.support_title,
         edit=True,
@@ -1556,7 +1559,8 @@ async def support_title_msg(
             return
         await _silent_settings_cancel(message, state, session, db_user)
         return
-    await state.update_data(support_title=text)
+    title, icon = split_label_and_icon(message.text, message.entities)
+    await state.update_data(support_title=title, support_icon=icon)
     from app.bot.nav_input import ask_text
 
     await ask_text(
@@ -1594,6 +1598,7 @@ async def support_telegram_msg(
         title=data.get("support_title") or "پشتیبان",
         telegram=text,
         enabled=True,
+        icon_custom_emoji_id=data.get("support_icon"),
     )
     if err:
         await message.answer(f"❌ {err}")
@@ -1808,7 +1813,7 @@ async def support_edit_start(
     await ask_text(
         callback,
         state,
-        prompt=f"عنوان جدید (فعلی: {c['title']}):",
+        prompt=f"عنوان جدید (فعلی: {c['title']}):\n" + PREMIUM_ICON_HINT,
         cancel_code="adm_set",
         fsm_state=SettingsStates.support_title,
         edit=True,

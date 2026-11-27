@@ -1791,6 +1791,10 @@
       ],
       [
         {
+          "callback_data": "ahb:s:6",
+          "text": "⛔ غیرفعال‌سازی کامل / فعال‌سازی"
+        },
+        {
           "callback_data": "adm:users:unres:6",
           "text": "🤝 حذف نمایندگی"
         }
@@ -1948,6 +1952,12 @@
       ],
       [
         {
+          "callback_data": "ahb:c:5",
+          "text": "⛔ غیرفعال‌سازی / فعال‌سازی حساب"
+        }
+      ],
+      [
+        {
           "callback_data": "adm:users:delask:5",
           "text": "🗑 حذف کامل کاربر"
         }
@@ -2001,6 +2011,12 @@
         {
           "callback_data": "adm:users:block:5",
           "text": "🔓 رفع مسدودی"
+        }
+      ],
+      [
+        {
+          "callback_data": "ahb:c:5",
+          "text": "⛔ غیرفعال‌سازی / فعال‌سازی حساب"
         }
       ],
       [
@@ -2405,7 +2421,7 @@
           "text": "⬅️ بازگشت"
         },
         {
-          "callback_data": "menu:home",
+          "callback_data": "pay:x:42",
           "style": "danger",
           "text": "❌ انصراف"
         }

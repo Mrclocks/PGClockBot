@@ -120,12 +120,12 @@
       <td class="col-hide-sm"><bdi dir="ltr">{{ p.payg_user_price | money }}</bdi></td>
       <td class="col-actions">
         {% call row_actions() %}
-        <button type="button" class="btn btn-sm" data-modal-open="modal-cp-plan-{{ p.id }}">ویرایش</button>
+        <button type="button" class="btn btn-sm" data-modal-open="modal-cp-plan-{{ p.id }}">{{ icon('edit', 'btn-ico') }}ویرایش</button>
         <form method="post" action="{{ page_path }}/plans/{{ p.id }}/delete"
               data-confirm="پلن «{{ p.name }}» حذف شود؟ هزینه‌های قبلی تغییری نمی‌کنند." data-confirm-title="حذف پلن"
               data-confirm-danger="1" data-confirm-label="حذف">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button class="btn btn-danger btn-sm" type="submit" aria-label="حذف پلن {{ p.name }}">حذف</button>
+          <button class="btn btn-danger btn-sm" type="submit" aria-label="حذف پلن {{ p.name }}">{{ icon('trash', 'btn-ico') }}حذف</button>
         </form>
         {% endcall %}
       </td>
@@ -146,7 +146,7 @@
       <td class="li-sub">{{ plan_names.get(c.plan_id, 'پکیج مالک') }}</td>
       <td class="cell-tight li-value"><bdi dir="ltr">{{ c.credit_limit | money }}</bdi></td>
       <td class="col-actions">
-        <button type="button" class="btn btn-sm btn-ghost li-hide" data-modal-open="modal-cp-child-{{ c.shop_id }}">ویرایش</button>
+        <button type="button" class="btn btn-sm btn-ghost li-hide" data-modal-open="modal-cp-child-{{ c.shop_id }}">{{ icon('edit', 'btn-ico') }}ویرایش</button>
         <button type="button" class="li-only li-open" data-modal-open="modal-cp-child-{{ c.shop_id }}" aria-label="ویرایش {{ c.label }}">{{ icon('chev', 'ico') }}</button>
       </td>
     </tr>{% else %}{{ empty_state('نمایندهٔ زیرمجموعه‌ای با فروشگاه ندارید', 'plans', colspan=4) }}{% endfor %}</tbody>

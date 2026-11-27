@@ -24,6 +24,7 @@ from urllib.parse import urlsplit
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import DATA_DIR
+from app.services.button_icons import ICON_KEY, set_icon
 from app.services.users import get_setting, set_setting
 
 GUIDE_MEDIA_DIR = DATA_DIR / "guide_media"
@@ -159,8 +160,8 @@ def parse_media(raw: Any) -> list[dict[str, Any]]:
     return out
 
 
-def normalize_link(label: Any, url: Any) -> dict[str, str]:
-    """One validated link; raises ``GuideMediaError`` with the reason."""
+def normalize_link(label: Any, url: Any, *, icon: Any = None) -> dict[str, str]:
+    """One validated link, with its premium icon when it has one; raises ``GuideMediaError``."""
     clean_url = str(url or "").strip()
     if len(clean_url) > LINK_URL_MAX:
         raise GuideMediaError("لینک خیلی بلند است.")
@@ -170,7 +171,7 @@ def normalize_link(label: Any, url: Any) -> dict[str, str]:
     if parts.username or parts.password:
         raise GuideMediaError("لینک نامعتبر است.")
     clean_label = re.sub(r"[<>\"'`]", "", str(label or "")).strip()[:LINK_LABEL_MAX] or DEFAULT_LINK_LABEL
-    return {"label": clean_label, "url": clean_url}
+    return set_icon({"label": clean_label, "url": clean_url}, icon)
 
 
 def parse_links(raw: Any) -> list[dict[str, str]]:
@@ -182,7 +183,7 @@ def parse_links(raw: Any) -> list[dict[str, str]]:
         if not isinstance(item, dict) or len(out) >= MAX_LINKS_PER_GUIDE:
             continue
         try:
-            out.append(normalize_link(item.get("label"), item.get("url")))
+            out.append(normalize_link(item.get("label"), item.get("url"), icon=item.get(ICON_KEY)))
         except GuideMediaError:
             continue
     return out

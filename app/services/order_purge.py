@@ -45,6 +45,7 @@ from app.services.authz import authz_from_staff, can_shop
 from app.services.db_safe import rollback_quiet
 from app.services.orders import release_unpaid_order_holds
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.pending_order_expiry import expiry_panel_context
 from app.services.stale_order_cleanup import disable_all_legacy_soft_cancel
 from app.services.user_purge import purge_row_references
 from app.services.users import get_all_settings, set_settings_bulk
@@ -432,6 +433,7 @@ async def purge_panel_context(
         "auto_on": rules.auto,
         "last_run": _last_run_view(settings),
         "run_action": f"{RUN_PATH}?next={quote(return_to)}",
+        "expiry": expiry_panel_context(settings),
     }
 
 

@@ -8,23 +8,33 @@ the outcome as unknown and moves past the user, so nobody is messaged twice. Pla
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import html
 import logging
 import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
-from aiogram.types import InlineKeyboardMarkup
-from sqlalchemy import or_, select, update
+from aiogram.types import FSInputFile, InlineKeyboardMarkup, Message
+from sqlalchemy import ColumnElement, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, BroadcastLog
 from app.services.broadcast import shop_scope_filter
+from app.services.broadcast_media import (
+    CAPTION_TOO_LONG,
+    KIND_PHOTO,
+    BroadcastMedia,
+    media_from_row,
+    prune_uploads,
+    stored_path,
+    text_limit,
+)
 from app.services.broadcast_audience import (
     AudienceSpec,
     StoredAudienceError,
@@ -34,6 +44,15 @@ from app.services.broadcast_audience import (
     load_spec,
     make_spec,
 )
+from app.services.broadcast_failures import (
+    KIND_UNKNOWN,
+    failure_kind,
+    mark_unreachable,
+    record_failure,
+    retry_clause,
+)
+from app.services.broadcast_schedule import checked_send_after
+from app.services.campaigns import RECIPIENT_LIMIT
 from app.services.message_buttons import stored_keyboard
 from app.services.telegram_html import normalize_telegram_html
 
@@ -65,10 +84,56 @@ _REQUEST_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
 
 @dataclass(frozen=True, slots=True)
 class BroadcastRequest:
-    """What a submit adds to a broadcast: its request token (repeat-safe) and its validated button rows."""
+    """What a submit adds to a broadcast: its request token (repeat-safe), validated button rows, send time and media."""
 
     token: object = None
     buttons: str | None = None
+    send_after: datetime | None = None
+    media: BroadcastMedia | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OutgoingMessage:
+    """What the worker sends each recipient of one broadcast."""
+
+    body: str
+    markup: InlineKeyboardMarkup | None = None
+    media: BroadcastMedia | None = None
+    upload: Path | None = None  # the stored web upload, while the bot has no file id for it
+
+
+def media_columns(media: BroadcastMedia | None) -> dict[str, str | None]:
+    """The broadcast row values that store ``media``."""
+    if media is None:
+        return {"media_kind": None, "media_file_id": None, "media_file": None}
+    return {"media_kind": media.kind, "media_file_id": media.file_id, "media_file": media.file_name}
+
+
+@dataclass(frozen=True, slots=True)
+class SendResult:
+    """How one recipient's send ended, and the failure reason kind when it was not delivered."""
+
+    outcome: str
+    kind: str | None = None
+
+
+SENT = SendResult(OUTCOME_OK)
+
+
+@dataclass(frozen=True, slots=True)
+class RetrySource:
+    """The broadcast a resend belongs to (None for an ordinary broadcast) and whether unknown outcomes are resent."""
+
+    broadcast_id: int | None = None
+    include_unknown: bool = False
+
+
+def recipient_clauses(spec: AudienceSpec, *, shop_id: int | None, retry: RetrySource) -> list[ColumnElement[bool]]:
+    """Who a broadcast sends to: its audience now, narrowed for a resend to the people the original did not reach."""
+    clauses = list(audience_clause(spec, shop_id=shop_id))
+    if retry.broadcast_id is not None:
+        clauses.append(retry_clause(retry.broadcast_id, include_unknown=bool(retry.include_unknown)))
+    return clauses
 
 
 def new_request_token() -> str:
@@ -85,6 +150,24 @@ def platform_request_key(token: object) -> str | None:
 def _spec(audience: AudienceSpec | str) -> AudienceSpec:
     """A platform audience; a bare key (the bot's audience buttons) is that segment with its defaults."""
     return audience if isinstance(audience, AudienceSpec) else make_spec(str(audience or ""), shop_id=None)
+
+
+def clean_platform_text(text: str | None, *, with_media: bool = False) -> str:
+    """A platform message body as Telegram HTML it accepts; ``ValueError`` when empty or too long.
+
+    With media the body is the caption: it may be empty and is limited to Telegram's caption length.
+    """
+    body = normalize_telegram_html((text or "").strip())
+    if not body and not with_media:
+        raise ValueError("متن پیام خالی است")
+    if len(body) > text_limit(with_media=with_media, default=MAX_TEXT_LENGTH):
+        raise ValueError(CAPTION_TOO_LONG if with_media else f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
+    return body
+
+
+def scheduled_spec(spec: AudienceSpec, send_after: datetime | None) -> AudienceSpec:
+    """A scheduled message's time windows («expires within 3 days») count from its send time, not from now."""
+    return replace(spec, as_of=send_after) if send_after is not None else spec
 
 
 async def count_platform_targets(session: AsyncSession, audience: AudienceSpec | str) -> int:
@@ -107,18 +190,15 @@ async def queue_broadcast(
     request's buttons are rows already validated by ``message_buttons`` (``dump_buttons``).
     """
     request = request or BroadcastRequest()
-    body = normalize_telegram_html((text or "").strip())
-    if not body:
-        raise ValueError("متن پیام خالی است")
-    if len(body) > MAX_TEXT_LENGTH:
-        raise ValueError(f"متن پیام خیلی طولانی است (حداکثر {MAX_TEXT_LENGTH})")
+    body = clean_platform_text(text, with_media=request.media is not None)
     spec = _spec(audience)
     key = platform_request_key(request.token)
     if key is not None:
         existing = await session.scalar(select(BroadcastLog).where(BroadcastLog.request_key == key))
         if existing is not None:
             return existing
-    spec = await checked_spec(session, spec, shop_id=None)
+    send_after = checked_send_after(request.send_after)
+    spec = await checked_spec(session, scheduled_spec(spec, send_after), shop_id=None)
     total = await count_audience(session, spec, shop_id=None)
     if not total:
         raise ValueError("مخاطبی برای این گروه وجود ندارد")
@@ -132,6 +212,8 @@ async def queue_broadcast(
         shop_id=None,
         request_key=key,
         buttons=request.buttons,
+        send_after=send_after,
+        **media_columns(request.media),
     )
     session.add(log)
     try:
@@ -194,6 +276,11 @@ async def mark_broadcast_failed(
     return changed.rowcount == 1
 
 
+def _is_due(now: datetime) -> ColumnElement[bool]:
+    """Not scheduled, or its send time has come."""
+    return or_(BroadcastLog.send_after.is_(None), BroadcastLog.send_after <= now)
+
+
 async def active_broadcast_ids(session: AsyncSession, *, limit: int = 5) -> list[int]:
     rows = await active_broadcast_jobs(session, limit=limit)
     return [log_id for log_id, _shop_id in rows]
@@ -209,6 +296,7 @@ async def active_broadcast_jobs(
             .where(
                 BroadcastLog.status.in_(ACTIVE_STATUSES),
                 or_(BroadcastLog.locked_until.is_(None), BroadcastLog.locked_until < now),
+                _is_due(now),
             )
             .order_by(BroadcastLog.id)
             .limit(max(1, min(int(limit), 20)))
@@ -226,6 +314,7 @@ async def _take_lease(session: AsyncSession, log_id: int) -> str | None:
             BroadcastLog.id == log_id,
             BroadcastLog.status.in_(ACTIVE_STATUSES),
             or_(BroadcastLog.locked_until.is_(None), BroadcastLog.locked_until < now),
+            _is_due(now),
         )
         .values(status=STATUS_RUNNING, lock_token=token, locked_until=now + timedelta(minutes=LEASE_MINUTES))
         .execution_options(synchronize_session=False)
@@ -246,12 +335,16 @@ def _owned(log_id: int, token: str):
 
 async def _settle_crashed_send(session: AsyncSession, log_id: int, token: str) -> None:
     """A user left in flight by a dead worker has an unknown outcome: count it and move past it."""
-    await session.execute(
+    settled = await session.execute(
         update(BroadcastLog)
         .where(*_owned(log_id, token), BroadcastLog.inflight_id.is_not(None))
         .values(cursor_id=BroadcastLog.inflight_id, inflight_id=None, review_count=BroadcastLog.review_count + 1)
+        .returning(BroadcastLog.cursor_id)
         .execution_options(synchronize_session=False)
     )
+    user_id = settled.scalar_one_or_none()
+    if user_id is not None:
+        await record_failure(session, broadcast_id=log_id, user_id=int(user_id), kind=KIND_UNKNOWN)
     await session.commit()
 
 
@@ -264,29 +357,77 @@ async def _mark_inflight(session: AsyncSession, log_id: int, token: str, user_id
     return marked.rowcount == 1
 
 
-async def _record(session: AsyncSession, log_id: int, token: str, user_id: int, outcome: str) -> None:
+async def _record(
+    session: AsyncSession, log_id: int, token: str, user_id: int, result: SendResult, *, shop_id: int | None
+) -> None:
+    """Count the outcome and, for a recipient not reached, its reason, in one transaction under the lease."""
     counts = {
         OUTCOME_OK: {"ok_count": BroadcastLog.ok_count + 1},
         OUTCOME_FAILED: {"fail_count": BroadcastLog.fail_count + 1},
         OUTCOME_UNKNOWN: {"review_count": BroadcastLog.review_count + 1},
-    }[outcome]
-    await session.execute(
+    }[result.outcome]
+    counted = await session.execute(
         update(BroadcastLog).where(*_owned(log_id, token)).values(cursor_id=user_id, inflight_id=None, **counts)
+        .execution_options(synchronize_session=False)
+    )
+    if counted.rowcount == 1 and result.kind is not None:
+        await record_failure(session, broadcast_id=log_id, user_id=user_id, kind=result.kind)
+        await mark_unreachable(session, user_id=user_id, shop_id=shop_id, kind=result.kind)
+    await session.commit()
+
+
+async def _send(bot: Bot, telegram_id: int, message: OutgoingMessage) -> tuple[SendResult, str | None]:
+    """How the send ended and, after the first upload of a stored file, the file id Telegram gave it."""
+    extra = {"reply_markup": message.markup} if message.markup is not None else {}
+    try:
+        if message.media is None:
+            await bot.send_message(telegram_id, message.body, parse_mode="HTML", **extra)
+            return SENT, None
+        sent = await _send_media(bot, telegram_id, message, extra)
+    except (TelegramForbiddenError, TelegramBadRequest) as exc:
+        return SendResult(OUTCOME_FAILED, failure_kind(exc)), None
+    return SENT, (None if message.media.file_id else learned_file_id(sent))
+
+
+async def _send_media(bot: Bot, telegram_id: int, message: OutgoingMessage, extra: dict) -> Message:
+    media = message.media
+    source = media.file_id or FSInputFile(message.upload)
+    caption = {"caption": message.body, "parse_mode": "HTML"} if message.body else {}
+    if media.kind == KIND_PHOTO:
+        return await bot.send_photo(telegram_id, source, **caption, **extra)
+    return await bot.send_video(telegram_id, source, supports_streaming=True, **caption, **extra)
+
+
+def learned_file_id(sent: object) -> str | None:
+    """The file id of the photo or video in a sent message, for reuse by the same bot."""
+    photos = getattr(sent, "photo", None)
+    if photos:
+        return str(photos[-1].file_id)
+    video = getattr(sent, "video", None)
+    return str(video.file_id) if video is not None else None
+
+
+async def _remember_file_id(session: AsyncSession, log_id: int, token: str, file_id: str) -> None:
+    """Keep the bot's file id so later recipients reuse it instead of uploading the file again."""
+    await session.execute(
+        update(BroadcastLog).where(*_owned(log_id, token)).values(media_file_id=file_id[:256])
         .execution_options(synchronize_session=False)
     )
     await session.commit()
 
 
-async def _send(
-    bot: Bot, telegram_id: int, text: str, *, escape_html: bool = False, markup: InlineKeyboardMarkup | None = None
-) -> str:
-    body = html.escape(text, quote=False) if escape_html else text
-    try:
-        extra = {"reply_markup": markup} if markup is not None else {}
-        await bot.send_message(telegram_id, body, parse_mode="HTML", **extra)
-    except (TelegramForbiddenError, TelegramBadRequest):
-        return OUTCOME_FAILED
-    return OUTCOME_OK
+async def prune_broadcast_uploads(session: AsyncSession) -> int:
+    """Remove stored uploads that no queued or running broadcast still has to upload."""
+    rows = (
+        await session.execute(
+            select(BroadcastLog.shop_id, BroadcastLog.media_file)
+            .where(BroadcastLog.status.in_(ACTIVE_STATUSES), BroadcastLog.media_file.is_not(None),
+                   BroadcastLog.media_file_id.is_(None))
+            .limit(500)
+        )
+    ).all()
+    in_use = {(int(shop_id) if shop_id is not None else None, str(name)) for shop_id, name in rows}
+    return await asyncio.to_thread(prune_uploads, in_use)
 
 
 async def _back_off(session: AsyncSession, log_id: int, token: str, seconds: int) -> None:
@@ -316,6 +457,67 @@ async def _release(session: AsyncSession, log_id: int, token: str) -> None:
     await session.commit()
 
 
+@dataclass(slots=True)
+class _Job:
+    """What one batch of a leased broadcast needs from its row."""
+
+    spec: AudienceSpec
+    tenant: int | None
+    text: str
+    buttons: str | None
+    cursor: int
+    total: int
+    progress: int
+    retry: RetrySource
+    media: BroadcastMedia | None = None
+
+    def clauses(self) -> list[ColumnElement[bool]]:
+        return recipient_clauses(self.spec, shop_id=self.tenant, retry=self.retry)
+
+
+async def _recount(session: AsyncSession, log_id: int, token: str, job: _Job) -> int:
+    """A scheduled broadcast's audience as it is when sending starts (a shop's still capped); saved as its total."""
+    total = int(await session.scalar(select(func.count()).select_from(BotUser).where(*job.clauses())) or 0)
+    if job.tenant is not None:
+        total = min(total, RECIPIENT_LIMIT)
+    await session.execute(
+        update(BroadcastLog).where(*_owned(log_id, token)).values(total=total).execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    return total
+
+
+async def _load_job(session: AsyncSession, log_id: int, token: str) -> _Job | None:
+    """The leased broadcast's state; None (and the broadcast marked failed) when its audience cannot be read."""
+    row = (
+        await session.execute(
+            select(
+                BroadcastLog.audience, BroadcastLog.audience_spec, BroadcastLog.text, BroadcastLog.cursor_id,
+                BroadcastLog.shop_id, BroadcastLog.total, BroadcastLog.ok_count, BroadcastLog.fail_count,
+                BroadcastLog.review_count, BroadcastLog.buttons, BroadcastLog.retry_of_id, BroadcastLog.retry_unknown,
+                BroadcastLog.send_after, BroadcastLog.media_kind, BroadcastLog.media_file_id, BroadcastLog.media_file,
+            ).where(BroadcastLog.id == log_id)
+        )
+    ).one()
+    tenant = int(row.shop_id) if row.shop_id is not None else None
+    try:
+        spec = load_spec(row.audience_spec, row.audience, shop_id=tenant)
+    except StoredAudienceError:
+        # Sending to a guessed audience could reach people the sender never chose; stop the message instead.
+        logger.warning("broadcast %s: saved audience cannot be read; marking failed", log_id, exc_info=True)
+        await mark_broadcast_failed(session, log_id, shop_id=tenant)
+        return None
+    job = _Job(
+        spec=spec, tenant=tenant, text=row.text, buttons=row.buttons, cursor=int(row.cursor_id), total=int(row.total),
+        progress=int(row.ok_count) + int(row.fail_count) + int(row.review_count),
+        retry=RetrySource(row.retry_of_id, bool(row.retry_unknown)),
+        media=media_from_row(row.media_kind, row.media_file_id, row.media_file),
+    )
+    if row.send_after is not None and job.progress == 0 and job.cursor == 0:
+        job.total = await _recount(session, log_id, token, job)
+    return job
+
+
 async def process_broadcast_batch(
     session: AsyncSession, log_id: int, bot: Bot, *, batch_size: int = BATCH_SIZE, delay: float = SEND_DELAY_SECONDS
 ) -> bool:
@@ -326,63 +528,43 @@ async def process_broadcast_batch(
     keep_going = True
     try:
         await _settle_crashed_send(session, log_id, token)
-        row = (
-            await session.execute(
-                select(
-                    BroadcastLog.audience,
-                    BroadcastLog.audience_spec,
-                    BroadcastLog.text,
-                    BroadcastLog.cursor_id,
-                    BroadcastLog.shop_id,
-                    BroadcastLog.total,
-                    BroadcastLog.ok_count,
-                    BroadcastLog.fail_count,
-                    BroadcastLog.review_count,
-                    BroadcastLog.buttons,
-                ).where(BroadcastLog.id == log_id)
-            )
-        ).one()
-        audience, stored_spec, text, cursor, shop_id, total, ok_count, fail_count, review_count, buttons = row
-        tenant = int(shop_id) if shop_id is not None else None
-        try:
-            spec = load_spec(stored_spec, audience, shop_id=tenant)
-        except StoredAudienceError:
-            # Sending to a guessed audience could reach people the sender never chose; stop the message instead.
-            logger.warning("broadcast %s: saved audience cannot be read; marking failed", log_id, exc_info=True)
-            await mark_broadcast_failed(session, log_id, shop_id=tenant)
+        job = await _load_job(session, log_id, token)
+        if job is None:
             return False
-        progress = int(ok_count) + int(fail_count) + int(review_count)
-        if progress >= int(total):
+        if job.progress >= job.total:
             await _finish(session, log_id, token)
             return False
-        take = max(1, min(int(batch_size), 500, int(total) - progress))
+        take = max(1, min(int(batch_size), 500, job.total - job.progress))
         recipients = (
             await session.execute(
                 select(BotUser.id, BotUser.telegram_id)
-                .where(
-                    *audience_clause(spec, shop_id=tenant),
-                    BotUser.id > int(cursor),
-                )
+                .where(*job.clauses(), BotUser.id > job.cursor)
                 .order_by(BotUser.id)
                 .limit(take)
             )
         ).all()
-        escape_html = shop_id is not None
-        keyboard = await stored_keyboard(session, buttons, shop_id=int(shop_id) if shop_id is not None else None)
-        markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
+        tenant = job.tenant
+        message = await _outgoing(session, job)
+        if message is None:
+            logger.warning("broadcast %s: its uploaded media file is gone; marking failed", log_id)
+            await mark_broadcast_failed(session, log_id, shop_id=tenant)
+            return False
         for user_id, telegram_id in recipients:
             if not await _mark_inflight(session, log_id, token, int(user_id)):
                 return False
             try:
-                outcome = await _send(bot, telegram_id, text, escape_html=escape_html, markup=markup)
+                result, file_id = await _send(bot, telegram_id, message)
             except TelegramRetryAfter as exc:
                 await _back_off(session, log_id, token, exc.retry_after)
                 return True
             except Exception:
                 # The message may or may not have been delivered; never send it again blindly.
                 logger.warning("broadcast %s: unknown outcome for user %s", log_id, user_id, exc_info=True)
-                outcome = OUTCOME_UNKNOWN
-            await _record(session, log_id, token, int(user_id), outcome)
+                result, file_id = SendResult(OUTCOME_UNKNOWN, KIND_UNKNOWN), None
+            await _record(session, log_id, token, int(user_id), result, shop_id=tenant)
+            if file_id:
+                await _remember_file_id(session, log_id, token, file_id)
+                message = replace(message, media=BroadcastMedia(kind=message.media.kind, file_id=file_id), upload=None)
             if delay:
                 await asyncio.sleep(delay)
         if len(recipients) < take:
@@ -393,10 +575,28 @@ async def process_broadcast_batch(
         await _release(session, log_id, token)
 
 
+async def _outgoing(session: AsyncSession, job: _Job) -> OutgoingMessage | None:
+    """The message of one broadcast; ``None`` when its media can be neither reused nor uploaded."""
+    # Shop messages are sent as typed, so their text is escaped here; platform text is already Telegram HTML.
+    body = html.escape(job.text, quote=False) if job.tenant is not None else job.text
+    keyboard = await stored_keyboard(session, job.buttons, shop_id=job.tenant)
+    markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
+    upload = None
+    if job.media is not None and not job.media.file_id:
+        upload = await asyncio.to_thread(stored_path, job.media.file_name, shop_id=job.tenant)
+        if upload is None:
+            return None
+    return OutgoingMessage(body=body, markup=markup, media=job.media, upload=upload)
+
+
 async def run_broadcast_worker(session_factory, bot: Bot, *, budget_seconds: float = TICK_BUDGET_SECONDS) -> None:
     """One scheduler tick: advance each active broadcast until the time budget is used."""
     async with session_factory() as session:
         jobs = await active_broadcast_jobs(session)
+        try:
+            await prune_broadcast_uploads(session)
+        except OSError:
+            logger.warning("broadcast media prune failed", exc_info=True)
     deadline = time.monotonic() + budget_seconds
     for log_id, shop_id in jobs:
         send_bot, should_close = bot, False

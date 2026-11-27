@@ -1,6 +1,7 @@
 {# Customer plan forms inside the unified plan modal (design language: panel-ds.css).
    Field names and element ids are the ones the /plans routes and the plans.html script expect. #}
 {% from "_ds.html" import ds_sec, ds_switch, ds_foot_warn, ico %}
+{% from "_icons.html" import label_icon %}
 {% from "_plan_category_field.html" import plan_category_field %}
 
 {% macro group_tags(selected=(), panel_groups=false) -%}
@@ -39,7 +40,7 @@
 <div class="ui-modal-sticky-save ds-foot" data-ds-form="{{ form_id }}">
   {{ ds_foot_warn() }}
   <div class="ds-foot-btns">
-    <button class="btn" type="submit">{{ label }}</button>
+    <button class="btn" type="submit">{{ label_icon(label) }}{{ label }}</button>
 
   </div>
 </div>

@@ -40,11 +40,11 @@
               data-gid="{{ g.get('id') }}"
               data-name="{{ g.get('name') or '' }}"
               data-disabled="{{ 1 if g.get('is_disabled') else 0 }}"
-              data-tags="{{ (g.get('inbound_tags') or [])|join('\u001f') }}">ویرایش</button>
+              data-tags="{{ (g.get('inbound_tags') or [])|join('\u001f') }}">{{ icon('edit', 'btn-ico') }}ویرایش</button>
             {% endif %}
             {% if can_delete %}
             <form method="post" action="/pg/groups/{{ g.get('id') }}/delete" data-confirm="این گروه حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف">
-              <button class="btn btn-sm btn-danger" type="submit">حذف</button>
+              <button class="btn btn-sm btn-danger" type="submit">{{ icon('trash', 'btn-ico') }}حذف</button>
             </form>
             {% endif %}
           {% endcall %}
@@ -85,7 +85,7 @@
       </div>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit">ساخت در پاسارگارد</button>
+        <button class="btn" type="submit">{{ icon('plus', 'btn-ico') }}ساخت در پاسارگارد</button>
 
       </div></div>
     </form>
@@ -123,7 +123,7 @@
       </div>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit">ذخیره تغییرات</button>
+        <button class="btn" type="submit">{{ icon('save', 'btn-ico') }}ذخیره تغییرات</button>
 
       </div></div>
     </form>

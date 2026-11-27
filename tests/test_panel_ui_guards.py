@@ -341,7 +341,7 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
         self.assertIn("btn-warn", users)
         inbox = (ROOT / "app/web/templates/inbox.html").read_text(encoding="utf-8")
-        self.assertRegex(inbox, r'btn-ok[^>]*>\s*آپدیت\s*<')
+        self.assertRegex(inbox, r'btn-ok[^>]*>\s*(?:\{\{[^}]*\}\}|<svg[^>]*>.*?</svg>)?\s*آپدیت\s*<')
         upd = (ROOT / "app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn('id="upd-start"', upd)
 

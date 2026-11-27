@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {% set notice_labels = {
   'pending': 'در صف ارسال',
   'sending': 'در حال ارسال',
@@ -42,7 +43,7 @@
     <label class="form-field">توضیح برای مشتری
       <textarea name="note" maxlength="1000">{{ row.operator_note }}</textarea>
     </label>
-    <button class="btn" type="submit">
+    <button class="btn" type="submit">{{ btn_icon('chev', 'btn-ico') }}
       {% if row.status == 'pending' %}تأیید لغو و اعتبار{% else %}بررسی پنل و ادامهٔ تأیید{% endif %}
     </button>
   </form>
@@ -53,13 +54,13 @@
     <label class="form-field">علت رد
       <textarea name="note" maxlength="1000" required></textarea>
     </label>
-    <button class="btn btn-danger" type="submit">رد درخواست</button>
+    <button class="btn btn-danger" type="submit">{{ btn_icon('close', 'btn-ico') }}رد درخواست</button>
   </form>
   {% endif %}
 </div>
 {% endfor %}
 {% if cancel_next_before %}
-<a class="btn" href="/finance?tab=cancellations&amp;before={{ cancel_next_before }}">درخواست‌های قدیمی‌تر</a>
+<a class="btn" href="/finance?tab=cancellations&amp;before={{ cancel_next_before }}">{{ btn_icon('chev', 'btn-ico') }}درخواست‌های قدیمی‌تر</a>
 {% endif %}
 {% else %}
 <div class="card settings-card">

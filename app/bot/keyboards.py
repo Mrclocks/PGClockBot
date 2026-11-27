@@ -11,6 +11,7 @@ from app.bot.button_sources import is_recording, note_button_source
 from app.bot.edit_mode import editable_screen
 from app.bot.list_pages import page_of, pager_row
 from app.bot.panel_back import BACK_LABEL_KEY, back_callback
+from app.services.button_icons import icon_kwargs
 from app.services.catalog_pricing import sale_price
 from app.services.plan_panel_groups import plan_has_pg_link
 from app.config import get_settings
@@ -1522,9 +1523,10 @@ def pay_methods(
     rows.append(
         [
             back_button(ui, f"pay:back:{order_id}"),
+            # Cancels the order when nothing was paid (handlers/checkout_cancel), then opens the home menu.
             _ikb(
                 _t(ui, "btn_cancel"),
-                callback_data="menu:home",
+                callback_data=f"pay:x:{order_id}",
                 style_id="cancel", style_fallback="danger",
                 ui=ui,
                 label_key="btn_cancel",
@@ -1587,10 +1589,13 @@ def support_contacts_keyboard(contacts: list[dict], ui: dict | None = None) -> I
     buttons: list[InlineKeyboardButton] = []
     for c in contacts:
         url = support_chat_url(c.get("telegram") or "")
-        title = str(c.get("title") or "پشتیبان")[:64]
+        title = str(c.get("title") or "پشتیبان")
         if url:
             style = resolve_support_contact_style(ui, c)
-            kwargs: dict = {"text": f"💬 {title}", "url": url}
+            icon = icon_kwargs(c)
+            # A premium icon replaces the default 💬 prefix.
+            text = title if icon else f"💬 {title}"
+            kwargs: dict = {"text": text[:64], "url": url, **icon}
             if style:
                 kwargs["style"] = style
             buttons.append(InlineKeyboardButton(**kwargs))
@@ -2022,6 +2027,22 @@ def admin_resellers_list_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
 
+# Callback prefix of the account hold screens (``app/bot/handlers/account_hold_bot.py``).
+ACCOUNT_HOLD_PREFIX = "ahb"
+
+
+def customer_hold_button(user_id: int) -> InlineKeyboardButton:
+    """Opens the customer's disable / enable screen; the handler re-checks who may act."""
+    return InlineKeyboardButton(text="⛔ غیرفعال‌سازی / فعال‌سازی حساب",
+                                callback_data=f"{ACCOUNT_HOLD_PREFIX}:c:{int(user_id)}")
+
+
+def shop_hold_button(shop_id: int) -> InlineKeyboardButton:
+    """Opens the shop's full disable / enable screen; the handler re-checks who may act."""
+    return InlineKeyboardButton(text="⛔ غیرفعال‌سازی کامل / فعال‌سازی",
+                                callback_data=f"{ACCOUNT_HOLD_PREFIX}:s:{int(shop_id)}")
+
+
 def admin_reseller_actions(
     user_id: int,
     *,
@@ -2089,6 +2110,7 @@ def admin_reseller_actions(
                 )
             ]
         )
+    rows.append([shop_hold_button(user_id)])
     rows.append(
         [
             InlineKeyboardButton(
@@ -2280,6 +2302,8 @@ def admin_user_actions(
             InlineKeyboardButton(text=block_label, callback_data=f"adm:users:block:{user_id}"),
         ],
     ]
+    if role != "admin":
+        rows.append([customer_hold_button(user_id)])
     if has_services:
         # After wallet + points rows so امتیاز stays next to کیف پول.
         rows.insert(

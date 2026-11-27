@@ -7,6 +7,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, ChargeCode, ResellerPlan
+from app.services.account_hold_guard import held_pg_user_ids
 from app.services.gift_codes import gift_code_scope
 from app.services.staff_audit import actor_from_staff, add_staff_action
 from app.services.table_bulk import parse_bulk_ids
@@ -422,7 +423,7 @@ async def bulk_pg_user_action(
             if action == "disable" and disabled:
                 fail += 1
                 continue
-            if action == "enable" and not disabled:
+            if action == "enable" and (not disabled or await held_pg_user_ids(session, [uid])):
                 fail += 1
                 continue
             pg, _ = await _staff_pg_client(session, staff)

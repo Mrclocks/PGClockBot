@@ -263,18 +263,7 @@
         {% include "_pg_connection_notice.html" %}
         {% block content %}{% endblock %}
       </div>
-      <footer class="site-footer">
-        <div class="footer-meta">
-          <span>© ۲۰۲۶ MrClockBot</span>
-        </div>
-        <div class="footer-actions">
-          <a class="btn btn-star" href="https://github.com/Mrclocks/PGClockBot" target="_blank" rel="noopener noreferrer">
-            {{ icon('loyalty') }}
-            ستاره
-            {{ icon('github', 'btn-star-gh') }}
-          </a>
-        </div>
-      </footer>
+      {% include "_site_footer.html" %}
     </main>
   </div>
   {# Navigation clock — fixed, no layout reflow; independent of deleted veil system #}
@@ -332,8 +321,8 @@
         </div>
         <div class="ds-foot">
           <div class="ds-foot-btns">
-            <button type="submit" class="btn" id="inbox-dismiss-submit">تأیید</button>
-            <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+            <button type="submit" class="btn" id="inbox-dismiss-submit">{{ icon('check', 'btn-ico') }}تأیید</button>
+            <button type="button" class="btn btn-ghost" data-modal-close>{{ icon('close', 'btn-ico') }}انصراف</button>
           </div>
         </div>
       </form>
@@ -358,8 +347,8 @@
         </div>
         <div class="ds-foot">
           <div class="ds-foot-btns">
-            <button type="submit" class="btn btn-danger" id="confirm-submit">تأیید</button>
-            <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+            <button type="submit" class="btn btn-danger" id="confirm-submit">{{ icon('check', 'btn-ico') }}تأیید</button>
+            <button type="button" class="btn btn-ghost" data-modal-close>{{ icon('close', 'btn-ico') }}انصراف</button>
           </div>
         </div>
       </form>

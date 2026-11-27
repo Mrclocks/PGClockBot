@@ -3,6 +3,10 @@
   'use strict';
 
   var MAX_MEDIA = 10;
+  // Same drawings as icon('chev-up'), icon('chev-down') and icon('trash') in _icons.html.
+  var ICON_UP = '<svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>';
+  var ICON_DOWN = '<svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  var ICON_TRASH = '<svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
 
   function esc(value) {
     return String(value == null ? '' : value)
@@ -32,9 +36,9 @@
       '<li class="guides-media-item" data-media-id="' + esc(item.id) + '">' +
         name + note +
         '<span class="guides-media-actions">' +
-          '<button type="button" class="btn btn-sm" data-media-move="up" aria-label="جابه‌جایی به قبل"' + (index === 0 ? ' disabled' : '') + '>▲</button>' +
-          '<button type="button" class="btn btn-sm" data-media-move="down" aria-label="جابه‌جایی به بعد"' + (index === count - 1 ? ' disabled' : '') + '>▼</button>' +
-          '<button type="button" class="btn btn-danger btn-sm" data-media-delete aria-label="حذف ' + label + '">حذف</button>' +
+          '<button type="button" class="btn btn-sm" data-media-move="up" aria-label="جابه‌جایی به قبل"' + (index === 0 ? ' disabled' : '') + '>' + ICON_UP + '</button>' +
+          '<button type="button" class="btn btn-sm" data-media-move="down" aria-label="جابه‌جایی به بعد"' + (index === count - 1 ? ' disabled' : '') + '>' + ICON_DOWN + '</button>' +
+          '<button type="button" class="btn btn-danger btn-sm" data-media-delete aria-label="حذف ' + label + '">' + ICON_TRASH + 'حذف</button>' +
         '</span>' +
       '</li>'
     );

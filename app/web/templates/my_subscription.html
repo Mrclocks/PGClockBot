@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import card_title, row_actions, page_header %}
 {% from "_my_account_tabs.html" import my_account_tabs %}
 {% block title %}اشتراک من{% endblock %}
@@ -79,7 +80,7 @@
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="plan_id" value="{{ c.plan.id }}">
               <input type="hidden" name="generation" value="{{ ov.generation }}">
-              <button type="submit" class="btn btn-sm{{ '' if c.relation in ('current', 'upgrade') else ' btn-ghost' }}">{{ 'تمدید' if c.relation == 'current' else c.label }}</button>
+              <button type="submit" class="btn btn-sm{{ '' if c.relation in ('current', 'upgrade') else ' btn-ghost' }}">{{ btn_icon('refresh', 'btn-ico') }}{{ 'تمدید' if c.relation == 'current' else c.label }}</button>
             </form>
             {% endcall %}
             {% endif %}
@@ -107,7 +108,7 @@
         {% for n in extras.gb_options %}<option value="{{ n }}">{{ (n) | fa }} گیگ — {{ (n * extras.gb_price) | money }} تومان</option>{% endfor %}
       </select>
     </label>
-    <button type="submit" class="btn btn-sm">خرید حجم</button>
+    <button type="submit" class="btn btn-sm">{{ btn_icon('cart', 'btn-ico') }}خرید حجم</button>
   </form>
 </div>
 {% endif %}
@@ -125,7 +126,7 @@
         {% for n in extras.user_options %}<option value="{{ n }}">{{ (n) | fa }} کاربر — {{ (n * extras.user_price) | money }} تومان</option>{% endfor %}
       </select>
     </label>
-    <button type="submit" class="btn btn-sm">خرید کاربر</button>
+    <button type="submit" class="btn btn-sm">{{ btn_icon('user', 'btn-ico') }}خرید کاربر</button>
   </form>
 </div>
 {% endif %}

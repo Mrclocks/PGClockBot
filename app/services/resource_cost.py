@@ -50,6 +50,7 @@ JOB_LABELS: dict[str, str] = {
     "coupon_win_back": "کوپن بازگشت مشتری",
     "pg_admin_subscription": "اشتراک ادمین‌های پنل",
     "order_purge": "پاکسازی سفارش‌های قدیمی",
+    "pending_order_expiry": "لغو خودکار خرید نیمه‌تمام",
     "scheduled_receipt_approval": "تأیید زمان‌دار رسید",
     "crypto_rate_refresh": "نرخ رمزارز",
     "scheduled_backup": "بکاپ زمان‌بندی‌شده",
@@ -62,6 +63,8 @@ JOB_LABELS: dict[str, str] = {
     "chat_message_purge": "پاکسازی پیام‌های گفتگو",
     "service_cleanup": "پاکسازی سرویس‌ها",
     "switch_reverts": "برگشت سوییچ‌های زمان‌دار",
+    "admin_subscription_cleanup": "پاکسازی اشتراک ادمین‌های حذف‌شده",
+    "account_holds": "غیرفعال‌سازی و فعال‌سازی حساب‌ها",
     "bot_profile_photo": "عکس پروفایل ربات",
     "user_photo_prune": "پاکسازی عکس کاربران",
     "cancellation_notifications": "اعلان لغو سرویس",
@@ -75,6 +78,8 @@ JOB_LABELS: dict[str, str] = {
     "service_transfers": "تغییر لینک سرویس‌های منتقل‌شده",
     "expiry": "هشدار کمبود حجم و زمان",
     "admin_daily_report": "گزارش روزانه",
+    "webhook_watch": "بررسی دریافت پیام تلگرام",
+    "start_watch": "خبر استارت کاربر منتظر",
 }
 
 # Jobs behind the switches tagged above, plus the panel recount of capacity-gated shops.

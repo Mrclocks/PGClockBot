@@ -38,7 +38,7 @@ class UserKeyboardLayoutTests(unittest.TestCase):
         rows = pay_methods(7, ui).inline_keyboard
         self.assertEqual([b.callback_data for b in rows[0]], ["pay:wallet:7"])
         self.assertEqual([b.callback_data for b in rows[1]], ["pay:card:7", "pay:gateway:7"])
-        self.assertEqual([b.callback_data for b in rows[-1]], ["pay:back:7", "menu:home"])
+        self.assertEqual([b.callback_data for b in rows[-1]], ["pay:back:7", "pay:x:7"])
 
     def test_plans_use_two_columns_only_for_short_labels(self) -> None:
         plans = [_plan(1, "a"), _plan(2, "b"), _plan(3, "x" * 40)]

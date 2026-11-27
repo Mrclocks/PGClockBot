@@ -38,21 +38,21 @@
     <h2>پرداخت <span dir="ltr">{{ topup.amount | money }}</span></h2>
     {% if topup.card_number %}<p>به کارت <b dir="ltr">{{ topup.card_number }}</b>{% if topup.card_holder %} به نام {{ topup.card_holder }}{% endif %} واریز کنید و تصویر رسید را بفرستید.</p>{% endif %}
     {% if topup.crypto_address %}<p>{{ topup.crypto_asset }} ({{ topup.crypto_network }}) به آدرس <b dir="ltr">{{ topup.crypto_address }}</b></p>{% endif %}
-    {% if topup.gateway_link %}<p><a class="btn" href="{{ topup.gateway_link }}" target="_blank" rel="noopener noreferrer">پرداخت در {{ topup.gateway_name or 'درگاه' }}</a></p>{% endif %}
-    {% if topup.checkout_url %}<p><a class="btn" href="{{ topup.checkout_url }}" rel="noopener noreferrer">رفتن به درگاه پرداخت</a></p>{% endif %}
+    {% if topup.gateway_link %}<p><a class="btn" href="{{ topup.gateway_link }}" target="_blank" rel="noopener noreferrer">{{ icon('external', 'btn-ico') }}پرداخت در {{ topup.gateway_name or 'درگاه' }}</a></p>{% endif %}
+    {% if topup.checkout_url %}<p><a class="btn" href="{{ topup.checkout_url }}" rel="noopener noreferrer">{{ icon('external', 'btn-ico') }}رفتن به درگاه پرداخت</a></p>{% endif %}
     {% if topup.note %}<p class="muted">{{ topup.note }}</p>{% endif %}
     {% if topup.needs_receipt %}
     <form method="post" action="/my-subscription/wallet/topup/{{ topup.payment_id }}/receipt" enctype="multipart/form-data" class="form-stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="form-field">تصویر رسید <input type="file" name="receipt" accept="image/*" required /></label>
-      <div class="actions"><button class="btn" type="submit">ارسال رسید</button></div>
+      <div class="actions"><button class="btn" type="submit">{{ icon('send', 'btn-ico') }}ارسال رسید</button></div>
     </form>
     {% endif %}
     {% if topup.settlement_id %}
     <form method="post" action="/my-subscription/wallet/check" class="form-stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="settlement_id" value="{{ topup.settlement_id }}">
-      <div class="actions"><button class="btn btn-ghost" type="submit">بررسی پرداخت</button></div>
+      <div class="actions"><button class="btn btn-ghost" type="submit">{{ icon('eye', 'btn-ico') }}بررسی پرداخت</button></div>
     </form>
     {% endif %}
   </div>
@@ -82,7 +82,7 @@
         </label>
         {% endif %}
       </div>
-      <div class="actions"><button class="btn" type="submit">ادامهٔ پرداخت</button></div>
+      <div class="actions"><button class="btn" type="submit">{{ icon('chev', 'btn-ico') }}ادامهٔ پرداخت</button></div>
     </form>
     {% endif %}
   </div>
@@ -146,7 +146,7 @@
         <td class="cell-tight li-badge"><span class="badge {{ charge_tones.get(c.status, 'neutral') }}">{{ charge_labels.get(c.status, c.status) }}</span></td>
       </tr>{% else %}{{ empty_state('هزینه‌ای ثبت نشده است', 'wallet', colspan=5) }}{% endfor %}</tbody>
     </table></div>
-    {% if next_before %}<div class="actions"><a class="btn btn-ghost" href="/my-subscription/charges?before={{ next_before }}">قدیمی‌تر</a></div>{% endif %}
+    {% if next_before %}<div class="actions"><a class="btn btn-ghost" href="/my-subscription/charges?before={{ next_before }}">{{ icon('chev', 'btn-ico') }}قدیمی‌تر</a></div>{% endif %}
   </div>
 {% endif %}
 </div>

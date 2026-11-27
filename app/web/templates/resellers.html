@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_account_hold_actions.html" import shop_hold_actions %}
 {% from "macros.html" import switch, oversell_create_switch, row_actions, table_select_head, table_select_cell, table_bulk_bar, modal_title, page_header, act_label, empty_state, search_submit %}
 {% from "_ds.html" import ds_perm_groups %}
 {% from "_user_card_modals.html" import user_card_link, user_card_hint, user_card_modals with context %}
@@ -64,11 +65,11 @@
       </small>
     </label>
     <div class="actions">
-      <button class="btn" type="submit">ذخیره تنظیمات</button>
+      <button class="btn" type="submit">{{ icon('save', 'btn-ico') }}ذخیره تنظیمات</button>
       {% if custom_panel_url or custom_pg_panel_url %}
       <button class="btn btn-ghost" type="button"
               data-clear-fields="reseller_panel_base_url,reseller_pg_panel_base_url"
-              data-clear-and-submit>
+              data-clear-and-submit>{{ icon('refresh', 'btn-ico') }}
         بازگشت آدرس‌ها به پیش‌فرض
       </button>
       {% endif %}
@@ -87,7 +88,7 @@
         data-confirm-title="همگام‌سازی ظرفیت"
         data-confirm-label="همگام‌سازی">
     <div class="actions">
-      <button class="btn btn-ghost" type="submit">همگام‌سازی ظرفیت</button>
+      <button class="btn btn-ghost" type="submit">{{ icon('refresh', 'btn-ico') }}همگام‌سازی ظرفیت</button>
     </div>
   </form>
 </div>
@@ -195,7 +196,9 @@
           <span class="li-only">· کاربران <bdi dir="ltr">{{ usage.get('users_text') or '—' }}</bdi></span>
         </td>
         <td class="li-badge" data-sort-value="{% if p.billing_suspended_at %}2{% elif p.is_active %}1{% else %}0{% endif %}">
-          {% if p.billing_suspended_at %}
+          {% if shop_holds.get(u.id) %}
+          <span class="badge blocked">غیرفعال کامل</span>
+          {% elif p.billing_suspended_at %}
           <span class="badge rejected">مسدود</span>
           {% elif p.is_active %}
           <span class="badge approved">فعال</span>
@@ -223,7 +226,7 @@
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-reseller-edit"
                     data-edit-url="/resellers/{{ u.id }}/edit?fragment=1"
-                    data-edit-title="ویرایش نماینده #{{ u.id }}">ویرایش</button>
+                    data-edit-title="ویرایش نماینده #{{ u.id }}">{{ icon('edit', 'btn-ico') }}ویرایش</button>
             <form method="post" action="/resellers/{{ u.id }}/delete"
                   data-confirm="نمایندگی حذف شود؟ ادمین پاسارگارد متصل هم حذف می‌شود و علت برای کاربر ارسال می‌گردد. حساب بات، سفارش‌ها و کیف پول کاربر باقی می‌ماند مگر «حذف کاربر» را بزنید."
                   data-confirm-title="حذف نمایندگی (+ ادمین پاسارگارد)"
@@ -233,7 +236,7 @@
                   data-confirm-reason-name="reason"
                   data-confirm-label="حذف نمایندگی و ادمین">
               <input type="hidden" name="reason" value="" />
-              <button class="btn btn-sm btn-danger" type="submit">حذف نمایندگی</button>
+              <button class="btn btn-sm btn-danger" type="submit">{{ icon('trash', 'btn-ico') }}حذف نمایندگی</button>
             </form>
             <form method="post" action="/resellers/{{ u.id }}/delete-user"
                   data-confirm="{% if (u.wallet_balance or 0) > 0 %}هشدار: موجودی کیف پول {{ u.wallet_balance | money }} تومان از بین می‌رود. {% endif %}کاربر، نمایندگی، ادمین پاسارگارد، تمام سفارش‌ها، سرویس‌ها و پرداخت‌ها کامل حذف شوند؟ برگشت‌ناپذیر است. توجه: اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود."
@@ -245,13 +248,16 @@
                   data-confirm-reason-name="reason"
                   data-confirm-label="حذف کامل">
               <input type="hidden" name="reason" value="" />
-              <button class="btn btn-sm btn-danger" type="submit">حذف کاربر</button>
+              <button class="btn btn-sm btn-danger" type="submit">{{ icon('trash', 'btn-ico') }}حذف کاربر</button>
             </form>
+          {% endif %}
+          {% if can_hold_shops %}
+            {{ shop_hold_actions(u.id, shop_holds.get(u.id)) }}
           {% endif %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-reseller-color"
                     data-edit-url="/resellers/{{ u.id }}/color-tag?fragment=1"
-                    data-edit-title="تگ ریسک #{{ u.id }}">تگ ریسک</button>
+                    data-edit-title="تگ ریسک #{{ u.id }}">{{ icon('tag', 'btn-ico') }}تگ ریسک</button>
           {% endcall %}
         </td>
       </tr>
@@ -281,10 +287,9 @@
       {% endif %}
       <div class="form-row">
         <div>
-          <label class="form-field">آیدی عددی تلگرام
-            
-            <input name="telegram_id" type="number" required dir="ltr" />
-        <small class="muted">مثال: 123456789</small>
+          <label class="form-field">آیدی عددی یا یوزرنیم تلگرام
+            <input name="telegram_id" required dir="ltr" maxlength="64" autocomplete="off" placeholder="123456789 یا @username" />
+            <small class="muted">باید یک بار ربات را استارت کرده باشد. یوزرنیم فقط برای پیدا کردن است و آیدی عددی ذخیره می‌شود.</small>
           </label>
         </div>
         <div>
@@ -339,7 +344,7 @@
         </div>
       </section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit" {% if not reseller_plans %}disabled{% endif %}>ذخیره و ارسال اطلاعات</button>
+        <button class="btn" type="submit" {% if not reseller_plans %}disabled{% endif %}>{{ icon('save', 'btn-ico') }}ذخیره و ارسال اطلاعات</button>
 
       </div></div>
     </form>
@@ -380,7 +385,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit" {% if not l2_pg_roles %}disabled{% endif %}>ساخت</button>
+        <button class="btn" type="submit" {% if not l2_pg_roles %}disabled{% endif %}>{{ icon('plus', 'btn-ico') }}ساخت</button>
 
       </div></div>
     </form>

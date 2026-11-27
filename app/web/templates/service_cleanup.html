@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import setting_help, row_actions, page_header %}
 {% from "_user_card_modals.html" import user_card_link, user_card_button, user_card_hint, user_card_modals with context %}
 {% block title %}پاکسازی سرویس‌ها{% endblock %}
@@ -78,7 +79,7 @@
   </div>
 
   <div class="actions sticky-actions ui-modal-sticky-save">
-    <button class="btn" type="submit">ذخیره تنظیمات</button>
+    <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیره تنظیمات</button>
   </div>
 </form>
 
@@ -130,7 +131,7 @@
                     data-confirm-reason="1" data-confirm-reason-label="علت تمدید مهلت" data-confirm-reason-name="reason">
                 <input type="hidden" name="reason" value="" />
                 <input type="hidden" name="days" value="{{ extra }}" />
-                <button class="btn btn-ghost btn-sm" type="submit">{{ (extra) | fa }} روز مهلت</button>
+                <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('time', 'btn-ico') }}{{ (extra) | fa }} روز مهلت</button>
               </form>
               {% endfor %}
               <form method="post" action="/service-cleanup/{{ r.service_id }}/exempt"
@@ -138,7 +139,7 @@
                     data-confirm-reason="1" data-confirm-reason-label="علت معافیت" data-confirm-reason-name="reason">
                 <input type="hidden" name="reason" value="" />
                 <input type="hidden" name="value" value="1" />
-                <button class="btn btn-ghost btn-sm" type="submit">معاف از پاکسازی</button>
+                <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('shield-check', 'btn-ico') }}معاف از پاکسازی</button>
               </form>
             {% endcall %}
           </td>
@@ -187,7 +188,7 @@
                     data-confirm-reason="1" data-confirm-reason-label="علت برگرداندن" data-confirm-reason-name="reason">
                 <input type="hidden" name="reason" value="" />
                 <input type="hidden" name="value" value="0" />
-                <button class="btn btn-ghost btn-sm" type="submit">برگردان به پاکسازی</button>
+                <button class="btn btn-ghost btn-sm" type="submit">{{ btn_icon('refresh', 'btn-ico') }}برگردان به پاکسازی</button>
               </form>
             {% endcall %}
           </td>

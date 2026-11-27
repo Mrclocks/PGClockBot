@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# «مینی‌اپ» settings tab (platform and shop).
    Expects: values, csrf_token, miniapp_brand_action, settings_base, shop_mode, main_app (or None);
    platform: miniapp_url; shop: miniapp_available, miniapp_on, miniapp_url (for _shop_miniapp_switch).
@@ -77,7 +78,7 @@
   {% endif %}
 
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیرهٔ تنظیمات مینی‌اپ</button>
+    <button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیرهٔ تنظیمات مینی‌اپ</button>
   </div>
 </form>
 <script src="/static/miniapp-brand-form.js?v={{ asset_v('miniapp-brand-form.js') if asset_v is defined else app_version }}" defer></script>

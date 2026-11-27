@@ -49,10 +49,10 @@ def kinds(buttons):
 
 
 class MakeButtonsTests(unittest.TestCase):
-    def test_screen_buttons_get_a_default_label_and_keep_their_colour(self) -> None:
+    def test_a_screen_button_without_a_label_is_stored_empty_and_keeps_its_colour(self) -> None:
         buttons = make_buttons([ButtonInput("shop"), ButtonInput("support", "سؤال دارید؟", style="success")], NO_LINKS)
         self.assertEqual(kinds(buttons), [
-            ("screen", "🛒 خرید سرویس", "shop", ""),
+            ("screen", "", "shop", ""),
             ("screen", "سؤال دارید؟", "support", "success"),
         ])
 
@@ -121,10 +121,11 @@ class ChecklistTests(unittest.TestCase):
     def test_checklist_marks_choices_and_lists_presets(self) -> None:
         markup = picker.checklist_markup(["shop"], renew=True, presets=[(3, "فروش")])
         texts = [b.text for row in markup.inline_keyboard for b in row]
-        self.assertIn("✅ 🛒 خرید سرویس", texts)
-        self.assertIn("⬜ 🔄 تمدید سرویس", texts)
+        # The checkbox ends each line, after the label, so a premium emoji never sits between them.
+        self.assertIn("\u200f🛒 خرید سرویس ✅", texts)
+        self.assertIn("\u200f🔄 تمدید سرویس ⬜", texts)
         self.assertIn("📚 قالب: فروش", texts)
-        self.assertNotIn("⬜ 🔗 لینک", texts)
+        self.assertNotIn("🔗 لینک ⬜", texts)
 
 
 class DbCase(unittest.IsolatedAsyncioTestCase):
@@ -161,7 +162,7 @@ class PresetTests(DbCase):
             preset = await save_preset(session, SHOP_A, name="فروش", items=[ButtonInput("wallet", style="danger")], rules=NO_LINKS)
             self.assertEqual([p.name for p in await list_presets(session, SHOP_A)], ["فروش"])
             self.assertEqual(await list_presets(session, SHOP_B), [])
-            self.assertEqual(await preset_inputs(session, SHOP_A, preset.id), [ButtonInput("wallet", "👛 کیف پول", "", "danger")])
+            self.assertEqual(await preset_inputs(session, SHOP_A, preset.id), [ButtonInput("wallet", "", "", "danger")])
             self.assertEqual(await preset_inputs(session, SHOP_B, preset.id), [])
             self.assertFalse(await delete_preset(session, SHOP_B, preset.id))
             self.assertFalse(await delete_preset(session, None, preset.id))

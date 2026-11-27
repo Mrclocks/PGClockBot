@@ -1013,6 +1013,12 @@ class BroadcastLog(Base):
             unique=True,
             postgresql_where=text("request_key IS NOT NULL"),
         ),
+        Index(
+            "uq_broadcast_logs_retry_of_id",
+            "retry_of_id",
+            unique=True,
+            postgresql_where=text("retry_of_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -1041,6 +1047,47 @@ class BroadcastLog(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Client nonce scoped by the service (``shop-<id>-<nonce>``); unique when set.
     request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # A resend to the recipients this broadcast did not reach: it only goes to people with a broadcast_failures row
+    # of that broadcast (none once it is deleted). A plain id, so deleting the original never widens the resend;
+    # unique, so one broadcast is resent at most once.
+    retry_of_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # The resend also goes to recipients whose outcome was unknown (they may get the message twice).
+    retry_unknown: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Scheduled send time (UTC); the worker leaves the broadcast queued until then and recounts its audience
+    # when sending starts. NULL = send as soon as possible.
+    send_after: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Optional photo or video (broadcast_media): the sending bot's file id once known, else a stored web upload.
+    media_kind: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    media_file_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    media_file: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+
+class BroadcastFailure(Base):
+    """A recipient a broadcast did not reach, or reached with an unknown outcome, and the kind of reason."""
+
+    __tablename__ = "broadcast_failures"
+    __table_args__ = (UniqueConstraint("broadcast_id", "bot_user_id", name="uq_broadcast_failures_recipient"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    broadcast_id: Mapped[int] = mapped_column(ForeignKey("broadcast_logs.id", ondelete="CASCADE"))
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), index=True)
+    # broadcast_failures.FAILURE_KINDS key; Telegram's own error text is never stored or shown.
+    kind: Mapped[str] = mapped_column(String(24))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BroadcastUnreachable(Base):
+    """A person one tenant's bot cannot message (blocked it, deleted the account or never started it).
+
+    Group messages skip them; their next /start in that bot removes the row.
+    """
+
+    __tablename__ = "broadcast_unreachable"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), primary_key=True)
+    shop_key: Mapped[int] = mapped_column(Integer, primary_key=True)  # 0 = platform
+    reason: Mapped[str] = mapped_column(String(24))
+    marked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ResellerProfile(Base):
@@ -2840,3 +2887,143 @@ class DiscountBudget(Base):
     shop_key: Mapped[int] = mapped_column(Integer)
     month: Mapped[str] = mapped_column(String(7))
     used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class AccountHold(Base):
+    """An owner turned a customer or a shop off: ``applying`` -> ``held`` -> ``releasing`` -> ``released``.
+
+    ``kind`` is ``customer`` or ``shop``. ``scope_shop_id`` is the shop a customer hold belongs to
+    (0 for the platform owner's account-wide hold; for a shop hold, the shop itself). The panel
+    users it turned off are its items; release turns back on only those. At most one open hold per
+    target and scope (partial unique index). ``restore_*`` say what release turns back on: what was
+    on before the hold, plus anything another path wanted to re-enable while the hold was open.
+    """
+
+    __tablename__ = "account_holds"
+    __table_args__ = (
+        Index(
+            "uq_account_holds_open",
+            "kind",
+            "target_user_id",
+            "scope_shop_id",
+            unique=True,
+            postgresql_where=text("status <> 'released'"),
+        ),
+        Index("ix_account_holds_status_id", "status", "id"),
+        Index("ix_account_holds_parent", "parent_hold_id"),
+        Index("ix_account_holds_admin_open", "pg_admin_username", postgresql_where=text("status <> 'released'")),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    target_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
+    scope_shop_id: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(16), default="applying", server_default="applying")
+    parent_hold_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("account_holds.id", ondelete="CASCADE"), nullable=True
+    )
+    # Shop holds: the shop's panel admin and what release switches back on.
+    pg_admin_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    admin_state: Mapped[str] = mapped_column(String(16), default="none", server_default="none")
+    restore_shop_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # Shop holds list the admin's panel users once (a network read), then work from the saved rows.
+    items_listed: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # Customer holds: the block flag release puts back (it may have been on before the hold).
+    restore_unblock: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    actor: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Who may release it: 0 for the platform owner, else the shop whose staff placed it.
+    placed_by_shop_id: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    lease_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    released_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AccountHoldItem(Base):
+    """One panel user a hold covers: ``pending`` -> ``sending`` -> ``disabled`` | ``skipped`` | ``gone``.
+
+    On release: ``disabled`` -> ``enabling`` -> ``restored`` | ``left`` (kept off: frozen, held by
+    another open hold, or removed). ``sending`` and ``enabling`` mean the panel call may have run;
+    a retry repeats the same call, which is safe because disabling or enabling twice changes nothing.
+    """
+
+    __tablename__ = "account_hold_items"
+    __table_args__ = (
+        UniqueConstraint("hold_id", "pg_user_id", name="uq_account_hold_items_user"),
+        Index("ix_account_hold_items_pg_user", "pg_user_id"),
+        Index("ix_account_hold_items_hold_state", "hold_id", "state"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hold_id: Mapped[int] = mapped_column(ForeignKey("account_holds.id", ondelete="CASCADE"))
+    pg_user_id: Mapped[int] = mapped_column(BigInteger)
+    service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("user_services.id", ondelete="SET NULL"), nullable=True
+    )
+    state: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class FaqItem(Base):
+    """One frequently asked question a shop shows under «پشتیبانی» as a button.
+
+    ``reseller_id`` is the shop (NULL for the platform's own bot). ``answer`` is Telegram HTML, so
+    bold text, links and premium emoji written in the bot survive. ``button_style`` NULL inherits the
+    «سوال‌های متداول» color; ``""`` is the client default. The two counters only ever grow by an
+    atomic ``UPDATE`` and tell staff which answers are read and which still end in a ticket.
+    """
+
+    __tablename__ = "faq_items"
+    __table_args__ = (Index("ix_faq_items_shop_order", "reseller_id", "sort_order", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True
+    )
+    question: Mapped[str] = mapped_column(String(160))
+    answer: Mapped[str] = mapped_column(Text)
+    button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    icon_custom_emoji_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Up to four buttons under the answer, stored like a group message's (``message_buttons``).
+    buttons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    view_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    ticket_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class StartWatch(Base):
+    """A staff member asked to hear when a person first starts the bot, to make them a reseller.
+
+    ``target`` is ``id:<telegram id>`` or ``u:<lower-case username>``. The watch never grants anything:
+    it only tells the watcher who matched (with the numeric id) and offers the usual make-reseller
+    step, so a username that changed hands cannot slip someone into a role. At most one open watch
+    per watcher and target (partial unique index); ``notified_at`` is the atomic claim.
+    """
+
+    __tablename__ = "start_watches"
+    __table_args__ = (
+        Index(
+            "uq_start_watches_open",
+            "watcher_telegram_id",
+            "target",
+            unique=True,
+            postgresql_where=text("notified_at IS NULL"),
+        ),
+        Index("ix_start_watches_open_expiry", "expires_at", postgresql_where=text("notified_at IS NULL")),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    watcher_telegram_id: Mapped[int] = mapped_column(BigInteger)
+    target: Mapped[str] = mapped_column(String(48))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

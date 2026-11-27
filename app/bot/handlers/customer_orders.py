@@ -16,6 +16,7 @@ from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, OrderStatus
 from app.services import bot_feedback_texts as feedback
+from app.services.checkout_cancel import is_customer_cancellable
 from app.services.customer_orders import CustomerOrder, get_customer_order, list_customer_orders
 from app.services.formatting import format_toman
 from app.services.users import current_shop_reseller_id, get_all_settings
@@ -28,6 +29,7 @@ SUPPORT_CALLBACK = "nv:s:new"
 ID = r"(\d{1,12})"
 NO_ORDERS = "هنوز سفارشی ثبت نشده است."
 NO_SUPPORT_STATUSES = (OrderStatus.DELIVERED.value, OrderStatus.CANCELLED.value)
+CANCEL_LABEL = "❌ لغو این خرید"
 
 
 def orders_button() -> InlineKeyboardButton:
@@ -98,6 +100,9 @@ async def order_card(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     if hint:
         lines.append(f"\n{hint}")
     rows = []
+    if await is_customer_cancellable(session, item.order_id):
+        # handlers/checkout_cancel asks for a confirmation, then cancels.
+        rows.append([InlineKeyboardButton(text=CANCEL_LABEL, callback_data=f"myord:x:{item.order_id}")])
     if item.status not in NO_SUPPORT_STATUSES:
         rows.append([InlineKeyboardButton(text="✉️ تماس با پشتیبانی", callback_data=SUPPORT_CALLBACK)])
     await _show(callback, session, "\n".join(lines), rows, LIST_CALLBACK)

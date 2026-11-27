@@ -25,7 +25,7 @@ class BroadcastAudienceContractTests(unittest.TestCase):
         html = Path("app/web/templates/_loyalty_rewards_panel.html").read_text(
             encoding="utf-8"
         )
-        self.assertIn(">حذف</button>", html)
+        self.assertRegex(html, r">(?:\{\{[^}]*\}\}|<svg[^>]*>.*?</svg>)?حذف</button>")
         self.assertIn('data-confirm-label="حذف"', html)
         self.assertNotIn(">بایگانی</button>", html)
 

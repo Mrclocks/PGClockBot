@@ -28,6 +28,7 @@ RELAXED_JOBS: dict[str, int] = {
     "service_cleanup": 2 * 3600,
     "chat_message_purge": 3 * 3600,
     "order_purge": 3 * 3600,
+    "pending_order_expiry": 2 * 3600,
     "bot_profile_photo": 24 * 3600,
 }
 

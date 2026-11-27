@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 from app.config import DATA_DIR, ROOT_DIR, get_settings, normalize_pg_base_url
 from app.services.web_auth import load_web_admin
+from app.services.webhook_address import telegram_port_error
 import logging
 
 logger = logging.getLogger(__name__)
@@ -572,11 +573,17 @@ def resolve_bot_update_mode(
     if not base:
         base = normalize_webhook_base_url(public_base_url)
 
+    if not requested and base and telegram_port_error(base):
+        # A derived address Telegram cannot post to (e.g. the panel on :9000) means polling, not an error.
+        return "polling", "", path
     if requested == "webhook" or (not requested and base):
         if not base:
             raise ValueError("برای حالت Webhook آدرس HTTPS عمومی لازم است")
         if not base.lower().startswith("https://"):
             raise ValueError("آدرس Webhook باید با https:// شروع شود")
+        port_error = telegram_port_error(base)
+        if port_error:
+            raise ValueError(port_error)
         return "webhook", base, path
     return "polling", "", path
 

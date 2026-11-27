@@ -57,6 +57,6 @@
 {% macro bot_admin_role_lock() -%}
 <div class="ds-note" role="note">{{ icon('info') }}<span>نقش «ادمین ربات» از «آیدی ادمین‌ها» در تنظیمات ربات می‌آید و از این فرم عوض نمی‌شود. برای برداشتن دسترسی، آیدی تلگرام این شخص را از همان‌جا پاک کنید.</span></div>
 <div class="actions">
-  <a class="btn btn-ghost" href="{{ bot_admin_settings_href }}">رفتن به تنظیمات ربات</a>
+  <a class="btn btn-ghost" href="{{ bot_admin_settings_href }}">{{ icon('gear', 'btn-ico') }}رفتن به تنظیمات ربات</a>
 </div>
 {%- endmacro %}

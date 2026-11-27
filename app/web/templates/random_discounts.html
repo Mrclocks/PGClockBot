@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import row_actions, page_header, act_label, empty_state %}
 {% from "_ds.html" import ds_modal_head, ds_sec, ds_foot %}
 {% block title %}تخفیف تصادفی{% endblock %}
@@ -41,7 +42,7 @@
               {% call row_actions() %}
               <form method="post" action="/random-discounts/{{ row.id }}/stop" data-confirm="تخفیف تصادفی برای سفارش‌های تازه متوقف می‌شود. مبلغ سفارش‌های قبلی تغییر نمی‌کند. ادامه می‌دهید؟" data-confirm-title="توقف تخفیف تصادفی" data-confirm-danger="1" data-confirm-label="توقف">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button class="btn btn-danger btn-sm" type="submit">توقف</button>
+                <button class="btn btn-danger btn-sm" type="submit">{{ btn_icon('pause', 'btn-ico') }}توقف</button>
               </form>
               {% endcall %}
               {% endif %}
@@ -51,7 +52,7 @@
         </tbody>
       </table>
     </div>
-    {% if next_before %}<div class="actions"><a class="btn btn-ghost" href="/random-discounts?before={{ next_before }}">قانون‌های قدیمی‌تر</a></div>{% endif %}
+    {% if next_before %}<div class="actions"><a class="btn btn-ghost" href="/random-discounts?before={{ next_before }}">{{ btn_icon('chev', 'btn-ico') }}قانون‌های قدیمی‌تر</a></div>{% endif %}
   </div>
   <div class="ui-modal ds" id="modal-random-discount" hidden>
     <div class="ui-modal-backdrop" data-modal-close></div>

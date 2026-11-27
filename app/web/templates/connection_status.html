@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon as btn_icon %}
 {% from "macros.html" import page_header, act_label %}
 {% block title %}تست اتصال سرویس{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/connection-status.css?v={{ asset_v('connection-status.css') if asset_v is defined else app_version }}">{% endblock %}
@@ -30,7 +31,7 @@
                data-focus-guard data-lpignore="true" data-1p-ignore value="{{ page.settings.username or '' }}" placeholder="MattDev" aria-describedby="monitor-account-help">
         <small class="muted" id="monitor-account-help">فقط نام کاربری را بنویسید؛ رمز عبور، توکن یا لینک اشتراک وارد نکنید.</small>
       </label>
-      <div class="actions"><button class="btn" type="submit">ثبت کاربر تست</button></div>
+      <div class="actions"><button class="btn" type="submit">{{ btn_icon('plus', 'btn-ico') }}ثبت کاربر تست</button></div>
     </form>
   </section>
 
@@ -58,7 +59,7 @@
     <form method="post" action="/connection-status/runtime" class="form-stack"{% if page.settings.enabled %} data-confirm="تست‌ها متوقف و همهٔ کانفیگ‌ها از فهرست کاربران مخفی می‌شوند. ادامه می‌دهید؟" data-confirm-title="توقف تست‌ها" data-confirm-danger="1" data-confirm-label="توقف"{% endif %}>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="enabled" value="{{ '0' if page.settings.enabled else '1' }}">
-      <div class="actions"><button class="btn {{ 'btn-danger' if page.settings.enabled else '' }}" type="submit"{% if not page.settings.enabled and (not page.settings.has_account or not binary_configured) %} disabled{% endif %}>{{ 'توقف تست‌ها' if page.settings.enabled else 'شروع تست‌ها' }}</button></div>
+      <div class="actions"><button class="btn {{ 'btn-danger' if page.settings.enabled else '' }}" type="submit"{% if not page.settings.enabled and (not page.settings.has_account or not binary_configured) %} disabled{% endif %}>{{ btn_icon('pause' if page.settings.enabled else 'play', 'btn-ico') }}{{ 'توقف تست‌ها' if page.settings.enabled else 'شروع تست‌ها' }}</button></div>
     </form>
     <small class="muted">روشن کردن دوبارهٔ تست‌ها، کانفیگ‌ها را خودکار به کاربران نشان نمی‌دهد.</small>
   </section>
@@ -76,7 +77,7 @@
         </select>
         <small class="muted" id="monitor-interval-help">فاصلهٔ بیشتر، اجرای هستهٔ xray و خواندن پنل را کمتر می‌کند. وضعیت «خارج از دسترس» همچنان بعد از سه دور شکست پشت‌سرهم اعلام می‌شود، پس با فاصلهٔ بیشتر دیرتر دیده می‌شود.</small>
       </label>
-      <div class="actions"><button class="btn" type="submit">ذخیرهٔ فاصله</button></div>
+      <div class="actions"><button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیرهٔ فاصله</button></div>
     </form>
   </section>
 </div>
@@ -88,7 +89,7 @@
   <p class="muted">نام و ترتیب کانفیگ‌ها مثل اشتراک کاربر تست است. کانفیگ تازه اول فقط برای ادمین دیده می‌شود. در هر دور حداکثر ۱۲ کانفیگ تست می‌شود.</p>
   {% if host_error %}<div class="flash warn" role="alert"><div class="flash-copy">{{ host_error }}</div></div>{% endif %}
   {% if page.settings.has_account %}
-  <div class="actions"><a class="btn btn-ghost" href="/connection-status?hosts=1#host-picker">دریافت کانفیگ‌ها از اشتراک</a></div>
+  <div class="actions"><a class="btn btn-ghost" href="/connection-status?hosts=1#host-picker">{{ btn_icon('download', 'btn-ico') }}دریافت کانفیگ‌ها از اشتراک</a></div>
   {% else %}<small class="muted">ابتدا کاربر تست را ثبت کنید.</small>{% endif %}
   {% if hosts is not none %}
   <div class="connection-config-summary"><span class="badge neutral">{{ hosts.total_count | num }} کانفیگ</span><span class="muted">به ترتیب اشتراک · جزئیات اتصال بدون نمایش اطلاعات محرمانه</span></div>
@@ -105,13 +106,13 @@
         </div>
         {% if host.issue %}<p class="muted connection-config-note" id="config-issue-{{ host.position }}">{{ reason_labels.get(host.issue, 'این کانفیگ فعلاً قابل تست نیست.') }}</p>{% else %}<p class="muted connection-config-note">آمادهٔ انتخاب · ابتدا فقط ادمین نتیجه را می‌بیند</p>{% endif %}
       </div>
-      <div class="connection-config-action">{% if host.issue %}<button class="btn btn-ghost btn-sm" type="button" disabled aria-describedby="config-issue-{{ host.position }}">قابل تست نیست</button>{% else %}<form method="post" action="/connection-status/configs/{{ host.config_key }}">
+      <div class="connection-config-action">{% if host.issue %}<button class="btn btn-ghost btn-sm" type="button" disabled aria-describedby="config-issue-{{ host.position }}">{{ btn_icon('pulse', 'btn-ico') }}قابل تست نیست</button>{% else %}<form method="post" action="/connection-status/configs/{{ host.config_key }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button class="btn btn-ghost btn-sm" type="submit" aria-label="افزودن {{ host.name }} به تست">افزودن به تست</button>
+          <button class="btn btn-ghost btn-sm" type="submit" aria-label="افزودن {{ host.name }} به تست">{{ btn_icon('plus', 'btn-ico') }}افزودن به تست</button>
         </form>{% endif %}</div>
     </li>{% else %}<li class="muted">کانفیگ دیگری در اشتراک پیدا نشد.</li>{% endfor %}
   </ol>
-  {% if hosts.next_offset %}<div class="actions"><a class="btn btn-ghost" href="/connection-status?hosts=1&amp;host_after={{ hosts.next_offset }}#host-picker">کانفیگ‌های بعدی</a></div>{% endif %}
+  {% if hosts.next_offset %}<div class="actions"><a class="btn btn-ghost" href="/connection-status?hosts=1&amp;host_after={{ hosts.next_offset }}#host-picker">{{ btn_icon('chev', 'btn-ico') }}کانفیگ‌های بعدی</a></div>{% endif %}
   {% endif %}
 </section>
 
@@ -146,14 +147,14 @@
     </div>
   </form>
   <div class="actions connection-actions">
-    <button class="btn" type="submit" form="target-form-{{ target.id }}">ذخیرهٔ کانفیگ</button>
+    <button class="btn" type="submit" form="target-form-{{ target.id }}">{{ btn_icon('save', 'btn-ico') }}ذخیرهٔ کانفیگ</button>
     <form method="post" action="/connection-status/targets/{{ target.id }}/check">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button class="btn btn-ghost" type="submit"{% if not page.settings.enabled or target.manual_pending %} disabled{% endif %}>تست الان</button>
+      <button class="btn btn-ghost" type="submit"{% if not page.settings.enabled or target.manual_pending %} disabled{% endif %}>{{ btn_icon('pulse', 'btn-ico') }}تست الان</button>
     </form>
     <form method="post" action="/connection-status/targets/{{ target.id }}/pause" data-confirm="تست این کانفیگ متوقف و نتیجهٔ آن از فهرست کاربران مخفی می‌شود. ادامه می‌دهید؟" data-confirm-title="توقف کانفیگ" data-confirm-danger="1" data-confirm-label="توقف">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button class="btn btn-danger" type="submit">توقف کانفیگ</button>
+      <button class="btn btn-danger" type="submit">{{ btn_icon('pause', 'btn-ico') }}توقف کانفیگ</button>
     </form>
     <form method="post" action="/connection-status/targets/{{ target.id }}/delete"
           data-confirm="این کانفیگ از فهرست تست حذف شود؟ تست و نمایش عمومی آن متوقف می‌شود."
@@ -161,14 +162,14 @@
           data-confirm-danger="1"
           data-confirm-label="حذف کانفیگ">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button class="btn btn-danger" type="submit">حذف</button>
+      <button class="btn btn-danger" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
     </form>
   </div>
   {% else %}
   <div class="actions connection-actions">
     {% if target.config_key %}<form method="post" action="/connection-status/configs/{{ target.config_key }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button class="btn btn-ghost" type="submit">فعال‌سازی دوبارهٔ کانفیگ</button>
+      <button class="btn btn-ghost" type="submit">{{ btn_icon('refresh', 'btn-ico') }}فعال‌سازی دوبارهٔ کانفیگ</button>
     </form>{% else %}<small class="muted">این مورد از فهرست قدیمی هاست‌ها مانده است؛ کانفیگ را دوباره از اشتراک انتخاب کنید. نام نمایشی قبلی حفظ شده است.</small>{% endif %}
     <form method="post" action="/connection-status/targets/{{ target.id }}/delete"
           data-confirm="این کانفیگ از فهرست تست حذف شود؟"
@@ -176,12 +177,12 @@
           data-confirm-danger="1"
           data-confirm-label="حذف کانفیگ">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button class="btn btn-danger" type="submit">حذف</button>
+      <button class="btn btn-danger" type="submit">{{ btn_icon('trash', 'btn-ico') }}حذف</button>
     </form>
   </div>
   {% endif %}
 </section>
 {% else %}<div class="card"><p class="muted">هنوز کانفیگی برای تست انتخاب نشده است. از بخش «انتخاب کانفیگ‌های اشتراک» شروع کنید.</p></div>{% endfor %}
-{% if page.next_id %}<div class="actions"><a class="btn btn-ghost" href="/connection-status?after={{ page.next_id }}">نتیجه‌های بعدی</a></div>{% endif %}
+{% if page.next_id %}<div class="actions"><a class="btn btn-ghost" href="/connection-status?after={{ page.next_id }}">{{ btn_icon('chev', 'btn-ico') }}نتیجه‌های بعدی</a></div>{% endif %}
 </div>
 {% endblock %}

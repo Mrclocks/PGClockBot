@@ -331,6 +331,13 @@ tests/test_payment_void_bot.py
 # Durable broadcast queue: platform audience only, no double send, cancel, admin-only.
 tests/test_broadcast_queue.py
 tests/test_shop_broadcast.py
+# Group-message media: per-tenant upload storage, content-checked files, one upload per broadcast.
+tests/test_broadcast_media.py
+# Broadcast failure reasons and unreachable marks: per-tenant bot, detail page scoped to its shop.
+tests/test_broadcast_failures.py
+tests/test_broadcast_retry.py
+tests/test_broadcast_schedule.py
+tests/test_broadcast_test_send.py
 # Buttons under staff messages: link permission per shop, presets per shop, renewal of own services only.
 tests/test_message_buttons.py
 tests/test_message_button_colors.py
@@ -620,3 +627,26 @@ tests/test_lite_mode.py
 tests/test_service_cancellation_settings.py
 # Panel-assigned groups: who may skip choosing a group, and delivery refuses a groupless user.
 tests/test_plan_panel_groups.py
+
+# Premium icons on staff-named buttons stay in their own shop.
+tests/test_button_premium_icons.py
+
+# Account holds: who may turn a customer or shop off, shop isolation, and exact restore.
+tests/test_account_holds.py
+# A customer cancels only their own unpaid order; abandoned discounted orders are released atomically.
+tests/test_checkout_abandon.py
+# Unpaid-order expiry: opt-in per shop, never cancels an order with money moving.
+tests/test_pending_order_expiry.py
+# Sign-in page shows only the platform brand, never a shop's.
+tests/test_login_brand.py
+
+# FAQ questions: shop isolation in the service, the bot editor, the customer buttons and the web page.
+tests/test_faq_service.py
+tests/test_faq_bot.py
+tests/test_faq_pages.py
+# Main bot token check before saving (format, shop tokens) and webhook auto-repair.
+tests/test_webhook_watch.py
+# Naming a person by id or @username: ambiguity refusal, shop scope, start watches claimed once.
+tests/test_telegram_target.py
+# FAQ answer buttons: shop rules (links, plans), forged items, owner check in the picker flow.
+tests/test_faq_answer_buttons.py

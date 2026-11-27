@@ -9,12 +9,14 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.button_icons import ICON_KEY, keep_stored_icons, set_icon
 from app.services.button_styles import serialize_item_button_style
 from app.services.users import get_setting, set_setting
 
 SETTING_KEY = "support_contacts"
 
 _STYLE_UNSET = object()
+_ICON_UNSET = object()
 
 _USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
 
@@ -109,16 +111,15 @@ def parse_support_contacts(raw: str | None) -> list[dict[str, Any]]:
         enabled = item.get("enabled", True)
         if isinstance(enabled, str):
             enabled = enabled.strip().lower() in {"1", "true", "yes", "on"}
-        out.append(
-            {
-                "id": cid,
-                "title": title,
-                "telegram": telegram,
-                "sort": sort,
-                "enabled": bool(enabled),
-                **serialize_item_button_style(item.get("button_style")),
-            }
-        )
+        entry = {
+            "id": cid,
+            "title": title,
+            "telegram": telegram,
+            "sort": sort,
+            "enabled": bool(enabled),
+            **serialize_item_button_style(item.get("button_style")),
+        }
+        out.append(set_icon(entry, item.get(ICON_KEY)))
     out.sort(key=lambda x: (x["sort"], x["title"]))
     return out
 
@@ -134,16 +135,15 @@ def dump_support_contacts(contacts: list[dict[str, Any]]) -> str:
             sort_val = int(c.get("sort", i))
         except (TypeError, ValueError):
             sort_val = i
-        clean.append(
-            {
-                "id": str(c.get("id") or _new_id()),
-                "title": title,
-                "telegram": telegram,
-                "sort": sort_val,
-                "enabled": bool(c.get("enabled", True)),
-                **serialize_item_button_style(c.get("button_style")),
-            }
-        )
+        entry = {
+            "id": str(c.get("id") or _new_id()),
+            "title": title,
+            "telegram": telegram,
+            "sort": sort_val,
+            "enabled": bool(c.get("enabled", True)),
+            **serialize_item_button_style(c.get("button_style")),
+        }
+        clean.append(set_icon(entry, c.get(ICON_KEY)))
     clean.sort(key=lambda x: (x["sort"], x["title"]))
     return json.dumps(clean, ensure_ascii=False)
 
@@ -168,6 +168,17 @@ async def save_support_contacts(
     reseller_id: int | None = None,
 ) -> None:
     await set_setting(session, SETTING_KEY, dump_support_contacts(contacts), reseller_id=reseller_id)
+
+
+async def save_submitted_support_contacts(
+    session: AsyncSession,
+    contacts: list[dict[str, Any]],
+    *,
+    reseller_id: int | None = None,
+) -> None:
+    """Save the web editor's list; each contact keeps the premium icon set for it in the bot."""
+    stored = await get_support_contacts(session, reseller_id=reseller_id)
+    await save_support_contacts(session, keep_stored_icons(contacts, stored), reseller_id=reseller_id)
 
 
 def contacts_from_form_json(raw: str | None) -> tuple[list[dict[str, Any]] | None, str | None]:
@@ -224,8 +235,10 @@ async def upsert_support_contact(
     sort: int = 0,
     enabled: bool = True,
     button_style: object = _STYLE_UNSET,
+    icon_custom_emoji_id: object = _ICON_UNSET,
     reseller_id: int | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
+    """Add or change one contact; the stored premium icon stays unless a new one is given."""
     err = validate_telegram(telegram)
     title = _sanitize_contact_title(title or "")
     if not title:
@@ -251,6 +264,8 @@ async def upsert_support_contact(
         if button_style is not _STYLE_UNSET:
             found.pop("button_style", None)
             found.update(style_patch)
+        if icon_custom_emoji_id is not _ICON_UNSET:
+            set_icon(found, icon_custom_emoji_id)
         await save_support_contacts(session, contacts, reseller_id=reseller_id)
         return found, None
     item = {
@@ -261,6 +276,8 @@ async def upsert_support_contact(
         "enabled": enabled,
         **style_patch,
     }
+    if icon_custom_emoji_id is not _ICON_UNSET:
+        set_icon(item, icon_custom_emoji_id)
     contacts.append(item)
     await save_support_contacts(session, contacts, reseller_id=reseller_id)
     return item, None

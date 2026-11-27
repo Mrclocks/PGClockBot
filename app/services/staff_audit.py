@@ -70,6 +70,8 @@ ACTION_LABELS = {
     "job_rerun": "اجرای دوبارهٔ کار پس‌زمینه",
     "maintenance_run": "ابزار نگهداری",
     "trial_reset": "اجازهٔ تست دوباره",
+    "account_disable": "غیرفعال‌سازی حساب با همهٔ سرویس‌ها",
+    "account_enable": "فعال‌سازی دوبارهٔ حساب",
 }
 
 TARGET_LABELS = {
@@ -81,6 +83,7 @@ TARGET_LABELS = {
     "order": "سفارش",
     "setting": "تنظیم",
     "job": "کار پس‌زمینه",
+    "shop": "فروشگاه",
 }
 
 

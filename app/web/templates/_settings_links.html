@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 <div class="card settings-card">
   <h2>لینک‌های سریع ربات</h2>
   {% if bot_username %}
@@ -23,7 +24,7 @@
                 data-copy="{{ links.get(key) }}"
                 data-copy-from="#ml-{{ key }}"
                 data-copy-idle="کپی"
-                aria-label="کپی لینک {{ label }}">کپی</button>
+                aria-label="کپی لینک {{ label }}">{{ btn_icon('copy', 'btn-ico') }}کپی</button>
         {% endif %}
       </div>
     </div>

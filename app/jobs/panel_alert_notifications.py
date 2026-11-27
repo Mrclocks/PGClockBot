@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from urllib.parse import urlsplit
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
@@ -32,6 +33,7 @@ from app.services.panel_alert_notifications import (
     update_signal,
 )
 from app.services.service_panel_presence import missing_signals, scan_panel_presence
+from app.services.ssl_certs import public_panel_base_url
 from app.services.users import get_all_settings
 from app.services.volume_allocation import volume_threshold_signals
 
@@ -40,13 +42,28 @@ logger = logging.getLogger(__name__)
 BUTTON_LABEL = "باز کردن در پنل"
 CAPACITY_READ_CONCURRENCY = 3
 SEND_PAUSE_SECONDS = 0.3
+LOOPBACK_HOSTS = frozenset({"", "127.0.0.1", "localhost", "::1"})
 
 
-def _markup(path: str) -> InlineKeyboardMarkup | None:
-    base = get_settings().public_base_url.rstrip("/")
-    if not base.startswith("https://"):
+async def _panel_base_url() -> str:
+    """Address staff open the panel at: PUBLIC_BASE_URL when it is https, else the panel's own https or http+IP."""
+    configured = str(get_settings().public_base_url or "").strip().rstrip("/")
+    if configured.startswith("https://"):
+        return configured
+    # The fallback may look up the server's public IP over the network, which blocks.
+    base = (await asyncio.to_thread(public_panel_base_url)).strip().rstrip("/")
+    host = urlsplit(base).hostname or ""
+    if not base.startswith(("https://", "http://")) or host in LOOPBACK_HOSTS:
+        return ""
+    return base
+
+
+async def _markup(signal: Signal) -> InlineKeyboardMarkup | None:
+    base = await _panel_base_url()
+    if not base:
         return None
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=BUTTON_LABEL, url=base + path)]])
+    label = signal.button_label or BUTTON_LABEL
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=label, url=base + signal.path)]])
 
 
 async def announce(bot: Bot, session: AsyncSession, signal: Signal) -> None:
@@ -64,7 +81,7 @@ async def announce(bot: Bot, session: AsyncSession, signal: Signal) -> None:
     try:
         delivered = await _dispatch_dual_notify(
             bot, session, signal.notify_key, signal.text,
-            markup=_markup(signal.path), ticket_reseller_id=signal.shop_id,
+            markup=await _markup(signal), ticket_reseller_id=signal.shop_id,
             replace_key=alert_replace_key(signal.alert),
         )
     except (TelegramAPIError, OSError, TimeoutError):

@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon as btn_icon %}
 {# «افزودن سرویس قبلی»: live status, a link test and the recent tries; the settings form follows. #}
 <div class="card settings-card bot-conn-overview" id="si-panel" data-status-url="/service-import/status" data-test-url="/service-import/test">
   <h2>وضعیت اتصال</h2>
@@ -8,7 +9,7 @@
     </div>
   </div>
   <div class="actions">
-    <button type="button" class="btn btn-ghost" id="si-refresh">بررسی مجدد</button>
+    <button type="button" class="btn btn-ghost" id="si-refresh">{{ btn_icon('refresh', 'btn-ico') }}بررسی مجدد</button>
   </div>
 </div>
 
@@ -23,7 +24,7 @@
     </div>
   </div>
   <div class="actions">
-    <button type="button" class="btn" id="si-test">بررسی لینک</button>
+    <button type="button" class="btn" id="si-test">{{ btn_icon('eye', 'btn-ico') }}بررسی لینک</button>
   </div>
   <div id="si-test-result" role="status" aria-live="polite"></div>
 </div>

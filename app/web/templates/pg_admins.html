@@ -103,35 +103,35 @@
           {% if src != 'owner' %}
           {% call row_actions() %}
             {% if src == 'reseller' and st.get('reseller_user_id') %}
-            <a class="btn btn-sm btn-ghost" href="/resellers/{{ st.get('reseller_user_id') }}/edit">مدیریت نماینده</a>
+            <a class="btn btn-sm btn-ghost" href="/resellers/{{ st.get('reseller_user_id') }}/edit">{{ icon('reseller', 'btn-ico') }}مدیریت نماینده</a>
             {% if st.get('staff_id') %}
             <form method="post" action="/pg/admins/{{ uname }}/web-access/revoke"
               data-confirm="ردیف ادمین فرعی یتیم حذف شود؟ (دسترسی نماینده باقی می‌ماند)"
               data-confirm-title="حذف ردیف یتیم"
               data-confirm-danger="1"
               data-confirm-label="حذف ردیف">
-              <button class="btn btn-sm btn-danger" type="submit">حذف ردیف ادمین فرعی</button>
+              <button class="btn btn-sm btn-danger" type="submit">{{ icon('trash', 'btn-ico') }}حذف ردیف ادمین فرعی</button>
             </form>
             {% endif %}
             {% elif src == 'pg_staff' %}
             <button type="button" class="btn btn-sm btn-ghost"
-              data-modal-open="modal-staff-{{ loop.index }}">ویرایش دسترسی ادمین فرعی</button>
+              data-modal-open="modal-staff-{{ loop.index }}">{{ icon('edit', 'btn-ico') }}ویرایش دسترسی ادمین فرعی</button>
             <button type="button" class="btn btn-sm"
-              data-modal-open="modal-convert-{{ loop.index }}">تبدیل به نماینده</button>
+              data-modal-open="modal-convert-{{ loop.index }}">{{ icon('reseller', 'btn-ico') }}تبدیل به نماینده</button>
             <form method="post" action="/pg/admins/{{ uname }}/web-access/toggle">
-              <button class="btn btn-sm btn-ghost" type="submit">
+              <button class="btn btn-sm btn-ghost" type="submit">{{ icon('power', 'btn-ico') }}
                 {% if st.get('is_active') %}غیرفعال کردن{% else %}فعال کردن{% endif %}
               </button>
             </form>
             <form method="post" action="/pg/admins/{{ uname }}/web-access/revoke"
               data-confirm="دسترسی وب ادمین فرعی حذف شود؟ ادمین پاسارگارد باقی می‌ماند." data-confirm-title="حذف دسترسی وب" data-confirm-danger="1" data-confirm-label="حذف دسترسی">
-              <button class="btn btn-sm btn-danger" type="submit">حذف دسترسی</button>
+              <button class="btn btn-sm btn-danger" type="submit">{{ icon('trash', 'btn-ico') }}حذف دسترسی</button>
             </form>
             {% elif src == 'none' %}
             <button type="button" class="btn btn-sm"
-              data-modal-open="modal-staff-{{ loop.index }}">اعطای ادمین فرعی</button>
+              data-modal-open="modal-staff-{{ loop.index }}">{{ icon('plus', 'btn-ico') }}اعطای ادمین فرعی</button>
             <button type="button" class="btn btn-sm btn-ghost"
-              data-modal-open="modal-reseller-{{ loop.index }}">اعطای نماینده</button>
+              data-modal-open="modal-reseller-{{ loop.index }}">{{ icon('plus', 'btn-ico') }}اعطای نماینده</button>
             {% endif %}
             {% if uname %}
             <form method="post" action="/pg/admins/{{ uname }}/delete"
@@ -151,7 +151,7 @@
               data-confirm-reason-name="reason"
               data-confirm-label="حذف">
               <input type="hidden" name="reason" value="" />
-              <button class="btn btn-sm btn-danger" type="submit">حذف ادمین</button>
+              <button class="btn btn-sm btn-danger" type="submit">{{ icon('trash', 'btn-ico') }}حذف ادمین</button>
             </form>
             {% endif %}
           {% endcall %}
@@ -254,7 +254,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit">{% if src == 'pg_staff' %}ذخیره{% else %}اعطای دسترسی ادمین فرعی{% endif %}</button>
+        <button class="btn" type="submit">{{ icon('save' if src == 'pg_staff' else 'plus', 'btn-ico') }}{% if src == 'pg_staff' %}ذخیره{% else %}اعطای دسترسی ادمین فرعی{% endif %}</button>
 
       </div></div>
     </form>
@@ -264,7 +264,7 @@
       <section class="ds-sec ds-sec-first"><div class="ds-card">
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn btn-ghost" type="submit">تمدید اشتراک زمانی (بدون کسر کیف پول)</button>
+        <button class="btn btn-ghost" type="submit">{{ icon('refresh', 'btn-ico') }}تمدید اشتراک زمانی (بدون کسر کیف پول)</button>
       </div></div>
     </form>
     {% endif %}
@@ -322,7 +322,7 @@
       </label>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit" {% if not grant_plans %}disabled{% endif %}>تبدیل به نماینده</button>
+        <button class="btn" type="submit" {% if not grant_plans %}disabled{% endif %}>{{ icon('reseller', 'btn-ico') }}تبدیل به نماینده</button>
 
       </div></div>
     </form>
@@ -382,7 +382,7 @@
       {% if owner_can_toggle_oversell %}<div class="ui-switch-list">{{ oversell_create_switch() }}</div>{% endif %}
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit" {% if not grant_plans %}disabled{% endif %}>اعطای دسترسی نماینده</button>
+        <button class="btn" type="submit" {% if not grant_plans %}disabled{% endif %}>{{ icon('plus', 'btn-ico') }}اعطای دسترسی نماینده</button>
 
       </div></div>
     </form>
@@ -494,7 +494,7 @@
       </div>
       </div></section>
       <div class="ui-modal-sticky-save ds-foot"><div class="ds-foot-btns">
-        <button class="btn" type="submit">ساخت ادمین</button>
+        <button class="btn" type="submit">{{ icon('plus', 'btn-ico') }}ساخت ادمین</button>
 
       </div></div>
     </form>
@@ -548,7 +548,7 @@
       const label = form.getAttribute('data-busy-label');
       if (label) {
         btn.dataset.idleLabel = btn.textContent;
-        btn.textContent = label;
+        setButtonText(btn, label);
       }
     });
   });
