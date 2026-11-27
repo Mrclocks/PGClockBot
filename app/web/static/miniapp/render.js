@@ -383,21 +383,25 @@
       : "";
   }
 
-  /** ``features`` (from the app) hides the code field and top-up button where a shop has not opened them. */
+  /**
+   * ``features`` (from the app) hides the code field and top-up button where a shop has not opened them;
+   * ``options.discountCode === false`` hides the code field where the shop turned codes off.
+   */
   function checkoutHtml(plan, wallet, features, options) {
     if (!plan) return `<section class="card"><p class="muted">یک پلن را انتخاب کنید.</p></section>`;
     const f = features || {};
+    const showCode = !plan.is_trial && f.gift !== false && (options || {}).discountCode !== false;
     const price = Number(plan.price) || 0;
     const enough = price <= (Number(wallet) || 0);
     return `<section class="card" aria-label="خلاصهٔ سفارش">
       <div class="sum-row"><span class="muted">پلن</span><span>${esc(plan.name)}</span></div>
       <div class="sum-row"><span class="muted">موجودی کیف پول</span><span>${esc(money(wallet))}</span></div>
       <div class="sum-row is-total"><span>قابل پرداخت</span><span>${priceHtml(plan)}</span></div>
-      ${plan.is_trial || f.gift === false ? "" : `<form class="code-form" data-form="discount">
+      ${showCode ? `<form class="code-form" data-form="discount">
         <label class="form-field"><span class="muted sm">کد تخفیف (اختیاری)</span>
           <span class="code-line"><input type="text" name="code" maxlength="64" autocomplete="off" dir="ltr" autocapitalize="characters">
           <button type="submit" class="btn ghost">اعمال</button></span></label>
-      </form>`}
+      </form>` : ""}
       ${checkoutExtrasHtml(options)}
       ${enough ? "" : lowBalanceHtml(f)}
       <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "ادامه دریافت تست" : "ادامه پرداخت"}</button>

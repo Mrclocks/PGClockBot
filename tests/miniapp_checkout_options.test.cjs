@@ -1,5 +1,5 @@
 "use strict";
-// Mini App checkout extras: the required service name and the staff free button.
+// Mini App checkout extras: the required service name, the staff free button and the code field.
 const assert = require("node:assert/strict");
 const { loadMiniApp, trigger, settle } = require("./miniapp_env.cjs");
 
@@ -74,6 +74,16 @@ test("the checkout card shows the name field and free button only when the serve
   const full = render.checkoutHtml(plan, 500000, {}, { nameRequired: true, staffFree: true, name: HOSTILE });
   assert.ok(full.includes('data-input="service-name"') && full.includes('data-action="buy-free"'));
   assert.ok(!full.includes(HOSTILE), "the typed name is escaped");
+});
+
+test("the code field follows the shop's discount code switch", () => {
+  const { render } = loadMiniApp({ routes: router({}) }).mini;
+  const plan = PLANS.plans[0];
+  const form = 'data-form="discount"';
+  assert.ok(render.checkoutHtml(plan, 500000, {}, { discountCode: true }).includes(form));
+  assert.ok(!render.checkoutHtml(plan, 500000, {}, { discountCode: false }).includes(form), "off hides the field");
+  assert.ok(!render.checkoutHtml({ ...plan, is_trial: true }, 500000, {}, { discountCode: true }).includes(form));
+  assert.ok(!render.checkoutHtml(plan, 500000, { gift: false }, { discountCode: true }).includes(form));
 });
 
 test("a required name blocks the purchase until it is valid, then is sent", async () => {

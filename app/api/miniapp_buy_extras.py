@@ -1,4 +1,4 @@
-"""Mini App purchase extras: the required service name and staff free checkout.
+"""Mini App purchase extras: the required service name, staff free checkout and the code field.
 
 The same rules as the bot's payment screen, through the same services: a shop with
 ``custom_service_name`` (or the platform with its switch on) requires a name before
@@ -8,6 +8,7 @@ paying, and the shop owner with ``free_checkout`` may take their own order free.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,10 +22,14 @@ from app.services.custom_service_name import (
 from app.services.miniapp_shop import MiniScope
 from app.services.redact import user_safe_error
 from app.services.staff_free_checkout import deliver_staff_free_order, may_use_staff_free
+from app.services.users import on
 
 logger = logging.getLogger(__name__)
 
 STAFF_FREE_MODE = "staff_free"
+# The same switch hides the bot's «کد تخفیف» button on the payment screen.
+DISCOUNT_CODE_SWITCH = "pay_discount_enabled"
+DISCOUNT_CODE_DISABLED = "کد تخفیف غیرفعال است"
 SERVICE_NAME_MAX_INPUT = 64
 DELIVERY_UNDER_REVIEW = (
     "پنل به ساخت سرویس پاسخ نداد. سفارش در «تحویل‌های ناموفق» ثبت شد؛ سفارش دیگری ثبت نکنید."
@@ -32,12 +37,20 @@ DELIVERY_UNDER_REVIEW = (
 DELIVERY_FAILED = "ساخت سرویس ناموفق بود؛ سفارش لغو شد. دوباره تلاش کنید."
 
 
-async def checkout_options(session: AsyncSession, user: BotUser, scope: MiniScope) -> dict[str, bool]:
-    """What the checkout card shows: a required name field, and the staff free button."""
+def discount_codes_enabled(ui: Mapping[str, object]) -> bool:
+    """Whether the shop lets customers type a discount code at checkout."""
+    return on(ui.get(DISCOUNT_CODE_SWITCH))
+
+
+async def checkout_options(
+    session: AsyncSession, user: BotUser, scope: MiniScope, *, ui: Mapping[str, object]
+) -> dict[str, bool]:
+    """What the checkout card shows: a required name field, the staff free button and the code field."""
     return {
         "service_name_required": await name_step_enabled(session, scope.shop_id),
         # The platform Mini App has no commerce for its owner, so only a shop owner gets it.
         "staff_free": scope.is_shop and await may_use_staff_free(session, user, shop_owner_id=scope.shop_id),
+        "discount_code_enabled": discount_codes_enabled(ui),
     }
 
 
