@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 from fastapi import FastAPI
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.settlement_pages import register_settlement_pages
@@ -205,6 +206,50 @@ class PspSettlementReviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row.error_message, f"{REVIEW_PREFIX}order_closed")
         self.approve.assert_not_awaited()
         self.notify.assert_awaited_once()
+
+    def _peer_settles_during_verify(self, payment_id: int, order_status: str) -> None:
+        """While this path waits on the gateway, another path settles the same payment."""
+        handler = self._handler
+
+        async def settle_then_answer(request: httpx.Request) -> httpx.Response:
+            async with self.Session() as peer:
+                settlement = await peer.get(PaymentSettlement, self.settlement_id)
+                payment = await peer.get(Payment, payment_id)
+                order = await peer.get(Order, int(payment.order_id))
+                settlement.status = SettlementStatus.SETTLING.value
+                payment.status = PaymentStatus.APPROVED.value
+                order.status = order_status
+                await peer.commit()
+            return handler(request)
+
+        self._handler = settle_then_answer
+
+    async def test_a_payment_settled_by_a_parallel_path_is_not_reported_as_a_duplicate(self) -> None:
+        payment_id, sid = await self._seed(order_status=OrderStatus.PENDING.value)
+        self._peer_settles_during_verify(payment_id, OrderStatus.DELIVERING.value)
+
+        await self._return(sid)
+
+        row = await self._row(sid)
+        self.assertNotEqual(row.status, SettlementStatus.FAILED.value)
+        self.assertFalse(str(row.error_message or "").startswith(REVIEW_PREFIX))
+        self.notify.assert_not_awaited()
+
+    async def test_a_settlement_another_path_is_settling_is_not_taken_for_review(self) -> None:
+        payment_id, sid = await self._seed(order_status=OrderStatus.PENDING.value)
+        self.paid_amount = AMOUNT - 1000
+        async with self.Session() as session:
+            await session.execute(
+                update(PaymentSettlement)
+                .where(PaymentSettlement.id == sid)
+                .values(status=SettlementStatus.SETTLING.value)
+            )
+            await session.commit()
+
+        await self._return(sid)
+
+        self.assertEqual((await self._row(sid)).status, SettlementStatus.SETTLING.value)
+        self.notify.assert_not_awaited()
 
     async def test_different_paid_amount_goes_to_review(self) -> None:
         _, sid = await self._seed()

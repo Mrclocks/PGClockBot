@@ -14,7 +14,7 @@ import json
 import logging
 from typing import Any
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Order, OrderStatus, Payment, PaymentSettlement, PaymentStatus, SettlementStatus
@@ -48,10 +48,10 @@ _APPROVABLE_ORDER_STATUSES = frozenset(
         OrderStatus.AWAITING_APPROVAL.value,
     }
 )
+# Not SETTLING: that claim belongs to the path approving the payment, which decides its outcome.
 _REVIEWABLE_STATUSES = (
     SettlementStatus.CREATED.value,
     SettlementStatus.AWAITING.value,
-    SettlementStatus.SETTLING.value,
 )
 
 
@@ -62,15 +62,29 @@ def is_in_review(settlement: PaymentSettlement) -> bool:
 
 
 async def unusable_payment_reason(session: AsyncSession, payment: Payment) -> str | None:
-    """Why a verified gateway payment cannot be approved, or None when it can."""
-    if payment.status == PaymentStatus.APPROVED.value:
-        return None
-    if payment.status != PaymentStatus.PENDING.value:
+    """Why a verified gateway payment cannot be approved, or None when it can.
+
+    Both statuses are read now, in one statement: the caller's ``payment`` was loaded before
+    the gateway call, and a parallel return, poll or check may have approved it meanwhile.
+    Separate reads could see the order already paid and the payment still pending.
+    """
+    row = (
+        await session.execute(
+            select(Payment.status, Payment.is_wallet_topup, Order.status)
+            .outerjoin(Order, Order.id == Payment.order_id)
+            .where(Payment.id == int(payment.id))
+        )
+    ).one_or_none()
+    if row is None:
         return "payment_not_pending"
-    if payment.is_wallet_topup or not payment.order_id:
+    payment_status, is_wallet_topup, order_status = row
+    if payment_status == PaymentStatus.APPROVED.value:
         return None
-    order = await session.get(Order, int(payment.order_id))
-    if order is not None and order.status not in _APPROVABLE_ORDER_STATUSES:
+    if payment_status != PaymentStatus.PENDING.value:
+        return "payment_not_pending"
+    if is_wallet_topup or order_status is None:
+        return None
+    if order_status not in _APPROVABLE_ORDER_STATUSES:
         return "order_closed"
     return None
 
