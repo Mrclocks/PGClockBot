@@ -10,6 +10,7 @@ from app.db.models import BotUser, ChargeCode, ResellerPlan
 from app.services.account_hold_guard import held_pg_user_ids
 from app.services.gift_codes import gift_code_scope
 from app.services.staff_audit import actor_from_staff, add_staff_action
+from app.services.subscription_link_store import PanelLink, commit_links, link_after_revoke, staff_link_scope
 from app.services.table_bulk import parse_bulk_ids
 
 logger = logging.getLogger(__name__)
@@ -385,6 +386,7 @@ async def bulk_pg_user_action(
 
     ids = parse_bulk_ids(user_ids)
     ok = fail = 0
+    new_links: dict[int, PanelLink] = {}
 
     async def _load_user(uid: int) -> dict | None:
         if is_full_pg_owner(staff):
@@ -434,7 +436,9 @@ async def bulk_pg_user_action(
             elif action == "reset":
                 await pg.reset_user_by_id(uid)
             elif action == "revoke":
-                await pg.revoke_sub_by_id(uid)
+                link = await link_after_revoke(pg, uid, await pg.revoke_sub_by_id(uid))
+                if link is not None:
+                    new_links[uid] = link
             elif action == "delete":
                 from app.services.bot_user_admin import (
                     detach_local_services_for_pg_user,
@@ -454,6 +458,7 @@ async def bulk_pg_user_action(
         except Exception:
             logger.debug("bulk pg user %s failed id=%s", action, uid, exc_info=True)
             fail += 1
+    await commit_links(session, new_links, scope=staff_link_scope(staff))
     return ok, fail
 
 

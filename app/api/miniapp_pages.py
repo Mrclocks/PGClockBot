@@ -81,6 +81,7 @@ from app.services.miniapp_shop import (
 from app.services.pasarguard import get_pg
 from app.services.service_live_info import fetch_subscription_info, service_info_error, validate_service_info
 from app.services.service_cancellations import CancellationOffer, cancellation_offer, request_cancellation
+from app.services.service_link_reset import link_reset_button
 from app.services.shop_maintenance import maintenance_plain_text
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import get_wallet_balance
@@ -708,6 +709,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         # Never return raw PG payload — allowlisted summary only
         row = _serialize_service(svc, info)
         row["addons_allowed"] = _addons_allowed(user, svc)
+        row["link_reset_allowed"] = await link_reset_button(session, svc, await _scope_ui(session, request))
         return _no_store({"service": row})
 
     @app.get("/api/mini/service/{service_id}/qr")

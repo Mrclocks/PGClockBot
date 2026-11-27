@@ -77,6 +77,7 @@ JOB_LABELS: dict[str, str] = {
     "service_automation": "تمدید و افزایش خودکار",
     "service_freezes": "پایان توقف سرویس‌ها",
     "service_transfers": "تغییر لینک سرویس‌های منتقل‌شده",
+    "service_link_resets": "پیگیری تغییر لینک مشتری",
     "expiry": "هشدار کمبود حجم و زمان",
     "admin_daily_report": "گزارش روزانه",
     "webhook_watch": "بررسی دریافت پیام تلگرام",

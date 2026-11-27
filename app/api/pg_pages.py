@@ -67,6 +67,7 @@ from app.services.provision_gate import (
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.redact import user_safe_error
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.subscription_link_store import staff_link_scope, store_revoked_link
 from app.services.volume_allocation import apply_create_form_oversell
 
 
@@ -1201,9 +1202,10 @@ def register_pg_pages(
             if denied is not None:
                 return denied
             pg, _ = await _staff_pg(session, staff)
-            await pg.revoke_sub_by_id(user_id)
+            revoked = await pg.revoke_sub_by_id(user_id)
         except Exception as e:
             return RedirectResponse(f"/pg/users?err={_pg_err(e)}", status_code=303)
+        await store_revoked_link(session, pg, pg_user_id=user_id, revoke_response=revoked, scope=staff_link_scope(staff))
         await log_reasoned_action(
             session, staff, action="pg_user_revoke_sub", target_type="pg_user", target_id=user_id, reason=reason
         )

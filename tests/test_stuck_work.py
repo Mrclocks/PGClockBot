@@ -19,6 +19,7 @@ from app.db.models import (
     PaymentSettlement,
     Plan,
     ServiceFreeze,
+    ServiceLinkReset,
     ServiceTransfer,
     ShopStaffAction,
     UserService,
@@ -63,6 +64,10 @@ class StuckHarness(RoutesHarness):
                               available_at=OLD),
                 ServiceTransfer(service_id=10, from_user_id=1, token_hash="a" * 64, status="accepted", expires_at=NOW,
                                 link_rotation_pending=True, accepted_at=OLD),
+                ServiceLinkReset(service_id=10, user_id=1, pg_user_id=500, old_token_hash="b" * 64, status="unknown",
+                                 created_at=OLD),
+                ServiceLinkReset(service_id=10, user_id=1, pg_user_id=500, old_token_hash="c" * 64, status="done",
+                                 created_at=OLD),
             ])
             await session.flush()
             # Only the first settlement was claimed long ago.
@@ -82,7 +87,9 @@ class StuckCountTests(StuckHarness):
         await self.seed_stuck()
         async with self.Session() as session:
             counts = await stuck_counts(session)
-        self.assertEqual(counts, {"settlements": 1, "deliveries": 1, "freezes": 1, "cashback": 1, "transfers": 1})
+        self.assertEqual(counts, {
+            "settlements": 1, "deliveries": 1, "freezes": 1, "cashback": 1, "transfers": 1, "link_resets": 1,
+        })
 
     async def test_nothing_is_stuck_on_a_clean_database(self) -> None:
         async with self.Session() as session:

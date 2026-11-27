@@ -17,8 +17,9 @@ from app.services.plan_scope import plan_choices
 from app.services.service_cancellation_settings import CANCEL_BOUNDS, CHOICES as CANCEL_CHOICES, normalize_choices
 from app.services.service_freeze_settings import FREEZE_BOUNDS
 from app.services.service_transfer_settings import TRANSFER_BOUNDS
+from app.services.service_link_reset_settings import LINK_RESET_BOUNDS
 
-NUMBER_BOUNDS: dict[str, tuple[int, int]] = {**FREEZE_BOUNDS, **TRANSFER_BOUNDS, **CANCEL_BOUNDS}
+NUMBER_BOUNDS: dict[str, tuple[int, int]] = {**FREEZE_BOUNDS, **TRANSFER_BOUNDS, **LINK_RESET_BOUNDS, **CANCEL_BOUNDS}
 # Settings tabs rendered with service_actions_context.
 SERVICE_ACTION_TABS = frozenset({"service_actions", "service_cancel"})
 

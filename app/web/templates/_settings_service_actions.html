@@ -31,4 +31,13 @@
     <div class="ds-note" data-tone="danger" role="note" data-ds-show-when="#st-new-link:0"{% if is_on('service_transfer_new_link') %} hidden{% endif %}>{{ ico('shield-alert') }}<span>بدون عوض شدن لینک، فرستنده بعد از انتقال هنوز با لینک قبلی به سرویس وصل می‌شود.</span></div>
     <div class="actions"><button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیرهٔ انتقال سرویس</button></div>
   {% endcall %}
+
+  {% call ds_toggle_sec('تغییر لینک اشتراک', 'مشتری وقتی لینکش به دست کس دیگری افتاده، خودش لینک اشتراک را عوض می‌کند.', 's_service_link_reset_enabled', 'slr-enabled', is_on('service_link_reset_enabled')) %}
+    <p class="ds-desc">از «⚙️ بیشتر» سرویس عوض می‌شود. لینک قبلی همان لحظه از کار می‌افتد و همهٔ دستگاه‌ها باید لینک جدید را وارد کنند. سرویس آزمایشی، متوقف، در حال انتقال یا با سفارش باز شامل نمی‌شود.</p>
+    {{ plan_scope_field('service_link_reset_plans', 'slr-plans') }}
+    <div class="ds-grid-2">
+      {{ number_field('service_link_reset_per_period', 'تعداد تغییر لینک در ۳۰ روز', 'بار', 'فقط تغییرهای انجام‌شده شمرده می‌شوند') }}
+    </div>
+    <div class="actions"><button class="btn" type="submit">{{ btn_icon('save', 'btn-ico') }}ذخیرهٔ تغییر لینک</button></div>
+  {% endcall %}
 </form>

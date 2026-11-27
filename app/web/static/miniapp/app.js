@@ -1129,6 +1129,34 @@
     });
   }
 
+  async function showLinkReset(id) {
+    const seq = openSheet("link-reset", "تغییر لینک اشتراک", R.loadingHtml(2), { serviceId: id });
+    try {
+      const data = await core.api(`/api/mini/service/${id}/link-reset`);
+      setSheetBody(seq, R.linkResetHtml(data, id));
+    } catch (err) {
+      setSheetBody(seq, R.errorHtml(err.message));
+    }
+  }
+
+  async function submitLinkReset(form) {
+    const id = intAttr(form, "data-id");
+    const button = form.querySelector("button[type=submit]");
+    await guarded("link-reset:" + id, button, async () => {
+      const ok = await core.confirmAction("لینک اشتراک همین حالا عوض شود؟ لینک فعلی روی همهٔ دستگاه‌ها از کار می‌افتد.");
+      if (!ok) return;
+      try {
+        const result = await core.api(`/api/mini/service/${id}/link-reset`, { method: "POST", body: {} });
+        // Reloaded even off the detail view: «کپی لینک جدید» copies from the fresh row.
+        await loadDetail(id);
+        if (state.sheet && state.sheet.kind === "link-reset") setSheetBody(state.sheetSeq, R.linkResetResultHtml(result, id));
+        core.toast(result.status === "done" ? "لینک اشتراک عوض شد" : "درخواست ثبت شد");
+      } catch (err) {
+        core.toast(err.message, "err");
+      }
+    });
+  }
+
   /* ---------- wallet top-up ---------- */
 
   const RECEIPT_MAX_SIDE = 1600;
@@ -1708,6 +1736,7 @@
     "confirm-addon": (el) => confirmAddon(intAttr(el, "data-id"), intAttr(el, "data-pack"), el),
     automation: (el) => showAutomation(intAttr(el, "data-id")),
     cancellation: (el) => showCancellation(intAttr(el, "data-id")),
+    "link-reset": (el) => showLinkReset(intAttr(el, "data-id")),
     buy: (el) => showBuyConfirm(intAttr(el, "data-id")),
     "confirm-buy": (el) => confirmBuy(intAttr(el, "data-id"), el),
     "buy-free": (el) => buyFree(intAttr(el, "data-id"), el),
@@ -1800,7 +1829,7 @@
     renderCheckout();
   }
 
-  const FORMS = { automation: saveAutomation, cancellation: submitCancellation, topup: startTopup, receipt: uploadReceipt,
+  const FORMS = { automation: saveAutomation, cancellation: submitCancellation, "link-reset": submitLinkReset, topup: startTopup, receipt: uploadReceipt,
     "ticket-new": submitNewTicket, "ticket-reply": submitTicketReply, discount: applyDiscount, gift: redeemGift };
 
   function formHandler(form) {

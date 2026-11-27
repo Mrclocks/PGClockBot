@@ -51,6 +51,7 @@ from app.services.payg_gate import (
 )
 from app.services.provision_gate import finish_staff_edit, hold_staff_create, hold_staff_edit, settle_failed_hold
 from app.services.redact import user_safe_error
+from app.services.subscription_link_store import LinkScope, store_revoked_link
 from app.services import bot_feedback_texts as feedback
 
 _USERS_BACK = InlineKeyboardMarkup(
@@ -1008,6 +1009,9 @@ async def pg_rev(
     targets = await _pg_notice_targets(session, reseller_owner_id, uid)
     try:
         user = await gate.pg_client.revoke_sub_by_id(uid)
+        await store_revoked_link(
+            session, gate.pg_client, pg_user_id=uid, revoke_response=user, scope=LinkScope.for_owner(reseller_owner_id)
+        )
         await _finish_reasoned_pg_action(
             session, db_user, owner_id=reseller_owner_id, uid=uid, action="pg_user_revoke_sub", reason=reason, targets=targets
         )

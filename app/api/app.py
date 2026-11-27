@@ -1653,6 +1653,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     from app.api.miniapp_loyalty import register_miniapp_loyalty
     from app.api.miniapp_onboarding import register_miniapp_onboarding
     from app.api.miniapp_pages import register_miniapp_pages
+    from app.api.miniapp_link_reset import register_miniapp_link_reset
     from app.api.miniapp_renewal import register_miniapp_renewal
     from app.api.miniapp_reseller import register_miniapp_reseller
     from app.api.miniapp_review import register_miniapp_review
@@ -1662,6 +1663,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_miniapp_pages(app, render=render, get_db=get_db)
     register_miniapp_feeds(app, get_db=get_db)
     register_miniapp_renewal(app, get_db=get_db)
+    register_miniapp_link_reset(app, get_db=get_db)
     register_miniapp_topup(app, get_db=get_db)
     register_miniapp_support(app, get_db=get_db)
     register_miniapp_codes(app, get_db=get_db)

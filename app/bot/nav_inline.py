@@ -1506,9 +1506,9 @@ def service_card_keyboard(service_id: int, ui: dict | None = None) -> InlineKeyb
 @editable_screen("c.service_more")
 def service_more_keyboard(
     service_id: int, ui: dict | None = None, *, external: bool = False, cancel: bool = True, wireguard: bool = False,
-    freeze: str | None = None, transfer: str | None = None,
+    freeze: str | None = None, transfer: str | None = None, link_reset: bool = False,
 ) -> InlineKeyboardMarkup:
-    """«⚙️ بیشتر» of a service card: refresh, WireGuard, automation, freeze, transfer, cancellation, delete.
+    """«⚙️ بیشتر» of a service card: refresh, WireGuard, automation, link change, freeze, transfer, cancellation, delete.
 
     The WireGuard button shows only for a service the panel gave a WireGuard address (``wireguard``).
     Cancel sits above delete so destructive delete stays visually separated. A service that was
@@ -1522,6 +1522,9 @@ def service_more_keyboard(
     if wireguard:
         rows.append([_service_button(ui, "btn_svc_wireguard", "🔐 فایل WireGuard", f"svc:wg:{sid}", "svc_wireguard")])
     rows.append([_service_button(ui, "btn_svc_auto", "⚙️ تنظیمات خودکار", f"svc:auto:{sid}", "svc_auto")])
+    # From service_link_reset.link_reset_button; False when the shop has it off for the service.
+    if link_reset:
+        rows.append([_service_button(ui, "btn_svc_link_reset", "🔗 تغییر لینک اشتراک", f"svc:lnk:{sid}", "svc_auto")])
     # «pause» or «resume» from service_freeze.freeze_button; None when the shop has it off.
     if freeze == "pause":
         rows.append([_service_button(ui, "btn_svc_freeze", "⏸ توقف موقت سرویس", f"svc:frz:{sid}", "svc_auto")])
