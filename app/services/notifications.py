@@ -22,6 +22,7 @@ from app.services.formatting import (
     format_expire,
     format_message,
     format_toman,
+    format_uptime,
     info_block,
     kv_line,
 )
@@ -1223,6 +1224,37 @@ async def notify_new_ticket(
         ticket_user_id=ticket_user_id,
         ticket_reseller_id=ticket_reseller_id,
         replace_key=ticket_notice_key(ticket_id),
+    )
+
+
+async def notify_ticket_reminder(
+    bot: Bot, session: AsyncSession, *, ticket_id: int, user_id: int, shop_id: int | None,
+    subject: str, waiting_seconds: int,
+) -> int:
+    """Remind the ticket's own shop staff (or the platform admins) that it still waits for an answer."""
+    import html as html_mod
+
+    user = await session.get(BotUser, int(user_id))
+    text = format_message(
+        "⏰ تیکت بی‌پاسخ",
+        info_block(
+            [
+                kv_line("🔢", "شماره", f"#{int(ticket_id)}"),
+                *_buyer_lines(user),
+                kv_line("📝", "موضوع", html_mod.escape(subject or "—")),
+                kv_line("⏳", "در انتظار پاسخ", format_uptime(waiting_seconds)),
+            ]
+        ),
+    )
+    return await _dispatch_dual_notify(
+        bot,
+        session,
+        "notify_new_ticket",
+        text,
+        markup=ticket_action_markup(int(ticket_id), user_id=int(user_id), shop_id=shop_id),
+        ticket_user_id=int(user_id),
+        ticket_reseller_id=shop_id,
+        replace_key=ticket_notice_key(int(ticket_id)),
     )
 
 

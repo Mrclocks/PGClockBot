@@ -908,6 +908,8 @@ class Ticket(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    # Staff were reminded of this unanswered ticket at this time (once per customer message).
+    reminded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     messages: Mapped[list["TicketMessage"]] = relationship(back_populates="ticket")
 

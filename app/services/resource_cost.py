@@ -70,6 +70,7 @@ JOB_LABELS: dict[str, str] = {
     "cancellation_notifications": "اعلان لغو سرویس",
     "customer_notices": "اعلان‌های مشتری",
     "panel_alert_notifications": "هشدارهای پنل",
+    "ticket_reminders": "یادآوری تیکت‌های بی‌پاسخ",
     "targeted_campaigns": "کمپین‌ها",
     "broadcast": "ارسال همگانی",
     "first_use_nudge": "پیام سرویس بدون مصرف",
