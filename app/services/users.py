@@ -64,6 +64,7 @@ from app.services.service_cancellation_settings import (
 )
 from app.services.psp_gateways import KEY_PSP_GATEWAYS, merge_submitted_psp_gateways
 from app.services.retired_text_defaults import refresh_retired_defaults
+from app.services.ticket_reminders import DEFAULT_HOURS as TICKET_REMINDER_DEFAULT, SETTING_KEY as TICKET_REMINDER_KEY
 from app.services.user_purge import purge_user_references
 
 logger = logging.getLogger("pgclock.users")
@@ -920,6 +921,7 @@ DEFAULT_SETTINGS = {
     "notify_trial_claimed": "1",
     "notify_wallet_topup": "1",
     "notify_new_ticket": "1",
+    TICKET_REMINDER_KEY: TICKET_REMINDER_DEFAULT,
     "notify_service_cancellation": "1",
     "notify_panel_update": "1",
     "notify_panel_capacity": "1",
@@ -1448,6 +1450,12 @@ SETTING_GROUPS = {
     ],
     "متن پشتیبانی ربات": [
         ("support_text", "متن صفحه پشتیبانی", "textarea", "بالای دکمه/فرم پشتیبانی در ربات نمایش داده می‌شود"),
+        (
+            TICKET_REMINDER_KEY,
+            "یادآوری تیکت بی‌پاسخ (ساعت)",
+            "number",
+            "اگر تیکتی این مدت بدون پاسخ بماند، یک بار به پشتیبان‌های همین فروشگاه یادآوری می‌شود. ۰ = خاموش، حداکثر ۱۶۸.",
+        ),
     ],
     "معرف اجباری": [
         (

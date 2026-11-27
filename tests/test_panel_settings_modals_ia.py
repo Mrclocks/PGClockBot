@@ -234,7 +234,7 @@ class DomainSettingGroupsTests(unittest.TestCase):
         msg_keys = {f[0] for f in SETTING_GROUPS["متن پیام‌ها"]}
         self.assertNotIn("support_text", msg_keys)
         self.assertNotIn("referral_text", msg_keys)
-        self.assertEqual(keys_for_tab("supports"), {"support_text"})
+        self.assertEqual(keys_for_tab("supports"), {"support_text", "ticket_reminder_hours"})
         # The referral wallet bonus sits with the referral text, not among payment methods
         self.assertEqual(keys_for_tab("loyalty"), {"referral_text", "referral_bonus"})
         self.assertNotIn("referral_bonus", keys_for_tab("payment"))

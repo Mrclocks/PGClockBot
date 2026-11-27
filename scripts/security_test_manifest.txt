@@ -649,3 +649,5 @@ tests/test_webhook_watch.py
 tests/test_telegram_target.py
 # FAQ answer buttons: shop rules (links, plans), forged items, owner check in the picker flow.
 tests/test_faq_answer_buttons.py
+# Unanswered ticket reminders: each shop's own switch and staff, one claim per waiting period.
+tests/test_ticket_reminders.py
