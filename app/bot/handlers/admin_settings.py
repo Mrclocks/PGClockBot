@@ -87,6 +87,7 @@ from app.services.bot_setting_values import (
 )
 from app.services.receipt_risk import BOT_FIELDS as RECEIPT_RISK_BOT_FIELDS
 from app.services.service_cancellation_settings import BOT_FIELDS as SERVICE_CANCEL_BOT_FIELDS, GROUP_TITLE as SERVICE_CANCEL_GROUP
+from app.services.lucky_wheel_settings import BOT_FIELDS as WHEEL_BOT_FIELDS, GROUP_TITLE as WHEEL_GROUP
 from app.services.service_freeze_settings import BOT_FIELDS as SERVICE_FREEZE_BOT_FIELDS, GROUP_TITLE as SERVICE_FREEZE_GROUP
 from app.services.service_transfer_settings import (
     BOT_FIELDS as SERVICE_TRANSFER_BOT_FIELDS,
@@ -268,6 +269,7 @@ SECTIONS: dict[str, dict] = {
                 ("referral_text", "متن دعوت", "textarea"),
                 ("referral_bonus", "پاداش دعوت", "number"),
             ]),
+            ("wheel", WHEEL_GROUP, WHEEL_BOT_FIELDS),
             ("profile", "پروفایل تلگرام ربات", PROFILE_BOT_FIELDS),
             *MESSAGE_TEXT_SUBS,
             ("status_texts", "متن‌های وضعیت اتصال", [

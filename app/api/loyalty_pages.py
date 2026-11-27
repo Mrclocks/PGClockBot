@@ -28,7 +28,10 @@ from app.services.loyalty import (
 from app.services.lucky_wheel import (
     DEFAULT_SUBMENU_ORDER,
     MAX_COOLDOWN,
+    MAX_DAILY_LIMIT,
+    MAX_FREE_SPINS_DAILY,
     MAX_INTERVAL_DAYS,
+    MAX_SPIN_COST,
     PRIZE_TYPE_LABELS as WHEEL_PRIZE_TYPE_LABELS,
     SETTING_COOLDOWN,
     SETTING_DAILY_LIMIT,
@@ -640,11 +643,11 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         except ValueError:
             return RedirectResponse("/home", status_code=303)
         enabled = "1" if str(lucky_wheel_enabled) in {"1", "on", "true", "yes"} else "0"
-        cost = clamp_int(lucky_wheel_spin_cost_points, lo=0, hi=1_000_000, default=10)
-        daily = clamp_int(lucky_wheel_daily_limit, lo=0, hi=100, default=3)
+        cost = clamp_int(lucky_wheel_spin_cost_points, lo=0, hi=MAX_SPIN_COST, default=10)
+        daily = clamp_int(lucky_wheel_daily_limit, lo=0, hi=MAX_DAILY_LIMIT, default=3)
         cool = clamp_int(lucky_wheel_cooldown_seconds, lo=0, hi=MAX_COOLDOWN, default=0)
         interval = clamp_int(lucky_wheel_interval_days, lo=0, hi=MAX_INTERVAL_DAYS, default=0)
-        free_d = clamp_int(lucky_wheel_free_spins_daily, lo=0, hi=50, default=0)
+        free_d = clamp_int(lucky_wheel_free_spins_daily, lo=0, hi=MAX_FREE_SPINS_DAILY, default=0)
         # Respect intentional omissions from the DnD list (no forced re-inject).
         order = ",".join(parse_submenu_order(loyalty_submenu_order, fill_missing=False))
         await set_setting(session, SETTING_WHEEL_ENABLED, enabled, reseller_id=scope)

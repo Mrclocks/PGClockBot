@@ -37,18 +37,24 @@ from app.services.loyalty import (
     points_balance,
 )
 from app.services.formatting import format_uptime
+from app.services.lucky_wheel_settings import (
+    MAX_COOLDOWN,
+    MAX_DAILY_LIMIT,
+    MAX_FREE_SPINS_DAILY,
+    MAX_INTERVAL_DAYS,
+    MAX_SPIN_COST,
+    SETTING_COOLDOWN,
+    SETTING_DAILY_LIMIT,
+    SETTING_FREE_SPINS_DAILY,
+    SETTING_INTERVAL_DAYS,
+    SETTING_SPIN_COST,
+    SETTING_WHEEL_ENABLED,
+)
 from app.services.service_scope import customer_may_use_service, shop_services_clause
 from app.services.users import current_shop_reseller_id
 
 logger = logging.getLogger(__name__)
 
-SETTING_WHEEL_ENABLED = "lucky_wheel_enabled"
-SETTING_SPIN_COST = "lucky_wheel_spin_cost_points"
-SETTING_DAILY_LIMIT = "lucky_wheel_daily_limit"
-SETTING_COOLDOWN = "lucky_wheel_cooldown_seconds"
-# "Once every N days": the shortest gap between two spins of one customer, in days (0 = off).
-SETTING_INTERVAL_DAYS = "lucky_wheel_interval_days"
-SETTING_FREE_SPINS_DAILY = "lucky_wheel_free_spins_daily"
 SETTING_SUBMENU_ORDER = "loyalty_submenu_order"
 
 PRIZE_TYPE_LABELS: dict[str, str] = {
@@ -71,12 +77,7 @@ DEFAULT_SUBMENU_ORDER = [
 
 MAX_WEIGHT = 10_000
 MAX_PRIZE_VALUE = 1_000_000
-MAX_SPIN_COST = 1_000_000
-MAX_DAILY_LIMIT = 100
-MAX_COOLDOWN = 86_400
-MAX_INTERVAL_DAYS = 365
 SECONDS_PER_DAY = 86_400
-MAX_FREE_SPINS_DAILY = 50
 MAX_LABEL_LEN = 128
 
 RandomFn = Callable[[int], int]

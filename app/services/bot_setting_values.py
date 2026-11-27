@@ -33,6 +33,7 @@ from app.services.service_import_config import (
 from app.services.service_cancellation_settings import CANCEL_BOUNDS, CHOICES as CANCEL_CHOICES
 from app.services.service_freeze_settings import FREEZE_BOUNDS
 from app.services.service_transfer_settings import TRANSFER_BOUNDS
+from app.services.lucky_wheel_settings import WHEEL_NUMBER_BOUNDS
 from app.services.settings_operation_fields import ALERT_UNIT_OPTIONS, OPERATION_NUMBER_BOUNDS
 
 TOPUP_PRESETS_KEY = "wallet_topup_presets"
@@ -70,6 +71,7 @@ NUMBER_BOUNDS: dict[str, tuple[int, int]] = {
     **TRANSFER_BOUNDS,
     **CANCEL_BOUNDS,
     **ENTRY_APPROVAL_NUMBER_BOUNDS,
+    **WHEEL_NUMBER_BOUNDS,
 }
 
 # Number settings that also take «نامحدود» (stored as the value here), like the web field's button.
