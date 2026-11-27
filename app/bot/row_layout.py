@@ -1,4 +1,4 @@
-"""Applies a menu's saved row layout (``app.services.menu_rows``) while its keyboard is built.
+"""Applies a menu's saved rows and order (``app.services.menu_rows``) while its keyboard is built.
 
 ``@editable_screen`` (and the main reply keyboard) publish which menu is being
 built in a context variable; keyboard packers then pass the menu's own buttons
@@ -14,10 +14,10 @@ import re
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
-from app.services.menu_rows import MAX_LAYOUT_BUTTONS, arrange, parse_layout, setting_key
+from app.services.menu_rows import MAX_LAYOUT_BUTTONS, arrange, follows_saved_order, parse_layout, setting_key
 from app.services.users import current_ui_snapshot
 
 B = TypeVar("B")
@@ -31,10 +31,11 @@ _recorded: ContextVar[list[MenuBody] | None] = ContextVar("row_layout_recorded",
 
 @dataclass(frozen=True, slots=True)
 class MenuBody:
-    """One menu's own buttons: keys in order, their texts, and the default and shown rows.
+    """One menu's own buttons as shown: keys and texts in order, and the default and shown rows.
 
     ``keys`` is empty when the buttons cannot be told apart (no key, or the same key twice);
-    such a menu keeps its default rows and offers no layout editor.
+    such a menu keeps its default rows and offers no layout editor. ``buttons`` maps each
+    shown button object to its key, so the editor can tell which listed button it is.
     """
 
     screen_id: str
@@ -42,6 +43,7 @@ class MenuBody:
     texts: tuple[str, ...]
     default_rows: tuple[tuple[str, ...], ...]
     rows: tuple[tuple[str, ...], ...]
+    buttons: dict[int, str] = field(default_factory=dict, compare=False, repr=False)
 
     @property
     def is_editable(self) -> bool:
@@ -98,20 +100,22 @@ def _distinct_keys(rows: Sequence[Sequence[B]], key: Callable[[B], str | None]) 
     return key_rows
 
 
-def _record(screen_id: str, rows: Sequence[Sequence[B]], key_rows: list[list[str]] | None, shown: list[list[str]]) -> None:
+def _record(screen_id: str, key_rows: list[list[str]] | None, shown: list[list[str]], by_key: dict[str, Any]) -> None:
     bodies = _recorded.get()
     if bodies is None:
         return
     if key_rows is None:
         bodies.append(MenuBody(screen_id, (), (), (), ()))
         return
+    keys = tuple(k for row in shown for k in row)
     bodies.append(
         MenuBody(
             screen_id=screen_id,
-            keys=tuple(k for row in key_rows for k in row),
-            texts=tuple(str(getattr(button, "text", "")) for row in rows for button in row),
+            keys=keys,
+            texts=tuple(str(getattr(by_key[k], "text", "")) for k in keys),
             default_rows=tuple(tuple(row) for row in key_rows),
             rows=tuple(tuple(row) for row in shown),
+            buttons={id(by_key[k]): k for k in keys},
         )
     )
 
@@ -122,19 +126,20 @@ def arrange_buttons(
     *,
     key: Callable[[B], str | None] = button_key,
 ) -> list[list[B]]:
-    """The menu's own buttons in the rows its saved layout asks for (default rows otherwise)."""
+    """The menu's own buttons in the rows and order its saved layout asks for (default otherwise)."""
     rows = [list(row) for row in default_rows if row]
     screen_id = _active_screen.get()
     if screen_id is None or not rows:
         return rows
     key_rows = _distinct_keys(rows, key)
     if key_rows is None:
-        _record(screen_id, rows, None, [])
+        _record(screen_id, None, [], {})
         return rows
     settings = ui if ui is not None else current_ui_snapshot()
-    shown = arrange(key_rows, parse_layout(settings.get(setting_key(screen_id))))
-    _record(screen_id, rows, key_rows, shown)
+    layout = parse_layout(settings.get(setting_key(screen_id)))
+    shown = arrange(key_rows, layout, follow_saved_order=follows_saved_order(screen_id))
     by_key = {
         k: button for row_keys, row in zip(key_rows, rows, strict=True) for k, button in zip(row_keys, row, strict=True)
     }
+    _record(screen_id, key_rows, shown, by_key)
     return [[by_key[k] for k in row] for row in shown]

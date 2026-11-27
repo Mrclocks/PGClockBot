@@ -491,19 +491,23 @@ def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         REPLY_ACTION_LOY_WHEEL: "loy_wheel",
         REPLY_ACTION_LOY_HISTORY: "loy_history",
     }
-    entries = _loyalty_submenu_entries(ui)
-    buttons = [
-        _ikb(
-            text,
-            callback_data=cb_map[key],
-            ui=ui,
-            action=key,
-            style_id=style_map[key], style_fallback="primary",
+    keyed = [
+        (
+            key,
+            _ikb(
+                text,
+                callback_data=cb_map[key],
+                ui=ui,
+                action=key,
+                style_id=style_map[key], style_fallback="primary",
+            ),
         )
-        for key, text in entries
+        for key, text in _loyalty_submenu_entries(ui)
         if key in cb_map
     ]
-    rows = arrange_buttons(_pairs(buttons), ui)
+    # Keyed by the items of ``loyalty_submenu_order``: the editor's order is that web setting.
+    actions = {id(button): key for key, button in keyed}
+    rows = arrange_buttons(_pairs([button for _key, button in keyed]), ui, key=lambda button: actions.get(id(button)))
     rows.append(
         [
             _ikb(

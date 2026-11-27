@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot.edit_mode import CATALOG_ROW_SCREENS
 from app.bot.handlers.catalog_row_editor import parse_request
-from app.bot.handlers.screen_editor import BTN_CATALOG_ROWS, panel_view
+from app.bot.handlers.screen_editor import BTN_CATALOG_ROWS, EditorScreen, panel_view
 from app.bot.panel_history import panel_history
 from app.bot.screen_registry import SCREENS, ScreenContext, screen_buttons
 from app.db.models import Base, BotUser, Plan, PlanCategory
@@ -133,10 +133,12 @@ class RequestTests(unittest.TestCase):
         for screen_id in CATALOG_ROW_SCREENS:
             with self.subTest(screen=screen_id):
                 spec = SCREENS[screen_id]
-                _, markup = panel_view(actor, spec, screen_buttons(screen_id, ScreenContext(ui={})), {}, minutes_left=5)
+                screen = EditorScreen(spec, screen_buttons(screen_id, ScreenContext(ui={})), {})
+                _, markup = panel_view(actor, screen, minutes_left=5)
                 links = [b.callback_data for row in markup.inline_keyboard for b in row if b.text == BTN_CATALOG_ROWS]
                 self.assertEqual(links, ["edr:a:l"])
-        _, markup = panel_view(actor, SCREENS["c.wallet"], screen_buttons("c.wallet", ScreenContext(ui={})), {}, minutes_left=5)
+        wallet = EditorScreen(SCREENS["c.wallet"], screen_buttons("c.wallet", ScreenContext(ui={})), {})
+        _, markup = panel_view(actor, wallet, minutes_left=5)
         self.assertNotIn(BTN_CATALOG_ROWS, [b.text for row in markup.inline_keyboard for b in row])
 
 
