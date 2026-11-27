@@ -23,14 +23,14 @@ from app.services.bbc_settlement import (
 )
 from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
-from app.services.orders import create_wallet_topup
+from app.services.orders import MIN_TOPUP_AMOUNT, create_wallet_topup
 from app.services.psp_gateways import gateway_choices
 from app.bot.nav_input import retire_prompt_buttons
 from app.services.receipts import submit_receipt
 from app.services.action_center import payment_shop_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import list_activity
-from app.services.wallet_topup import TOPUP_METHODS
+from app.services.wallet_topup import TOPUP_METHODS, TopupError, parse_typed_topup_amount
 from app.services.crypto_rates import CryptoQuote, attach_quote, display_amount, quote_from_settings, validity_note
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 from app.services import bot_feedback_texts as feedback
@@ -322,7 +322,7 @@ async def present_topup_methods(
 async def wallet_topup_amount(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser,
     is_reseller_bot: bool = False, reseller_owner_id: int | None = None):
     from app.bot.menu_nav import restore_main_reply
-    from app.bot.nav_input import finish_text_step, try_legacy_cancel
+    from app.bot.nav_input import try_legacy_cancel
 
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui):
@@ -346,38 +346,41 @@ async def wallet_topup_amount(message: Message, state: FSMContext, session: Asyn
         )
         return
     try:
-        amount = int((message.text or "").replace(",", "").replace("٬", "").strip())
-        if amount < 1000:
-            raise ValueError
-    except ValueError:
+        amount = parse_typed_topup_amount(message.text)
+    except TopupError as exc:
         from app.bot.nav_input import ask_text
 
         await ask_text(
             message,
             state,
-            prompt=format_message("⚠️ خطا", "مبلغ معتبر وارد کنید (حداقل ۱٬۰۰۰)."),
+            prompt=format_message("⚠️ خطا", str(exc)),
             cancel_code="w_amt",
             fsm_state=WalletStates.topup_amount,
         )
         return
-    # Inline cancel path — edit prompt into methods; no heal-only message.
+    await _show_methods_for_typed_amount(message, state, ui, amount, push=True)
+
+
+async def _show_methods_for_typed_amount(
+    message: Message, state: FSMContext, ui: dict, amount: int, *, push: bool, note: str = ""
+) -> None:
+    """Turn the typed step into the pay-method panel for ``amount``; ``note`` heads the body."""
     from app.bot import menu_nav as nav
     from app.bot.nav_inline import topup_methods_keyboard
+    from app.bot.nav_input import finish_text_step
 
     body = format_message(
         "➕ شارژ کیف پول",
-        f"{kv_line('💰', 'مبلغ', f'<b>{format_toman(amount, get_settings().currency)}</b>')}\n\n"
+        (f"{note}\n\n" if note else "")
+        + f"{kv_line('💰', 'مبلغ', f'<b>{format_toman(amount, get_settings().currency)}</b>')}\n\n"
         + "روش واریز را انتخاب کنید:",
     )
     await state.set_state(WalletStates.choose_method)
     await state.update_data(topup_amount=amount)
-    await nav.set_nav_level(state, nav.NAV_TOPUP_PAY, push=True)
-    await finish_text_step(
-        message,
-        state,
-        text=body,
-        inline=topup_methods_keyboard(ui),
-    )
+    if push:
+        await nav.set_nav_level(state, nav.NAV_TOPUP_PAY, push=True)
+    await finish_text_step(message, state, text=body, inline=topup_methods_keyboard(ui))
+
 
 async def _topup_instructions(
     session: AsyncSession,
@@ -772,7 +775,21 @@ async def wallet_choose_method_cancel(
             reseller_owner_id=reseller_owner_id,
         )
         return
-    await message.answer("روش واریز را از دکمه‌های پیام انتخاب کنید یا انصراف بزنید.")
+    # The method panel leaves the chat when the bot answers, so every reply redraws it.
+    try:
+        amount = parse_typed_topup_amount(message.text)
+    except TopupError:
+        amount = int((await state.get_data()).get("topup_amount") or 0)
+        note = "روش واریز را از دکمه‌های زیر انتخاب کنید؛ برای مبلغ دیگر، همان مبلغ را بفرستید."
+    else:
+        note = ""
+    if amount < MIN_TOPUP_AMOUNT:
+        # reply_nav imports this module; a top-level import would be circular.
+        from app.bot.handlers.reply_nav import open_wallet_topup
+
+        await open_wallet_topup(message, session, state)
+        return
+    await _show_methods_for_typed_amount(message, state, ui, amount, push=False, note=note)
 
 @router.message(WalletStates.waiting_receipt, F.photo)
 async def wallet_receipt_photo(

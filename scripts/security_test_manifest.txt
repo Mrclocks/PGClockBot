@@ -90,6 +90,7 @@ tests/test_addon_preview.py
 tests/test_miniapp_feeds.py
 tests/test_miniapp_frontend.py
 tests/test_miniapp_topup.py
+tests/test_wallet_custom_topup_bot.py
 tests/test_miniapp_support.py
 tests/test_miniapp_codes.py
 tests/test_miniapp_guides.py
