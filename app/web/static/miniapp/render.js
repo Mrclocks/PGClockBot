@@ -656,7 +656,7 @@
           <label class="chip"><input type="radio" name="preset" value="custom"${presets.length ? "" : " checked"}><span>مبلغ دلخواه</span></label>
         </div>
         <label class="form-field"><span class="muted sm">مبلغ دلخواه (<bdi>${esc(money(options.min_amount))}</bdi> تا <bdi>${esc(money(options.max_amount))}</bdi>)</span>
-          <input type="text" name="custom_amount" inputmode="numeric" autocomplete="off" dir="ltr" maxlength="16"></label>
+          <input type="text" name="custom_amount" data-input="topup-custom" inputmode="numeric" autocomplete="off" dir="ltr" maxlength="16"></label>
       </fieldset>
       <fieldset class="field-group"><legend>روش پرداخت</legend>
         ${methods.map((m, i) => `<label class="method-option">

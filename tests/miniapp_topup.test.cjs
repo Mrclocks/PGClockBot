@@ -89,6 +89,34 @@ test("amount rules: presets, Persian digits, bounds; nothing is sent for a bad a
   assert.ok(html.includes("6037991111111111") && html.includes('data-form="receipt"'));
 });
 
+test("a typed amount is charged even while the first preset chip is still selected", async () => {
+  const env = await boot([[/POST \/api\/mini\/topup$/, (body) => ({ status: 200, body: { topup: { payment_id: 9, method: "card", amount: body.amount, needs_receipt: true, card_number: "6037991111111111" } } })]]);
+  await env.mini.app.ACTIONS.topup(trigger({}));
+  await settle();
+  await env.mini.app.submitForm(topupForm({ preset: "100000", custom: "۳۷۰٬۰۰۰" }));
+  await settle();
+  assert.equal(posts(env, "/api/mini/topup")[0].body.amount, 370000);
+  await env.mini.app.submitForm(topupForm({ preset: "100000", custom: "999" }));
+  await settle();
+  assert.equal(posts(env, "/api/mini/topup").length, 1, "a bad typed amount is refused, not swapped for the preset");
+});
+
+test("typing selects «مبلغ دلخواه» and picking a preset clears the typed amount", async () => {
+  const env = await boot();
+  const customChip = { checked: false };
+  const form = {
+    elements: { custom_amount: { value: "" } },
+    querySelector: (sel) => (sel === "input[name=preset][value=custom]" ? customChip : null),
+  };
+  const typed = { name: "custom_amount", value: "۲۵۰۰۰۰", form, matches: (sel) => sel === "[data-input=topup-custom]" };
+  form.elements.custom_amount = typed;
+  env.dispatch("input", typed);
+  assert.equal(customChip.checked, true);
+  const preset = { name: "preset", value: "100000", form, matches: (sel) => sel === ".topup-form input[name=preset]" };
+  env.dispatch("change", preset);
+  assert.equal(typed.value, "");
+});
+
 test("a double tap on «ادامه» starts one payment", async () => {
   let open;
   const pending = new Promise((resolve) => { open = resolve; });
