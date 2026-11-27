@@ -264,6 +264,7 @@ SECTIONS: dict[str, dict] = {
                 ("support_text", "متن پشتیبانی", "textarea"),
                 ("purchase_success_text", "موفقیت خرید", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
+                ("payment_reject_reasons", "دلایل رد رسید", "textarea"),
             ]),
             ("invite", "دعوت دوستان", [
                 ("referral_text", "متن دعوت", "textarea"),
