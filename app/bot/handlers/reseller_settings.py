@@ -76,6 +76,7 @@ from app.services.settings_message_texts import (
 )
 from app.services.receipt_risk import BOT_FIELDS as RECEIPT_RISK_BOT_FIELDS
 from app.services.service_cancellation_settings import BOT_FIELDS as SERVICE_CANCEL_BOT_FIELDS, GROUP_TITLE as SERVICE_CANCEL_GROUP
+from app.services.lucky_wheel_settings import BOT_FIELDS as WHEEL_BOT_FIELDS, GROUP_TITLE as WHEEL_GROUP
 from app.services.service_freeze_settings import BOT_FIELDS as SERVICE_FREEZE_BOT_FIELDS, GROUP_TITLE as SERVICE_FREEZE_GROUP
 from app.services.service_transfer_settings import (
     BOT_FIELDS as SERVICE_TRANSFER_BOT_FIELDS,
@@ -259,6 +260,11 @@ SECTIONS: dict[str, dict] = {
                 ("pg_username_pattern", "الگو", "text"),
             ]),
         ],
+    },
+    # Same keys as the web club page's wheel settings; prizes and the club menu order stay on the web.
+    "loyalty": {
+        "title": "باشگاه مشتریان",
+        "subs": [("wheel", WHEEL_GROUP, WHEEL_BOT_FIELDS)],
     },
     "limits": {
         "title": "ورود و عضویت",

@@ -96,6 +96,7 @@ class LuckyWheelEngineTests(unittest.IsolatedAsyncioTestCase):
             "lucky_wheel_spin_cost_points",
             "lucky_wheel_daily_limit",
             "lucky_wheel_cooldown_seconds",
+            "lucky_wheel_interval_days",
             "lucky_wheel_free_spins_daily",
             "loyalty_submenu_order",
         ):
@@ -165,6 +166,55 @@ class LuckyWheelEngineTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(r2.replayed)
             self.assertEqual(r1.spin.id, r2.spin.id)
             self.assertEqual(int(u.points_balance), bal_after)
+
+    def test_wait_is_the_longer_of_cooldown_and_day_interval(self):
+        from datetime import datetime, timedelta, timezone
+
+        from app.services.lucky_wheel import spin_wait_remaining, spin_wait_seconds
+
+        self.assertEqual(spin_wait_seconds({"cooldown_seconds": 60, "interval_days": 0}), 60)
+        self.assertEqual(spin_wait_seconds({"cooldown_seconds": 60, "interval_days": 2}), 2 * 86_400)
+        now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+        cfg = {"cooldown_seconds": 0, "interval_days": 1}
+        self.assertEqual(spin_wait_remaining(cfg, None, now=now), 0)
+        self.assertEqual(spin_wait_remaining(cfg, now - timedelta(hours=20), now=now), 4 * 3600)
+        naive = (now - timedelta(hours=20)).replace(tzinfo=None)
+        self.assertEqual(spin_wait_remaining(cfg, naive, now=now), 4 * 3600, "a naive time is read as UTC")
+        self.assertEqual(spin_wait_remaining(cfg, now - timedelta(days=2), now=now), 0)
+
+    async def test_interval_days_allows_one_spin_per_interval(self):
+        from datetime import timedelta
+
+        from sqlalchemy import select, update
+
+        from app.db.models import LuckyWheelSpin, LuckyWheelUserState
+        from app.services.lucky_wheel import _utc_now, get_user_wheel_status, spin, upsert_prize
+        from app.services.users import set_setting
+
+        async with self.Session() as session:
+            u = await self._user(session, 503, "WHEEL003", points=100)
+            await self._enable_wheel(session, reseller_id=None, cost=5)
+            await set_setting(session, "lucky_wheel_interval_days", "3", reseller_id=None)
+            await upsert_prize(
+                session, reseller_id=None, label="۵ امتیاز", prize_type="points", prize_value=5, weight=1
+            )
+            await spin(session, u, idempotency_key="day-1", random_fn=lambda n: 0)
+            with self.assertRaisesRegex(ValueError, "روز"):
+                await spin(session, u, idempotency_key="day-1-again", random_fn=lambda n: 0)
+            status = await get_user_wheel_status(session, u)
+            self.assertFalse(status.can_spin)
+            self.assertEqual(status.interval_days, 3)
+            self.assertGreater(status.cooldown_remaining, 2 * 86_400)
+
+            await session.execute(
+                update(LuckyWheelUserState)
+                .where(LuckyWheelUserState.user_id == u.id)
+                .values(last_spin_at=_utc_now() - timedelta(days=3, seconds=1))
+            )
+            await session.commit()
+            await spin(session, u, idempotency_key="day-4", random_fn=lambda n: 0)
+            spins = (await session.scalars(select(LuckyWheelSpin).where(LuckyWheelSpin.user_id == u.id))).all()
+            self.assertEqual(len(spins), 2, "the refused spin left no row and cost nothing")
 
     async def test_tenant_isolation(self):
         from app.db.models import BotUser, Role

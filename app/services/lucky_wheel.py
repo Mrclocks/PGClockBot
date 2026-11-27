@@ -36,16 +36,25 @@ from app.services.loyalty import (
     loyalty_enabled,
     points_balance,
 )
+from app.services.formatting import format_uptime
+from app.services.lucky_wheel_settings import (
+    MAX_COOLDOWN,
+    MAX_DAILY_LIMIT,
+    MAX_FREE_SPINS_DAILY,
+    MAX_INTERVAL_DAYS,
+    MAX_SPIN_COST,
+    SETTING_COOLDOWN,
+    SETTING_DAILY_LIMIT,
+    SETTING_FREE_SPINS_DAILY,
+    SETTING_INTERVAL_DAYS,
+    SETTING_SPIN_COST,
+    SETTING_WHEEL_ENABLED,
+)
 from app.services.service_scope import customer_may_use_service, shop_services_clause
 from app.services.users import current_shop_reseller_id
 
 logger = logging.getLogger(__name__)
 
-SETTING_WHEEL_ENABLED = "lucky_wheel_enabled"
-SETTING_SPIN_COST = "lucky_wheel_spin_cost_points"
-SETTING_DAILY_LIMIT = "lucky_wheel_daily_limit"
-SETTING_COOLDOWN = "lucky_wheel_cooldown_seconds"
-SETTING_FREE_SPINS_DAILY = "lucky_wheel_free_spins_daily"
 SETTING_SUBMENU_ORDER = "loyalty_submenu_order"
 
 PRIZE_TYPE_LABELS: dict[str, str] = {
@@ -68,10 +77,7 @@ DEFAULT_SUBMENU_ORDER = [
 
 MAX_WEIGHT = 10_000
 MAX_PRIZE_VALUE = 1_000_000
-MAX_SPIN_COST = 1_000_000
-MAX_DAILY_LIMIT = 100
-MAX_COOLDOWN = 86_400
-MAX_FREE_SPINS_DAILY = 50
+SECONDS_PER_DAY = 86_400
 MAX_LABEL_LEN = 128
 
 RandomFn = Callable[[int], int]
@@ -95,6 +101,7 @@ class WheelStatus:
     spin_cost: int
     daily_limit: int
     cooldown_seconds: int
+    interval_days: int
     free_spins_daily: int
     free_spins_left: int
     spins_today: int
@@ -110,6 +117,24 @@ def _utc_now() -> datetime:
 
 def _utc_day(now: datetime | None = None) -> str:
     return (now or _utc_now()).strftime("%Y-%m-%d")
+
+
+def spin_wait_seconds(cfg: dict[str, Any]) -> int:
+    """The gap required after a spin: the longer of the seconds cooldown and the day interval."""
+    return max(int(cfg["cooldown_seconds"]), int(cfg["interval_days"]) * SECONDS_PER_DAY)
+
+
+def spin_wait_remaining(cfg: dict[str, Any], last_spin_at: datetime | None, *, now: datetime) -> int:
+    """Seconds this customer must still wait before the next spin (0 = may spin now)."""
+    wait = spin_wait_seconds(cfg)
+    if wait <= 0 or last_spin_at is None:
+        return 0
+    last = last_spin_at if last_spin_at.tzinfo else last_spin_at.replace(tzinfo=timezone.utc)
+    return max(0, wait - int((now - last).total_seconds()))
+
+
+def spin_wait_message(remaining_seconds: int) -> str:
+    return f"تا چرخش بعدی {format_uptime(remaining_seconds)} مانده است"
 
 
 def clamp_int(value: Any, *, lo: int, hi: int, default: int) -> int:
@@ -168,6 +193,12 @@ async def get_wheel_settings(
             await get_setting(session, SETTING_COOLDOWN, "0", reseller_id=reseller_id),
             lo=0,
             hi=MAX_COOLDOWN,
+            default=0,
+        ),
+        "interval_days": clamp_int(
+            await get_setting(session, SETTING_INTERVAL_DAYS, "0", reseller_id=reseller_id),
+            lo=0,
+            hi=MAX_INTERVAL_DAYS,
             default=0,
         ),
         "free_spins_daily": clamp_int(
@@ -471,6 +502,7 @@ async def get_user_wheel_status(session: AsyncSession, user: BotUser) -> WheelSt
             spin_cost=0,
             daily_limit=0,
             cooldown_seconds=0,
+            interval_days=0,
             free_spins_daily=0,
             free_spins_left=0,
             spins_today=0,
@@ -484,13 +516,7 @@ async def get_user_wheel_status(session: AsyncSession, user: BotUser) -> WheelSt
     _refresh_day_counters(state, free_spins_daily=int(cfg["free_spins_daily"]))
     await session.flush()
 
-    cooldown_remaining = 0
-    if cfg["cooldown_seconds"] > 0 and state.last_spin_at:
-        last = state.last_spin_at
-        if last.tzinfo is None:
-            last = last.replace(tzinfo=timezone.utc)
-        elapsed = int((_utc_now() - last).total_seconds())
-        cooldown_remaining = max(0, int(cfg["cooldown_seconds"]) - elapsed)
+    cooldown_remaining = spin_wait_remaining(cfg, state.last_spin_at, now=_utc_now())
 
     free_left = int(state.free_spins_balance or 0)
     spins_today = int(state.spins_today or 0)
@@ -509,7 +535,7 @@ async def get_user_wheel_status(session: AsyncSession, user: BotUser) -> WheelSt
         reason = "سقف چرخش روزانه پر شده"
     elif cooldown_remaining > 0:
         can = False
-        reason = f"کمی صبر کنید ({cooldown_remaining} ثانیه)"
+        reason = spin_wait_message(cooldown_remaining)
     elif free_left <= 0 and cost > 0 and pts < cost:
         can = False
         reason = "امتیاز کافی نیست"
@@ -519,6 +545,7 @@ async def get_user_wheel_status(session: AsyncSession, user: BotUser) -> WheelSt
         spin_cost=cost,
         daily_limit=daily_limit,
         cooldown_seconds=int(cfg["cooldown_seconds"]),
+        interval_days=int(cfg["interval_days"]),
         free_spins_daily=int(cfg["free_spins_daily"]),
         free_spins_left=free_left,
         spins_today=spins_today,
@@ -570,15 +597,9 @@ async def spin(
     state = await _get_or_create_state(session, user, for_update=True)
     _refresh_day_counters(state, free_spins_daily=int(cfg["free_spins_daily"]))
 
-    if cfg["cooldown_seconds"] > 0 and state.last_spin_at:
-        last = state.last_spin_at
-        if last.tzinfo is None:
-            last = last.replace(tzinfo=timezone.utc)
-        elapsed = int((_utc_now() - last).total_seconds())
-        if elapsed < int(cfg["cooldown_seconds"]):
-            raise ValueError(
-                f"کمی صبر کنید ({int(cfg['cooldown_seconds']) - elapsed} ثانیه)"
-            )
+    remaining = spin_wait_remaining(cfg, state.last_spin_at, now=_utc_now())
+    if remaining > 0:
+        raise ValueError(spin_wait_message(remaining))
 
     daily_limit = int(cfg["daily_limit"])
     if daily_limit > 0 and int(state.spins_today or 0) >= daily_limit:
