@@ -363,6 +363,7 @@
   <script src="/static/panel.js?v={{ panel_script_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/list-inputs.js?v={{ list_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/table-list.js?v={{ asset_v('table-list.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/inbox-badge.js?v={{ asset_v('inbox-badge.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script src="/static/panel-ds.js?v={{ asset_v('panel-ds.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script type="application/json" id="template-variable-specs"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>{{ template_variable_specs(daily_report_actor|default('shop' if shop_mode|default(false) else 'owner', true))|tojson }}</script>
   <script src="/static/template-variables.js?v={{ asset_v('template-variables.js') if asset_v is defined else app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
