@@ -28,6 +28,9 @@ from app.bot.row_layout import MenuBody, recording_menu_bodies
 from app.db.models import Role
 from app.py_compat import StrEnum
 from app.services.button_styles import CATALOG_IDS, setting_key
+from app.services.lucky_wheel import parse_submenu_order
+from app.services.menu_rows import EXTERNAL_ORDER_SETTINGS
+from app.services.users import DEFAULT_SETTINGS
 from app.services.screen_titles import SCREEN_TITLE_DEFAULTS
 
 Markup = InlineKeyboardMarkup | ReplyKeyboardMarkup
@@ -72,6 +75,8 @@ class ScreenButton:
     text: str
     label_key: str | None
     style_id: str | None
+    # The button's key in the menu's own rows (``row_layout``); None for «بازگشت» and other fixed rows.
+    order_key: str | None = None
 
     @property
     def style_setting_key(self) -> str | None:
@@ -223,11 +228,25 @@ def _catalog_style_id(style_id: str | None) -> str | None:
 
 def screen_buttons(screen_id: str, ctx: ScreenContext) -> list[ScreenButton]:
     """Every button of the screen in display order, with the settings behind it."""
+    return screen_view(screen_id, ctx)[0]
+
+
+def screen_body(screen_id: str, ctx: ScreenContext) -> MenuBody | None:
+    """The menu's own buttons as its row layout sees them; None when its rows cannot be edited."""
+    return screen_view(screen_id, ctx)[1]
+
+
+def screen_view(screen_id: str, ctx: ScreenContext) -> tuple[list[ScreenButton], MenuBody | None]:
+    """Build the real menu once: every button in display order, and the menu's own rows."""
     spec = SCREENS.get(screen_id)
     if spec is None:
         raise ValueError(f"unknown screen {screen_id!r}")
-    with without_editor(), recording_button_sources() as log:
+    with without_editor(), recording_button_sources() as log, recording_menu_bodies() as bodies:
         markup = spec.build(ctx)
+    own = [body for body in bodies if body.screen_id == screen_id]
+    # A menu built from more than one packer has no single row order to edit.
+    body = own[0] if len(own) == 1 and own[0].is_editable else None
+    order_keys = body.buttons if body else {}
     buttons: list[ScreenButton] = []
     for row_index, row in enumerate(_rows(markup)):
         for column_index, button in enumerate(row):
@@ -239,20 +258,25 @@ def screen_buttons(screen_id: str, ctx: ScreenContext) -> list[ScreenButton]:
                     text=button.text,
                     label_key=source.label_key if source else None,
                     style_id=_catalog_style_id(source.style_id if source else None),
+                    order_key=order_keys.get(id(button)),
                 )
             )
-    return buttons
+    return buttons, body
 
 
-def screen_body(screen_id: str, ctx: ScreenContext) -> MenuBody | None:
-    """The menu's own buttons as its row layout sees them; None when its rows cannot be edited."""
-    spec = SCREENS.get(screen_id)
-    if spec is None:
-        raise ValueError(f"unknown screen {screen_id!r}")
-    with without_editor(), recording_menu_bodies() as bodies:
-        spec.build(ctx)
-    own = [body for body in bodies if body.screen_id == screen_id]
-    # A menu built from more than one packer has no single row order to edit.
-    if len(own) != 1 or not own[0].is_editable:
-        return None
-    return own[0]
+def external_order(screen_id: str, ui: dict[str, str]) -> tuple[str, ...] | None:
+    """The web setting's order list for menus whose order lives there (None for the others)."""
+    setting = EXTERNAL_ORDER_SETTINGS.get(screen_id)
+    if setting == "menu_order":
+        return tuple(kb._menu_order(ui))
+    if setting == "loyalty_submenu_order":
+        return tuple(parse_submenu_order(ui.get(setting), fill_missing=False))
+    return None
+
+
+def shipped_external_order(screen_id: str) -> tuple[str, ...]:
+    """The order the web setting ships with, for «↺ ترتیب پیش‌فرض»."""
+    setting = EXTERNAL_ORDER_SETTINGS.get(screen_id)
+    if setting is None:
+        return ()
+    return tuple(item.strip() for item in DEFAULT_SETTINGS.get(setting, "").split(",") if item.strip())

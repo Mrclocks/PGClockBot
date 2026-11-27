@@ -345,7 +345,8 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         # The same menu's edit panel comes back with the new text and a way back to the menu.
         self.assertTrue(message.answer.await_args.args[0].startswith(ui_module.TEXT_LABEL_SAVED))
         markup = message.answer.await_args.kwargs["reply_markup"]
-        self.assertIn("💳 شارژ", [b.text.split(" ", 1)[1] for row in markup.inline_keyboard for b in row])
+        # Button rows read «<color> <text>»; the ⬆️/⬇️ beside them have no text part.
+        self.assertIn("💳 شارژ", [b.text.split(" ", 1)[1] for row in markup.inline_keyboard for b in row if " " in b.text])
         self.assertEqual(markup.inline_keyboard[-1][0].callback_data, "nv:w:home")
 
     async def test_owner_renames_the_admin_panel_button_from_the_admin_main_menu(self) -> None:

@@ -1,12 +1,17 @@
-"""Menu editor: «▦ چیدمان منو», how many buttons share each row of one menu.
+"""Menu editor: the rows («▦ چیدمان منو») and the order (⬆️/⬇️) of one menu's buttons.
 
-Opened from a menu's edit panel («✏️ ویرایش این منو»); «⬅️ بازگشت» returns there.
-Callback data ``edl:<a|r>:<view>:<screen>[:<sizes>[:<row>]]``: ``o`` open with the saved
-rows, ``p``/``m`` one more / one fewer button in row ``row`` of the draft ``sizes``,
-``s`` save the draft, ``r`` back to the default rows, ``i`` a hint for the row labels.
-The draft travels in the callback (one digit per row), so nothing is saved until
-«✅ ذخیره». Every step rebuilds the real menu, re-checks edit mode and the
-actor's audience, and refuses a draft that no longer fits the menu's buttons.
+«▦ چیدمان منو» is opened from a menu's edit panel («✏️ ویرایش این منو»); «⬅️ بازگشت»
+returns there. Callback data ``edl:<a|r>:<view>:<screen>[:<sizes>[:<row>]]``: ``o`` open
+with the saved rows, ``p``/``m`` one more / one fewer button in row ``row`` of the draft
+``sizes``, ``s`` save the draft, ``r`` back to the default rows, ``i`` a hint for the row
+labels. The draft travels in the callback (one digit per row), so nothing is saved until
+«✅ ذخیره».
+
+The edit panel's arrows use ``edl:<a|r>:v:<screen>:<from>:<to>:<tag>`` (move one button
+to the next slot, saved at once), ``z`` («↺ ترتیب پیش‌فرض») and ``e`` (an arrow at either
+end). ``tag`` is the panel's state: a move from an older message is refused, so a double
+tap moves a button one slot only. Every step rebuilds the real menu and re-checks edit
+mode and the actor's audience.
 """
 
 from __future__ import annotations
@@ -24,38 +29,51 @@ from app.bot.edit_mode import EDIT_CALLBACK_ROOT, MENU_ROWS_ROOT, audience_code
 from app.bot.handlers.screen_editor import (
     TEXT_EDIT_MODE_EXPIRED,
     TEXT_FEATURE_OFF,
+    TEXT_MENU_CHANGED,
     TEXT_SHOP_BOT_ONLY,
+    EditorScreen,
+    load_screen,
+    panel_for,
     shop_editor_actor,
 )
 from app.bot.row_layout import MenuBody
-from app.bot.screen_registry import SCREENS, ScreenContext, ScreenSpec, screen_body
+from app.bot.screen_registry import SCREENS, ScreenSpec, shipped_external_order
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
 from app.services.menu_rows import (
     TEXT_NOT_EDITABLE,
+    TEXT_ORDER_EDGE,
+    MenuOrder,
     decode_sizes,
+    default_order,
     encode_sizes,
+    follows_saved_order,
+    layout_fits,
+    moved_order,
     narrow_row,
+    parse_layout,
     reset_menu_rows,
+    save_menu_order,
     save_menu_rows,
+    setting_key,
     split_rows,
     widen_row,
 )
 from app.services.numbers import to_fa_digits
-from app.services.resellers import get_reseller_profile
 from app.services.screen_editor import EditorActor, edit_mode_store, is_editor_enabled
 from app.services.user_errors import domain_error_text
-from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
 
 owner_router = Router(name="menu_rows_editor_owner")
 shop_router = Router(name="menu_rows_editor_shop")
 
-_REQUEST = re.compile(r"^edl:(a|r):(o|p|m|s|r|i):([a-z][a-z0-9._]{0,23})(?::([1-4]{1,24}))?(?::(\d{1,2}))?$")
+_REQUEST = re.compile(r"^edl:(a|r):(o|p|m|s|r|i|z|e):([a-z][a-z0-9._]{0,23})(?::([1-4]{1,24}))?(?::(\d{1,2}))?$")
+_MOVE = re.compile(r"^edl:(a|r):v:([a-z][a-z0-9._]{0,23}):(\d{1,2}):(\d{1,2}):([0-9a-f]{6})$")
 _NEEDS_SIZES = frozenset({"p", "m", "s"})
 _NEEDS_ROW = frozenset({"p", "m"})
+_ORDER_VIEWS = frozenset({"v", "z"})
 
 BTN_WIDEN = "➕"
 BTN_NARROW = "➖"
@@ -67,7 +85,13 @@ TEXT_ROW_HINT = "برای تغییر تعداد ستون این ردیف، ➖ �
 TEXT_UNSAVED = "⚠️ این چیدمان هنوز ذخیره نشده."
 TEXT_SAVED = "✅ چیدمان منو ذخیره شد."
 TEXT_RESET = "✅ چیدمان به حالت پیش‌فرض برگشت."
+TEXT_MOVED = "✅ جای دکمه عوض شد."
+TEXT_ORDER_RESET = "✅ ترتیب دکمه‌ها به حالت پیش‌فرض برگشت."
+TEXT_ORDER_ALREADY_DEFAULT = "ترتیب دکمه‌ها همین حالا پیش‌فرض است."
+TEXT_STALE_LAYOUT = "ℹ️ ترتیب این منو در وب‌پنل عوض شده؛ چیدمان ذخیره‌شده کنار رفت و ردیف‌های پیش‌فرض نشان داده می‌شوند."
 BUTTON_TEXT_PREVIEW = 24
+# Views that only answer with a short hint, without reading anything.
+_HINTS = {"i": TEXT_ROW_HINT, "e": TEXT_ORDER_EDGE}
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,9 +101,17 @@ class RowsRequest:
     screen_id: str
     sizes: str = ""
     row: int = -1
+    target: int = -1
+    state: str = ""
 
 
 def parse_request(data: str | None) -> RowsRequest | None:
+    move = _MOVE.match(data or "")
+    if move is not None:
+        audience, screen_id, row, target, state = move.groups()
+        if screen_id not in SCREENS:
+            return None
+        return RowsRequest(audience, "v", screen_id, row=int(row), target=int(target), state=state)
     match = _REQUEST.match(data or "")
     if match is None:
         return None
@@ -112,10 +144,12 @@ def _short(text: str) -> str:
 
 
 def rows_view(
-    actor: EditorActor, spec: ScreenSpec, body: MenuBody, draft: list[int]
+    actor: EditorActor, spec: ScreenSpec, body: MenuBody, draft: list[int], *, stale: bool = False
 ) -> tuple[str, InlineKeyboardMarkup]:
     sizes = encode_sizes(draft)
     lines = [f"▦ <b>چیدمان منو: {html.escape(spec.title)}</b>", TEXT_HINT, ""]
+    if stale:
+        lines[2:2] = [TEXT_STALE_LAYOUT, ""]
     keyboard: list[list[InlineKeyboardButton]] = []
     start = 0
     for index, size in enumerate(draft):
@@ -137,18 +171,6 @@ def rows_view(
 # ── Steps ────────────────────────────────────────────────────────────────────
 
 
-async def _load_body(session: AsyncSession, actor: EditorActor, screen_id: str) -> tuple[ScreenSpec, MenuBody]:
-    spec = SCREENS.get(screen_id)
-    if spec is None or spec.audience.value not in actor.audiences:
-        raise ValueError(feedback.INVALID)
-    ui = await get_all_settings(session, reseller_id=actor.settings_scope)
-    profile = await get_reseller_profile(session, actor.shop_id) if actor.for_reseller else None
-    body = screen_body(screen_id, ScreenContext(ui=ui, profile=profile))
-    if body is None:
-        raise ValueError(TEXT_NOT_EDITABLE)
-    return spec, body
-
-
 async def _check_editing(session: AsyncSession, actor: EditorActor) -> None:
     if not await is_editor_enabled(session):
         raise ValueError(TEXT_FEATURE_OFF)
@@ -156,18 +178,34 @@ async def _check_editing(session: AsyncSession, actor: EditorActor) -> None:
         raise ValueError(TEXT_EDIT_MODE_EXPIRED)
 
 
-async def _step(
+async def _editable(session: AsyncSession, actor: EditorActor, screen_id: str) -> tuple[EditorScreen, MenuBody, MenuOrder]:
+    screen = await load_screen(session, actor, screen_id)
+    if screen.body is None or screen.menu is None:
+        raise ValueError(TEXT_NOT_EDITABLE)
+    return screen, screen.body, screen.menu
+
+
+def _rows_screen(
+    actor: EditorActor, screen: EditorScreen, body: MenuBody, draft: list[int] | None = None
+) -> tuple[str, InlineKeyboardMarkup]:
+    layout = parse_layout(screen.ui.get(setting_key(screen.spec.id)))
+    stale = not layout_fits(body.default_rows, layout, follow_saved_order=follows_saved_order(screen.spec.id))
+    shown = draft if draft is not None else _sizes_of(body.rows)
+    return rows_view(actor, screen.spec, body, shown, stale=stale)
+
+
+async def _rows_step(
     session: AsyncSession, actor: EditorActor, request: RowsRequest
 ) -> tuple[str | None, tuple[str, InlineKeyboardMarkup]]:
-    """Run one step; return the toast and the view to show."""
-    await _check_editing(session, actor)
-    spec, body = await _load_body(session, actor, request.screen_id)
+    """One step of «▦ چیدمان منو»; return the toast and the view to show."""
+    screen, body, menu = await _editable(session, actor, request.screen_id)
+    spec = screen.spec
     if request.view == "o":
-        return None, rows_view(actor, spec, body, _sizes_of(body.rows))
+        return None, _rows_screen(actor, screen, body)
     if request.view in _NEEDS_ROW:
         change = widen_row if request.view == "p" else narrow_row
         draft = change(decode_sizes(request.sizes, total=len(body.keys)), request.row)
-        return None, rows_view(actor, spec, body, draft)
+        return None, _rows_screen(actor, screen, body, draft)
     if request.view == "s":
         rows = split_rows(body.keys, decode_sizes(request.sizes, total=len(body.keys)))
         await save_menu_rows(
@@ -176,19 +214,42 @@ async def _step(
         )
         toast = TEXT_SAVED
     else:
-        await reset_menu_rows(session, actor, screen_id=spec.id, audience=spec.audience.value)
+        await reset_menu_rows(session, actor, menu=menu, audience=spec.audience.value)
         toast = TEXT_RESET
     edit_mode_store.extend(actor)
-    spec, body = await _load_body(session, actor, spec.id)
-    return toast, rows_view(actor, spec, body, _sizes_of(body.rows))
+    screen, body, _ = await _editable(session, actor, spec.id)
+    return toast, _rows_screen(actor, screen, body)
+
+
+async def _order_step(
+    session: AsyncSession, actor: EditorActor, request: RowsRequest
+) -> tuple[str | None, tuple[str, InlineKeyboardMarkup]]:
+    """A move (⬆️/⬇️) or «↺ ترتیب پیش‌فرض» in the edit panel; the panel is shown again."""
+    screen, _, menu = await _editable(session, actor, request.screen_id)
+    spec = screen.spec
+    if request.view == "v":
+        if request.state != screen.state:
+            raise ValueError(TEXT_MENU_CHANGED)
+        new_order = moved_order(menu, request.row, request.target)
+        toast = TEXT_MOVED
+    else:
+        new_order = default_order(menu, shipped_external_order(spec.id))
+        if new_order == list(menu.movable):
+            return TEXT_ORDER_ALREADY_DEFAULT, panel_for(actor, screen)
+        toast = TEXT_ORDER_RESET
+    await save_menu_order(session, actor, menu=menu, audience=spec.audience.value, new_movable=new_order)
+    edit_mode_store.extend(actor)
+    return toast, panel_for(actor, await load_screen(session, actor, spec.id))
 
 
 async def _handle(callback: CallbackQuery, session: AsyncSession, actor: EditorActor, request: RowsRequest) -> None:
-    if request.view == "i":
-        await callback.answer(TEXT_ROW_HINT)
+    if request.view in _HINTS:
+        await callback.answer(_HINTS[request.view])
         return
     try:
-        toast, (text, markup) = await _step(session, actor, request)
+        await _check_editing(session, actor)
+        step = _order_step if request.view in _ORDER_VIEWS else _rows_step
+        toast, (text, markup) = await step(session, actor, request)
     except ValueError as exc:
         await callback.answer(domain_error_text(exc), show_alert=True)
         return

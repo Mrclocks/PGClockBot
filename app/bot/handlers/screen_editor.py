@@ -7,7 +7,9 @@ Callback data ``ed:<a|r>:<view>[:<screen>[:<button>[:<color>]]]``:
 mode, ``o`` a menu's buttons, ``b`` one button, ``t`` new text, ``c`` color,
 ``n``/``nr`` new/default title, ``d``/``dh``/``dr`` new/hidden/default caption;
 every view but the switches needs my edit mode to be on.
-A menu whose rows can be regrouped also links to «▦ چیدمان منو» (``menu_rows_editor``).
+A menu whose rows can be regrouped also links to «▦ چیدمان منو» and shows ⬆️/⬇️ beside its
+own buttons (both handled in ``menu_rows_editor``). Button views carry a short tag of the menu's
+state (``b``/``t``/``c`` end in ``:<tag>``); a tag from before a move or rename is refused.
 Button numbers are positions in ``screen_buttons``; every step rebuilds the
 real menu and re-checks the position and permissions before acting.
 """
@@ -16,6 +18,7 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 from dataclasses import dataclass
 
 from aiogram import F, Router
@@ -29,7 +32,8 @@ from app.bot import keyboards as kb
 from app.bot.edit_mode import CATALOG_ROW_ROOT, CATALOG_ROW_SCREENS, EDIT_CALLBACK_ROOT, MENU_ROWS_ROOT, audience_code
 from app.bot.handlers.button_colors import shop_settings_shop_id
 from app.bot.reply_keyboard_state import is_menu_tap
-from app.bot.screen_registry import SCREENS, ScreenButton, ScreenContext, ScreenSpec, screen_body, screen_buttons
+from app.bot.row_layout import MenuBody
+from app.bot.screen_registry import SCREENS, ScreenButton, ScreenContext, ScreenSpec, external_order, screen_view
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.user_errors import domain_error_text
@@ -43,6 +47,8 @@ from app.services.button_color_editor import (
     set_button_color,
     shared_button_count,
 )
+from app.services.menu_rows import EXTERNAL_ORDER_SETTINGS, MenuOrder, fingerprint, parse_layout
+from app.services.menu_rows import setting_key as rows_setting_key
 from app.services.resellers import get_reseller_profile
 from app.services.rich_text import pack_setting_from_message
 from app.services.screen_editor import (
@@ -93,6 +99,14 @@ BTN_RESET = "↺ رنگ پیش‌فرض"
 BTN_CONTINUE = "✏️ ادامهٔ ویرایش"
 BTN_CATALOG_ROWS = "🗂 نام و رنگ دسته‌ها و پلن‌ها"
 BTN_MENU_ROWS = "▦ چیدمان منو"
+BTN_ORDER_RESET = "↺ ترتیب پیش‌فرض"
+BTN_UP = "⬆️"
+BTN_DOWN = "⬇️"
+TEXT_HINT_ORDER = "روی هر دکمه بزنید تا متن یا رنگش عوض شود؛ با ⬆️ و ⬇️ جایش عوض می‌شود."
+TEXT_SHARED_ORDER = {
+    "menu_order": "ترتیب منوی اصلی بین ادمین و مشتری یکی است و همان ترتیب «ظاهر ربات › چیدمان منو» در وب‌پنل است.",
+    "loyalty_submenu_order": "ترتیب این منو همان ترتیب زیرمنوی باشگاه در وب‌پنل است.",
+}
 TEXT_FEATURE_OFF_FOR_SHOP = "✏️ <b>حالت ویرایش منوها</b>\n\nاین قابلیت فعلاً توسط مدیر سیستم خاموش است."
 TEXT_FEATURE_OFF = "قابلیت ویرایش منوها خاموش است."
 TEXT_SHOP_BOT_ONLY = "حالت ویرایش فروشگاه فقط داخل ربات فروشگاه کار می‌کند."
@@ -119,6 +133,7 @@ class EditorStates(StatesGroup):
     shop_label = State()
 
 
+_STATE = re.compile(r"[0-9a-f]{6}")
 _EDITOR_STATES = frozenset({EditorStates.owner_label.state, EditorStates.shop_label.state})
 # Views that open a text prompt; every other view leaves it.
 _PROMPT_VIEWS = frozenset({"n", "d", "t"})
@@ -131,6 +146,7 @@ class EditRequest:
     screen_id: str = ""
     index: int = -1
     code: str = ""
+    state: str = ""
 
 
 def entry_button(*, for_reseller: bool) -> InlineKeyboardButton:
@@ -147,17 +163,18 @@ def parse_request(data: str | None) -> EditRequest | None:
             return EditRequest(audience, view)
         if view in {"o", "n", "nr", "d", "dh", "dr"} and len(rest) == 1 and rest[0] in SCREENS:
             return EditRequest(audience, view, screen_id=rest[0])
+        state = rest.pop() if len(rest) in {3, 4} and _STATE.fullmatch(rest[-1]) else ""
         if view in {"b", "t"} and len(rest) == 2 and rest[0] in SCREENS:
-            return EditRequest(audience, view, screen_id=rest[0], index=int(rest[1]))
+            return EditRequest(audience, view, screen_id=rest[0], index=int(rest[1]), state=state)
         if view == "c" and len(rest) == 3 and rest[0] in SCREENS:
-            return EditRequest(audience, view, screen_id=rest[0], index=int(rest[1]), code=rest[2])
+            return EditRequest(audience, view, screen_id=rest[0], index=int(rest[1]), code=rest[2], state=state)
     except ValueError:
         return None
     return None
 
 
 def _cb(actor: EditorActor, *parts: object) -> str:
-    return ":".join([EDIT_CALLBACK_ROOT, audience_code(actor), *map(str, parts)])
+    return ":".join([EDIT_CALLBACK_ROOT, audience_code(actor), *(str(part) for part in parts if part != "")])
 
 
 def _button(text: str, data: str, *, style: str | None = None) -> InlineKeyboardButton:
@@ -206,19 +223,13 @@ def _main_menu_rows(actor: EditorActor) -> list[list[InlineKeyboardButton]]:
     ]
 
 
-def panel_view(
-    actor: EditorActor,
-    spec: ScreenSpec,
-    buttons: list[ScreenButton],
-    ui: dict[str, str],
-    *,
-    minutes_left: int,
-    has_rows: bool = False,
-) -> tuple[str, InlineKeyboardMarkup]:
+def panel_view(actor: EditorActor, screen: EditorScreen, *, minutes_left: int) -> tuple[str, InlineKeyboardMarkup]:
+    spec, ui = screen.spec, screen.ui
+    movable = screen.menu.movable if screen.menu else ()
     rows = [
-        [_button(f"{_button_marker(actor, button, ui)} {button.text}", _cb(actor, "b", spec.id, index))]
-        for index, button in enumerate(buttons)
-        if _editable_parts(actor, button, ui) != (False, False)
+        _panel_button_row(actor, screen, index, button, movable)
+        for index, button in enumerate(screen.buttons)
+        if _editable_parts(actor, button, ui) != (False, False) or button.order_key in movable
     ]
     text_rows = []
     if has_title(spec.id):
@@ -228,16 +239,54 @@ def panel_view(
     rows = text_rows + rows
     if spec.id in CATALOG_ROW_SCREENS:
         rows.append([_button(BTN_CATALOG_ROWS, f"{CATALOG_ROW_ROOT}:{audience_code(actor)}:l")])
-    if has_rows:
-        rows.append([_button(BTN_MENU_ROWS, f"{MENU_ROWS_ROOT}:{audience_code(actor)}:o:{spec.id}")])
+    arrangement = _arrangement_row(actor, screen, can_reorder=len(movable) > 1)
+    if arrangement:
+        rows.append(arrangement)
     rows.append([_button(BTN_BACK_TO_MENU, spec.reopen_callback)])
-    hint = (
-        "روی تیتر، توضیح یا یک دکمه بزنید تا آن را عوض کنید."
-        if len(rows) > 1
-        else "در این منو چیزی برای ویرایش شما نیست."
+    lines = [f"✏️ <b>ویرایش: {html.escape(spec.title)}</b>"]
+    if len(movable) > 1:
+        lines.append(TEXT_HINT_ORDER)
+        shared = TEXT_SHARED_ORDER.get(EXTERNAL_ORDER_SETTINGS.get(spec.id, ""))
+        if shared:
+            lines.append(shared)
+    elif len(rows) > 1:
+        lines.append("روی تیتر، توضیح یا یک دکمه بزنید تا آن را عوض کنید.")
+    else:
+        lines.append("در این منو چیزی برای ویرایش شما نیست.")
+    lines.append(f"⏱ حالت ویرایش تا {minutes_left} دقیقهٔ دیگر روشن است.")
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _rows_cb(actor: EditorActor, *parts: object) -> str:
+    return ":".join([MENU_ROWS_ROOT, audience_code(actor), *map(str, parts)])
+
+
+def _panel_button_row(
+    actor: EditorActor, screen: EditorScreen, index: int, button: ScreenButton, movable: tuple[str, ...]
+) -> list[InlineKeyboardButton]:
+    """The button itself, between ⬆️ and ⬇️ when it is one of the menu's movable buttons."""
+    label = _button(
+        f"{_button_marker(actor, button, screen.ui)} {button.text}", _cb(actor, "b", screen.spec.id, index, screen.state)
     )
-    text = f"✏️ <b>ویرایش: {html.escape(spec.title)}</b>\n{hint}\n⏱ حالت ویرایش تا {minutes_left} دقیقهٔ دیگر روشن است."
-    return text, InlineKeyboardMarkup(inline_keyboard=rows)
+    if button.order_key not in movable:
+        return [label]
+    position = movable.index(button.order_key)
+
+    def arrow(text: str, target: int) -> InlineKeyboardButton:
+        if not 0 <= target < len(movable):
+            return _button(text, _rows_cb(actor, "e", screen.spec.id))
+        return _button(text, _rows_cb(actor, "v", screen.spec.id, position, target, screen.state))
+
+    return [arrow(BTN_UP, position - 1), label, arrow(BTN_DOWN, position + 1)]
+
+
+def _arrangement_row(actor: EditorActor, screen: EditorScreen, *, can_reorder: bool) -> list[InlineKeyboardButton]:
+    row: list[InlineKeyboardButton] = []
+    if screen.body is not None:
+        row.append(_button(BTN_MENU_ROWS, _rows_cb(actor, "o", screen.spec.id), style="primary"))
+    if can_reorder:
+        row.append(_button(BTN_ORDER_RESET, _rows_cb(actor, "z", screen.spec.id), style="success"))
+    return row
 
 
 def _caption_preview(ui: dict[str, str], screen_id: str) -> str:
@@ -248,32 +297,38 @@ def _caption_preview(ui: dict[str, str], screen_id: str) -> str:
 
 
 def button_view(
-    actor: EditorActor, spec: ScreenSpec, index: int, button: ScreenButton, ui: dict[str, str]
+    actor: EditorActor, spec: ScreenSpec, index: int, button: ScreenButton, ui: dict[str, str], *, state: str = ""
 ) -> tuple[str, InlineKeyboardMarkup]:
     label_ok, color_ok = _editable_parts(actor, button, ui)
     lines = [f"✏️ <b>{html.escape(spec.title)}</b> › {html.escape(button.text)}", ""]
     rows: list[list[InlineKeyboardButton]] = []
     if label_ok:
-        rows.append([_button(BTN_EDIT_TEXT, _cb(actor, "t", spec.id, index))])
+        rows.append([_button(BTN_EDIT_TEXT, _cb(actor, "t", spec.id, index, state))])
     if color_ok:
         item = find_color_item(ui, button.style_id, for_reseller=actor.for_reseller)
         lines.append(f"رنگ فعلی: {_swatch(item.color)} · پیش‌فرض: {_swatch(item.default)}")
         shared = shared_button_count(item.style_id)
         if shared > 1:
             lines.append(f"⚠️ این رنگ بین {shared} دکمه مشترک است و همه با هم عوض می‌شوند.")
-        rows.extend(_color_rows(actor, spec.id, index, item))
+        rows.extend(_color_rows(actor, spec.id, index, item, state))
     if not label_ok:
         lines.append("متن این دکمه از اینجا قابل ویرایش نیست.")
     rows.append([_button(BTN_BACK, _cb(actor, "o", spec.id))])
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _color_rows(actor: EditorActor, screen_id: str, index: int, item: ColorItem) -> list[list[InlineKeyboardButton]]:
+def _color_rows(
+    actor: EditorActor, screen_id: str, index: int, item: ColorItem, state: str
+) -> list[list[InlineKeyboardButton]]:
     buttons = [
-        _button(f"{'✓ ' if color == item.color else ''}{_swatch(color)}", _cb(actor, "c", screen_id, index, code), style=color or None)
+        _button(
+            f"{'✓ ' if color == item.color else ''}{_swatch(color)}",
+            _cb(actor, "c", screen_id, index, code, state),
+            style=color or None,
+        )
         for code, color in _CODE_TO_COLOR.items()
     ]
-    return [buttons[0:2], buttons[2:4], [_button(BTN_RESET, _cb(actor, "c", screen_id, index, _RESET_CODE))]]
+    return [buttons[0:2], buttons[2:4], [_button(BTN_RESET, _cb(actor, "c", screen_id, index, _RESET_CODE, state))]]
 
 
 def _editable_parts(actor: EditorActor, button: ScreenButton, ui: dict[str, str]) -> tuple[bool, bool]:
@@ -299,31 +354,48 @@ def _button_marker(actor: EditorActor, button: ScreenButton, ui: dict[str, str])
 
 
 @dataclass(frozen=True, slots=True)
-class _Screen:
+class EditorScreen:
+    """A menu as the editor shows it: its buttons, its own rows (if editable) and its order."""
+
     spec: ScreenSpec
     buttons: list[ScreenButton]
     ui: dict[str, str]
-    has_rows: bool = False
+    body: MenuBody | None = None
+    menu: MenuOrder | None = None
+
+    @property
+    def state(self) -> str:
+        return fingerprint([f"{b.order_key}|{b.label_key}|{b.style_id}" for b in self.buttons])
 
 
-async def _load_screen(session: AsyncSession, actor: EditorActor, screen_id: str) -> _Screen:
+def _menu_order(screen_id: str, body: MenuBody, ui: dict[str, str]) -> MenuOrder:
+    return MenuOrder(
+        screen_id=screen_id,
+        keys=body.keys,
+        sizes=tuple(len(row) for row in body.rows),
+        default_rows=body.default_rows,
+        has_saved_rows=parse_layout(ui.get(rows_setting_key(screen_id))) is not None,
+        external_order=external_order(screen_id, ui),
+    )
+
+
+async def load_screen(session: AsyncSession, actor: EditorActor, screen_id: str) -> EditorScreen:
+    """Rebuild the real menu for this actor, after checking they may edit it."""
     spec = SCREENS.get(screen_id)
     if spec is None or spec.audience.value not in actor.audiences:
         raise ValueError(feedback.INVALID)
     ui = await get_all_settings(session, reseller_id=actor.settings_scope)
     profile = await get_reseller_profile(session, actor.shop_id) if actor.for_reseller else None
-    ctx = ScreenContext(ui=ui, profile=profile)
-    return _Screen(spec, screen_buttons(screen_id, ctx), ui, has_rows=screen_body(screen_id, ctx) is not None)
+    buttons, body = screen_view(screen_id, ScreenContext(ui=ui, profile=profile))
+    menu = _menu_order(screen_id, body, ui) if body is not None else None
+    return EditorScreen(spec, buttons, ui, body, menu)
 
 
-def _panel(actor: EditorActor, screen: _Screen) -> tuple[str, InlineKeyboardMarkup]:
-    return panel_view(
-        actor, screen.spec, screen.buttons, screen.ui,
-        minutes_left=edit_mode_store.minutes_left(actor), has_rows=screen.has_rows,
-    )
+def panel_for(actor: EditorActor, screen: EditorScreen) -> tuple[str, InlineKeyboardMarkup]:
+    return panel_view(actor, screen, minutes_left=edit_mode_store.minutes_left(actor))
 
 
-def _button_at(screen: _Screen, index: int) -> ScreenButton:
+def _button_at(screen: EditorScreen, index: int) -> ScreenButton:
     if not 0 <= index < len(screen.buttons):
         raise ValueError(TEXT_MENU_CHANGED)
     return screen.buttons[index]
@@ -364,13 +436,13 @@ async def _screen_views(
         raise ValueError(TEXT_FEATURE_OFF)
     if not edit_mode_store.is_active(actor):
         raise ValueError(TEXT_EDIT_MODE_EXPIRED)
-    screen = await _load_screen(session, actor, request.screen_id)
+    screen = await load_screen(session, actor, request.screen_id)
     if request.view not in _PROMPT_VIEWS and await state.get_state() in _EDITOR_STATES:
         # Back out of a text prompt: a later message must not be saved as its answer.
         await state.set_state(None)
     if request.view == "o":
         await callback.answer()
-        await _show(callback, _panel(actor, screen))
+        await _show(callback, panel_for(actor, screen))
         return
     if request.view in {"n", "d"}:
         await _ask_screen_text(callback, actor, screen, state, part="title" if request.view == "n" else "caption")
@@ -378,6 +450,9 @@ async def _screen_views(
     if request.view in {"nr", "dr", "dh"}:
         await _change_screen_text(callback, session, actor, screen, request.view)
         return
+    if request.state and request.state != screen.state:
+        # The message predates a move: its button number may now name another button.
+        raise ValueError(TEXT_MENU_CHANGED)
     button = _button_at(screen, request.index)
     if request.view == "t":
         await _ask_label(callback, actor, screen, request.index, button, state)
@@ -388,12 +463,12 @@ async def _screen_views(
         await callback.answer(feedback.COLOR_SAVED)
     else:
         await callback.answer()
-    await _show(callback, button_view(actor, screen.spec, request.index, button, screen.ui))
+    await _show(callback, button_view(actor, screen.spec, request.index, button, screen.ui, state=screen.state))
 
 
 async def _save_color(
-    session: AsyncSession, actor: EditorActor, screen: _Screen, button: ScreenButton, code: str
-) -> _Screen:
+    session: AsyncSession, actor: EditorActor, screen: EditorScreen, button: ScreenButton, code: str
+) -> EditorScreen:
     if not _editable_parts(actor, button, screen.ui)[1]:
         raise ValueError("رنگ این دکمه قابل ویرایش نیست.")
     if code == _RESET_CODE:
@@ -405,11 +480,11 @@ async def _save_color(
     else:
         raise ValueError(feedback.INVALID)
     edit_mode_store.extend(actor)
-    return await _load_screen(session, actor, screen.spec.id)
+    return await load_screen(session, actor, screen.spec.id)
 
 
 async def _ask_label(
-    callback: CallbackQuery, actor: EditorActor, screen: _Screen, index: int, button: ScreenButton, state: FSMContext
+    callback: CallbackQuery, actor: EditorActor, screen: EditorScreen, index: int, button: ScreenButton, state: FSMContext
 ) -> None:
     if not can_edit_label(actor, button.label_key):
         raise ValueError("متن این دکمه قابل ویرایش نیست.")
@@ -421,12 +496,12 @@ async def _ask_label(
         f"یک خط، حداکثر {LABEL_MAX_LENGTH} کاراکتر.\n"
         "برای انصراف: انصراف"
     )
-    rows = [[_button(BTN_BACK, _cb(actor, "b", screen.spec.id, index))]]
+    rows = [[_button(BTN_BACK, _cb(actor, "b", screen.spec.id, index, screen.state))]]
     await _show(callback, (prompt, InlineKeyboardMarkup(inline_keyboard=rows)))
 
 
 async def _ask_screen_text(
-    callback: CallbackQuery, actor: EditorActor, screen: _Screen, state: FSMContext, *, part: str
+    callback: CallbackQuery, actor: EditorActor, screen: EditorScreen, state: FSMContext, *, part: str
 ) -> None:
     spec_id = screen.spec.id
     if not (has_title(spec_id) if part == "title" else has_caption(spec_id)):
@@ -457,7 +532,7 @@ async def _ask_screen_text(
 
 
 async def _change_screen_text(
-    callback: CallbackQuery, session: AsyncSession, actor: EditorActor, screen: _Screen, view: str
+    callback: CallbackQuery, session: AsyncSession, actor: EditorActor, screen: EditorScreen, view: str
 ) -> None:
     """Reset the title or caption, or hide the caption, then show the menu's panel again."""
     spec = screen.spec
@@ -468,9 +543,9 @@ async def _change_screen_text(
         part, toast = _SCREEN_TEXT_ACTIONS[view]
         await reset_screen_text(session, actor, screen_id=spec.id, audience=spec.audience.value, part=part)
     edit_mode_store.extend(actor)
-    screen = await _load_screen(session, actor, spec.id)
+    screen = await load_screen(session, actor, spec.id)
     await callback.answer(toast)
-    await _show(callback, _panel(actor, screen))
+    await _show(callback, panel_for(actor, screen))
 
 
 async def _handle(
@@ -510,7 +585,7 @@ async def _save_label_message(message: Message, state: FSMContext, session: Asyn
         await _save_screen_text_message(message, state, session, actor, screen_id, part=data["ed_kind"])
         return
     try:
-        screen = await _load_screen(session, actor, screen_id)
+        screen = await load_screen(session, actor, screen_id)
         button = _button_at(screen, int(index))
         if button.label_key != key:
             raise ValueError(TEXT_MENU_CHANGED)
@@ -556,11 +631,11 @@ async def _answer_with_panel(
     try:
         if not screen_id or not edit_mode_store.is_active(actor):
             raise ValueError(TEXT_EDIT_MODE_EXPIRED)
-        screen = await _load_screen(session, actor, screen_id)
+        screen = await load_screen(session, actor, screen_id)
     except ValueError:
         await message.answer(notice, reply_markup=_after_label_markup(actor, screen_id))
         return
-    text, markup = _panel(actor, screen)
+    text, markup = panel_for(actor, screen)
     await message.answer(f"{notice}\n\n{text}", reply_markup=markup)
 
 
@@ -571,12 +646,12 @@ async def _answer_with_button(
     try:
         if not edit_mode_store.is_active(actor):
             raise ValueError(TEXT_EDIT_MODE_EXPIRED)
-        screen = await _load_screen(session, actor, screen_id)
+        screen = await load_screen(session, actor, screen_id)
         button = _button_at(screen, index)
     except ValueError:
         await _answer_with_panel(message, session, actor, screen_id, feedback.CANCELLED)
         return
-    text, markup = button_view(actor, screen.spec, index, button, screen.ui)
+    text, markup = button_view(actor, screen.spec, index, button, screen.ui, state=screen.state)
     await message.answer(f"{feedback.CANCELLED}\n\n{text}", reply_markup=markup)
 
 
