@@ -1,6 +1,7 @@
 """Settings of the customer's service cancellation, without the cancellation service's own imports.
 
-``users`` reads these to build the settings tabs, so this module imports only ``plan_scope``.
+``users`` reads these to build the settings tabs, so this module imports only ``plan_scope`` and
+``reject_reasons``.
 The defaults keep the behavior shops had before the settings existed: the request is on for every
 plan, an operator approves it, and the remaining share of the payment is only a suggestion.
 """
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.services.plan_scope import PlanScope, parse_plan_scope
+from app.services.reject_reasons import CANCELLATION_REASONS_KEY, MAX_REASONS
 
 ENABLED_KEY = "service_cancel_enabled"
 PLANS_KEY = "service_cancel_plans"
@@ -59,6 +61,8 @@ WEB_FIELDS: list[tuple[str, str, str, str]] = [
     (WINDOW_DAYS_KEY, "مهلت لغو پس از خرید یا تمدید (روز)", "number", "بعد از این مدت درخواست لغو پذیرفته نمی‌شود. ۰ = بدون مهلت."),
     (AUTO_MAX_KEY, "سقف بازگشت خودکار (تومان)", "number",
      "در حالت خودکار، مبلغ بیشتر از این سقف برای تأیید ادمین می‌ماند. ۰ = بدون سقف."),
+    (CANCELLATION_REASONS_KEY, "دلایل آمادهٔ رد درخواست", "textarea",
+     f"هر خط یک دلیل، حداکثر {MAX_REASONS} دلیل. ادمین هنگام رد یکی را انتخاب می‌کند و به مشتری نمایش داده می‌شود."),
 ]
 BOT_FIELDS: list[tuple[str, str, str]] = [(key, label, kind) for key, label, kind, _help in WEB_FIELDS]
 

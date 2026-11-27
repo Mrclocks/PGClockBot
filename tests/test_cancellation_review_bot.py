@@ -10,8 +10,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.bot.handlers import cancellation_review as review
 from app.db.models import Base, BotUser, ServiceCancellation, ShopWallet, UserService
 from app.services import bot_feedback_texts as feedback
+from app.services.reject_reasons import DEFAULT_CANCELLATION_REASONS, parse_reasons
 from app.services.service_cancellations import request_cancellation
-from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
+from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_setting, set_shop_reseller_id
 from tests.postgres_support import scoped_async_engine
 
 CTX = {"is_reseller_bot": False, "reseller_owner_id": None}
@@ -238,12 +239,37 @@ class CancellationReviewBotTests(ReviewCase):
 
     async def test_reject_offers_fixed_reasons_with_back_and_saves_the_chosen_one(self):
         _, edit, _ = await self.press(f"cnrv:r:{self.shop_request}")
-        self.assertEqual(self.shown(edit)[1], [f"cnrv:rn:{self.shop_request}:{key}" for key in review.REJECT_NOTES] + [f"cnrv:v:{self.shop_request}"])
+        defaults = parse_reasons(DEFAULT_CANCELLATION_REASONS)
+        self.assertEqual(
+            self.shown(edit)[1],
+            [f"cnrv:rn:{self.shop_request}:{n}" for n in range(1, len(defaults) + 1)] + [f"cnrv:v:{self.shop_request}"],
+        )
         await self.press(f"cnrv:rn:{self.shop_request}:2")
         row = await self.session.get(ServiceCancellation, self.shop_request)
         await self.session.refresh(row)
-        self.assertEqual((row.status, row.operator_note), ("rejected", review.REJECT_NOTES["2"]))
+        self.assertEqual((row.status, row.operator_note), ("rejected", defaults[1]))
         self.assertEqual(self.panel.writes, 0)
+
+    async def test_reject_uses_the_shops_own_edited_reasons(self):
+        await set_setting(self.session, "service_cancel_reject_reasons", "دلیل یک\n\n<b>دلیل دو</b>\n", reseller_id=2)
+        await set_setting(self.session, "service_cancel_reject_reasons", "دلیل پلتفرم", reseller_id=None)
+        _SETTINGS_CACHE.clear()
+        _, edit, _ = await self.press(f"cnrv:r:{self.shop_request}")
+        self.assertEqual(
+            self.shown(edit)[1], [f"cnrv:rn:{self.shop_request}:1", f"cnrv:rn:{self.shop_request}:2", f"cnrv:v:{self.shop_request}"]
+        )
+        callback, _, _ = await self.press(f"cnrv:rn:{self.shop_request}:3")
+        self.assertTrue(callback.answer.await_args.kwargs["show_alert"], "a number past the list is refused")
+        self.assertEqual(await self.status(self.shop_request), "pending")
+        await self.press(f"cnrv:rn:{self.shop_request}:2")
+        row = await self.session.get(ServiceCancellation, self.shop_request)
+        await self.session.refresh(row)
+        self.assertEqual((row.status, row.operator_note), ("rejected", "<b>دلیل دو</b>"))
+
+    async def test_another_shop_cannot_reject_the_request(self):
+        callback, _, _ = await self.press(f"cnrv:rn:{self.shop_request}:1", shop_id=3)
+        self.assertTrue(callback.answer.await_args.kwargs["show_alert"])
+        self.assertEqual(await self.status(self.shop_request), "pending")
 
     async def test_platform_owner_decides_platform_requests_only(self):
         _, edit, _ = await self.press(f"cnrv:v:{self.platform_request}", owner=True)
