@@ -2426,10 +2426,14 @@ html[dir="rtl"] .ui-switch input:checked:active + .ui-switch-track::after {
   vertical-align: middle;
 }
 :where(button, a):not(.btn) > .btn-ico { margin-inline-end: var(--space-1); }
-.btn:hover, a.btn:hover {
-  background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent);
-  opacity: 1;
-  transform: translateY(-1px);
+/* Only a real pointer hovers: on a touch screen the last tapped button would keep this look (sticky hover)
+   while the page scrolls under it, and read as focused. Touch keeps the press feedback below. */
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover, a.btn:hover {
+    background: color-mix(in srgb, var(--btn-tone, var(--brand)) 15%, transparent);
+    opacity: 1;
+    transform: translateY(-1px);
+  }
 }
 .btn:active:not(:disabled), a.btn:active {
   transform: scale(0.96) translateY(0);
