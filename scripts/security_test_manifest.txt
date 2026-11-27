@@ -654,3 +654,6 @@ tests/test_shop_maintenance.py
 
 # Ready-made reject reasons: one claim per payment, reviewer access, escaped reason text.
 tests/test_payment_reject_reasons.py
+
+# Unanswered ticket reminders: each shop's own switch and staff, one claim per waiting period.
+tests/test_ticket_reminders.py

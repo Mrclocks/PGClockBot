@@ -142,6 +142,7 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("texts", "متن‌های ضروری", [
                 ("support_text", "متن پشتیبانی", "textarea"),
+                ("ticket_reminder_hours", "یادآوری تیکت بی‌پاسخ (ساعت)", "number"),
                 ("purchase_success_text", "موفقیت خرید", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
                 ("payment_reject_reasons", "دلایل رد رسید", "textarea"),
