@@ -510,6 +510,7 @@
   "lucky_wheel_daily_limit": "3",
   "lucky_wheel_enabled": "0",
   "lucky_wheel_free_spins_daily": "0",
+  "lucky_wheel_interval_days": "0",
   "lucky_wheel_spin_cost_points": "10",
   "menu_keyboard_persistent": "0",
   "menu_layout": "compact",

@@ -32,6 +32,10 @@
         <label class="form-field">کولدون (ثانیه)
           <input name="lucky_wheel_cooldown_seconds" type="number" min="0" max="86400" value="{{ lucky_wheel_cooldown_seconds }}" dir="ltr" />
         </label>
+        <label class="form-field">هر چند روز یک‌بار
+          <input name="lucky_wheel_interval_days" type="number" min="0" max="365" value="{{ lucky_wheel_interval_days }}" dir="ltr" />
+          <small class="muted">۰ = بدون محدودیت روزانه؛ ۷ = هر مشتری هفته‌ای یک‌بار</small>
+        </label>
         <label class="form-field">چرخش رایگان روزانه
           <input name="lucky_wheel_free_spins_daily" type="number" min="0" max="50" value="{{ lucky_wheel_free_spins_daily }}" dir="ltr" />
         </label>

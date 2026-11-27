@@ -18,7 +18,7 @@ from app.bot.tg_utils import safe_edit_text
 from app.services.db_safe import rollback_quiet
 from app.config import get_settings
 from app.db.models import BotUser, LoyaltyReward, LoyaltyTier, PointsRule, Role
-from app.services.formatting import format_message, format_toman, kv_line
+from app.services.formatting import format_message, format_toman, format_uptime, kv_line
 from app.services.loyalty import (
     EVENT_LABELS,
     REWARD_TYPE_LABELS,
@@ -440,7 +440,7 @@ async def _build_wheel_hub_text(session: AsyncSession, db_user: BotUser) -> tupl
             )
         )
     if status.cooldown_remaining > 0:
-        lines.append(kv_line("⏳", "زمان انتظار", f"{status.cooldown_remaining} ثانیه"))
+        lines.append(kv_line("⏳", "زمان انتظار", format_uptime(status.cooldown_remaining)))
     if status.block_reason:
         lines.extend(["", f"⚠️ {html.escape(status.block_reason)}"])
     if pool:

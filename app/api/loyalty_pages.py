@@ -27,10 +27,13 @@ from app.services.loyalty import (
 )
 from app.services.lucky_wheel import (
     DEFAULT_SUBMENU_ORDER,
+    MAX_COOLDOWN,
+    MAX_INTERVAL_DAYS,
     PRIZE_TYPE_LABELS as WHEEL_PRIZE_TYPE_LABELS,
     SETTING_COOLDOWN,
     SETTING_DAILY_LIMIT,
     SETTING_FREE_SPINS_DAILY,
+    SETTING_INTERVAL_DAYS,
     SETTING_SPIN_COST,
     SETTING_SUBMENU_ORDER,
     SETTING_WHEEL_ENABLED,
@@ -105,6 +108,7 @@ def _empty_wheel_context() -> dict:
         "lucky_wheel_spin_cost_points": 10,
         "lucky_wheel_daily_limit": 3,
         "lucky_wheel_cooldown_seconds": 0,
+        "lucky_wheel_interval_days": 0,
         "lucky_wheel_free_spins_daily": 0,
         "wheel_prizes": [],
         "wheel_spins": [],
@@ -155,6 +159,7 @@ async def _wheel_panel_context(
             "lucky_wheel_spin_cost_points": int(cfg["spin_cost"]),
             "lucky_wheel_daily_limit": int(cfg["daily_limit"]),
             "lucky_wheel_cooldown_seconds": int(cfg["cooldown_seconds"]),
+            "lucky_wheel_interval_days": int(cfg["interval_days"]),
             "lucky_wheel_free_spins_daily": int(cfg["free_spins_daily"]),
             "wheel_prizes": prizes,
             "wheel_spins": spins,
@@ -626,6 +631,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         lucky_wheel_spin_cost_points: str = Form("10"),
         lucky_wheel_daily_limit: str = Form("3"),
         lucky_wheel_cooldown_seconds: str = Form("0"),
+        lucky_wheel_interval_days: str = Form("0"),
         lucky_wheel_free_spins_daily: str = Form("0"),
         loyalty_submenu_order: str = Form(",".join(DEFAULT_SUBMENU_ORDER)),
     ):
@@ -636,7 +642,8 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         enabled = "1" if str(lucky_wheel_enabled) in {"1", "on", "true", "yes"} else "0"
         cost = clamp_int(lucky_wheel_spin_cost_points, lo=0, hi=1_000_000, default=10)
         daily = clamp_int(lucky_wheel_daily_limit, lo=0, hi=100, default=3)
-        cool = clamp_int(lucky_wheel_cooldown_seconds, lo=0, hi=86_400, default=0)
+        cool = clamp_int(lucky_wheel_cooldown_seconds, lo=0, hi=MAX_COOLDOWN, default=0)
+        interval = clamp_int(lucky_wheel_interval_days, lo=0, hi=MAX_INTERVAL_DAYS, default=0)
         free_d = clamp_int(lucky_wheel_free_spins_daily, lo=0, hi=50, default=0)
         # Respect intentional omissions from the DnD list (no forced re-inject).
         order = ",".join(parse_submenu_order(loyalty_submenu_order, fill_missing=False))
@@ -644,6 +651,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         await set_setting(session, SETTING_SPIN_COST, str(cost), reseller_id=scope)
         await set_setting(session, SETTING_DAILY_LIMIT, str(daily), reseller_id=scope)
         await set_setting(session, SETTING_COOLDOWN, str(cool), reseller_id=scope)
+        await set_setting(session, SETTING_INTERVAL_DAYS, str(interval), reseller_id=scope)
         await set_setting(session, SETTING_FREE_SPINS_DAILY, str(free_d), reseller_id=scope)
         await set_setting(session, SETTING_SUBMENU_ORDER, order, reseller_id=scope)
         return _wheel_redirect(saved=True)

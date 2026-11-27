@@ -852,6 +852,7 @@ DEFAULT_SETTINGS = {
     "lucky_wheel_spin_cost_points": "10",
     "lucky_wheel_daily_limit": "3",
     "lucky_wheel_cooldown_seconds": "0",
+    "lucky_wheel_interval_days": "0",
     "lucky_wheel_free_spins_daily": "0",
     "loyalty_submenu_order": "loy_referral,loy_points,loy_rewards,loy_wheel,loy_history",
     "auto_approve_payments": "0",
