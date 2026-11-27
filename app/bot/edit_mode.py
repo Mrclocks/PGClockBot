@@ -63,8 +63,14 @@ def without_editor() -> Iterator[None]:
 
 def editable_screen(
     screen_id: str | Callable[..., str],
+    *,
+    context: Callable[..., str] | None = None,
 ) -> Callable[[Callable[P, InlineKeyboardMarkup]], Callable[P, InlineKeyboardMarkup]]:
-    """Mark a menu builder as screen *screen_id* (or a function of the builder's arguments)."""
+    """Mark a menu builder as screen *screen_id* (or a function of the builder's arguments).
+
+    ``context`` names which of the screen's lists is shown (e.g. one category's plans); the
+    edit row carries it so the editor opens on that same list.
+    """
 
     def decorate(build: Callable[P, InlineKeyboardMarkup]) -> Callable[P, InlineKeyboardMarkup]:
         @functools.wraps(build)
@@ -76,14 +82,17 @@ def editable_screen(
             actor = _active_editor.get()
             if actor is None:
                 return markup
-            return with_edit_row(markup, actor, resolved)
+            token = context(*args, **kwargs) if context is not None else ""
+            return with_edit_row(markup, actor, resolved, context=token)
 
         return wrapper
 
     return decorate
 
 
-def with_edit_row(markup: InlineKeyboardMarkup, actor: EditorActor, screen_id: str) -> InlineKeyboardMarkup:
+def with_edit_row(
+    markup: InlineKeyboardMarkup, actor: EditorActor, screen_id: str, *, context: str = ""
+) -> InlineKeyboardMarkup:
     # Local import: the registry imports nav_inline, whose builders use this module.
     from app.bot.screen_registry import SCREENS
 
@@ -92,7 +101,7 @@ def with_edit_row(markup: InlineKeyboardMarkup, actor: EditorActor, screen_id: s
         return markup
     button = InlineKeyboardButton(
         text=EDIT_ROW_TEXT,
-        callback_data=f"{EDIT_CALLBACK_ROOT}:{audience_code(actor)}:o:{screen_id}",
+        callback_data=f"{EDIT_CALLBACK_ROOT}:{audience_code(actor)}:o:{screen_id}" + (f":{context}" if context else ""),
     )
     return InlineKeyboardMarkup(inline_keyboard=[*markup.inline_keyboard, [button]])
 

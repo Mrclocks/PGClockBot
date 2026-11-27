@@ -81,6 +81,17 @@ def serialize_layout(rows: Sequence[Sequence[str]]) -> str:
     return json.dumps([list(row) for row in rows], ensure_ascii=False, separators=(",", ":"))
 
 
+def columns_setting_key(screen_id: str) -> str:
+    """Columns of a catalog list (the shop's categories or plans), chosen in the edit panel."""
+    return "menu_cols_" + screen_id.replace(".", "_")
+
+
+def catalog_columns(ui: dict[str, str] | None, screen_id: str) -> int | None:
+    """1 or 2 when the editor fixed the list's columns; None keeps the list's own packing."""
+    value = (ui or {}).get(columns_setting_key(screen_id), "")
+    return int(value) if value in {"1", "2"} else None
+
+
 def follows_saved_order(screen_id: str) -> bool:
     """Whether the saved rows decide the order (False when a web setting owns it)."""
     return screen_id not in EXTERNAL_ORDER_SETTINGS

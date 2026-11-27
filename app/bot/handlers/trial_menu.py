@@ -128,7 +128,7 @@ async def keyboard_get_trial(
     if len(plans) > 1:
         await message.answer(
             format_message("پلن تست", "پلن تست را انتخاب کنید:"),
-            reply_markup=kb.plans_keyboard(plans, ui, back_callback="menu:home", kind="trial"),
+            reply_markup=kb.plans_keyboard(plans, ui, back_callback="menu:home", kind="trial", edit_list="t"),
         )
         return
     await _start_purchase(message, session, plans[0])

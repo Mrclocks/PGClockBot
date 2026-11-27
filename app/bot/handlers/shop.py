@@ -464,6 +464,7 @@ async def shop_kind_fixed(
                 kind="fixed",
                 category_names=cat_names,
                 categories={int(c.id): c for c in all_cats},
+                edit_list="f",
             ),
         )
 
@@ -520,6 +521,7 @@ async def shop_category_pick(
                 back_callback="shop:list",
                 kind="fixed",
                 categories=cat_map,
+                edit_list="n" if cat_id is None else f"c{cat_id}",
             ),
         )
 
@@ -548,6 +550,7 @@ async def shop_kind_trial(
                 ui,
                 back_callback="shop:list",
                 kind="trial",
+                edit_list="t",
             ),
         )
 

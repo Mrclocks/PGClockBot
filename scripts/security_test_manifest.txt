@@ -48,6 +48,8 @@ tests/test_button_color_editor.py
 tests/test_screen_editor.py
 # Menu row layout editor: owner/shop scope, per-shop writes, stale drafts refused.
 tests/test_menu_rows.py
+# Shop lists in the menu editor: catalog order per shop, stale moves refused, columns per shop.
+tests/test_catalog_order.py
 tests/test_hub_entry_labels.py
 # Editable menu titles: owner/shop scope, unsafe titles refused.
 tests/test_screen_titles.py

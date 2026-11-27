@@ -10,8 +10,9 @@ labels. The draft travels in the callback (one digit per row), so nothing is sav
 The edit panel's arrows use ``edl:<a|r>:v:<screen>:<from>:<to>:<tag>`` (move one button
 to the next slot, saved at once), ``z`` («↺ ترتیب پیش‌فرض») and ``e`` (an arrow at either
 end). ``tag`` is the panel's state: a move from an older message is refused, so a double
-tap moves a button one slot only. Every step rebuilds the real menu and re-checks edit
-mode and the actor's audience.
+tap moves a button one slot only. ``edl:<a|r>:w:<shop screen>:<0|1|2>`` sets the columns
+of a shop list (categories, plans, wholesale; 0 = the list's own packing). Every step
+rebuilds the real menu and re-checks edit mode and the actor's audience.
 """
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ from app.bot.screen_registry import SCREENS, ScreenSpec, shipped_external_order
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
+from app.services.catalog_order import save_catalog_columns
 from app.services.menu_rows import (
     TEXT_NOT_EDITABLE,
     TEXT_ORDER_EDGE,
@@ -73,7 +75,8 @@ _REQUEST = re.compile(r"^edl:(a|r):(o|p|m|s|r|i|z|e):([a-z][a-z0-9._]{0,23})(?::
 _MOVE = re.compile(r"^edl:(a|r):v:([a-z][a-z0-9._]{0,23}):(\d{1,2}):(\d{1,2}):([0-9a-f]{6})$")
 _NEEDS_SIZES = frozenset({"p", "m", "s"})
 _NEEDS_ROW = frozenset({"p", "m"})
-_ORDER_VIEWS = frozenset({"v", "z"})
+# The shop lists' columns: 0 keeps the list's own packing, 1 or 2 fix it.
+_COLUMNS = re.compile(r"^edl:(a|r):w:(c\.shop|c\.shop\.plans|c\.shop\.wholesale):([012])$")
 
 BTN_WIDEN = "➕"
 BTN_NARROW = "➖"
@@ -86,6 +89,7 @@ TEXT_UNSAVED = "⚠️ این چیدمان هنوز ذخیره نشده."
 TEXT_SAVED = "✅ چیدمان منو ذخیره شد."
 TEXT_RESET = "✅ چیدمان به حالت پیش‌فرض برگشت."
 TEXT_MOVED = "✅ جای دکمه عوض شد."
+TEXT_COLUMNS_SAVED = "✅ ستون‌های فهرست ذخیره شد."
 TEXT_ORDER_RESET = "✅ ترتیب دکمه‌ها به حالت پیش‌فرض برگشت."
 TEXT_ORDER_ALREADY_DEFAULT = "ترتیب دکمه‌ها همین حالا پیش‌فرض است."
 TEXT_STALE_LAYOUT = "ℹ️ ترتیب این منو در وب‌پنل عوض شده؛ چیدمان ذخیره‌شده کنار رفت و ردیف‌های پیش‌فرض نشان داده می‌شوند."
@@ -106,6 +110,10 @@ class RowsRequest:
 
 
 def parse_request(data: str | None) -> RowsRequest | None:
+    columns = _COLUMNS.match(data or "")
+    if columns is not None:
+        audience, screen_id, value = columns.groups()
+        return RowsRequest(audience, "w", screen_id, sizes=value)
     move = _MOVE.match(data or "")
     if move is not None:
         audience, screen_id, row, target, state = move.groups()
@@ -248,13 +256,26 @@ async def _order_step(
     return toast, panel_for(actor, await load_screen(session, actor, spec.id))
 
 
+async def _columns_step(
+    session: AsyncSession, actor: EditorActor, request: RowsRequest
+) -> tuple[str | None, tuple[str, InlineKeyboardMarkup]]:
+    """The columns of a shop list (categories, plans, wholesale); the panel is shown again."""
+    value = "" if request.sizes == "0" else request.sizes
+    await save_catalog_columns(session, actor, screen_id=request.screen_id, value=value)
+    edit_mode_store.extend(actor)
+    return TEXT_COLUMNS_SAVED, panel_for(actor, await load_screen(session, actor, request.screen_id))
+
+
+_STEPS = {"v": _order_step, "z": _order_step, "w": _columns_step}
+
+
 async def _handle(callback: CallbackQuery, session: AsyncSession, actor: EditorActor, request: RowsRequest) -> None:
     if request.view in _HINTS:
         await callback.answer(_HINTS[request.view])
         return
     try:
         await _check_editing(session, actor)
-        step = _order_step if request.view in _ORDER_VIEWS else _rows_step
+        step = _STEPS.get(request.view, _rows_step)
         toast, (text, markup) = await step(session, actor, request)
     except ValueError as exc:
         await callback.answer(domain_error_text(exc), show_alert=True)

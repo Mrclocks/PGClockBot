@@ -374,7 +374,8 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         _, panel = self._shown(await self._panel("ed:a:o:c.wallet"))
         self.assertIn("edl:a:o:c.wallet", self._data(panel))
         _, shop_panel = self._shown(await self._panel("ed:a:o:c.shop"))
-        self.assertFalse(any(d.startswith("edl:") for d in self._data(shop_panel)))
+        # The shop's first step has its own list tools (columns), but no «▦ چیدمان منو».
+        self.assertFalse(any(d.startswith("edl:a:o:") for d in self._data(shop_panel)))
         _, view = self._shown(await self._owner("edl:a:o:c.wallet"))
         self.assertEqual(view.inline_keyboard[-1][0].callback_data, "ed:a:o:c.wallet")
         _, back = self._shown(await self._panel(view.inline_keyboard[-1][0].callback_data))
