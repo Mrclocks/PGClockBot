@@ -80,12 +80,13 @@ async def render_home(
     offer_import = False
     offer_trial = False
     has_services = False
+    # An empty «نام فروشگاه» means no title line at all, for staff as for customers.
     if effective_role == "admin":
         from app.bot.menu_nav import build_main_reply_keyboard
 
         text, home_send_kw = outbound_setting_text(
             "پنل مدیریت فروشگاه\nاز منوی زیر گزینه را انتخاب کنید.",
-            title_raw=ui.get("shop_title") or "کلاک",
+            title_raw=ui.get("shop_title") or "",
         )
         reply_kb, ui, _ = await build_main_reply_keyboard(
             session,
@@ -106,7 +107,7 @@ async def render_home(
         text, home_send_kw = outbound_setting_text(
             "پنل مدیریت فروشگاه شما\nاز منوی زیر گزینه را انتخاب کنید.\n"
             "برای دیدن منوی مشتری: «پیش‌نمایش منوی کاربر».",
-            title_raw=ui.get("shop_title") or "فروشگاه",
+            title_raw=ui.get("shop_title") or "",
         )
         reply_kb = kb.reseller_hub_main_keyboard(profile, ui)
     else:

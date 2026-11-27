@@ -3,6 +3,9 @@
 The shop screens' edit panels («✏️ ویرایش این منو» on the shop and its plan lists) link here.
 Callback data ``edr:<a|r>:<view>[:<id>[:<color>]]``: ``l`` the list, ``c``/``p`` one category or
 plan, ``cn``/``pn`` ask for a new name, ``ci`` remove a category's icon, ``cc``/``pc`` set a color.
+``edr:<a|r>:m:<list>:<from>:<to>:<tag>`` moves a category or plan of one shop list (the panel's
+⬆️/⬇️) by its web ``sort_order``; ``tag`` is the list's state, so a move from an older message
+is refused and a double tap moves one slot only.
 Every step re-checks edit mode and the catalog permission, and the services re-check that the row
 belongs to the actor's shop.
 """
@@ -25,12 +28,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.edit_mode import CATALOG_ROW_ROOT, EDIT_CALLBACK_ROOT, audience_code
 from app.bot.handlers.plan_catalog_manage import resolve_catalog_staff
-from app.bot.handlers.screen_editor import TEXT_EDIT_MODE_EXPIRED, TEXT_FEATURE_OFF, shop_editor_actor
+from app.bot.handlers.screen_editor import (
+    TEXT_EDIT_MODE_EXPIRED,
+    TEXT_FEATURE_OFF,
+    TEXT_MENU_CHANGED,
+    load_screen,
+    panel_for,
+    shop_editor_actor,
+)
 from app.bot.reply_keyboard_state import is_menu_tap
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan, PlanCategory
 from app.services import bot_feedback_texts as feedback
 from app.services import catalog_row_edits as rows
+from app.services.catalog_order import catalog_list, move_catalog_item, screen_for_token
 from app.services.button_color_editor import COLOR_NAMES, COLOR_SWATCHES
 from app.services.plan_categories import split_category_label_from_message
 from app.services.screen_editor import EditorActor, edit_mode_store, is_editor_enabled
@@ -43,6 +54,7 @@ logger = logging.getLogger(__name__)
 owner_router = Router(name="catalog_row_editor_owner")
 shop_router = Router(name="catalog_row_editor_shop")
 
+_MOVE = re.compile(r"^edr:(a|r):m:(k|f|t|n|w|c\d{1,10}):(\d{1,2}):(\d{1,2}):([0-9a-f]{6})$")
 _REQUEST = re.compile(r"^edr:(a|r):(l|c|p|cn|pn|ci|cc|pc)(?::(\d{1,10}))?(?::([wpsdi]))?$")
 _NEEDS_ID = frozenset({"c", "p", "cn", "pn", "ci", "cc", "pc"})
 _NEEDS_COLOR = frozenset({"cc", "pc"})
@@ -54,6 +66,7 @@ BTN_CLEAR_ICON = "🧹 حذف ایموجی"
 BTN_BACK = "⬅️ بازگشت"
 INHERIT_LABEL = {"c": "↺ رنگ نوع پلن", "p": "↺ رنگ دسته"}
 TEXT_SAVED = "✅ ذخیره شد."
+TEXT_MOVED = "✅ ترتیب ذخیره شد؛ در وب‌پنل هم همین است."
 TEXT_EMPTY = "هنوز دسته یا پلنی برای این فروشگاه ساخته نشده است."
 PROMPT_CATEGORY = "نام تازهٔ دسته را بفرستید. اگر یک ایموجی پرمیوم هم کنارش بفرستید، آیکون دسته می‌شود."
 PROMPT_PLAN = "نام تازهٔ پلن را بفرستید."
@@ -62,6 +75,24 @@ PROMPT_PLAN = "نام تازهٔ پلن را بفرستید."
 class CatalogRowStates(StatesGroup):
     owner_name = State()
     shop_name = State()
+
+
+@dataclass(frozen=True, slots=True)
+class MoveRequest:
+    """⬆️/⬇️ beside a category or plan in the edit panel; ``state`` tags the list it was shown from."""
+
+    token: str
+    index: int
+    target: int
+    state: str
+
+
+def parse_move(data: str | None) -> MoveRequest | None:
+    match = _MOVE.match(data or "")
+    if match is None:
+        return None
+    _, token, index, target, state = match.groups()
+    return MoveRequest(token, int(index), int(target), state)
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,10 +242,27 @@ async def _editing_staff(
     return staff
 
 
+async def _move(session: AsyncSession, actor: EditorActor, staff: dict, move: MoveRequest) -> View:
+    """Move one category or plan, then show the same edit panel again."""
+    listing = await catalog_list(session, shop_id=actor.shop_id, token=move.token)
+    if move.state != listing.state:
+        # The message predates another move: its positions may name other rows now.
+        raise ValueError(TEXT_MENU_CHANGED)
+    await move_catalog_item(session, staff, listing=listing, index=move.index, target=move.target)
+    edit_mode_store.extend(actor)
+    return panel_for(actor, await load_screen(session, actor, screen_for_token(move.token), context=move.token))
+
+
 async def _handle(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext, actor: EditorActor,
     *, is_reseller_bot: bool, reseller_owner_id: int | None,
 ) -> None:
+    move = parse_move(callback.data)
+    if move is not None:
+        await _handle_move(
+            callback, session, db_user, actor, move, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+        )
+        return
     request = parse_request(callback.data)
     if request is None:
         await callback.answer(feedback.INVALID, show_alert=True)
@@ -232,6 +280,23 @@ async def _handle(
     if request.view in _CHANGES:
         edit_mode_store.extend(actor)
     await callback.answer(TEXT_SAVED if request.view in _CHANGES else None)
+    if callback.message:
+        await safe_edit_text(callback.message, text, reply_markup=markup)
+
+
+async def _handle_move(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, actor: EditorActor, move: MoveRequest,
+    *, is_reseller_bot: bool, reseller_owner_id: int | None,
+) -> None:
+    try:
+        staff = await _editing_staff(
+            session, db_user, actor, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+        )
+        text, markup = await _move(session, actor, staff, move)
+    except (ValueError, ShopScopeError) as exc:
+        await callback.answer(domain_error_text(exc), show_alert=True)
+        return
+    await callback.answer(TEXT_MOVED)
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=markup)
 

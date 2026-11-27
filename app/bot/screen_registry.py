@@ -53,6 +53,8 @@ class ScreenContext:
 
     ui: dict[str, str]
     profile: Any = None
+    # The shop's category rows, so the shop menu is built as customers see it (None = sample).
+    categories: list[Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,16 +116,20 @@ def _customer_screens() -> list[ScreenSpec]:
         # The card belongs to one service; the editor returns to the service list.
         customer("c.service", "کارت سرویس", lambda ctx: hubs.service_card_keyboard(0, ctx.ui), "svc:list"),
         customer("c.service_more", "بیشتر سرویس", lambda ctx: hubs.service_more_keyboard(0, ctx.ui, wireguard=True, freeze="pause", transfer="start"), "svc:list"),
-        # The shop's first step with every entry on, so each one can be renamed and recolored.
+        # The shop's first step with every entry on, so each one can be renamed and recolored, and with
+        # the shop's own categories when the editor loaded them.
         customer(
             "c.shop",
             "فروشگاه",
-            lambda ctx: kb.shop_kind_keyboard(ctx.ui, fixed_on=True, trial_on=True, custom_on=True, wholesale_on=True),
+            lambda ctx: kb.shop_kind_keyboard(
+                ctx.ui, fixed_on=True, trial_on=True, custom_on=True, wholesale_on=True, categories=ctx.categories
+            ),
             "shop:list",
         ),
-        # Plan lists belong to a category or kind; the editor returns to the shop's first step.
-        customer("c.shop.plans", "لیست پلن‌ها", lambda ctx: kb.plans_keyboard([], ctx.ui), "shop:list"),
-        customer("c.shop.wholesale", "پلن‌های عمده", lambda ctx: kb.wholesale_plans_keyboard([], ctx.ui), "shop:list"),
+        # Plan lists belong to a category or kind; the editor lists the shop's own plans of that list
+        # itself (catalog_order), so the sample has no plans and no «هنوز پلنی ساخته نشده».
+        customer("c.shop.plans", "لیست پلن‌ها", lambda ctx: kb.plans_keyboard([], ctx.ui, empty_row=False), "shop:list"),
+        customer("c.shop.wholesale", "پلن‌های عمده", lambda ctx: kb.wholesale_plans_keyboard([], ctx.ui, empty_row=False), "shop:list"),
     ]
 
 

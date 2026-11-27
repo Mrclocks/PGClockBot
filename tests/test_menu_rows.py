@@ -374,11 +374,19 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         _, panel = self._shown(await self._panel("ed:a:o:c.wallet"))
         self.assertIn("edl:a:o:c.wallet", self._data(panel))
         _, shop_panel = self._shown(await self._panel("ed:a:o:c.shop"))
-        self.assertFalse(any(d.startswith("edl:") for d in self._data(shop_panel)))
+        # The shop's first step has its own list tools (columns), but no «▦ چیدمان منو».
+        self.assertFalse(any(d.startswith("edl:a:o:") for d in self._data(shop_panel)))
         _, view = self._shown(await self._owner("edl:a:o:c.wallet"))
         self.assertEqual(view.inline_keyboard[-1][0].callback_data, "ed:a:o:c.wallet")
         _, back = self._shown(await self._panel(view.inline_keyboard[-1][0].callback_data))
         self.assertIn("edl:a:o:c.wallet", self._data(back))
+
+    async def test_layout_view_colors_save_and_reset_and_reads_row_sizes_clearly(self) -> None:
+        await self._start_editing()
+        _, view = self._shown(await self._owner("edl:a:o:a.settings"))
+        actions = next(row for row in view.inline_keyboard if row[0].text == rows_ui.BTN_SAVE)
+        self.assertEqual([(b.text, b.style) for b in actions], [(rows_ui.BTN_SAVE, "success"), (rows_ui.BTN_RESET, "danger")])
+        self.assertEqual(view.inline_keyboard[0][1].text, "ردیف ۱: ۲ ستون")
 
     async def test_plus_and_minus_change_only_the_draft_until_saved(self) -> None:
         await self._start_editing()
@@ -469,17 +477,23 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_panel_shows_arrows_beside_the_menu_own_buttons_only(self) -> None:
         await self._start_editing()
-        markup = await self._panel_markup("c.wallet")
-        arrow_rows = [row for row in markup.inline_keyboard if len(row) == 3 and row[0].text == editor_ui.BTN_UP]
-        self.assertEqual(len(arrow_rows), 2)
-        self.assertEqual(arrow_rows[0][0].callback_data, "edl:a:e:c.wallet")  # first ⬆️
-        self.assertEqual(arrow_rows[-1][2].callback_data, "edl:a:e:c.wallet")  # last ⬇️
+        markup = await self._panel_markup("c.support")
+        sides = {editor_ui.BTN_UP, editor_ui.BTN_DOWN, editor_ui.BTN_NO_MOVE}
+        arrow_rows = [row for row in markup.inline_keyboard if len(row) == 3 and row[0].text in sides]
+        # ➖ stands where an arrow would lead nowhere: no ⬆️ on the first button, no ⬇️ on the last.
+        self.assertEqual([(row[0].text, row[2].text) for row in arrow_rows], [
+            (editor_ui.BTN_NO_MOVE, editor_ui.BTN_DOWN),
+            (editor_ui.BTN_UP, editor_ui.BTN_DOWN),
+            (editor_ui.BTN_UP, editor_ui.BTN_NO_MOVE),
+        ])
+        self.assertEqual(arrow_rows[0][0].callback_data, "edl:a:e:c.support")
+        self.assertEqual(arrow_rows[-1][2].callback_data, "edl:a:e:c.support")
         back_label = default_ui()["btn_back"]
         back = next(row for row in markup.inline_keyboard if any(b.text.endswith(back_label) for b in row))
         self.assertEqual(len(back), 1)  # «بازگشت» is fixed: no arrows
-        tools = next(row for row in markup.inline_keyboard if row[0].text == editor_ui.BTN_MENU_ROWS)
+        tools = next(row for row in markup.inline_keyboard if row[0].text == editor_ui.BTN_ORDER_RESET)
         self.assertEqual([(b.text, b.style) for b in tools], [
-            (editor_ui.BTN_MENU_ROWS, "primary"), (editor_ui.BTN_ORDER_RESET, "success"),
+            (editor_ui.BTN_ORDER_RESET, "danger"), (editor_ui.BTN_MENU_ROWS, "primary"),
         ])
 
     async def test_a_move_is_saved_and_shown_to_customers(self) -> None:

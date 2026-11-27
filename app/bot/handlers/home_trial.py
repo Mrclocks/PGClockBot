@@ -67,6 +67,6 @@ async def home_get_trial(
         await callback.answer()
         await callback.message.answer(
             format_message("پلن تست", "پلن تست را انتخاب کنید:"),
-            reply_markup=kb.plans_keyboard(plans, ui, back_callback="menu:home", kind="trial"),
+            reply_markup=kb.plans_keyboard(plans, ui, back_callback="menu:home", kind="trial", edit_list="t"),
         )
     await _remove_offer(callback)

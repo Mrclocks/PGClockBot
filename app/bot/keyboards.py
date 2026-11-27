@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -13,6 +15,7 @@ from app.bot.list_pages import page_of, pager_row
 from app.bot.panel_back import BACK_LABEL_KEY, back_callback
 from app.services.button_icons import icon_kwargs
 from app.services.catalog_pricing import sale_price
+from app.services.menu_rows import catalog_columns
 from app.services.plan_panel_groups import plan_has_pg_link
 from app.config import get_settings
 from app.db.models import Plan, Role
@@ -156,6 +159,18 @@ def _pack_by_label_width(
             pending.append(button)
     rows.extend(chunk_buttons(pending, cols=2))
     return rows
+
+
+def _catalog_rows(
+    buttons: list[InlineKeyboardButton],
+    ui: dict | None,
+    screen_id: str,
+    *,
+    auto: Callable[[list[InlineKeyboardButton]], list[list[InlineKeyboardButton]]],
+) -> list[list[InlineKeyboardButton]]:
+    """A shop list packed in the columns chosen in the menu editor, or by its own rule (``auto``)."""
+    columns = catalog_columns(_resolve_ui(ui), screen_id)
+    return auto(buttons) if columns is None else chunk_buttons(buttons, cols=columns)
 
 
 def pack_long_list(
@@ -1151,7 +1166,7 @@ def shop_kind_keyboard(
     if not rows:
         rows = [[InlineKeyboardButton(text=feedback.NO_PLANS, callback_data="menu:home")]]
     else:
-        rows = chunk_buttons([row[0] for row in rows], cols=2)
+        rows = _catalog_rows([row[0] for row in rows], ui, "c.shop", auto=lambda buttons: chunk_buttons(buttons, cols=2))
         # Same as wallet/support/loyalty hubs — back to welcome (menu:home).
         # Nested plan lists keep back_callback="shop:list" (kind picker), not home.
         rows.append(
@@ -1250,7 +1265,11 @@ def admin_plan_kind_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=pack_detail_rows(rows))
 
 
-@editable_screen("c.shop.plans")
+def _plan_list_token(*_args: object, edit_list: str = "", **_kwargs: object) -> str:
+    return edit_list
+
+
+@editable_screen("c.shop.plans", context=_plan_list_token)
 def plans_keyboard(
     plans: list[Plan],
     ui: dict | None = None,
@@ -1261,8 +1280,14 @@ def plans_keyboard(
     kind: str | None = None,
     category_names: dict[int, str] | None = None,
     categories: dict[int, object] | None = None,
+    edit_list: str = "",
+    empty_row: bool = True,
 ) -> InlineKeyboardMarkup:
-    """Plan name rows — override → category inherit → plan-kind catalog color."""
+    """Plan name rows — override → category inherit → plan-kind catalog color.
+
+    ``edit_list`` names the list for the menu editor (``app.services.catalog_order`` tokens);
+    ``empty_row=False`` leaves out «هنوز پلنی ساخته نشده», which the editor must not offer.
+    """
     from app.services.button_styles import plan_kind_style_id
 
     _ = custom_enabled, wholesale_enabled  # call-site compat
@@ -1292,8 +1317,8 @@ def plans_keyboard(
                 )
             ]
         )
-    rows = _pack_by_label_width([row[0] for row in rows])
-    if not rows:
+    rows = _catalog_rows([row[0] for row in rows], ui, "c.shop.plans", auto=_pack_by_label_width)
+    if not rows and empty_row:
         rows = [
             [
                 _ikb(
@@ -1317,9 +1342,13 @@ def wholesale_plans_keyboard(
     *,
     back_callback: str = "shop:list",
     categories: dict[int, object] | None = None,
+    empty_row: bool = True,
 ) -> InlineKeyboardMarkup:
-    """Wholesale plan names — Back returns to shop kind hub (not this screen)."""
-    rows = _pack_by_label_width(
+    """Wholesale plan names — Back returns to shop kind hub (not this screen).
+
+    ``empty_row=False`` leaves out «هنوز پلنی ساخته نشده» (the menu editor's sample build).
+    """
+    rows = _catalog_rows(
         [
             _ikb(
                 f"{p.name} — {sale_price(p):,} ت".replace(",", "٬"),
@@ -1328,9 +1357,12 @@ def wholesale_plans_keyboard(
                 icon_custom_emoji_id=category_icon_for(p, categories),
             )
             for p in plans
-        ]
+        ],
+        ui,
+        "c.shop.wholesale",
+        auto=_pack_by_label_width,
     )
-    if not rows:
+    if not rows and empty_row:
         rows = [
             [
                 _ikb(

@@ -29,6 +29,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.catalog_panel import BTN_DOWN, BTN_NO_MOVE, BTN_UP, catalog_lines, catalog_rows, columns_row
 from app.bot.edit_mode import CATALOG_ROW_ROOT, CATALOG_ROW_SCREENS, EDIT_CALLBACK_ROOT, MENU_ROWS_ROOT, audience_code
 from app.bot.handlers.button_colors import shop_settings_shop_id
 from app.bot.reply_keyboard_state import is_menu_tap
@@ -47,7 +48,8 @@ from app.services.button_color_editor import (
     set_button_color,
     shared_button_count,
 )
-from app.services.menu_rows import EXTERNAL_ORDER_SETTINGS, MenuOrder, fingerprint, parse_layout
+from app.services.catalog_order import CATALOG_SCREENS, CatalogList, catalog_list, default_token, is_list_token
+from app.services.menu_rows import EXTERNAL_ORDER_SETTINGS, MenuOrder, catalog_columns, fingerprint, parse_layout
 from app.services.menu_rows import setting_key as rows_setting_key
 from app.services.resellers import get_reseller_profile
 from app.services.rich_text import pack_setting_from_message
@@ -100,8 +102,6 @@ BTN_CONTINUE = "✏️ ادامهٔ ویرایش"
 BTN_CATALOG_ROWS = "🗂 نام و رنگ دسته‌ها و پلن‌ها"
 BTN_MENU_ROWS = "▦ چیدمان منو"
 BTN_ORDER_RESET = "↺ ترتیب پیش‌فرض"
-BTN_UP = "⬆️"
-BTN_DOWN = "⬇️"
 TEXT_HINT_ORDER = "روی هر دکمه بزنید تا متن یا رنگش عوض شود؛ با ⬆️ و ⬇️ جایش عوض می‌شود."
 TEXT_SHARED_ORDER = {
     "menu_order": "ترتیب منوی اصلی بین ادمین و مشتری یکی است و همان ترتیب «ظاهر ربات › چیدمان منو» در وب‌پنل است.",
@@ -147,6 +147,7 @@ class EditRequest:
     index: int = -1
     code: str = ""
     state: str = ""
+    context: str = ""
 
 
 def entry_button(*, for_reseller: bool) -> InlineKeyboardButton:
@@ -163,6 +164,8 @@ def parse_request(data: str | None) -> EditRequest | None:
             return EditRequest(audience, view)
         if view in {"o", "n", "nr", "d", "dh", "dr"} and len(rest) == 1 and rest[0] in SCREENS:
             return EditRequest(audience, view, screen_id=rest[0])
+        if view == "o" and len(rest) == 2 and rest[0] in CATALOG_SCREENS and is_list_token(rest[1]):
+            return EditRequest(audience, view, screen_id=rest[0], context=rest[1])
         state = rest.pop() if len(rest) in {3, 4} and _STATE.fullmatch(rest[-1]) else ""
         if view in {"b", "t"} and len(rest) == 2 and rest[0] in SCREENS:
             return EditRequest(audience, view, screen_id=rest[0], index=int(rest[1]), state=state)
@@ -236,15 +239,19 @@ def panel_view(actor: EditorActor, screen: EditorScreen, *, minutes_left: int) -
         text_rows.append([_button(f"📝 تیتر: {screen_title(ui, spec.id)}", _cb(actor, "n", spec.id))])
     if has_caption(spec.id):
         text_rows.append([_button(f"📄 توضیح: {_caption_preview(ui, spec.id)}", _cb(actor, "d", spec.id))])
-    rows = text_rows + rows
+    rows = text_rows + _catalog_rows(actor, screen) + rows
     if spec.id in CATALOG_ROW_SCREENS:
         rows.append([_button(BTN_CATALOG_ROWS, f"{CATALOG_ROW_ROOT}:{audience_code(actor)}:l")])
     arrangement = _arrangement_row(actor, screen, can_reorder=len(movable) > 1)
     if arrangement:
         rows.append(arrangement)
+    if screen.catalog is not None:
+        rows.append(columns_row(audience_code(actor), spec.id, catalog_columns(ui, spec.id)))
     rows.append([_button(BTN_BACK_TO_MENU, spec.reopen_callback)])
     lines = [f"✏️ <b>ویرایش: {html.escape(spec.title)}</b>"]
-    if len(movable) > 1:
+    if screen.catalog is not None and screen.catalog.items:
+        lines.extend(catalog_lines(screen.catalog))
+    elif len(movable) > 1:
         lines.append(TEXT_HINT_ORDER)
         shared = TEXT_SHARED_ORDER.get(EXTERNAL_ORDER_SETTINGS.get(spec.id, ""))
         if shared:
@@ -257,6 +264,12 @@ def panel_view(actor: EditorActor, screen: EditorScreen, *, minutes_left: int) -
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _catalog_rows(actor: EditorActor, screen: EditorScreen) -> list[list[InlineKeyboardButton]]:
+    if screen.catalog is None:
+        return []
+    return catalog_rows(audience_code(actor), screen.spec.id, screen.catalog)
+
+
 def _rows_cb(actor: EditorActor, *parts: object) -> str:
     return ":".join([MENU_ROWS_ROOT, audience_code(actor), *map(str, parts)])
 
@@ -264,7 +277,7 @@ def _rows_cb(actor: EditorActor, *parts: object) -> str:
 def _panel_button_row(
     actor: EditorActor, screen: EditorScreen, index: int, button: ScreenButton, movable: tuple[str, ...]
 ) -> list[InlineKeyboardButton]:
-    """The button itself, between ⬆️ and ⬇️ when it is one of the menu's movable buttons."""
+    """The button itself, between ⬆️ and ⬇️ when it is one of the menu's movable buttons (➖ at either end)."""
     label = _button(
         f"{_button_marker(actor, button, screen.ui)} {button.text}", _cb(actor, "b", screen.spec.id, index, screen.state)
     )
@@ -274,7 +287,7 @@ def _panel_button_row(
 
     def arrow(text: str, target: int) -> InlineKeyboardButton:
         if not 0 <= target < len(movable):
-            return _button(text, _rows_cb(actor, "e", screen.spec.id))
+            return _button(BTN_NO_MOVE, _rows_cb(actor, "e", screen.spec.id))
         return _button(text, _rows_cb(actor, "v", screen.spec.id, position, target, screen.state))
 
     return [arrow(BTN_UP, position - 1), label, arrow(BTN_DOWN, position + 1)]
@@ -282,10 +295,10 @@ def _panel_button_row(
 
 def _arrangement_row(actor: EditorActor, screen: EditorScreen, *, can_reorder: bool) -> list[InlineKeyboardButton]:
     row: list[InlineKeyboardButton] = []
+    if can_reorder:
+        row.append(_button(BTN_ORDER_RESET, _rows_cb(actor, "z", screen.spec.id), style="danger"))
     if screen.body is not None:
         row.append(_button(BTN_MENU_ROWS, _rows_cb(actor, "o", screen.spec.id), style="primary"))
-    if can_reorder:
-        row.append(_button(BTN_ORDER_RESET, _rows_cb(actor, "z", screen.spec.id), style="success"))
     return row
 
 
@@ -362,6 +375,8 @@ class EditorScreen:
     ui: dict[str, str]
     body: MenuBody | None = None
     menu: MenuOrder | None = None
+    # The shop's categories or one plan list, for the shop screens (``CATALOG_SCREENS``).
+    catalog: CatalogList | None = None
 
     @property
     def state(self) -> str:
@@ -379,16 +394,40 @@ def _menu_order(screen_id: str, body: MenuBody, ui: dict[str, str]) -> MenuOrder
     )
 
 
-async def load_screen(session: AsyncSession, actor: EditorActor, screen_id: str) -> EditorScreen:
-    """Rebuild the real menu for this actor, after checking they may edit it."""
+# The plan list each person last opened per shop screen, so views without the list in their
+# callback (a button's color, «⬅️ بازگشت») come back to the same list. Bounded like edit mode.
+_LIST_TOKENS: dict[tuple[int, int, str], str] = {}
+_LIST_TOKENS_LIMIT = 1000
+
+
+def _list_token(actor: EditorActor, screen_id: str, context: str) -> str:
+    key = (actor.user_id, actor.shop_id or 0, screen_id)
+    if context:
+        _LIST_TOKENS.pop(key, None)
+        _LIST_TOKENS[key] = context
+        while len(_LIST_TOKENS) > _LIST_TOKENS_LIMIT:
+            _LIST_TOKENS.pop(next(iter(_LIST_TOKENS)))
+        return context
+    return _LIST_TOKENS.get(key) or default_token(screen_id)
+
+
+async def load_screen(session: AsyncSession, actor: EditorActor, screen_id: str, *, context: str = "") -> EditorScreen:
+    """Rebuild the real menu for this actor, after checking they may edit it.
+
+    For the shop screens it also reads the list shown there (``context``, or the one last opened).
+    """
     spec = SCREENS.get(screen_id)
     if spec is None or spec.audience.value not in actor.audiences:
         raise ValueError(feedback.INVALID)
     ui = await get_all_settings(session, reseller_id=actor.settings_scope)
     profile = await get_reseller_profile(session, actor.shop_id) if actor.for_reseller else None
-    buttons, body = screen_view(screen_id, ScreenContext(ui=ui, profile=profile))
+    catalog = None
+    if screen_id in CATALOG_SCREENS:
+        catalog = await catalog_list(session, shop_id=actor.shop_id, token=_list_token(actor, screen_id, context))
+    categories = list(catalog.categories) if catalog is not None and catalog.categories else None
+    buttons, body = screen_view(screen_id, ScreenContext(ui=ui, profile=profile, categories=categories))
     menu = _menu_order(screen_id, body, ui) if body is not None else None
-    return EditorScreen(spec, buttons, ui, body, menu)
+    return EditorScreen(spec, buttons, ui, body, menu, catalog)
 
 
 def panel_for(actor: EditorActor, screen: EditorScreen) -> tuple[str, InlineKeyboardMarkup]:
@@ -436,7 +475,7 @@ async def _screen_views(
         raise ValueError(TEXT_FEATURE_OFF)
     if not edit_mode_store.is_active(actor):
         raise ValueError(TEXT_EDIT_MODE_EXPIRED)
-    screen = await load_screen(session, actor, request.screen_id)
+    screen = await load_screen(session, actor, request.screen_id, context=request.context)
     if request.view not in _PROMPT_VIEWS and await state.get_state() in _EDITOR_STATES:
         # Back out of a text prompt: a later message must not be saved as its answer.
         await state.set_state(None)
