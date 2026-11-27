@@ -92,6 +92,34 @@ class ShopPurchaseTests(ShopFixture):
         me = (await self.shop_get("/api/mini/me")).json()
         self.assertFalse(me["customer"]["wallet_pay_enabled"])
 
+    async def test_shop_maintenance_stops_new_purchases_in_the_mini_app(self) -> None:
+        async with self.Session() as session:
+            await set_setting(session, "shop_maintenance_enabled", "1", reseller_id=SHOP)
+            await set_setting(session, "shop_maintenance_text", "تا ساعت ۵ بسته‌ایم", reseller_id=SHOP)
+        clear_settings_cache()
+        for path, body in (
+            ("/api/mini/buy", {"plan_id": SHOP_PLAN, "price": 5_000}),
+            ("/api/mini/buy", {"plan_id": SHOP_TRIAL}),
+            ("/api/mini/checkout", {"plan_id": SHOP_PLAN, "price": 5_000, "code": "OFF"}),
+            ("/api/mini/checkout/1/pay", {}),
+        ):
+            with self.subTest(path=path, body=body):
+                response = await self.post(path, body)
+                self.assertEqual(response.status_code, 403, response.text)
+                self.assertEqual(response.json()["detail"], "تا ساعت ۵ بسته‌ایم")
+        async with self.Session() as session:
+            self.assertEqual(await session.scalar(select(func.count()).select_from(Order)), 0)
+        self.assertEqual(await self.purses(), (50_000, 7_000))
+        self.delivered.assert_not_awaited()
+
+    async def test_platform_maintenance_does_not_close_a_shop(self) -> None:
+        async with self.Session() as session:
+            await set_setting(session, "shop_maintenance_enabled", "1", reseller_id=None)
+        clear_settings_cache()
+        shop = await self.post("/api/mini/buy", {"plan_id": SHOP_PLAN, "price": 5_000})
+        platform = await self.post("/api/mini/buy", {"plan_id": PLATFORM_PLAN}, key=None, token=MAIN_TOKEN)
+        self.assertEqual((shop.status_code, platform.status_code), (200, 403))
+
     async def test_renewal_and_addons_need_a_service_the_shop_sold(self) -> None:
         for path in ("/api/mini/service/102/renewal-preview?plan_id=51", "/api/mini/service/103/addons"):
             with self.subTest(path=path):
