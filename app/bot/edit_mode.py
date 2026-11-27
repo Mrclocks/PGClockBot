@@ -1,5 +1,8 @@
 """Adds «✏️ ویرایش این منو» under registered menus while edit mode is on.
 
+Every ``@editable_screen`` builder also runs with its menu id published (see
+``app.bot.row_layout``), so the menu's saved row layout applies to everyone.
+
 ``EditModeMiddleware`` looks up the person's edit-mode switch once per update
 (a dictionary read; the settings read only happens when the switch is on) and
 publishes the active editor in a context variable. Menu builders marked with
@@ -18,6 +21,7 @@ from typing import Any, ParamSpec
 from aiogram import BaseMiddleware
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, TelegramObject
 
+from app.bot.row_layout import menu_screen
 from app.services.screen_editor import EditorActor, edit_mode_store, is_editor_enabled
 
 P = ParamSpec("P")
@@ -27,6 +31,8 @@ EDIT_CALLBACK_ROOT = "ed"
 # The shop's own categories and plans, edited from the shop screens' edit panels.
 CATALOG_ROW_ROOT = "edr"
 CATALOG_ROW_SCREENS = frozenset({"c.shop", "c.shop.plans", "c.shop.wholesale"})
+# «▦ چیدمان منو»: how many buttons share each row of a menu.
+MENU_ROWS_ROOT = "edl"
 
 _active_editor: ContextVar[EditorActor | None] = ContextVar("active_editor", default=None)
 
@@ -63,11 +69,13 @@ def editable_screen(
     def decorate(build: Callable[P, InlineKeyboardMarkup]) -> Callable[P, InlineKeyboardMarkup]:
         @functools.wraps(build)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> InlineKeyboardMarkup:
-            markup = build(*args, **kwargs)
+            resolved = screen_id(*args, **kwargs) if callable(screen_id) else screen_id
+            # Publishes the menu so its packer applies the menu's saved row layout.
+            with menu_screen(resolved):
+                markup = build(*args, **kwargs)
             actor = _active_editor.get()
             if actor is None:
                 return markup
-            resolved = screen_id(*args, **kwargs) if callable(screen_id) else screen_id
             return with_edit_row(markup, actor, resolved)
 
         return wrapper

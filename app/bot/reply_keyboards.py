@@ -18,6 +18,7 @@ from app.services.trial_offer import TRIAL_LABEL_KEY, TRIAL_MENU_KEY
 # Bind helpers/constants from keyboards after that module has defined them
 # (keyboards imports this module mid-file, once primitives exist).
 from app.bot.keyboard_guard import register_main_keyboard
+from app.bot.row_layout import arrange_buttons, menu_screen
 from app.bot import keyboards as _k
 import logging
 
@@ -709,6 +710,26 @@ def _pack_reply_button(action: str, text: str, ui: dict | None) -> KeyboardButto
     return _kb(text, action=action, ui=ui)
 
 
+def _default_reply_rows(
+    entries: list[tuple[str, str]], ui: dict | None
+) -> tuple[list[list[KeyboardButton]], dict[int, str]]:
+    """Rows from the panel's ``menu_layout`` (two per row, or one), and each button's action."""
+    items = [(a, t) for a, t in entries if (t or "").strip()]
+    width = 2 if _menu_layout(ui) == "compact" else 1
+    rows: list[list[KeyboardButton]] = []
+    actions: dict[int, str] = {}
+    for i in range(0, len(items), width):
+        row: list[KeyboardButton] = []
+        for action, text in items[i : i + width]:
+            button = _pack_reply_button(action, text, ui)
+            if button is not None:
+                row.append(button)
+                actions[id(button)] = action
+        if row:
+            rows.append(row)
+    return rows, actions
+
+
 def _pack_reply_rows(
     entries: list[tuple[str, str]],
     ui: dict | None,
@@ -716,20 +737,8 @@ def _pack_reply_rows(
     footer: list[str | tuple[str, ...]] | None = None,
     footer_row: list[str | tuple[str, ...]] | None = None,
 ) -> list[list[KeyboardButton]]:
-    layout = _menu_layout(ui)
-    items = [(a, t) for a, t in entries if (t or "").strip()]
-    rows: list[list[KeyboardButton]] = []
-    if layout == "compact":
-        for i in range(0, len(items), 2):
-            chunk = items[i : i + 2]
-            btns = [b for a, t in chunk if (b := _pack_reply_button(a, t, ui)) is not None]
-            if btns:
-                rows.append(btns)
-    else:
-        for a, t in items:
-            btn = _pack_reply_button(a, t, ui)
-            if btn is not None:
-                rows.append([btn])
+    default_rows, actions = _default_reply_rows(entries, ui)
+    rows = arrange_buttons(default_rows, ui, key=lambda button: actions.get(id(button)))
 
     def _footer_btns(items_in: list[str | tuple[str, ...]]) -> list[KeyboardButton]:
         out: list[KeyboardButton] = []
@@ -761,6 +770,10 @@ def _submenu_footer(ui: dict | None = None) -> list[tuple[str, str]]:
         (REPLY_ACTION_BACK, _back_label(ui)),
         (REPLY_ACTION_HOME, _home_label(ui)),
     ]
+
+
+# The main menu's row layout as edited in «✏️ ویرایش منوی اصلی» (screen_registry ids).
+_MAIN_MENU_SCREENS = {Role.USER.value: "c.main", Role.ADMIN.value: "a.main"}
 
 
 def main_reply_keyboard(
@@ -813,9 +826,10 @@ def main_reply_keyboard(
         entries.append((preview_exit_action, exit_label))
     # Only the staff preview (which has its own exit row) drops «شروع مجدد»; the
     # customer keyboard rebuilt after a purchase or receipt keeps it.
-    rows = _pack_reply_rows(
-        entries, ui, footer=[] if preview_exit_action else _restart_footer(ui)
-    )
+    with menu_screen(_MAIN_MENU_SCREENS.get(map_role)):
+        rows = _pack_reply_rows(
+            entries, ui, footer=[] if preview_exit_action else _restart_footer(ui)
+        )
     return register_main_keyboard(
         _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…", persistent=is_menu_keyboard_persistent(ui))
     )

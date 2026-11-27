@@ -35,6 +35,7 @@ from app.bot.hub_entries import (
 from app.bot.broadcast_entries import BROADCAST_HISTORY
 from app.bot.keyboards import _ikb, _label_or, _t
 from app.bot.pg_entries import PG_ADMINS, PG_HOSTS, PG_INBOUNDS
+from app.bot.row_layout import arrange_buttons
 from app.bot.list_pages import Page, page_of, pager_row
 from app.bot.payg_review_entries import PAYG_REVIEW
 from app.bot.service_cleanup_entries import ADMIN_SERVICE_CLEANUP, SHOP_SERVICE_CLEANUP
@@ -393,6 +394,7 @@ def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             ),
         ],
     ]
+    rows = arrange_buttons(rows, ui)
     rows.append(
         [
             _ikb(
@@ -446,6 +448,7 @@ def support_hub_keyboard(
             ),
         ]
     )
+    rows = arrange_buttons(rows, ui)
     if contact_rows:
         rows.extend(contact_rows)
     rows.append(
@@ -500,9 +503,7 @@ def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         for key, text in entries
         if key in cb_map
     ]
-    rows: list[list[InlineKeyboardButton]] = []
-    for i in range(0, len(buttons), 2):
-        rows.append(buttons[i : i + 2])
+    rows = arrange_buttons(_pairs(buttons), ui)
     rows.append(
         [
             _ikb(
@@ -550,11 +551,14 @@ def _pack_hub_keyboard(
     *,
     back_callback: str,
 ) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    for i in range(0, len(buttons), 2):
-        rows.append(buttons[i : i + 2])
+    rows = arrange_buttons(_pairs(buttons), ui)
     rows.append(_hub_back_row(ui, callback_data=back_callback))
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _pairs(buttons: list[InlineKeyboardButton]) -> list[list[InlineKeyboardButton]]:
+    """The default hub rows: two buttons side by side."""
+    return [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
 
 
 def queue_shortcut_row(
@@ -662,13 +666,15 @@ def admin_groups_hub_keyboard(
     if shortcuts:
         rows.append(shortcuts)
     # Open work first; then the command center, which opens any other screen by name.
-    rows.append([_hub_entry_button(ui, ADMIN_COMMAND_CENTER), _hub_entry_button(ui, ADMIN_SEARCH)])
     # Group messages and quick links share one row under the groups: the most used tools, one tap away.
     broadcast = [b for b in buttons if b.callback_data == "nv:adm:broadcast"]
     groups = [b for b in buttons if b.callback_data != "nv:adm:broadcast"]
-    for i in range(0, len(groups), 2):
-        rows.append(groups[i : i + 2])
-    rows.append([*broadcast, _hub_entry_button(ui, ADMIN_QUICK_LINKS)])
+    body = [
+        [_hub_entry_button(ui, ADMIN_COMMAND_CENTER), _hub_entry_button(ui, ADMIN_SEARCH)],
+        *_pairs(groups),
+        [*broadcast, _hub_entry_button(ui, ADMIN_QUICK_LINKS)],
+    ]
+    rows.extend(arrange_buttons(body, ui))
     rows.append(
         [
             _ikb(
@@ -1061,11 +1067,13 @@ def reseller_manage_hub_keyboard(
     )
     if shortcuts:
         rows.append(shortcuts)
-    rows.append([_hub_entry_button(ui, SHOP_COMMAND_CENTER), _hub_entry_button(ui, SHOP_SEARCH)])
-    for i in range(0, len(buttons), 2):
-        rows.append(buttons[i : i + 2])
-    # Like the admin panel: group messages beside quick links in one row.
-    rows.append([*_reseller_entry_buttons(home_entries(entries), ui, {}), _hub_entry_button(ui, SHOP_QUICK_LINKS)])
+    body = [
+        [_hub_entry_button(ui, SHOP_COMMAND_CENTER), _hub_entry_button(ui, SHOP_SEARCH)],
+        *_pairs(buttons),
+        # Like the admin panel: group messages beside quick links in one row.
+        [*_reseller_entry_buttons(home_entries(entries), ui, {}), _hub_entry_button(ui, SHOP_QUICK_LINKS)],
+    ]
+    rows.extend(arrange_buttons(body, ui))
     rows.append(_hub_back_row(ui, callback_data="menu:home"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1231,9 +1239,7 @@ def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
         for key, text in _admin_resellers_submenu_entries(ui)
         if key in cb_map
     ]
-    rows: list[list[InlineKeyboardButton]] = []
-    for i in range(0, len(buttons), 2):
-        rows.append(buttons[i : i + 2])
+    rows = arrange_buttons(_pairs(buttons), ui)
     rows.append(_hub_back_row(ui, callback_data="nv:adm:people"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1396,7 +1402,7 @@ def admin_plans_audience_keyboard(
         for key, text in _admin_plans_list_entries(ui)
         if key in cb_map
     ]
-    rows = [actions[i : i + 2] for i in range(0, len(actions), 2)]
+    rows = arrange_buttons(_pairs(actions), ui)
     rows.extend(plan_rows or [])
     if pager:
         rows.append(pager)
@@ -1474,7 +1480,7 @@ def service_card_keyboard(service_id: int, ui: dict | None = None) -> InlineKeyb
     Reuses existing ``svc:*`` / ``guide:svc:*`` callbacks — no duplicated business logic.
     """
     sid = int(service_id)
-    rows: list[list[InlineKeyboardButton]] = [
+    actions: list[list[InlineKeyboardButton]] = [
         [
             _service_button(ui, "btn_renew", "🔄 تمدید", f"svc:renew:{sid}", "svc_renew", style_fallback="primary"),
             _service_button(ui, "btn_svc_addon", "➕ حجم / زمان", f"svc:addon:{sid}", "svc_addon", style_fallback="primary"),
@@ -1487,8 +1493,9 @@ def service_card_keyboard(service_id: int, ui: dict | None = None) -> InlineKeyb
             ),
         ],
         [_service_button(ui, "btn_svc_more", "⚙️ بیشتر", f"svc:more:{sid}", "svc_more")],
-        [_service_button(ui, "btn_back", "⬅️ بازگشت", SERVICES_LIST_CALLBACK, "back")],
     ]
+    rows = arrange_buttons(actions, ui)
+    rows.append([_service_button(ui, "btn_back", "⬅️ بازگشت", SERVICES_LIST_CALLBACK, "back")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
