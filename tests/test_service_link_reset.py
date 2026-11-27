@@ -314,6 +314,63 @@ class LinkResetBotTests(LinkResetHarness):
         self.assertEqual(self.pg.revoked, [500])
 
 
+class LinkResetMiniAppTests(LinkResetHarness):
+    """The Mini App endpoints: only the user's own service in this Mini App's shop, fixed error texts."""
+
+    async def client_for(self, user_id: int):
+        import httpx
+        from fastapi import FastAPI
+
+        from app.api.miniapp_link_reset import register_miniapp_link_reset
+
+        async def get_db():
+            async with self.Session() as session:
+                yield session
+
+        async def load_user(session, _request):
+            return await session.get(BotUser, user_id)
+
+        app = FastAPI()
+        register_miniapp_link_reset(app, get_db=get_db)
+        for target, value in (
+            ("app.api.miniapp_link_reset.load_mini_user", load_user),
+            ("app.api.miniapp_link_reset._require_commerce_ready", AsyncMock()),
+            ("app.api.miniapp_link_reset._scope_ui", AsyncMock(return_value=UI)),
+        ):
+            patcher = patch(target, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+        self.addAsyncCleanup(client.aclose)
+        return client
+
+    async def test_the_owner_sees_the_offer_and_gets_the_new_link_once(self) -> None:
+        client = await self.client_for(OWNER)
+        offer = await client.get("/api/mini/service/10/link-reset")
+        self.assertEqual((offer.status_code, offer.json()), (200, {"offered": True, "left": 2}))
+        self.assertEqual(offer.headers["cache-control"], "no-store, private")
+        done = await client.post("/api/mini/service/10/link-reset")
+        self.assertEqual(done.json(), {"status": "done", "subscription_url": NEW_URL})
+        again = await client.post("/api/mini/service/10/link-reset")
+        self.assertEqual(again.status_code, 400)
+        self.assertIn("تازگی", again.json()["detail"])
+        self.assertEqual(self.pg.revoked, [500])
+
+    async def test_another_customer_or_another_shops_service_is_not_found(self) -> None:
+        other = await self.client_for(OTHER)
+        self.assertEqual((await other.get("/api/mini/service/10/link-reset")).status_code, 404)
+        self.assertEqual((await other.post("/api/mini/service/10/link-reset")).status_code, 404)
+        owner = await self.client_for(OWNER)
+        self.assertEqual((await owner.post("/api/mini/service/11/link-reset")).status_code, 404)
+        self.assertEqual(self.pg.revoked, [])
+
+    async def test_a_panel_refusal_shows_the_fixed_text_never_the_panels(self) -> None:
+        self.pg.refuse = 403
+        response = await (await self.client_for(OWNER)).post("/api/mini/service/10/link-reset")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], reset.REFUSED)
+
+
 class LinkResetMigrationTests(unittest.TestCase):
     def test_upgrade_twice_and_downgrade(self) -> None:
         path = ROOT / "alembic/versions/0142_service_link_resets.py"

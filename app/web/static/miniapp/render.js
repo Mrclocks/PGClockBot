@@ -302,6 +302,7 @@
     }
     if (features.manage !== false) {
       if (open) rows.push(actionRow("automation", id, "auto", "تمدید خودکار", { tone: "teal" }));
+      if (open && s.link_reset_allowed) rows.push(actionRow("link-reset", id, "link", "تغییر لینک اشتراک", { tone: "blue" }));
       rows.push(actionRow("cancellation", id, "cancel", s.is_cancelled || s.cancellation_pending ? "وضعیت درخواست لغو" : "درخواست لغو سرویس", { danger: true }));
     }
     return rows.length ? `<section class="card list-card" aria-label="عملیات سرویس"><h2 class="card-title">مدیریت سرویس</h2>${rows.join("")}</section>` : "";
@@ -587,6 +588,35 @@
         <button type="submit" class="btn block is-danger">${auto ? "لغو سرویس" : "ثبت درخواست لغو"}</button>
       </form>` : "";
     return `${statusHtml}${blocked}${form}`;
+  }
+
+  const LINK_RESET_NOTE = "لینک فعلی همین لحظه از کار می‌افتد و همهٔ دستگاه‌هایی که با آن وصل‌اند قطع می‌شوند. لینک جدید را باید روی هر دستگاه دوباره وارد کنید.";
+
+  // ``data`` is the server's offer: whether the change is open to this service and how many are left.
+  function linkResetHtml(data, serviceId) {
+    const sid = Number(serviceId) || 0;
+    const offer = data || {};
+    if (!offer.offered) return emptyHtml("تغییر لینک برای این سرویس فعال نیست.");
+    const left = Math.max(Number(offer.left) || 0, 0);
+    const note = `<p class="sm" role="alert">${esc(LINK_RESET_NOTE)}</p>`;
+    if (!left) return `${note}<p class="muted sm">سقف تغییر لینک این سرویس در ۳۰ روز گذشته پر شده است.</p>`;
+    return `${note}
+      <p class="muted sm">در ۳۰ روز گذشته ${esc(faDigits(left))} بار دیگر می‌توانید لینک این سرویس را عوض کنید.</p>
+      <form data-form="link-reset" data-id="${sid}">
+        <button type="submit" class="btn block is-danger">تغییر لینک اشتراک</button>
+      </form>`;
+  }
+
+  // After the change: the new link when the panel answered, otherwise a note to check back.
+  function linkResetResultHtml(result, serviceId) {
+    const sid = Number(serviceId) || 0;
+    const url = result && result.status === "done" ? core.safeUrl(result.subscription_url) : "";
+    if (url) {
+      return `<p class="sm">لینک اشتراک عوض شد و لینک قبلی دیگر کار نمی‌کند.</p>
+        <div class="link-box" dir="ltr">${icon("link", 16)}<span>${esc(url)}</span></div>
+        <div class="btn-row"><button type="button" class="btn" data-action="copy-link" data-id="${sid}">کپی لینک جدید</button></div>`;
+    }
+    return `<p class="sm">درخواست به سرور رسید ولی پاسخش هنوز نیامده. تا چند دقیقهٔ دیگر لینک جدید در جزئیات سرویس دیده می‌شود؛ لطفاً دوباره تلاش نکنید.</p>`;
   }
 
   function qrHtml(pngBase64) {
@@ -1100,7 +1130,7 @@
     brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, buyConfirmHtml, discountedCheckoutHtml,
     validServiceName, randomServiceName, giftFormHtml, renewPlansHtml, renewChoicesHtml, renewCategoryHtml,
-    renewPreviewHtml, addonPacksHtml, addonPreviewHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
+    renewPreviewHtml, addonPacksHtml, addonPreviewHtml, automationHtml, cancellationHtml, linkResetHtml, linkResetResultHtml, qrHtml, activityHtml,
     backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml, resellerSubscriptionHtml,
   });
