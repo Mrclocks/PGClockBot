@@ -102,6 +102,8 @@ BTN_MENU_ROWS = "▦ چیدمان منو"
 BTN_ORDER_RESET = "↺ ترتیب پیش‌فرض"
 BTN_UP = "⬆️"
 BTN_DOWN = "⬇️"
+# Stands where an arrow would lead nowhere (⬆️ on the first button, ⬇️ on the last).
+BTN_NO_MOVE = "➖"
 TEXT_HINT_ORDER = "روی هر دکمه بزنید تا متن یا رنگش عوض شود؛ با ⬆️ و ⬇️ جایش عوض می‌شود."
 TEXT_SHARED_ORDER = {
     "menu_order": "ترتیب منوی اصلی بین ادمین و مشتری یکی است و همان ترتیب «ظاهر ربات › چیدمان منو» در وب‌پنل است.",
@@ -264,7 +266,7 @@ def _rows_cb(actor: EditorActor, *parts: object) -> str:
 def _panel_button_row(
     actor: EditorActor, screen: EditorScreen, index: int, button: ScreenButton, movable: tuple[str, ...]
 ) -> list[InlineKeyboardButton]:
-    """The button itself, between ⬆️ and ⬇️ when it is one of the menu's movable buttons."""
+    """The button itself, between ⬆️ and ⬇️ when it is one of the menu's movable buttons (➖ at either end)."""
     label = _button(
         f"{_button_marker(actor, button, screen.ui)} {button.text}", _cb(actor, "b", screen.spec.id, index, screen.state)
     )
@@ -274,7 +276,7 @@ def _panel_button_row(
 
     def arrow(text: str, target: int) -> InlineKeyboardButton:
         if not 0 <= target < len(movable):
-            return _button(text, _rows_cb(actor, "e", screen.spec.id))
+            return _button(BTN_NO_MOVE, _rows_cb(actor, "e", screen.spec.id))
         return _button(text, _rows_cb(actor, "v", screen.spec.id, position, target, screen.state))
 
     return [arrow(BTN_UP, position - 1), label, arrow(BTN_DOWN, position + 1)]
@@ -282,10 +284,10 @@ def _panel_button_row(
 
 def _arrangement_row(actor: EditorActor, screen: EditorScreen, *, can_reorder: bool) -> list[InlineKeyboardButton]:
     row: list[InlineKeyboardButton] = []
+    if can_reorder:
+        row.append(_button(BTN_ORDER_RESET, _rows_cb(actor, "z", screen.spec.id), style="danger"))
     if screen.body is not None:
         row.append(_button(BTN_MENU_ROWS, _rows_cb(actor, "o", screen.spec.id), style="primary"))
-    if can_reorder:
-        row.append(_button(BTN_ORDER_RESET, _rows_cb(actor, "z", screen.spec.id), style="success"))
     return row
 
 
