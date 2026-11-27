@@ -649,3 +649,5 @@ tests/test_webhook_watch.py
 tests/test_telegram_target.py
 # FAQ answer buttons: shop rules (links, plans), forged items, owner check in the picker flow.
 tests/test_faq_answer_buttons.py
+# Ready-made reject reasons: one claim per payment, reviewer access, escaped reason text.
+tests/test_payment_reject_reasons.py

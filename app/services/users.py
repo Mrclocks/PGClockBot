@@ -63,6 +63,7 @@ from app.services.service_cancellation_settings import (
     WEB_FIELDS as SERVICE_CANCEL_FIELDS,
 )
 from app.services.psp_gateways import KEY_PSP_GATEWAYS, merge_submitted_psp_gateways
+from app.services.reject_reasons import PAYMENT_REASONS_KEY, REASON_DEFAULTS
 from app.services.retired_text_defaults import refresh_retired_defaults
 from app.services.user_purge import purge_user_references
 
@@ -1317,6 +1318,7 @@ DEFAULT_SETTINGS.update(ENTRY_APPROVAL_DEFAULTS)
 DEFAULT_SETTINGS.update(FREEZE_DEFAULTS)
 DEFAULT_SETTINGS.update(TRANSFER_DEFAULTS)
 DEFAULT_SETTINGS.update(CANCEL_DEFAULTS)
+DEFAULT_SETTINGS.update(REASON_DEFAULTS)
 DEFAULT_SETTINGS.update(RECEIPT_RISK_DEFAULTS)
 DEFAULT_SETTINGS.update(AUTO_RENEW_DEFAULTS)
 DEFAULT_SETTINGS.update(notice_text_defaults())
@@ -1883,6 +1885,12 @@ SETTING_GROUPS = {
             "مثلاً ۱۲۰",
         ),
         ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
+        (
+            PAYMENT_REASONS_KEY,
+            "دلایل آمادهٔ رد رسید",
+            "textarea",
+            "هر خط یک دلیل، حداکثر ۸ دلیل. دلیل انتخاب‌شده زیر متن رد برای مشتری فرستاده می‌شود. خالی = رد بدون پرسیدن دلیل.",
+        ),
     ],
     "کد تخفیف": [
         ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),

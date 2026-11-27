@@ -19,7 +19,7 @@ PAYMENT_KEYS_BEFORE = {
     "crypto_rate_api_path", "crypto_rate_api_divisor", "crypto_rate_margin_percent", "crypto_quote_minutes",
     "btn_pay_crypto", "stars_toman_per_star", "stars_title", "stars_description", "btn_pay_stars",
     "btn_pay_wallet", "btn_pay_discount", "shop_maintenance_enabled", "shop_maintenance_text",
-    "receipt_auto_match_enabled", "receipt_match_window_minutes",
+    "receipt_auto_match_enabled", "receipt_match_window_minutes", "payment_reject_reasons",
 }
 
 METHOD_SWITCH = {
