@@ -155,6 +155,50 @@ class PresenceCase(PresenceFixture):
         self.assertFalse((await self.flags())["gone"])
 
 
+class QuotaCacheRefreshTests(PresenceFixture):
+    """The scan already reads each panel user, so it keeps the cached expiry and volume current."""
+
+    async def row(self, name: str) -> UserService:
+        async with self.Session() as session:
+            return (await session.scalars(sa.select(UserService).where(UserService.pg_username == name))).one()
+
+    def full_record(self, user_id: int, *, status: str, expire: datetime) -> dict:
+        return {"id": user_id, "status": status, "expire": int(expire.timestamp()), "data_limit": 1000, "used_traffic": 1000}
+
+    async def test_a_finished_volume_and_a_past_expiry_reach_the_cache(self) -> None:
+        expired_at = datetime.now(timezone.utc) - timedelta(days=3)
+        panel = self.panel()
+        panel.answers[11] = self.full_record(11, status="limited", expire=expired_at)
+        await self.scan(panel)
+        row = await self.row("alive")
+        self.assertEqual(row.quota_status, "limited")
+        self.assertIsNotNone(row.volume_exhausted_at)
+        self.assertEqual(int(row.quota_expire_at.timestamp()), int(expired_at.timestamp()))
+        self.assertEqual(row.quota_data_limit_bytes, 1000)
+        self.assertIsNotNone(row.quota_synced_at)
+
+    async def test_volume_given_back_in_the_panel_clears_the_cached_mark(self) -> None:
+        async with self.Session() as session:
+            await session.execute(
+                sa.update(UserService).where(UserService.pg_username == "alive").values(
+                    volume_exhausted_at=datetime.now(timezone.utc) - timedelta(days=5), cleanup_volume_warn_stage=1
+                )
+            )
+            await session.commit()
+        panel = self.panel()
+        panel.answers[11] = self.full_record(11, status="active", expire=datetime.now(timezone.utc) + timedelta(days=9))
+        await self.scan(panel)
+        row = await self.row("alive")
+        self.assertIsNone(row.volume_exhausted_at)
+        self.assertEqual(row.cleanup_volume_warn_stage, 0)
+
+    async def test_missing_unreadable_and_partial_answers_leave_the_cache_alone(self) -> None:
+        await self.scan(self.panel())  # 11 answers without an expiry: not enough to trust
+        for name in ("gone", "alive", "outage"):
+            row = await self.row(name)
+            self.assertEqual((row.quota_synced_at, row.quota_status, row.volume_exhausted_at), (None, None, None), name)
+
+
 class MissingAlertCadenceTests(PresenceFixture):
     """Staff hear about services removed while usable: once, then only for new ones, at most daily."""
 

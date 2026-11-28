@@ -1326,12 +1326,20 @@ async def admin_extend_service(
     )
 
 
-async def _pg_user_presence(pg: Any, pg_uid: int) -> str:
-    """Probe whether a PasarGuard user still exists.
+@dataclass(frozen=True, slots=True)
+class PanelLookup:
+    """One user lookup: ``present`` / ``absent`` / ``unknown``, and the panel record when present."""
 
-    Returns ``absent`` (clean GET HTTP 404), ``present`` (GET returned a user),
-    or ``unknown`` (403/5xx/network/odd body). Only ``absent`` may authorize
-    wiping a local shop row after a DELETE 404 — never treat uncertainty as gone.
+    presence: str
+    record: dict[str, Any] | None = None
+
+
+async def _pg_user_lookup(pg: Any, pg_uid: int) -> PanelLookup:
+    """Probe whether a PasarGuard user still exists, keeping the record it returned.
+
+    ``absent`` is a clean GET HTTP 404, ``present`` a returned user, ``unknown`` anything else
+    (403/5xx/network/odd body). Only ``absent`` may authorize wiping a local shop row after a
+    DELETE 404 — never treat uncertainty as gone.
     """
     from app.services.pasarguard import is_pg_not_found
 
@@ -1339,12 +1347,17 @@ async def _pg_user_presence(pg: Any, pg_uid: int) -> str:
         info = await pg.get_user_by_id(int(pg_uid))
     except Exception as exc:
         if is_pg_not_found(exc):
-            return "absent"
-        return "unknown"
+            return PanelLookup("absent")
+        return PanelLookup("unknown")
     if isinstance(info, dict) and info.get("id") is not None:
-        return "present"
+        return PanelLookup("present", info)
     # Empty / unexpected body — do not guess.
-    return "unknown"
+    return PanelLookup("unknown")
+
+
+async def _pg_user_presence(pg: Any, pg_uid: int) -> str:
+    """``absent`` / ``present`` / ``unknown`` of one PasarGuard user (see ``_pg_user_lookup``)."""
+    return (await _pg_user_lookup(pg, pg_uid)).presence
 
 
 async def panel_client_for_service(session: AsyncSession, service: UserService) -> Any | None:
@@ -1367,22 +1380,27 @@ async def _panel_login_is_valid(pg: Any) -> bool:
     return isinstance(admin, dict)
 
 
-async def probe_panel_presence(pg: Any | None, pg_user_id: int | None) -> str:
-    """``present``, ``absent`` or ``unknown`` (no client, outage, timeout, refusal, unverified login).
+async def lookup_panel_user(pg: Any | None, pg_user_id: int | None) -> PanelLookup:
+    """Presence of one panel user (no client, outage, timeout, refusal, unverified login = ``unknown``).
 
     A 404 only counts as ``absent`` when the same client can still read its own admin account: a
     panel role that cannot see a user may answer 404 instead of 403, and an expired login must not
-    mark services as removed.
+    mark services as removed. A ``present`` answer carries the record the panel returned.
     """
     if pg is None or not pg_user_id:
-        return "unknown"
+        return PanelLookup("unknown")
     try:
-        presence = await asyncio.wait_for(_pg_user_presence(pg, int(pg_user_id)), timeout=SNAPSHOT_TIMEOUT_SECONDS)
+        lookup = await asyncio.wait_for(_pg_user_lookup(pg, int(pg_user_id)), timeout=SNAPSHOT_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
-        return "unknown"
-    if presence == "absent" and not await _panel_login_is_valid(pg):
-        return "unknown"
-    return presence
+        return PanelLookup("unknown")
+    if lookup.presence == "absent" and not await _panel_login_is_valid(pg):
+        return PanelLookup("unknown")
+    return lookup
+
+
+async def probe_panel_presence(pg: Any | None, pg_user_id: int | None) -> str:
+    """``present``, ``absent`` or ``unknown`` of one panel user (see ``lookup_panel_user``)."""
+    return (await lookup_panel_user(pg, pg_user_id)).presence
 
 
 def _raise_pg_not_removed(presence: str, *, cause: BaseException) -> None:
