@@ -19,8 +19,17 @@ _PG_SPECIAL_CHARS = "!@#$%^&*()-_=+[]{}|;:,.<>?/~`"
 _PG_USERNAME_RE = re.compile(r"^[a-zA-Z0-9-_@.]+$")
 _PG_USERNAME_CONSEC_SPECIAL_RE = re.compile(r"[-_@.]{2,}")
 
+USERNAME_TAKEN_MESSAGE = "این نام کاربری قبلاً ثبت شده است. یک نام دیگر بفرستید."
+TELEGRAM_ID_TAKEN_MESSAGE = (
+    "این آیدی تلگرام در پاسارگارد روی ادمین دیگری ثبت شده است. "
+    "در پنل، آیدی تلگرام آن ادمین را پاک یا ادمین را حذف کنید و دوباره تلاش کنید."
+)
+# PasarGuard answers 409 both for a taken username and for a Telegram ID already on another admin.
+_PG_TELEGRAM_ID_TAKEN_RE = re.compile(r"telegram\s*_?\s*id.{0,40}(already|assigned|exists|taken)", re.I)
+
 # Business / conflict API errors → standalone Persian (no validation wrapper).
 _PG_BUSINESS_MSG_MAP: list[tuple[re.Pattern[str], str]] = [
+    (_PG_TELEGRAM_ID_TAKEN_RE, TELEGRAM_ID_TAKEN_MESSAGE),
     (
         re.compile(
             r"(username|user).{0,40}(already\s*(exists|taken|in\s*use)|exists|taken|duplicate)"
@@ -346,7 +355,10 @@ def friendly_pg_error(text: str, *, status_code: int | None = None) -> str:
     """
     raw = (text or "").strip()
     if status_code == 409:
-        return "این نام کاربری قبلاً ثبت شده است. یک نام دیگر بفرستید."
+        # ``user_safe_error`` maps an already-mapped message a second time.
+        if raw == TELEGRAM_ID_TAKEN_MESSAGE or _PG_TELEGRAM_ID_TAKEN_RE.search(raw):
+            return TELEGRAM_ID_TAKEN_MESSAGE
+        return USERNAME_TAKEN_MESSAGE
     if status_code == 403:
         return "اجازه این عمل را ندارید."
     if status_code == 401:
