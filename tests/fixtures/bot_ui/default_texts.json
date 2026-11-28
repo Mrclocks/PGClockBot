@@ -525,6 +525,7 @@
   "miniapp_shops_enabled": "0",
   "nav_mode": "inline",
   "notice_text_cleanup_deleted": "",
+  "notice_text_cleanup_detached": "",
   "notice_text_cleanup_expired": "",
   "notice_text_cleanup_volume_deleted": "",
   "notice_text_cleanup_volume_finished": "",

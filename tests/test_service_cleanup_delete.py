@@ -546,5 +546,40 @@ class FailureTests(DeleteCase):
         del first
 
 
+class ExternalServiceTests(DeleteCase):
+    """A service added from outside the bot leaves the list; its panel user is not the bot's to delete."""
+
+    async def test_imported_and_linked_services_are_detached_and_their_panel_users_kept(self) -> None:
+        await self.add(1, remark="imported")
+        await self.add(2, remark="linked")
+        await self.add(3)
+        panel = FakePanel({1001: expired(), 1002: expired(), 1003: expired()})
+        result = await self.sweep(panel)
+        self.assertEqual((result.deleted, result.failed), (3, 0))
+        self.assertEqual(panel.deleted, [1003])
+        self.assertEqual(sorted(panel.users), [1001, 1002])
+        self.assertEqual(panel.disabled, [])
+        self.assertFalse(any([await self.exists(1), await self.exists(2), await self.exists(3)]))
+        notices = {n.service_name: n.action for n in await self.table(CustomerNotice)}
+        self.assertEqual(notices, {"svc1": "cleanup_detached", "svc2": "cleanup_detached", "svc3": "cleanup_deleted"})
+        reasons = {log.target_id: log.reason for log in await self.table(ShopStaffAction)}
+        self.assertIn("کاربر پنل حذف نشد", reasons[1])
+        self.assertNotIn("کاربر پنل حذف نشد", reasons[3])
+
+    async def test_an_imported_service_renewed_in_the_panel_is_kept(self) -> None:
+        await self.add(1, remark="imported")
+        panel = FakePanel({1001: expired(NOW + timedelta(days=20))})
+        result = await self.sweep(panel)
+        self.assertEqual(result.deleted, 0)
+        self.assertTrue(await self.exists(1))
+
+    async def test_a_panel_that_refuses_deletes_cannot_hold_back_an_imported_service(self) -> None:
+        await self.add(1, remark="imported")
+        panel = FakePanel({1001: expired()}, delete_error=PasarGuardError("forbidden", 403))
+        result = await self.sweep(panel)
+        self.assertEqual((result.deleted, result.failed), (1, 0))
+        self.assertIn(1001, panel.users)
+
+
 if __name__ == "__main__":
     unittest.main()
