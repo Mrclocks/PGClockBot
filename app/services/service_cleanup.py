@@ -238,6 +238,7 @@ class PreviewRow:
     deadline: str
     days_left: int = 0  # whole days to the deadline, 0 once it is due
     retrying: bool = False  # a delete was tried and failed; the next try waits for the lease to expire
+    kind_code: str = ""  # KIND_TIME or KIND_VOLUME, the rule that makes the service due
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,9 +300,10 @@ async def _preview_rows(
     session: AsyncSession, shop_id: int | None, policy: CleanupPolicy, now: datetime, soon: timedelta
 ) -> list[PreviewRow]:
     rows: list[PreviewRow] = []
-    for make, column, days, enabled_at, label in (
-        (time_due_clause, UserService.quota_expire_at, policy.time_days, policy.time_enabled_at, "انقضا"),
-        (volume_due_clause, UserService.volume_exhausted_at, policy.volume_days, policy.volume_enabled_at, "اتمام حجم"),
+    for make, column, days, enabled_at, label, kind_code in (
+        (time_due_clause, UserService.quota_expire_at, policy.time_days, policy.time_enabled_at, "انقضا", KIND_TIME),
+        (volume_due_clause, UserService.volume_exhausted_at, policy.volume_days, policy.volume_enabled_at, "اتمام حجم",
+         KIND_VOLUME),
     ):
         clause = make(policy, now, ahead=soon)
         if clause is None:
@@ -333,6 +335,7 @@ async def _preview_rows(
                     deadline=local_date(deadline),
                     days_left=max(0, -(-int((deadline - now).total_seconds()) // 86400)),
                     retrying=claimed_at is not None and _aware(claimed_at) > now - LEASE,
+                    kind_code=kind_code,
                 )
             )
     return rows[:PREVIEW_SAMPLE]

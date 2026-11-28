@@ -35,6 +35,7 @@ from app.services.service_cleanup import (
     time_due_clause,
     volume_due_clause,
 )
+from app.services.service_cleanup_errors import ERROR_PANEL_UNREADABLE, clear_cleanup_error, record_cleanup_error
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,8 @@ NOTICE_ACTIONS = {
 class ScanResult:
     queued: int = 0
     reset: int = 0
+    # Last service id of a full batch: the next batch starts after it. ``None`` = the scope was scanned to the end.
+    next_after_id: int | None = None
 
 
 def stage_column(kind: str):
@@ -137,9 +140,13 @@ async def _claim_stage(session: AsyncSession, service_id: int, kind: str, stage:
 
 async def scan_notices(
     session: AsyncSession, *, shop_id: int | None, policy: CleanupPolicy, kind: str, now: datetime | None = None,
-    limit: int = SCAN_BATCH,
+    limit: int = SCAN_BATCH, after_id: int = 0,
 ) -> ScanResult:
-    """Queue the due warnings of one scope and rule; one bounded batch per call."""
+    """Queue the due warnings of one scope and rule; one bounded batch of ids above ``after_id`` per call.
+
+    Services that stay candidates without a warning (a panel that cannot be read, no Telegram chat) would fill
+    every batch in id order; the caller passes ``next_after_id`` on so the batches walk past them.
+    """
     now = now or datetime.now(timezone.utc)
     days = policy.time_days if kind == KIND_TIME else policy.volume_days
     if not (policy.time_on if kind == KIND_TIME else policy.volume_on):
@@ -152,7 +159,8 @@ async def scan_notices(
             # A service the panel already removed cannot be read or renewed: it is never warned, and leaving it
             # in the batch would let enough of them fill every batch and stop the warnings for everyone else.
             .where(shop_services_clause(shop_id), *eligible_clauses(), BotUser.is_blocked.is_(False),
-                   UserService.panel_missing_at.is_(None), _candidate_clause(kind, policy, now))
+                   UserService.panel_missing_at.is_(None), UserService.id > int(after_id),
+                   _candidate_clause(kind, policy, now))
             .order_by(UserService.id)
             .limit(limit)
         )
@@ -161,7 +169,12 @@ async def scan_notices(
     telegram = {int(service.id): int(tg or 0) for service, tg in rows}
     if not services:
         return ScanResult()
+    next_after_id = int(services[-1].id) if len(services) >= limit else None
     fresh = await live_refresh(session, services)
+    await record_cleanup_error(
+        session, [int(s.id) for s in services if int(s.id) not in fresh], ERROR_PANEL_UNREADABLE, now=now
+    )
+    await clear_cleanup_error(session, sorted(fresh))
     queued = reset = 0
     for service in services:
         stage = stage_of(service, kind)
@@ -188,4 +201,4 @@ async def scan_notices(
         )
         queued += 1
     await session.commit()
-    return ScanResult(queued=queued, reset=reset)
+    return ScanResult(queued=queued, reset=reset, next_after_id=next_after_id)

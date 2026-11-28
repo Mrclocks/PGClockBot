@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import ColumnElement, and_, or_, select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, ServiceAutomation, UserService
@@ -47,6 +48,12 @@ from app.services.service_cleanup import (
     shop_services_clause,
     time_due_clause,
     volume_due_clause,
+)
+from app.services.service_cleanup_errors import (
+    ERROR_DELETE_FAILED,
+    ERROR_PANEL_UNREADABLE,
+    clear_cleanup_error,
+    record_cleanup_error,
 )
 from app.services.service_cleanup_notices import is_over, live_refresh, stage_column, stage_of
 from app.services.staff_audit import ACTOR_SYSTEM, StaffActor, add_staff_action
@@ -205,6 +212,9 @@ async def delete_due_services(
     # A service the panel could not be read for may simply have no panel user any more (an earlier run deleted it
     # there and then failed locally): confirm that with the shop's own client, so the leftover row is cleaned up.
     gone = await _confirmed_gone(session, [s for s in services if int(s.id) not in fresh])
+    read = fresh | gone
+    await record_cleanup_error(session, [int(s.id) for s in services if int(s.id) not in read], ERROR_PANEL_UNREADABLE, now=now)
+    await clear_cleanup_error(session, sorted(read))
     await session.commit()
     # Decide for every service first, from the freshly read data: a failed delete rolls the session back,
     # which would expire the other loaded rows.
@@ -284,6 +294,16 @@ async def _release_lease(session: AsyncSession, service_id: int) -> None:
     await session.commit()
 
 
+async def _remember_failure(session: AsyncSession, service_id: int, now: datetime) -> None:
+    """Show the failed delete on the cleanup page; losing this note never changes what is deleted."""
+    try:
+        await record_cleanup_error(session, [service_id], ERROR_DELETE_FAILED, now=now)
+        await session.commit()
+    except SQLAlchemyError:
+        logger.warning("service cleanup failure note not saved service=%s", service_id, exc_info=True)
+        await session.rollback()
+
+
 async def _delete_one(
     session: AsyncSession, service: UserService, *, kind: str, days: int, telegram_id: int, shop_id: int | None,
     now: datetime, require_absent: bool = False,
@@ -321,6 +341,7 @@ async def _delete_one(
     except Exception:  # noqa: BLE001 - unknown panel outcome: keep the row and the lease, retry after the lease expires
         logger.warning("service cleanup delete failed service=%s", service_id, exc_info=True)
         await session.rollback()
+        await _remember_failure(session, service_id, now)
         return "failed"
     if telegram_id:
         try:

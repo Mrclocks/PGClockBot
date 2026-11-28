@@ -520,6 +520,10 @@ class UserService(Base):
             postgresql_where=text("panel_missing_at IS NOT NULL"),
         ),
         Index(
+            "ix_user_services_cleanup_error", "shop_id",
+            postgresql_where=text("cleanup_error IS NOT NULL"),
+        ),
+        Index(
             "ix_user_services_first_use_pending", "created_at",
             postgresql_where=text("first_use_checked_at IS NULL"),
         ),
@@ -584,6 +588,9 @@ class UserService(Base):
     cleanup_volume_warn_stage: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     # Lease taken before the delete call; a lease that never finished means the outcome is unknown.
     cleanup_claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Why the cleanup could not handle the service on its last try (service_cleanup_report codes); NULL = no failure.
+    cleanup_error: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    cleanup_error_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # When the panel first reported the volume as finished (status «limited»); cleared when it is not.
     volume_exhausted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Set when the panel confirmed (HTTP 404 on the user lookup) that this service's panel user is gone.
