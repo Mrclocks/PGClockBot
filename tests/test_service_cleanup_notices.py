@@ -79,10 +79,12 @@ class NoticeCase(unittest.IsolatedAsyncioTestCase):
             await session.commit()
 
     async def scan(self, panel: FakePanel, *, shop: int | None = SHOP, kind: str = KIND_TIME, pol: CleanupPolicy | None = None,
-                   at: datetime = NOW, limit: int = 100):
+                   at: datetime = NOW, limit: int = 100, after_id: int = 0):
         with patch("app.services.bot_user_admin._pg_client_for_bot_service", AsyncMock(return_value=panel)):
             async with self.Session() as session:
-                return await notices.scan_notices(session, shop_id=shop, policy=pol or policy(), kind=kind, now=at, limit=limit)
+                return await notices.scan_notices(
+                    session, shop_id=shop, policy=pol or policy(), kind=kind, now=at, limit=limit, after_id=after_id
+                )
 
     async def queued(self) -> list[CustomerNotice]:
         async with self.Session() as session:
@@ -217,6 +219,57 @@ class PanelRemovedTests(NoticeCase):
         self.assertEqual(result.queued, 1)
         self.assertEqual(panel.calls, [1004])
         self.assertEqual([r.service_id for r in await self.queued()], [4])
+
+
+class StuckServicesTests(NoticeCase):
+    """Services that stay candidates without a warning must not keep the others from being warned."""
+
+    def stuck_panel(self) -> FakePanel:
+        old = NOW - timedelta(days=2)
+        return FakePanel({1001: TimeoutError(), 1002: TimeoutError(), 1003: user_info(expire=old)})
+
+    async def add_three(self) -> None:
+        for i in (1, 2, 3):
+            await self.add(i, quota_expire_at=NOW - timedelta(days=2))
+
+    async def test_a_full_batch_of_unreadable_services_passes_the_cursor_on(self) -> None:
+        await self.add_three()
+        panel = self.stuck_panel()
+        first = await self.scan(panel, limit=2)
+        self.assertEqual((first.queued, first.next_after_id), (0, 2))
+        second = await self.scan(panel, limit=2, after_id=first.next_after_id)
+        self.assertEqual((second.queued, second.next_after_id), (1, None))
+        self.assertEqual([r.service_id for r in await self.queued()], [3])
+
+    async def test_the_job_reaches_the_rest_in_a_later_run_and_then_starts_over(self) -> None:
+        from app.jobs import service_cleanup as job
+        from app.services.service_cleanup_delete import DeleteResult
+
+        await self.add_three()
+        panel = self.stuck_panel()
+
+        async def scan_in_twos(session, **kw):
+            return await notices.scan_notices(session, **kw, limit=2)
+
+        scan_two = AsyncMock(side_effect=scan_in_twos)
+        self.addCleanup(job._resume_after.clear)
+        with (
+            patch.object(job, "SessionLocal", self.Session),
+            patch.object(job, "MAX_BATCHES_PER_SCOPE", 1),
+            patch.object(job, "enabled_scopes", AsyncMock(return_value=[(SHOP, policy(volume_on=False))])),
+            patch.object(job, "scan_notices", scan_two),
+            patch.object(job, "delete_due_services", AsyncMock(return_value=DeleteResult())),
+            patch("app.services.service_cleanup_notices.datetime") as clock,
+            patch("app.services.bot_user_admin._pg_client_for_bot_service", AsyncMock(return_value=panel)),
+        ):
+            clock.now.return_value = NOW
+            await job.run_service_cleanup()
+            self.assertEqual(await self.queued(), [])
+            await job.run_service_cleanup()
+            self.assertEqual([r.service_id for r in await self.queued()], [3])
+            await job.run_service_cleanup()
+        after_ids = [call.kwargs["after_id"] for call in scan_two.await_args_list if call.kwargs["kind"] == KIND_TIME]
+        self.assertEqual(after_ids, [0, 2, 0])
 
 
 class VolumeStageTests(NoticeCase):
