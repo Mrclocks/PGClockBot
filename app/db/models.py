@@ -1922,6 +1922,31 @@ class ChargeCodeRedemption(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class PaymentReceipt(Base):
+    """A receipt photo sent after the first one for the same pending payment (an album, a second page).
+
+    The first photo stays ``Payment.receipt_file_id``. ``forwarded_at`` is claimed once when the photo is
+    sent under the staff review cards, so two photos racing each other are each forwarded once.
+    """
+
+    __tablename__ = "payment_receipts"
+    __table_args__ = (
+        Index(
+            "uq_payment_receipts_payment_unique_file", "payment_id", "file_unique_id", unique=True,
+            postgresql_where=text("file_unique_id IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    payment_id: Mapped[int] = mapped_column(ForeignKey("payments.id", ondelete="CASCADE"), index=True)
+    file_id: Mapped[str] = mapped_column(String(255))
+    file_unique_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # The duplicate-receipt warning of this photo, shown to staff with it (plain text).
+    review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    forwarded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class PaymentReceiptFingerprint(Base):
     """Telegram file_unique_id + image sha256 for duplicate-receipt review warnings."""
 

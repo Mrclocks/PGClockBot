@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import bbc_checkout_view as bbc_view
@@ -21,6 +22,7 @@ from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
 from app.services.bbc_settlement import (
     CUSTOMER_UNAVAILABLE, BbcNotReady, ensure_gateway_ready, reusable_bbc_topup, start_bbc_checkout,
 )
+from app.services.payment_receipts import EXTRA_RECEIPT_WINDOW
 from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import MIN_TOPUP_AMOUNT, create_wallet_topup
@@ -888,20 +890,25 @@ async def generic_receipt(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    """Attach photo to latest awaiting payment for this user."""
+    """Attach photo to latest awaiting payment for this user.
+
+    A payment still waiting for its receipt comes first; otherwise a photo sent soon after the receipt
+    of a pending payment joins that payment (a second page, an album) instead of being ignored.
+    """
     from app.bot.menu_nav import restore_main_reply
 
+    extra_since = datetime.now(timezone.utc) - EXTRA_RECEIPT_WINDOW
     result = await session.execute(
         select(Payment)
         .outerjoin(Order, Order.id == Payment.order_id)
         .where(
             Payment.user_id == db_user.id,
             Payment.status == PaymentStatus.PENDING.value,
-            Payment.receipt_file_id.is_(None),
+            or_(Payment.receipt_file_id.is_(None), Payment.receipt_at >= extra_since),
             # Only a payment of the shop whose bot received the photo.
             payment_shop_clause(current_shop_reseller_id()),
         )
-        .order_by(Payment.id.desc())
+        .order_by(Payment.receipt_file_id.is_not(None), Payment.id.desc())
         .limit(1)
     )
     payment = result.scalar_one_or_none()

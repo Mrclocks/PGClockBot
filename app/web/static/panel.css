@@ -9952,6 +9952,18 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   min-height: 200px;
   max-height: min(70vh, 640px);
 }
+.receipt-modal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.receipt-modal-nav[hidden] { display: none; }
+.receipt-modal-counter {
+  font-size: var(--fs-2);
+  color: var(--muted-fg);
+}
 .receipt-modal-img {
   display: block;
   width: 100%;
