@@ -6,8 +6,13 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from app.services.credential_policy import friendly_pg_error
+from app.services.credential_policy import (
+    TELEGRAM_ID_TAKEN_MESSAGE,
+    USERNAME_TAKEN_MESSAGE,
+    friendly_pg_error,
+)
 from app.services.pasarguard import PasarGuardError
+from app.services.redact import user_safe_error
 from app.services.pg_quota import PgQuotaError
 
 
@@ -79,6 +84,23 @@ class FriendlyPgErrorTests(unittest.TestCase):
             {"detail": "Username already exists"},
         )
         self.assertIn("قبلاً ثبت شده", exc.user_message())
+
+    def test_telegram_id_taken_409_is_not_reported_as_a_taken_username(self):
+        exc = PasarGuardError(
+            "POST /api/admin failed (409)",
+            409,
+            {"detail": "Telegram ID is already assigned to another admin."},
+        )
+        self.assertEqual(exc.user_message(), TELEGRAM_ID_TAKEN_MESSAGE)
+        self.assertEqual(user_safe_error(exc), TELEGRAM_ID_TAKEN_MESSAGE)
+
+    def test_telegram_id_taken_text_without_status(self):
+        msg = friendly_pg_error("Telegram ID is already assigned to another admin.")
+        self.assertEqual(msg, TELEGRAM_ID_TAKEN_MESSAGE)
+
+    def test_admin_already_exists_409_stays_a_taken_username(self):
+        exc = PasarGuardError("POST /api/admin failed (409)", 409, {"detail": "Admin already exists"})
+        self.assertEqual(user_safe_error(exc), USERNAME_TAKEN_MESSAGE)
 
     def test_validation_still_wrapped(self):
         msg = friendly_pg_error(

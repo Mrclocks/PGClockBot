@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db import Base
 from app.db.models import BotUser, ResellerPlan, ResellerProfile
+from app.services.credential_policy import TELEGRAM_ID_TAKEN_MESSAGE, USERNAME_TAKEN_MESSAGE
 from app.services.pasarguard import PasarGuardError
 from app.services.pg_admin_roles import (
     ROLE_LIST_UNREADABLE,
@@ -188,6 +189,22 @@ class ProvisionWithoutPlanTests(unittest.IsolatedAsyncioTestCase):
             await self._provision(pg)
         self.assertEqual(pg.create_admin.await_count, 1)
 
+
+    async def test_telegram_id_on_another_panel_admin_is_explained_and_not_retried(self) -> None:
+        pg = FakeRoleClient([OWNER_ROLE, SHOP_ROLE])
+        pg.create_admin.side_effect = PasarGuardError(
+            "POST /api/admin failed (409)",
+            409,
+            {"detail": "Telegram ID is already assigned to another admin."},
+        )
+        with self.assertRaises(ValueError) as ctx:
+            await self._provision(pg)
+        self.assertIn(TELEGRAM_ID_TAKEN_MESSAGE, str(ctx.exception))
+        self.assertNotIn(USERNAME_TAKEN_MESSAGE, str(ctx.exception))
+        self.assertEqual(pg.create_admin.await_count, 1)
+        async with self.Session() as session:
+            profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == 5))
+        self.assertIsNone(profile)
 
     async def test_unreadable_role_list_explains_how_to_pick_a_role(self) -> None:
         pg = RoleListUnreadableClient()
