@@ -19,6 +19,25 @@
 {% set pg_update = can_pg_update if can_pg_update is defined else false %}
 {% set ops = can_user_ops if can_user_ops is defined else true %}
 {% set bulk_count = rows|length if flt != 'all' else 0 %}
+{#- Quick renew of one named service with its current plan. ``row_renew`` marks the row-level form whose service
+   follows the service column's picker. -#}
+{% macro quick_renew_form(user, svc, extra_class='', row_renew=false) -%}
+{% set svc_name = svc.plan_name or svc.label %}
+<form method="post" action="/users/{{ user.id }}/quick-renew"{% if extra_class %} class="{{ extra_class }}"{% endif %}
+      {% if row_renew %}data-users-row-renew{% endif %}
+      data-confirm="سرویس «{{ svc_name }}» با پلن فعلی تمدید شود؟ مصرف ریست می‌شود."
+      data-confirm-title="تمدید سریع"
+      data-confirm-reason="1"
+      data-confirm-reason-label="علت تمدید"
+      data-confirm-reason-name="reason"
+      data-confirm-label="تمدید">
+  <input type="hidden" name="reason" value="" />
+  <input type="hidden" name="service_id" value="{{ svc.id }}" />
+  <input type="hidden" name="return_filter" value="{{ flt }}" />
+  {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
+  <button class="btn btn-sm" type="submit" aria-label="تمدید سرویس {{ svc_name }}">{{ icon('refresh', 'btn-ico') }}تمدید</button>
+</form>
+{%- endmacro %}
 {% block title %}کاربران ربات{% endblock %}
 {% block content %}
 {% call(slot) page_header('users', 'کاربران ربات', help='users') %}
@@ -179,6 +198,7 @@
                       data-expire="{{ s.expire_text }}"
                       data-days="{{ s.days_left if s.days_left is not none else 9999 }}"
                       data-alert="{{ '1' if s.has_alert else '0' }}"
+                      data-name="{{ s.plan_name or s.label }}"
                       {% if s.id == sel.id %}selected{% endif %}>{{ s.label }}</option>
               {% endfor %}
             </select>
@@ -205,18 +225,11 @@
                     data-msg-name="{{ u.full_name or u.username or u.telegram_id }}">{{ icon('message', 'btn-ico') }}پیام</button>
             {% endif %}
             {% if ops and pg_update and row.service_count > 0 %}
-            <form method="post" action="/users/{{ u.id }}/quick-renew"
-                  data-confirm="سرویس بحرانی (نزدیک‌ترین انقضا) با پلن فعلی تمدید شود؟ مصرف ریست می‌شود."
-                  data-confirm-title="تمدید سریع"
-                  data-confirm-reason="1"
-                  data-confirm-reason-label="علت تمدید"
-                  data-confirm-reason-name="reason"
-                  data-confirm-label="تمدید">
-          <input type="hidden" name="reason" value="" />
-              <input type="hidden" name="return_filter" value="{{ flt }}" />
-              {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
-              <button class="btn btn-sm" type="submit">{{ icon('refresh', 'btn-ico') }}تمدید</button>
-            </form>
+            {#- Renews the service shown in the row: the only one, or the one picked in the service column (the page
+                script keeps service_id and the question in step). On phones a user with several services renews
+                each one from its own «⋯» in the opened list, so this one stays in the table. -#}
+            {% set renew_svc = row.services[0] if row.service_count == 1 else (row.services | selectattr('id', 'equalto', sel.id) | first) %}
+            {{ quick_renew_form(u, renew_svc, extra_class=('li-hide' if row.service_count > 1 else ''), row_renew=(row.service_count > 1)) }}
             {% endif %}
             {% if can_open_edit %}
             <button type="button" class="btn btn-ghost btn-sm"
@@ -267,6 +280,9 @@
               <span class="li-value li-tone-{{ s.expire_tone or 'none' }}">{{ s.expire_text }}</span>
               <span class="li-sub">{% if s.pg_username %}<bdi dir="ltr">{{ s.pg_username }}</bdi> · {% endif %}{{ s.volume_text }}</span>
               <span class="li-badge">{% if s.has_alert %}<span class="badge warn">هشدار</span>{% endif %}</span>
+              {% if ops and pg_update %}
+              {% call row_actions() %}{{ quick_renew_form(u, s) }}{% endcall %}
+              {% endif %}
             </div>
             {% endfor %}
           </div>
@@ -387,6 +403,19 @@
       exp.setAttribute('data-sort-value', days);
     });
     cell.setAttribute('data-sort-value', (opt.textContent || '').trim());
+    syncRowRenew(tr, opt);
+  }
+
+  /* The row's «تمدید» renews the service picked here; its question names it. */
+  function syncRowRenew(tr, opt){
+    var form = tr.querySelector('form[data-users-row-renew]');
+    if (!form) return;
+    var name = (opt.getAttribute('data-name') || opt.textContent || '').trim();
+    var idInput = form.querySelector('input[name="service_id"]');
+    if (idInput) idInput.value = opt.value;
+    form.setAttribute('data-confirm', 'سرویس «' + name + '» با پلن فعلی تمدید شود؟ مصرف ریست می‌شود.');
+    var btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.setAttribute('aria-label', 'تمدید سرویس ' + name);
   }
 
   document.querySelectorAll('.users-svc-select').forEach(function(sel){

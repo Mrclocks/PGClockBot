@@ -20,6 +20,7 @@ from app.bot import keyboards as kb
 from app.bot.auth import resolve_bot_principal_bridge
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.db.models import BotUser
+from app.services.rich_text import premium_text_from_message
 from app.services.redact import user_safe_error
 from app.services.shop_scope import ShopScopeError, is_platform_admin as staff_is_platform_admin
 from app.services import bot_feedback_texts as feedback
@@ -834,11 +835,11 @@ async def pcm_cat_desc_save(
         await state.clear()
         await message.answer(feedback.NO_ACCESS_REPLY)
         return
-    text = (message.text or "").strip()
+    text, premium = premium_text_from_message(message.text, message.entities)
+    if text == CLEAR_DESCRIPTION_TOKEN:
+        text, premium = "", None
     try:
-        await update_category(
-            session, staff, cid, description="" if text == CLEAR_DESCRIPTION_TOKEN else text
-        )
+        await update_category(session, staff, cid, description=text, description_rich=premium)
     except (ShopScopeError, ValueError) as e:
         await message.answer(user_safe_error(e))
         return

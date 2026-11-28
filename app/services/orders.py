@@ -2825,7 +2825,7 @@ async def renew_service_with_plan(
     expected_price: int | None = None,
 ) -> Order:
     """Create a pending renewal order. Caller shows pay_methods (or uses pay_with_wallet)."""
-    from app.services.service_renewals import assert_renewal_category, validate_renewal_selection
+    from app.services.service_renewals import validate_renewal_selection
 
     shop_rid = _shop_reseller_id()
     if request_key is not None:
@@ -2839,7 +2839,6 @@ async def renew_service_with_plan(
     terms = await validate_renewal_selection(
         session, user_id=user_id, service=service, plan=plan, shop_id=shop_rid,
     )
-    await assert_renewal_category(session, service=service, plan=plan, terms=terms, shop_id=shop_rid)
     if shop_rid is not None:
         await _assert_affordable(session, int(shop_rid), ServiceChange(
             ChargeEvent.RENEW,

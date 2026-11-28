@@ -1,8 +1,9 @@
 {# Body of the header's action-center modal (fragment of /inbox/panel): every visible item as a row in the settings
-   list style (DESIGN_SYSTEM.md §6-2), tapping it goes where to act; a round «×» at its end hides it through the inbox dismiss dialog. #}
+   list style (DESIGN_SYSTEM.md §6-2), tapping it goes where to act; a round «×» at its end hides it through the inbox dismiss dialog.
+   data-inbox-count is the fresh visible count; inbox-badge.js writes it back to the header badge. #}
 {% from "macros.html" import empty_state %}
 {% from "_icons.html" import icon %}
-<div class="inbox-panel">
+<div class="inbox-panel" data-inbox-count="{{ visible_count }}">
   {% if entries %}
   <div class="hub-list inbox-list">
     {% for entry in entries %}

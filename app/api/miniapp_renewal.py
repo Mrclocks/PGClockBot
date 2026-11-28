@@ -15,6 +15,7 @@ from app.api.miniapp_pages import _no_store, _owned_service_or_404, _require_com
 from app.db.models import UserService
 from app.services.miniapp_auth import load_mini_user
 from app.services.miniapp_shop import mini_scope
+from app.services.renewal_category import RENEWAL_UNAVAILABLE
 from app.services.service_renewals import RenewalChoices, load_renewal_choices
 from app.services.users import on
 
@@ -30,6 +31,7 @@ def renewal_options_payload(choices: RenewalChoices, *, wallet_pay_enabled: bool
     grouped = bool(choices.categories)
     return {
         "wallet_pay_enabled": wallet_pay_enabled,
+        "unavailable": "" if choices.options else RENEWAL_UNAVAILABLE,
         "grouped": grouped,
         "current": _plan_row(choices, choices.current) if choices.current else None,
         "categories": [

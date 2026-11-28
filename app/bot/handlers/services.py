@@ -27,6 +27,7 @@ from app.config import get_settings
 from app.db.models import BotUser, UserService
 from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_catalog_plan
+from app.services.renewal_category import RENEWAL_UNAVAILABLE
 from app.services.pasarguard import absolutize_subscription_url, get_pg
 from app.services.service_cancellation_settings import cancellation_policy
 from app.services.service_cancellations import cancellation_offer, request_cancellation, shows_cancel_button
@@ -698,7 +699,7 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         return
     choices, categories = await _renewal_choices(session, svc)
     if not choices.options:
-        await callback.answer(feedback.NO_PLANS, show_alert=True)
+        await callback.answer(RENEWAL_UNAVAILABLE, show_alert=True)
         return
     await callback.answer()
     ui = await get_all_settings(session)

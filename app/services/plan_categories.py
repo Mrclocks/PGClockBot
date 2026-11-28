@@ -311,12 +311,15 @@ async def update_category(
     *,
     name: str | None = None,
     description: str | None = None,
+    description_rich: str | None | object = ...,
     sort_order: int | None = None,
     is_active: bool | None = None,
     audience: str | None = None,
     button_style: str | None | object = ...,
     icon_custom_emoji_id: str | None | object = ...,
 ) -> PlanCategory:
+    """``description_rich`` (the bot's premium emoji of the description) is left as is when omitted;
+    a stale one no longer matches the description and is not shown."""
     cat = await get_owned_category(session, category_id, staff)
     if not cat:
         raise ShopScopeError("دسته‌بندی یافت نشد")
@@ -340,6 +343,8 @@ async def update_category(
         if desc and len(desc) > 255:
             raise ValueError("توضیح خیلی طولانی است")
         cat.description = desc
+    if description_rich is not ...:
+        cat.description_rich = description_rich
     if sort_order is not None:
         cat.sort_order = int(sort_order)
     if is_active is not None:

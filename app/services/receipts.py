@@ -2,6 +2,8 @@ from __future__ import annotations
 
 """Receipt submission: manual admin approve or optional auto-approve."""
 
+from datetime import datetime, timezone
+
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from sqlalchemy.exc import SQLAlchemyError
@@ -22,6 +24,12 @@ from app.services.notifications import (
 from app.services.delivery_recovery_policy import PENDING_STAFF_NOTE, is_delivered, pending_buyer_note
 from app.services.orders import DeliveryAttempt, approve_payment, attach_receipt, hold_unknown_delivery_for_review
 from app.services.pasarguard import failure_text
+from app.services.payment_receipts import (
+    EXTRA_ADDED,
+    accepts_extra_receipt,
+    add_extra_receipt,
+    forward_extra_receipts,
+)
 from app.services.receipt_risk import (
     ENABLED_KEY as RISK_ENABLED_KEY,
     HOLD_KEY as RISK_HOLD_KEY,
@@ -89,7 +97,19 @@ async def submit_receipt(
             "اگر اشتباه است با پشتیبانی تماس بگیرید.",
         )
 
-    await attach_receipt(session, payment, file_id, first_only=first_only)
+    try:
+        await attach_receipt(session, payment, file_id, first_only=True)
+    except ValueError:
+        # Not the first photo. ``first_only`` callers (Mini App, web upload) take one receipt only.
+        if first_only:
+            raise
+        await session.refresh(payment)
+        if accepts_extra_receipt(payment, now=datetime.now(timezone.utc)):
+            # A later photo of the same purchase joins its review instead of opening a second one.
+            return await _add_extra(session, payment, bot=bot, file_id=file_id, file_unique_id=file_unique_id,
+                                    sha=sha, note=format_dup_warning(matches) if matches else None)
+        # A day later it is a new receipt for the payment, reviewed again as before.
+        await attach_receipt(session, payment, file_id)
     payment_id = int(payment.id)
     try:
         await store_receipt_fingerprint(
@@ -110,7 +130,7 @@ async def submit_receipt(
     dup_note = format_dup_warning(matches) if matches else None
     risk = await _assess_risk(session, payment, shop_id=shop_rid, duplicates=len(matches or []))
     notes = [note for note in (dup_note, risk_note(risk) if risk else None) if note]
-    return await process_receipt(
+    answer = await process_receipt(
         session,
         payment,
         bot=bot,
@@ -118,6 +138,38 @@ async def submit_receipt(
         reviewer_note="\n\n".join(notes) or None,
         risk=risk,
     )
+    # Photos of the same payment that arrived while its review cards were being sent.
+    await _forward_extras(session, payment_id, bot=bot)
+    return answer
+
+
+async def _add_extra(
+    session: AsyncSession, payment: Payment, *, bot: Bot, file_id: str, file_unique_id: str | None,
+    sha: str | None, note: str | None,
+) -> str:
+    answer = await add_extra_receipt(session, payment, file_id=file_id, file_unique_id=file_unique_id, note=note)
+    if answer != EXTRA_ADDED:
+        return answer
+    payment_id = int(payment.id)
+    try:
+        # Later payments are checked against this photo too.
+        await store_receipt_fingerprint(
+            session, payment_id=payment_id, file_unique_id=file_unique_id, sha256=sha, commit=True
+        )
+    except SQLAlchemyError:
+        logger.warning("extra receipt fingerprint not stored payment=%s", payment_id, exc_info=True)
+        await rollback_quiet(session)
+    await _forward_extras(session, payment_id, bot=bot)
+    return answer
+
+
+async def _forward_extras(session: AsyncSession, payment_id: int, *, bot: Bot) -> None:
+    try:
+        await forward_extra_receipts(session, payment_id, bot=bot)
+    except SQLAlchemyError:
+        # The photos stay on the payment (web panel); the receipt itself is already accepted.
+        logger.warning("extra receipt forward failed payment=%s", payment_id, exc_info=True)
+        await rollback_quiet(session)
 
 
 async def _assess_risk(

@@ -1,4 +1,4 @@
-"""Renewal offers the service's own plan first, then the shop's categories, like the shop."""
+"""Renewal offers the service's own plan first, then its own category, like the shop."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.bot.panel_history import panel_history
 from app.db.models import BotUser, Plan, PlanCategory, UserService
+from app.services.renewal_category import RENEWAL_UNAVAILABLE
 from app.services.service_renewals import renewal_choices
 from tests.chat_sim import ChatSim
 from tests.postgres_support import add_rows
@@ -23,7 +24,7 @@ def _plan(plan_id: int, category_id: int | None, *, gb: float = 50, days: int = 
 
 
 
-# A used-up service (expired, unlimited volume): nothing would carry over, so every category is offered.
+# A used-up service (expired, unlimited volume): nothing would carry over, yet only its own category is offered.
 USED_UP = {"quota_synced_at": datetime.now(timezone.utc), "quota_status": "expired", "quota_data_limit_bytes": 0}
 
 class ChoicesTests(unittest.TestCase):
@@ -86,16 +87,16 @@ class _RenewalFlow(unittest.IsolatedAsyncioTestCase):
 
 
 class GroupedRenewalTests(_RenewalFlow):
-    async def test_the_current_plan_then_the_categories(self) -> None:
+    async def test_the_current_plan_then_only_its_own_category(self) -> None:
         await self.tap("svc:renew:70")
 
         texts = [t for t, _ in self.buttons()]
         self.assertTrue(texts[0].startswith("🔄 پلن فعلی · ماهانه ۵۰"), texts)
         self.assertEqual(self.buttons()[0][1], "svc:renewpay:70:1")
-        self.assertEqual([d for _, d in self.buttons()[1:4]], ["svc:renewcat:70:10", "svc:renewcat:70:11", "svc:renewcat:70:none"])
-        self.assertEqual([t for t in texts[1:4]], ["اقتصادی", "ویژه", "سایر"])
-        self.assertNotIn("خالی", texts)
-        self.assertNotIn("فروشگاه دیگر", texts)
+        self.assertEqual([d for _, d in self.buttons() if d.startswith("svc:renewcat:")], ["svc:renewcat:70:10"])
+        self.assertEqual(texts[1], "اقتصادی")
+        for unrelated in ("ویژه", "سایر", "خالی", "فروشگاه دیگر"):
+            self.assertNotIn(unrelated, texts)
         self.assertNotIn("سه‌ماهه", " ".join(texts))
 
     async def test_a_category_lists_its_plans_with_their_relation_and_back_returns(self) -> None:
@@ -110,10 +111,14 @@ class GroupedRenewalTests(_RenewalFlow):
         await self.tap("svc:renew:70")
         self.assertEqual(self.buttons()[1][1], "svc:renewcat:70:10")
 
-    async def test_plans_without_a_category_are_under_other(self) -> None:
+    async def test_another_category_does_not_open_from_an_old_button(self) -> None:
         await self.tap("svc:renew:70")
-        await self.tap("svc:renewcat:70:none")
-        self.assertEqual([d for _, d in self.buttons() if d.startswith("svc:renewpay:")], ["svc:renewpay:70:4"])
+        before = self.buttons()
+        for data in ("svc:renewcat:70:11", "svc:renewcat:70:none"):
+            with self.subTest(data=data):
+                await self.tap(data)
+                self.assertEqual(self.buttons(), before)
+        self.assertTrue(self.sim.telegram.alerts)
 
     async def test_another_shops_or_an_empty_category_does_not_open(self) -> None:
         await self.tap("svc:renew:70")
@@ -131,6 +136,16 @@ class GroupedRenewalTests(_RenewalFlow):
         await self.tap("svc:renewcat:71:10")
         self.assertEqual(self.buttons(), before)
         self.assertTrue(self.sim.telegram.alerts)
+
+
+    async def test_an_empty_own_category_tells_the_customer_to_buy_a_new_service(self) -> None:
+        async with self.sim.Session() as session:
+            for plan_id in (1, 2):
+                (await session.get(Plan, plan_id)).is_active = False
+            await session.commit()
+        await self.tap("svc:renew:70")
+        self.assertEqual(self.sim.telegram.alerts[-1], RENEWAL_UNAVAILABLE)
+        self.assertNotIn("svc:renewpay:", " ".join(d for _, d in self.buttons()))
 
 
 class UngroupedRenewalTests(_RenewalFlow):

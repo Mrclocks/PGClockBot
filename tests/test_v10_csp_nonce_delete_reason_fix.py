@@ -136,7 +136,8 @@ class DeleteReasonExtractionTests(unittest.TestCase):
         # v9-compatible in-place update + IME-safe validation + native submit after confirm
         self.assertIn("update existing hidden reason in place", js)
         self.assertIn("form.id === 'confirm-form'", js)
-        self.assertIn("علت حذف باید حداقل", js)
+        # The too-short error names the modal's own reason label («علت تمدید», «علت حذف», ...).
+        self.assertIn("activeReasonLabel + ' باید حداقل '", js)
         self.assertNotIn('minlength="', js[js.find("setupPanelConfirm") : js.find("Normalize Persian")])
         self.assertIn("compositionend", js)
         self.assertIn("confirm_reason", js)

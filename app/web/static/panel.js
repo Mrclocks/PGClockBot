@@ -1645,7 +1645,7 @@ function setButtonText(button, text) {
         if (ae && el.contains(ae) && typeof ae.blur === 'function') ae.blur();
       } catch (_) {}
       el.hidden = true;
-      el.classList.remove('open', 'is-closing', 'is-front', 'is-stack');
+      el.classList.remove('open', 'is-closing', 'is-front', 'is-stack', 'is-settled');
       try { el.style.zIndex = ''; } catch (_) {}
       restoreModalHome(el);
       /* After closing a stacked confirm, re-mark the remaining top modal. */
@@ -1737,6 +1737,19 @@ function setButtonText(button, text) {
       closeModal(el);
       if (keys && keys.length) stripQueryParams(keys);
     }
+    /* Once the open slide has ended, .is-settled drops the panel's animation. A filled transform animation keeps the
+       sheet on its own moved layer, and iOS then draws the caret of a focused field (the confirm modal's reason box)
+       away from the field while the keyboard shifts the viewport. */
+    function settleModalAfterOpen(el){
+      const panel = el.querySelector('.ui-modal-panel');
+      if (!panel) return;
+      const onEnd = (e) => {
+        if (e.target !== panel) return;
+        panel.removeEventListener('animationend', onEnd);
+        if (el.classList.contains('open') && !el.classList.contains('is-closing')) el.classList.add('is-settled');
+      };
+      panel.addEventListener('animationend', onEnd);
+    }
     function openModal(id, opts){
       opts = opts || {};
       const el = (typeof id === 'string') ? document.getElementById(id) : id;
@@ -1756,9 +1769,10 @@ function setButtonText(button, text) {
         err.hidden = true;
         err.textContent = '';
       });
-      el.classList.remove('is-closing');
+      el.classList.remove('is-closing', 'is-settled');
       el.hidden = false;
       el.classList.add('open');
+      settleModalAfterOpen(el);
       /* Must run AFTER .open so maxZ scans include siblings; re-appends to body end. */
       bringModalToFront(el, opts);
       lockPageScroll();
@@ -2434,6 +2448,7 @@ function setButtonText(button, text) {
       let resolver = null;
       let activeRequireReason = false;
       let activeReasonMin = 3;
+      let activeReasonLabel = 'علت';
       let activeConfirmPhrase = '';
       let reasonComposing = false;
 
@@ -2505,6 +2520,7 @@ function setButtonText(button, text) {
         const min = Math.max(1, parseInt(opts.reasonMin, 10) || 3);
         activeRequireReason = true;
         activeReasonMin = min;
+        activeReasonLabel = label;
         reasonComposing = false;
         reasonSlot.hidden = false;
         /* No HTML required/minlength — Persian IME composition made browsers
@@ -2618,7 +2634,7 @@ function setButtonText(button, text) {
             const v = commitReasonInput(reasonInput);
             const min = activeReasonMin || 3;
             if (reasonCharLen(v) < min) {
-              showReasonError(reasonInput, 'علت حذف باید حداقل ' + min + ' کاراکتر باشد.');
+              showReasonError(reasonInput, activeReasonLabel + ' باید حداقل ' + min + ' کاراکتر باشد.');
               return;
             }
             clearReasonError();

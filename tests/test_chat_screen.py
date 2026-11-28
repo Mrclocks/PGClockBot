@@ -292,6 +292,21 @@ class OwnerOwnPurchaseTests(_Flow):
         self.assertIsNotNone(review, self.sim.screen())
         self.assertTrue(any("رد" in b for b in review.buttons()), review.buttons())
 
+    async def test_a_second_receipt_photo_joins_the_one_review(self) -> None:
+        from sqlalchemy import func, select
+
+        from app.db.models import PaymentReceipt
+
+        await self._buy_with_card()
+        await self.sim.send_photo()
+        reviews = [m for m in self.sim.telegram.visible() if "تأیید" in " ".join(m.buttons())]
+        self.assertEqual(len(reviews), 1, self.sim.screen())
+        self.assertTrue(any("تصویر دیگر رسید" in m.text and not m.buttons() for m in self.sim.telegram.visible()),
+                        self.sim.screen())
+        self.assertTrue(any("به همان پرداخت اضافه شد" in m.text for m in self.sim.telegram.visible()), self.sim.screen())
+        async with self.sim.Session() as session:
+            self.assertEqual(await session.scalar(select(func.count(PaymentReceipt.id))), 1)
+
     async def test_the_review_survives_moving_to_another_menu(self) -> None:
         await self._buy_with_card()
         await self.sim.type("🟡👛 کیف پول")

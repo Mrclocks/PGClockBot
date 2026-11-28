@@ -1,4 +1,4 @@
-"""Mini App renewal choices: the service's own plan, then its shop's categories, never another shop's."""
+"""Mini App renewal choices: the service's own plan, then its own category, never another shop's."""
 
 from __future__ import annotations
 
@@ -13,13 +13,14 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.api.miniapp_renewal import register_miniapp_renewal
 from app.db.models import Base, BotUser, Plan, PlanCategory, UserService
+from app.services.renewal_category import RENEWAL_UNAVAILABLE
 from tests.postgres_support import add_rows, scoped_async_engine
 
 SHOP = 900
 
 
 
-# A used-up service (expired, unlimited volume): nothing would carry over, so every category is offered.
+# A used-up service (expired, unlimited volume): nothing would carry over, yet only its own category is offered.
 USED_UP = {"quota_synced_at": datetime.now(timezone.utc), "quota_status": "expired", "quota_data_limit_bytes": 0}
 
 class RenewalOptionsTests(unittest.IsolatedAsyncioTestCase):
@@ -76,7 +77,7 @@ class RenewalOptionsTests(unittest.IsolatedAsyncioTestCase):
     async def options(self, service_id: int) -> httpx.Response:
         return await self.client.get(f"/api/mini/service/{service_id}/renewal-options")
 
-    async def test_the_current_plan_then_this_shops_categories(self) -> None:
+    async def test_the_current_plan_then_only_its_own_category(self) -> None:
         response = await self.options(70)
         self.assertEqual(response.status_code, 200, response.text)
         self.assertIn("no-store", response.headers["cache-control"])
@@ -86,11 +87,23 @@ class RenewalOptionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([c["id"] for c in data["categories"]], [10])
         self.assertEqual([p["id"] for p in data["categories"][0]["plans"]], [1, 2])
         self.assertEqual(data["categories"][0]["plans"][1]["relation"], "downgrade")
-        self.assertEqual([p["id"] for p in data["other"]], [3])
+        self.assertEqual(data["other"], [], "another category's plan is not offered")
         self.assertEqual(data["plans"], [])
         every_id = {p["id"] for c in data["categories"] for p in c["plans"]} | {p["id"] for p in data["other"]}
         self.assertNotIn(4, every_id, "a trial plan is never offered for renewal")
         self.assertNotIn(5, every_id, "another shop's plan is never offered")
+
+    async def test_an_empty_own_category_says_why_renewal_is_unavailable(self) -> None:
+        for plan in (1, 2):
+            (await self.session.get(Plan, plan)).is_active = False
+        await self.session.commit()
+        response = await self.options(70)
+        data = response.json()
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(data["unavailable"], RENEWAL_UNAVAILABLE)
+        self.assertEqual((data["current"], data["categories"], data["other"], data["plans"]), (None, [], [], []))
+        self.scope = SimpleNamespace(shop_id=SHOP)
+        self.assertEqual((await self.options(73)).json()["unavailable"], "", "another shop's catalog is untouched")
 
     async def test_without_categories_every_plan_is_listed_current_first(self) -> None:
         for plan in (1, 2):

@@ -29,7 +29,7 @@ from app.db.models import (
 )
 from app.services import auto_renew_timing as timing
 from app.services.catalog_pricing import annotate_prices, displayed_quote, sale_price
-from app.services.renewal_category import Leftover, offered_plans
+from app.services.renewal_category import offered_plans, same_category
 from app.services.service_renewals import current_plan_of
 from app.services.account_hold_guard import is_service_held
 from app.services.service_freeze_guard import is_frozen
@@ -102,10 +102,6 @@ async def get_automation(
     return row
 
 
-# Automatic renewal runs while volume or time may still be left: only plans that may take it.
-AUTO_RENEW_LEFTOVER = Leftover(volume=True, time=True)
-
-
 async def automation_choices(session: AsyncSession, service: UserService | None = None) -> dict[str, list]:
     from app.services.orders import list_active_plans
     from app.services.service_addons import list_shop_packs
@@ -113,7 +109,7 @@ async def automation_choices(session: AsyncSession, service: UserService | None 
     plans = [p for p in await list_active_plans(session, include_trial=False) if p.price >= 0]
     if service is not None:
         current = await current_plan_of(session, service)
-        plans = offered_plans(plans, current_plan=current, leftover=AUTO_RENEW_LEFTOVER)
+        plans = offered_plans(plans, current_plan=current)
     packs = await list_shop_packs(session)
     return {
         "renew": plans,
@@ -189,10 +185,10 @@ async def selected_choice(session: AsyncSession, row: ServiceAutomation, action:
 
 
 async def _renewal_allowed(session: AsyncSession, row: ServiceAutomation, choice: Plan) -> bool:
-    """Another category's plan is valid only when it would carry nothing over (renewal_category)."""
+    """Only a plan of the service's own category (renewal_category)."""
     service = await session.get(UserService, row.service_id)
     current = await current_plan_of(session, service) if service is not None else None
-    return bool(offered_plans([choice], current_plan=current, leftover=AUTO_RENEW_LEFTOVER))
+    return current is None or same_category(current, choice)
 
 
 async def claim_automation(session: AsyncSession, service_id: int) -> str | None:

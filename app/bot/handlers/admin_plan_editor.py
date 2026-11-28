@@ -23,6 +23,7 @@ from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Plan
 from app.services import bot_feedback_texts as feedback
+from app.services.rich_text import premium_text_from_message
 from app.services.formatting import format_toman
 from app.services.pasarguard import get_pg
 from app.services.plans_catalog import plan_groups_denial, plan_template_denial, role_requires_template
@@ -394,7 +395,8 @@ async def adm_plan_edit_save(  # noqa: C901 - moved unchanged from admin.py, whe
             gb = parse_bot_float(text)
             plan.data_limit_gb = None if gb <= 0 else gb
         elif field == "desc":
-            plan.description = text or None
+            desc, premium = premium_text_from_message(message.text, message.entities)
+            plan.description, plan.description_rich = desc or None, premium
         elif field == "sort":
             plan.sort_order = parse_bot_int(text, default=0)
         elif field == "prefix":

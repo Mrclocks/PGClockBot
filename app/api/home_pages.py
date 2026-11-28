@@ -17,6 +17,7 @@ from app.services.host_gauges import gauges_json, local_host_gauges
 from app.services.home_overview import build_home_overview, reseller_shop_summary
 from app.services.inbox_entries import inbox_entries
 from app.services.panel_inbox import build_inbox_context
+from app.services.panel_sidebar_cache import invalidate_sidebar_counts, sidebar_cache_key
 from app.services import pg_link_health
 from app.services.pg_read_cache import NODE_LIST_MAX_AGE_SEC
 from app.services.pg_read_resilience import circuit_status
@@ -597,12 +598,16 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
     ):
         """Body of the header's action-center modal: the same items as /inbox, as rows."""
         ctx = await build_inbox_context(session, request, staff)
+        # The page-level badge cache may predate this fresh build; drop it so the next page shows this count.
+        invalidate_sidebar_counts(sidebar_cache_key(staff))
+        entries = inbox_entries(ctx)
         response = render(
             request,
             "_inbox_modal_body.html",
             {
                 "staff": staff,
-                "entries": inbox_entries(ctx),
+                "entries": entries,
+                "visible_count": len(entries),
                 "hidden_count": int(ctx.get("inbox_hidden_by_dismiss") or 0),
             },
         )

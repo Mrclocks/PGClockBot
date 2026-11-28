@@ -114,7 +114,7 @@
           {% if has_receipt or can_act %}
           {% call row_actions() %}
             {% if has_receipt %}
-            <button type="button" class="btn btn-ghost btn-sm" data-receipt-open="/payments/{{ pay.id }}/receipt">{{ icon('eye', 'btn-ico') }}مشاهده رسید</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-receipt-open="/payments/{{ pay.id }}/receipt" data-receipt-count="{{ 1 + (extra_receipts or {}).get(pay.id, 0) }}">{{ icon('eye', 'btn-ico') }}مشاهده رسید{% if (extra_receipts or {}).get(pay.id) %} ({{ (1 + extra_receipts[pay.id]) | num }}){% endif %}</button>
             {% endif %}
             {% if pay and pay.status == 'pending' %}
               <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="این سفارش تأیید و محصول ارسال شود؟" data-confirm-title="تأیید سفارش" data-confirm-label="تأیید">
@@ -268,7 +268,7 @@
           {% if p.status == 'pending' or can_void_row or can_retry_void or (p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:')) %}
           {% call row_actions() %}
             {% if p.receipt_file_id and not (p.receipt_file_id|string).startswith('stars:') %}
-            <button type="button" class="btn btn-ghost btn-sm" data-receipt-open="/payments/{{ p.id }}/receipt">{{ icon('eye', 'btn-ico') }}مشاهده رسید</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-receipt-open="/payments/{{ p.id }}/receipt" data-receipt-count="{{ 1 + (extra_receipts or {}).get(p.id, 0) }}">{{ icon('eye', 'btn-ico') }}مشاهده رسید{% if (extra_receipts or {}).get(p.id) %} ({{ (1 + extra_receipts[p.id]) | num }}){% endif %}</button>
             {% endif %}
             {% if p.status == 'pending' %}
             <form method="post" action="/payments/{{ p.id }}/approve" data-confirm="این پرداخت تأیید شود؟ در صورت خرید، محصول هم ارسال می‌شود." data-confirm-title="تأیید پرداخت" data-confirm-label="تأیید"><button class="btn btn-ok btn-sm" type="submit">{{ icon('check', 'btn-ico') }}تأیید</button></form>
@@ -473,41 +473,16 @@
       <div class="receipt-modal-frame">
         <img id="receipt-modal-img" class="receipt-modal-img" alt="رسید پرداخت" />
       </div>
+      {#- A payment with more than one photo steps through them; hidden for a single photo. -#}
+      <div class="receipt-modal-nav" data-receipt-nav hidden>
+        <button type="button" class="btn btn-ghost btn-sm" data-receipt-step="-1">قبلی</button>
+        <span class="receipt-modal-counter" data-receipt-counter aria-live="polite"></span>
+        <button type="button" class="btn btn-ghost btn-sm" data-receipt-step="1">بعدی</button>
+      </div>
     </div>
   </div>
 </div>
-<script>
-(function () {
-  const modal = document.getElementById('modal-receipt');
-  const img = document.getElementById('receipt-modal-img');
-  if (!modal || !img) return;
-  document.addEventListener('click', function (e) {
-    const btn = e.target.closest('[data-receipt-open]');
-    if (!btn) return;
-    e.preventDefault();
-    const url = btn.getAttribute('data-receipt-open');
-    if (!url) return;
-    img.removeAttribute('src');
-    img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
-    if (window.openModal) window.openModal('modal-receipt');
-    else {
-      modal.hidden = false;
-      modal.classList.add('open');
-    }
-  });
-  modal.addEventListener('click', function (e) {
-    if (e.target === modal.querySelector('.ui-modal-backdrop')) {
-      img.removeAttribute('src');
-    }
-  });
-  const closer = modal.querySelector('[data-modal-close].icon-btn');
-  if (closer) {
-    closer.addEventListener('click', function () {
-      img.removeAttribute('src');
-    });
-  }
-})();
-</script>
+<script src="/static/receipt-viewer.js?v={{ asset_v('receipt-viewer.js') if asset_v is defined else app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% if finance_tab == 'payments' and can_void_payment %}
 <div class="ui-modal ds ds-dialog" id="modal-payment-void" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>

@@ -115,7 +115,7 @@ def _customer_screens() -> list[ScreenSpec]:
         ),
         # The card belongs to one service; the editor returns to the service list.
         customer("c.service", "کارت سرویس", lambda ctx: hubs.service_card_keyboard(0, ctx.ui), "svc:list"),
-        customer("c.service_more", "بیشتر سرویس", lambda ctx: hubs.service_more_keyboard(0, ctx.ui, wireguard=True, freeze="pause", transfer="start"), "svc:list"),
+        customer("c.service_more", "بیشتر سرویس", lambda ctx: hubs.service_more_keyboard(0, ctx.ui, wireguard=True, freeze="pause", transfer="start", link_reset=True), "svc:list"),
         # The shop's first step with every entry on, so each one can be renamed and recolored, and with
         # the shop's own categories when the editor loaded them.
         customer(

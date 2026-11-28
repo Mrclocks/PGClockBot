@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.pasarguard import failure_text
 from app.services.trial_offer import has_claimed_trial, may_offer_trial, trial_shown_to_claimed
-from app.services.catalog_descriptions import with_descriptions
+from app.services.catalog_descriptions import description_html, with_descriptions
 from app.services.chat_records import keep_sent
 from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id
@@ -1224,7 +1224,7 @@ async def shop_plan(
     limit = f"{plan.data_limit_gb:g} گیگابایت" if plan.data_limit_gb is not None else "نامحدود"
     body = info_block(
         [
-            html.escape(plan.description or ""),
+            description_html(plan, limit=None),
             kv_line("⏱", "مدت", f"<b>{format_plan_duration_days(plan.duration_days)}</b>"),
             kv_line("📦", "حجم", f"<b>{limit}</b>"),
             kv_line("💰", "قیمت", price_html(displayed_quote(plan), get_settings().currency)),

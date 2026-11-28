@@ -475,6 +475,7 @@
   /** The service's own plan first, then the shop's categories (and «سایر»), like the bot. */
   function renewChoicesHtml(data, serviceId) {
     const d = data || {};
+    if (d.unavailable) return emptyHtml(d.unavailable);
     if (!d.grouped) return renewPlansHtml(d.plans, serviceId);
     const categories = (d.categories || []).filter((c) => (c.plans || []).length);
     const other = d.other || [];

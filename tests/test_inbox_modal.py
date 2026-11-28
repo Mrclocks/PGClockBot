@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.api import home_pages
 from app.api.app import render
+from app.services.panel_sidebar_cache import peek_sidebar_counts, sidebar_cache_key, store_sidebar_counts
 from app.services.inbox_entries import TONE_ERR, TONE_NEUTRAL, TONE_WARN, inbox_entries
 
 SHOP_STAFF = {"role": "reseller", "bot_user_id": 7, "permissions": ["dashboard"], "username": "shop7"}
@@ -114,6 +115,24 @@ class InboxPanelRouteTests(unittest.TestCase):
             html = _client(staff=SHOP_STAFF).get("/inbox/panel").text
         self.assertNotIn("<img src=x", html)
         self.assertIn("&lt;img src=x", html)
+
+    def test_panel_reports_the_count_of_rows_it_shows(self) -> None:
+        with patch.object(home_pages, "build_inbox_context", AsyncMock(return_value=FULL_CONTEXT)):
+            html = _client(staff=SHOP_STAFF).get("/inbox/panel").text
+        self.assertIn('data-inbox-count="11"', html)
+
+    def test_resolved_items_report_zero_so_a_stale_badge_clears(self) -> None:
+        resolved = {"inbox_count": 1, "inbox_hidden_by_dismiss": 1}
+        with patch.object(home_pages, "build_inbox_context", AsyncMock(return_value=resolved)):
+            html = _client(staff=SHOP_STAFF).get("/inbox/panel").text
+        self.assertIn('data-inbox-count="0"', html)
+
+    def test_opening_the_panel_drops_the_cached_header_count(self) -> None:
+        key = sidebar_cache_key(SHOP_STAFF)
+        store_sidebar_counts(key, unread=0, inbox_count=1)
+        with patch.object(home_pages, "build_inbox_context", AsyncMock(return_value={})):
+            _client(staff=SHOP_STAFF).get("/inbox/panel")
+        self.assertIsNone(peek_sidebar_counts(key))
 
     def test_signed_out_request_is_refused(self) -> None:
         built = AsyncMock(return_value={})

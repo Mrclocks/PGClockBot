@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote, urlencode
 
-from fastapi import Depends, Request
+from fastapi import Depends, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +27,7 @@ from app.services.list_query import (
     parse_list_page,
 )
 from app.services.payment_voids import list_voids
+from app.services.payment_receipts import MAX_EXTRA_RECEIPTS, extra_receipt_counts, receipt_file_id
 from app.services.receipt_files import fetch_telegram_file, payment_bot_token
 from app.services.shop_scope import is_platform_admin, payment_shop_id, shop_owner_id
 from app.services.stuck_order_resolution import describe_stuck_orders
@@ -174,6 +175,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "orders": [],
             "payments_by_order": {},
             "payments": [],
+            # Extra receipt photos per payment shown on the page (payment_receipts).
+            "extra_receipts": {},
             "payers": {},
             "delivery_failures": [],
             "stuck_paid_orders": [],
@@ -356,6 +359,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                         payments_by_order[p.order_id] = p
             ctx["orders"] = orders
             ctx["payments_by_order"] = payments_by_order
+            ctx["extra_receipts"] = await extra_receipt_counts(
+                session, [int(p.id) for p in payments_by_order.values()]
+            )
             ctx["pager"] = pager
             ctx["stuck_order_ids"] = {
                 int(o.id)
@@ -454,6 +460,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 }
             ctx["payments"] = payments
             ctx["payers"] = payers
+            ctx["extra_receipts"] = await extra_receipt_counts(session, [int(p.id) for p in payments])
             ctx["pager"] = pager
             ctx["can_void_payment"] = can_shop(authz, "payment_void") and (
                 is_platform_admin(staff) or bool(shop_owner_id(staff))
@@ -621,23 +628,28 @@ def register_finance_pages(app, *, render, require_staff, get_db):
     @app.get("/payments/{payment_id}/receipt")
     async def payment_receipt(
         payment_id: int,
+        n: int = Query(0, ge=0, le=MAX_EXTRA_RECEIPTS),
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
+        """The payment's receipt photo ``n`` (0 the first, then the extra ones in the order sent)."""
         authz = authz_from_staff(staff)
         if not can_shop(authz, "payments"):
             return RedirectResponse("/home", status_code=303)
         payment = await session.get(Payment, int(payment_id))
         if not payment:
             return Response(status_code=404, content="رسید یافت نشد")
-        file_id = (payment.receipt_file_id or "").strip()
-        if not file_id or file_id.startswith("stars:"):
+        first = (payment.receipt_file_id or "").strip()
+        if not first or first.startswith("stars:"):
             return Response(status_code=404, content="رسید تصویری نیست")
 
         scoped = await _authorize_receipt_access(session, staff, payment)
         if scoped is None:
             return Response(status_code=403, content="دسترسی ندارید")
         order, payer_reseller_id = scoped
+        file_id = (await receipt_file_id(session, payment, n) or "").strip()
+        if not file_id:
+            return Response(status_code=404, content="رسید یافت نشد")
 
         token = await payment_bot_token(
             session,
@@ -660,7 +672,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             media_type=ctype,
             headers={
                 "Cache-Control": "private, no-store",
-                "Content-Disposition": f'inline; filename="receipt-{payment_id}"',
+                "Content-Disposition": f'inline; filename="receipt-{payment_id}-{n + 1}"',
                 "X-Content-Type-Options": "nosniff",
             },
         )
