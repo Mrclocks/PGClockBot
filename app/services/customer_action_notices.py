@@ -106,6 +106,11 @@ CLEANUP_NOTICE_TEXTS = {
         "🗑 <b>سرویس شما حذف شد</b>\nسرویس: <code>{name}</code>\n"
         "حجم این سرویس تمام شده بود و در مهلت تعیین‌شده تمدید نشد. برای ادامه می‌توانید سرویس جدید بخرید."
     ),
+    # A service added from outside the bot only leaves the list; its panel account is not the bot's to delete.
+    "cleanup_detached": (
+        "📤 <b>سرویس از لیست شما جدا شد</b>\nسرویس: <code>{name}</code>\n"
+        "این سرویس در مهلت تعیین‌شده تمدید نشد و از ربات جدا شد. حساب آن روی سرور حذف نشده است."
+    ),
 }
 # Only the warnings that leave the customer a way out carry the renew button.
 RENEW_BUTTON_ACTIONS = frozenset(
@@ -115,7 +120,7 @@ RENEW_BUTTON_ACTIONS = frozenset(
 VOLUME_PACK_ACTIONS = frozenset({"cleanup_volume_finished", "cleanup_volume_warning"})
 # The service (or an expired unpaid order) is gone: offer a new one instead of the customer's service list.
 SERVICE_GONE_ACTIONS = frozenset(
-    {"cleanup_deleted", "cleanup_volume_deleted", "service_delete", "pg_user_delete", "service_detach", ORDER_EXPIRED}
+    {"cleanup_deleted", "cleanup_volume_deleted", "cleanup_detached", "service_delete", "pg_user_delete", "service_detach", ORDER_EXPIRED}
 )
 # The customer needs their service list (a new link, a service now in the list) more than support.
 SERVICES_ONLY_ACTIONS = frozenset({"pg_user_revoke_sub", "service_import_assign"})

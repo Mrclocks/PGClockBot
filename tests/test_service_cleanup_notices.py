@@ -16,7 +16,7 @@ from app.db.models import BotUser, CustomerNotice, ResellerProfile, UserService
 from app.services import service_cleanup as cleanup
 from app.services import service_cleanup_notices as notices
 from app.services.pasarguard import PasarGuardError
-from app.services.customer_action_notices import CLEANUP_NOTICE_TEXTS, deliver_notice, notice_text
+from app.services.customer_action_notices import CLEANUP_NOTICE_TEXTS, SERVICE_GONE_ACTIONS, deliver_notice, notice_text
 from app.services.service_cleanup import KIND_TIME, KIND_VOLUME, CleanupPolicy
 from app.services.users import clear_settings_cache
 from tests.postgres_support import scoped_async_engine, scoped_sync_engine
@@ -298,7 +298,7 @@ class NoticeTextTests(NoticeCase):
         for action in CLEANUP_NOTICE_TEXTS:
             text = notice_text(action, service_name="<script>x</script>", reason="2026-11-17")
             self.assertNotIn("<script>", text, action)
-            if not action.endswith("deleted"):  # the deleted notice has no deadline left to show
+            if action not in SERVICE_GONE_ACTIONS:  # once the service is gone there is no deadline left to show
                 self.assertIn("2026-11-17", text, action)
 
     async def test_a_cleanup_warning_carries_a_renew_button_and_other_notices_do_not(self) -> None:

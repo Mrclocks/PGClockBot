@@ -12,6 +12,9 @@ Order of effects: the lease is committed first, then the panel user is deleted (
 disabled is a failure that keeps the row), then the local row, the staff log record and the customer notice. A
 panel error leaves the lease in place and the row untouched; the next run retries the same service after the
 lease expires, and deleting an already deleted panel user is a clean success, so a repeat is safe.
+
+A service added from outside the bot (imported or a view-only link) is only detached: its local row goes, its
+panel user is never deleted, exactly as when the customer removes it from the list.
 """
 
 from __future__ import annotations
@@ -49,6 +52,7 @@ from app.services.service_cleanup import (
     volume_due_clause,
 )
 from app.services.service_cleanup_notices import is_over, live_refresh, stage_column, stage_of
+from app.services.service_import import is_external_service
 from app.services.staff_audit import ACTOR_SYSTEM, StaffActor, add_staff_action
 
 logger = logging.getLogger(__name__)
@@ -67,6 +71,7 @@ OPEN_ORDER_STATUSES = (
     OrderStatus.DELIVERING.value,
 )
 DELETED_ACTION = {KIND_TIME: "cleanup_deleted", KIND_VOLUME: "cleanup_volume_deleted"}
+DETACHED_ACTION = "cleanup_detached"
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,9 +87,10 @@ def _aware(moment: datetime) -> datetime:
     return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
-def _reason(kind: str, days: int) -> str:
+def _reason(kind: str, days: int, *, detach_only: bool = False) -> str:
     what = "پس از انقضا" if kind == KIND_TIME else "پس از تمام شدن حجم"
-    return f"حذف خودکار {days} روز {what} بدون تمدید"[:255]
+    done = "جدا شدن خودکار از لیست (کاربر پنل حذف نشد)" if detach_only else "حذف خودکار"
+    return f"{done} {days} روز {what} بدون تمدید"[:255]
 
 
 async def _blocked_by_other_state(session: AsyncSession, service_ids: list[int]) -> set[int]:
@@ -295,6 +301,7 @@ async def _delete_one(
     """
     service_id, user_id = int(service.id), int(service.bot_user_id)
     name, owner_shop = service.pg_username or "", service.shop_id
+    detach_only = is_external_service(service)
     pg_user_id = int(service.pg_user_id) if service.pg_user_id else None
     actor = StaffActor(shop_id=shop_id, kind=ACTOR_SYSTEM, user_id=None, label=SYSTEM_LABEL)
     try:
@@ -309,13 +316,14 @@ async def _delete_one(
         if record is not None and (require_absent or not _still_over(record, kind, now)):
             await _release_lease(session, service_id)
             return "skipped"
-        await ensure_pg_user_removed_or_absent(pg, pg_user_id, staff=None, allow_disable_fallback=False)
+        if not detach_only:
+            await ensure_pg_user_removed_or_absent(pg, pg_user_id, staff=None, allow_disable_fallback=False)
         service = await session.get(UserService, service_id)
         if service is not None:
             # The log record joins the local delete's own commit, so a deleted service always has its record.
             add_staff_action(
                 session, actor, action="service_auto_delete", target_type="service", target_id=service_id,
-                reason=_reason(kind, days),
+                reason=_reason(kind, days, detach_only=detach_only),
             )
             await admin_delete_service(session, service, delete_pg=False, staff=None)
     except Exception:  # noqa: BLE001 - unknown panel outcome: keep the row and the lease, retry after the lease expires
@@ -326,7 +334,7 @@ async def _delete_one(
         try:
             add_notice(
                 session, shop_id=owner_shop, bot_user_id=user_id, telegram_id=telegram_id,
-                action=DELETED_ACTION[kind], service_name=name, reason="",
+                action=DETACHED_ACTION if detach_only else DELETED_ACTION[kind], service_name=name, reason="",
             )
             await session.commit()
         except Exception:  # noqa: BLE001 - the service is gone; only the customer message is lost

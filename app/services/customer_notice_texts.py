@@ -36,6 +36,7 @@ CLEANUP_ACTION_LABELS: dict[str, str] = {
     "cleanup_volume_warning": "هشدار حذف سرویس بی‌حجم",
     "cleanup_deleted": "حذف پس از انقضا",
     "cleanup_volume_deleted": "حذف پس از اتمام حجم",
+    "cleanup_detached": "جدا شدن سرویس قبلی از لیست پس از پایان مهلت",
 }
 
 STAFF_ACTION_VARIABLES = frozenset({"service_name", "reason", "shop_title"})
