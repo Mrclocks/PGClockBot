@@ -4,6 +4,10 @@ A service is marked missing only after the shop's own panel client got a clean H
 user lookup. A timeout, a 5xx or a refusal changes nothing, so an outage never hides services.
 The mark is a flag on the row: the service, its orders and its wallet history stay as they were,
 and nothing is refunded or deleted from here.
+
+The scan reads every active service from the panel in turn, so it also keeps each service's cached
+expiry, volume and status current from the record it already received. The expired-service cleanup
+and the customer lists rely on that cache; no extra panel call is made for it.
 """
 
 from __future__ import annotations
@@ -12,12 +16,18 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from sqlalchemy import ColumnElement, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import PanelAlertState, UserService
-from app.services.bot_user_admin import panel_client_for_service, probe_panel_presence
+from app.services.bot_user_admin import (
+    lookup_panel_user,
+    panel_client_for_service,
+    probe_panel_presence,
+    sync_service_quota_cache,
+)
 from app.services.panel_alert_notifications import (
     ALERT_PANEL_MISSING,
     KEY_PANEL_MISSING,
@@ -25,6 +35,7 @@ from app.services.panel_alert_notifications import (
     Signal,
     scope_key,
 )
+from app.services.service_live_info import validate_service_info
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +56,7 @@ CUSTOMER_TEXT = (
 class PresenceResult:
     service_id: int
     presence: str
+    record: dict[str, Any] | None = None  # the panel user, when the lookup found it
 
 
 def _utcnow() -> datetime:
@@ -117,11 +129,14 @@ async def scan_panel_presence(session: AsyncSession, *, limit: int = SCAN_BATCH_
     # One session cannot run queries concurrently, so every shop client is resolved first and
     # only the panel calls overlap.
     clients = [await panel_client_for_service(session, service) for service in services]
+    # No connection waits idle in a transaction while the panel answers; the loaded rows stay usable.
+    await session.commit()
     gate = asyncio.Semaphore(SCAN_CONCURRENCY)
 
     async def probe(service: UserService, pg: object | None) -> PresenceResult:
         async with gate:
-            return PresenceResult(int(service.id), await probe_panel_presence(pg, service.pg_user_id))
+            lookup = await lookup_panel_user(pg, service.pg_user_id)
+            return PresenceResult(int(service.id), lookup.presence, lookup.record)
 
     results: list[PresenceResult] = []
     outcomes = await asyncio.gather(
@@ -132,9 +147,21 @@ async def scan_panel_presence(session: AsyncSession, *, limit: int = SCAN_BATCH_
             logger.warning("panel presence probe failed", exc_info=item)
             continue
         results.append(item)
+    by_id = {int(service.id): service for service in services}
     for result in results:
+        # The cache change is written by the commit inside record_presence, together with the check time.
+        _refresh_quota_cache(by_id[result.service_id], result.record)
         await record_presence(session, result.service_id, result.presence)
     return results
+
+
+def _refresh_quota_cache(service: UserService, record: dict[str, Any] | None) -> None:
+    """Copy expiry, volume and status from a panel record the scan already has; a partial record changes nothing."""
+    if record is None:
+        return
+    checked = validate_service_info(record)
+    if checked.get("status") and "expire" in checked:
+        sync_service_quota_cache(service, info=checked)
 
 
 def _removed_while_usable() -> ColumnElement[bool]:
