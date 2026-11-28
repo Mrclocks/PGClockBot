@@ -405,7 +405,7 @@ async def svc_list(
 ):
     await callback.answer()
     ui = await get_all_settings(session)
-    services = await list_customer_services(session, db_user.id, current_shop_reseller_id())
+    services = await list_customer_services(session, db_user.id, current_shop_reseller_id(), listed_only=True)
     reseller_label = await _reseller_capacity_list_label(
         session,
         db_user,

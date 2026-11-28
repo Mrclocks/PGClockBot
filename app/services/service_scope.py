@@ -7,11 +7,14 @@ customer-facing service view re-checks this where the service is read or changed
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models import UserService
+from app.services.panel_removed_services import hidden_from_customer_clause
 
 SERVICE_OUTSIDE_SHOP_MESSAGE = "این سرویس متعلق به فروشگاه دیگری است و از اینجا قابل مدیریت نیست"
 _OWNER_UNKNOWN_MESSAGE = "مالکیت فروشگاه سرویس مشخص نیست"
@@ -56,15 +59,31 @@ def shop_services_clause(shop_id: int | None) -> ColumnElement[bool]:
     return sold & UserService.shop_needs_review.is_(False)
 
 
+def listed_for_customer_clause() -> ColumnElement[bool]:
+    """Services «سرویس‌های من» shows: all but leftovers the panel removed after they ran out."""
+    return ~hidden_from_customer_clause(datetime.now(timezone.utc))
+
+
 async def list_customer_services(
-    session: AsyncSession, user_id: int, shop_id: int | None, *, limit: int | None = None
+    session: AsyncSession,
+    user_id: int,
+    shop_id: int | None,
+    *,
+    limit: int | None = None,
+    listed_only: bool = False,
 ) -> list[UserService]:
-    """The customer's services sold by ``shop_id``, newest first."""
+    """The customer's services sold by ``shop_id``, newest first.
+
+    ``listed_only`` keeps what the services list shows; ownership checks such as trial
+    eligibility leave it off, so a removed leftover still counts as a service the customer had.
+    """
     query = (
         select(UserService)
         .where(UserService.bot_user_id == int(user_id), shop_services_clause(shop_id))
         .order_by(UserService.id.desc())
     )
+    if listed_only:
+        query = query.where(listed_for_customer_clause())
     if limit:
         query = query.limit(limit)
     return list(await session.scalars(query))
@@ -84,12 +103,13 @@ def _service_name_clause(text: str) -> ColumnElement[bool]:
 async def search_customer_services(
     session: AsyncSession, user_id: int, shop_id: int | None, text: str, *, limit: int
 ) -> list[UserService]:
-    """The customer's services in ``shop_id`` whose name contains ``text`` (any letter case)."""
+    """The listed services of the customer in ``shop_id`` whose name contains ``text`` (any letter case)."""
     query = (
         select(UserService)
         .where(
             UserService.bot_user_id == int(user_id),
             shop_services_clause(shop_id),
+            listed_for_customer_clause(),
             _service_name_clause(text),
         )
         .order_by(UserService.id.desc())
@@ -107,12 +127,12 @@ async def page_customer_services(
     before_id: int | None = None,
     text: str | None = None,
 ) -> tuple[list[UserService], bool]:
-    """One newest-first keyset page of the customer's services in ``shop_id``.
+    """One newest-first keyset page of the customer's listed services in ``shop_id``.
 
     Returns the page and whether older services remain. ``text`` narrows by name.
     """
     query = select(UserService).where(
-        UserService.bot_user_id == int(user_id), shop_services_clause(shop_id)
+        UserService.bot_user_id == int(user_id), shop_services_clause(shop_id), listed_for_customer_clause()
     )
     if before_id is not None:
         query = query.where(UserService.id < int(before_id))
