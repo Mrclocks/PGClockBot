@@ -1,4 +1,4 @@
-"""The expired-service cleanup page: the shop's (or the platform's) rule and a read-only preview."""
+"""The expired-service cleanup page: the shop's (or the platform's) rule, a read-only preview and why due services wait."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.action_reasons import ReasonRequired, reason_from_form
 from app.services.service_cleanup_manage import AuditEntry, extend_deadline, list_exempt, parse_hold_days, set_exempt
+from app.services.service_cleanup_report import due_row_reasons, reason_summary
 from app.services.shop_scope import resolve_shop_scope_id
 from app.services.staff_audit import actor_from_staff
 from app.services.service_cleanup import (
@@ -47,6 +48,8 @@ def register_service_cleanup_pages(
         policy = await load_policy(session, shop_id=shop_id)
         preview = await build_preview(session, shop_id=shop_id, policy=policy)
         exempt = await list_exempt(session, shop_id=shop_id)
+        reasons = await reason_summary(session, shop_id=shop_id, policy=policy)
+        row_reasons = await due_row_reasons(session, preview.rows)
         return render(
             request,
             "service_cleanup.html",
@@ -55,6 +58,8 @@ def register_service_cleanup_pages(
                 "policy": policy,
                 "preview": preview,
                 "exempt": exempt,
+                "reasons": reasons,
+                "row_reasons": row_reasons,
                 "min_days": MIN_DAYS,
                 "max_days": MAX_DAYS,
                 "save_action": SERVICE_CLEANUP_PATH,

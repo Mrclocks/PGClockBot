@@ -35,6 +35,7 @@ from app.services.service_cleanup import (
     time_due_clause,
     volume_due_clause,
 )
+from app.services.service_cleanup_errors import ERROR_PANEL_UNREADABLE, clear_cleanup_error, record_cleanup_error
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +171,10 @@ async def scan_notices(
         return ScanResult()
     next_after_id = int(services[-1].id) if len(services) >= limit else None
     fresh = await live_refresh(session, services)
+    await record_cleanup_error(
+        session, [int(s.id) for s in services if int(s.id) not in fresh], ERROR_PANEL_UNREADABLE, now=now
+    )
+    await clear_cleanup_error(session, sorted(fresh))
     queued = reset = 0
     for service in services:
         stage = stage_of(service, kind)

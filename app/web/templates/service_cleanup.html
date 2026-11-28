@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon as btn_icon %}
-{% from "macros.html" import setting_help, row_actions, page_header %}
+{% from "macros.html" import setting_help, row_actions, page_header, card_title %}
 {% from "_user_card_modals.html" import user_card_link, user_card_button, user_card_hint, user_card_modals with context %}
 {% block title %}پاکسازی سرویس‌ها{% endblock %}
 {% block content %}
@@ -117,7 +117,11 @@
             </div>
           </td>
           <td class="col-svc li-sub" data-sort-value="{{ r.username }}"><bdi dir="ltr" class="mono">{{ r.username }}</bdi></td>
-          <td class="col-status li-badge" data-sort-value="{{ r.kind }}"><span class="badge {{ 'blocked' if r.retrying else 'neutral' }}">{{ 'تلاش مجدد' if r.retrying else r.kind }}</span></td>
+          {% set why = row_reasons.get(r.service_id) %}
+          <td class="col-status li-badge" data-sort-value="{{ why.label if why else r.kind }}">
+            {% if why %}<span class="badge {{ why.tone }}">{{ why.label }}</span>
+            {% else %}<span class="badge {{ 'blocked' if r.retrying else 'neutral' }}">{{ 'تلاش مجدد' if r.retrying else r.kind }}</span>{% endif %}
+          </td>
           <td class="col-hide-sm" data-sort-value="{{ r.since }}"><bdi dir="ltr" class="mono">{{ r.since }}</bdi></td>
           <td class="col-exp li-value li-tone-{{ 'danger' if r.days_left <= 1 else ('warn' if r.days_left <= 3 else 'none') }}" data-sort-value="{{ r.days_left }}">
             <bdi dir="ltr" class="mono">{{ r.deadline }}</bdi>
@@ -150,6 +154,31 @@
   </div>
   {% endif %}
 </div>
+
+<section class="card card-flush">
+  <header class="card-flush-head">{{ card_title('alert', 'چرا سرویس‌های سررسیده هنوز حذف نشده‌اند') }}</header>
+  <p class="muted card-flush-note">خطاهای آخرین تلاش پاکسازی، و برای سرویس‌هایی که مهلتشان گذشته، اولین دلیلی که جلوی حذفشان را گرفته است. هر سرویس یک بار شمرده می‌شود.</p>
+  {% if reasons %}
+  <div class="table-wrap">
+    <table class="table-compact">
+      <thead>
+        <tr><th class="col-status">علت</th><th class="col-num">تعداد</th><th class="col-hide-sm">آخرین خطا</th></tr>
+      </thead>
+      <tbody>
+      {% for item in reasons %}
+        <tr>
+          <td class="col-status"><span class="badge {{ item.tone }}">{{ item.label }}</span></td>
+          <td class="col-num">{{ item.count | num }}</td>
+          <td class="col-hide-sm">{% if item.last_at %}<bdi dir="ltr" class="mono">{{ item.last_at }}</bdi>{% else %}—{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted ov-empty">هیچ سرویسی از مهلتش نگذشته و خطایی هم در پاکسازی نبوده است.</p>
+  {% endif %}
+</section>
 
 {% if exempt %}
 <div class="card card-flush">

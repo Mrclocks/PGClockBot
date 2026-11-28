@@ -237,6 +237,20 @@ class CleanupRoutesTests(CleanupCase):
         self.assertIn("&lt;b&gt;Eve&lt;/b&gt;", response.text)
         self.assertNotIn("foreign", response.text)
 
+    async def test_the_page_says_why_due_services_wait_for_this_shop_only(self) -> None:
+        await self.set_shop_permissions("dashboard,service_cleanup")
+        async with await self.session() as session:
+            await cleanup.save_policy(session, shop_id=SHOP, policy=cleanup.parse_policy_form(form()), now=NOW - timedelta(days=30))
+        await self.add_service(1, 20, SHOP, quota_expire_at=NOW - timedelta(days=20), cleanup_error="delete_failed",
+                               cleanup_error_at=NOW)
+        await self.add_service(2, 21, OTHER_SHOP, quota_expire_at=NOW - timedelta(days=20), cleanup_error="panel_unreadable",
+                               cleanup_error_at=NOW)
+        response = await self.call_as(SHOP_SESSION, "GET", "/service-cleanup")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("چرا سرویس‌های سررسیده هنوز حذف نشده‌اند", response.text)
+        self.assertIn("حذف در پنل انجام نشد", response.text)
+        self.assertNotIn("پنل برای این سرویس جواب نداد", response.text)
+
     async def test_the_owner_reaches_the_platform_page(self) -> None:
         response = await self.call_as(OWNER_SESSION, "GET", "/service-cleanup")
         self.assertEqual(response.status_code, 200)
