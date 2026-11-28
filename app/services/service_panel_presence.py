@@ -13,7 +13,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import ColumnElement, and_, func, or_, select, update
+from sqlalchemy import ColumnElement, and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import PanelAlertState, UserService
@@ -25,6 +25,7 @@ from app.services.panel_alert_notifications import (
     Signal,
     scope_key,
 )
+from app.services.panel_removed_services import usable_when_removed_clause
 
 logger = logging.getLogger(__name__)
 
@@ -146,8 +147,7 @@ def _removed_while_usable() -> ColumnElement[bool]:
     return and_(
         UserService.panel_missing_at.is_not(None),
         UserService.is_cancelled.is_(False),
-        UserService.volume_exhausted_at.is_(None),
-        or_(UserService.quota_expire_at.is_(None), UserService.quota_expire_at > UserService.panel_missing_at),
+        usable_when_removed_clause(),
     )
 
 
